@@ -427,3 +427,70 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# =========================
+# React / Vite
+# =========================
+web/**/node_modules/
+web/**/dist/
+web/**/.env
+web/**/.env.local
+web/**/.env.*.local
+
+# =========================
+# Flutter / Dart
+# =========================
+mobile/**/.dart_tool/
+mobile/**/.flutter-plugins
+mobile/**/.flutter-plugins-dependencies
+mobile/**/.packages
+mobile/**/build/
+mobile/**/.pub-cache/
+mobile/**/.pub/
+mobile/**/coverage/
+
+# Keep pubspec.lock for applications
+# Do NOT ignore pubspec.lock
+
+# Android local config
+mobile/**/android/local.properties
+mobile/**/android/.gradle/
+mobile/**/android/app/debug/
+mobile/**/android/app/profile/
+mobile/**/android/app/release/
+
+# iOS generated files if later needed
+mobile/**/ios/Flutter/Generated.xcconfig
+mobile/**/ios/Flutter/flutter_export_environment.sh
+mobile/**/ios/Pods/
+mobile/**/ios/.symlinks/
+
+# =========================
+# Python / Agent
+# =========================
+agent/**/__pycache__/
+agent/**/*.pyc
+agent/**/.venv/
+agent/**/venv/
+agent/**/.env
+agent/**/.pytest_cache/
+
+# =========================
+# Environment files
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Logs
+# =========================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Keep Flutter Android debug source files
+!mobile/rentflow_mobile/android/app/src/debug/
+!mobile/rentflow_mobile/android/app/src/debug/**
