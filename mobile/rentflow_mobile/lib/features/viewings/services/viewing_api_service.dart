@@ -1,0 +1,158 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+import '../../../core/constants/api_constants.dart';
+import '../../../core/network/api_client.dart';
+import '../models/viewing.dart';
+
+class ViewingApiService {
+  const ViewingApiService(this.apiClient);
+
+  final ApiClient apiClient;
+
+  Future<Viewing> createViewing({
+    required String tenantId,
+    required String propertyId,
+    required DateTime requestedDateTime,
+    String? tenantMessage,
+  }) async {
+    final uri = apiClient.buildUri(
+      ApiConstants.viewingsPath,
+      queryParameters: {'tenantId': tenantId},
+    );
+    final body = jsonEncode({
+      'propertyId': propertyId,
+      'requestedDateTime': requestedDateTime.toUtc().toIso8601String(),
+      'tenantMessage': tenantMessage,
+    });
+
+    final response = await _send(() => apiClient.post(uri, body: body));
+    return _parseViewing(response.body);
+  }
+
+  Future<Viewing> getViewingById(String id) async {
+    final uri = apiClient.buildUri('${ApiConstants.viewingsPath}/$id');
+    final response = await _send(() => apiClient.get(uri));
+    return _parseViewing(response.body);
+  }
+
+  Future<List<Viewing>> getViewingsByTenant(String tenantId) async {
+    final uri = apiClient.buildUri(
+      '${ApiConstants.viewingsPath}/tenant/$tenantId',
+    );
+    final response = await _send(() => apiClient.get(uri));
+    return _parseViewingList(response.body);
+  }
+
+  Future<List<Viewing>> getViewingsByProperty(String propertyId) async {
+    final uri = apiClient.buildUri(
+      '${ApiConstants.viewingsPath}/property/$propertyId',
+    );
+    final response = await _send(() => apiClient.get(uri));
+    return _parseViewingList(response.body);
+  }
+
+  Future<Viewing> cancelViewing({
+    required String id,
+    required String tenantId,
+  }) async {
+    final uri = apiClient.buildUri(
+      '${ApiConstants.viewingsPath}/$id/cancel',
+      queryParameters: {'tenantId': tenantId},
+    );
+    final response = await _send(() => apiClient.patch(uri));
+    return _parseViewing(response.body);
+  }
+
+  Future<http.Response> _send(Future<http.Response> Function() request) async {
+    late final http.Response response;
+    try {
+      response = await request();
+    } on http.ClientException {
+      throw const ViewingApiException(
+        'Unable to connect to the viewing service.',
+      );
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ViewingApiException(
+        _readErrorMessage(response.body) ??
+            'The viewing request failed. Please try again.',
+        statusCode: response.statusCode,
+      );
+    }
+
+    return response;
+  }
+
+  Viewing _parseViewing(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException();
+      }
+      return Viewing.fromJson(decoded);
+    } on FormatException {
+      throw const ViewingApiException(
+        'The viewing service returned an invalid response.',
+      );
+    }
+  }
+
+  List<Viewing> _parseViewingList(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! List<dynamic>) {
+        throw const FormatException();
+      }
+
+      return decoded
+          .map((item) {
+            if (item is! Map<String, dynamic>) {
+              throw const FormatException();
+            }
+            return Viewing.fromJson(item);
+          })
+          .toList(growable: false);
+    } on FormatException {
+      throw const ViewingApiException(
+        'The viewing service returned an invalid response.',
+      );
+    }
+  }
+
+  String? _readErrorMessage(String body) {
+    if (body.trim().isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) {
+        return null;
+      }
+
+      for (final key in ['detail', 'title', 'message']) {
+        final value = decoded[key];
+        if (value is String && value.trim().isNotEmpty) {
+          return value.trim();
+        }
+      }
+    } on FormatException {
+      return null;
+    }
+
+    return null;
+  }
+}
+
+class ViewingApiException implements Exception {
+  const ViewingApiException(this.message, {this.statusCode});
+
+  final String message;
+  final int? statusCode;
+
+  @override
+  String toString() => message;
+}
