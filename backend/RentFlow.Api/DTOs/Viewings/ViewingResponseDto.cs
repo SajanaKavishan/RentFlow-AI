@@ -1,0 +1,27 @@
+using RentFlow.Api.Models;
+
+namespace RentFlow.Api.DTOs.Viewings;
+
+/// <summary>
+/// Represents viewing request data returned by the API.
+/// </summary>
+public class ViewingResponseDto
+{
+    public Guid Id { get; set; }
+
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+
+    public DateTimeOffset RequestedDateTime { get; set; }
+
+    public ViewingStatus Status { get; set; }
+
+    public string? TenantMessage { get; set; }
+
+    public string? LandlordResponse { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset? UpdatedAt { get; set; }
+}
