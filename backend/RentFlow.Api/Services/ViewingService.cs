@@ -26,9 +26,10 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
             throw ViewingServiceException.Validation("A property ID is required.");
         }
 
+        var requestedDateTimeUtc = request.RequestedDateTime.ToUniversalTime();
         var now = DateTimeOffset.UtcNow;
 
-        if (request.RequestedDateTime <= now)
+        if (requestedDateTimeUtc <= now)
         {
             throw ViewingServiceException.Validation("The requested viewing date and time must be in the future.");
         }
@@ -36,7 +37,7 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
         var duplicateExists = await dbContext.ViewingRequests.AnyAsync(
             viewing => viewing.TenantId == tenantId
                 && viewing.PropertyId == request.PropertyId
-                && viewing.RequestedDateTime == request.RequestedDateTime,
+                && viewing.RequestedDateTime == requestedDateTimeUtc,
             cancellationToken);
 
         if (duplicateExists)
@@ -49,7 +50,7 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
         {
             TenantId = tenantId,
             PropertyId = request.PropertyId,
-            RequestedDateTime = request.RequestedDateTime,
+            RequestedDateTime = requestedDateTimeUtc,
             TenantMessage = request.TenantMessage,
             Status = ViewingStatus.Pending,
             CreatedAt = now
@@ -160,7 +161,7 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
                 $"A {viewing.Status} viewing cannot be cancelled.");
         }
 
-        if (viewing.RequestedDateTime <= DateTimeOffset.UtcNow)
+        if (viewing.RequestedDateTime.ToUniversalTime() <= DateTimeOffset.UtcNow)
         {
             throw ViewingServiceException.Conflict(
                 "A viewing cannot be cancelled at or after its requested date and time.");
