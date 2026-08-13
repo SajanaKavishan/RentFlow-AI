@@ -1,9 +1,40 @@
+using RentFlow.Api.DTOs.Viewings;
+
 namespace RentFlow.Api.Services.Interfaces;
 
 /// <summary>
 /// Defines operations for the Viewing Booking feature.
-/// Service operations will be added when the feature behavior is implemented.
 /// </summary>
 public interface IViewingService
 {
+    Task<ViewingResponseDto> CreateAsync(
+        Guid tenantId,
+        CreateViewingRequestDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<ViewingResponseDto?> GetByIdAsync(
+        Guid viewingId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ViewingResponseDto>> GetByTenantAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ViewingResponseDto>> GetByPropertyAsync(
+        Guid propertyId,
+        CancellationToken cancellationToken = default);
+
+    Task<ViewingResponseDto> ApproveAsync(
+        Guid viewingId,
+        string? landlordResponse = null,
+        CancellationToken cancellationToken = default);
+
+    Task<ViewingResponseDto> RejectAsync(
+        Guid viewingId,
+        string landlordResponse,
+        CancellationToken cancellationToken = default);
+
+    Task<ViewingResponseDto> CancelAsync(
+        Guid viewingId,
+        CancellationToken cancellationToken = default);
 }
