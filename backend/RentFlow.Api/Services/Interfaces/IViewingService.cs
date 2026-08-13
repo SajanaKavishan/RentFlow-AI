@@ -36,5 +36,6 @@ public interface IViewingService
 
     Task<ViewingResponseDto> CancelAsync(
         Guid viewingId,
+        Guid tenantId,
         CancellationToken cancellationToken = default);
 }

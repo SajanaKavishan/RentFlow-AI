@@ -139,9 +139,20 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
 
     public async Task<ViewingResponseDto> CancelAsync(
         Guid viewingId,
+        Guid tenantId,
         CancellationToken cancellationToken = default)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw ViewingServiceException.Validation("A tenant ID is required.");
+        }
+
         var viewing = await GetTrackedViewingAsync(viewingId, cancellationToken);
+
+        if (viewing.TenantId != tenantId)
+        {
+            throw ViewingServiceException.NotFound("The viewing request was not found for this tenant.");
+        }
 
         if (viewing.Status is not (ViewingStatus.Pending or ViewingStatus.Approved))
         {
