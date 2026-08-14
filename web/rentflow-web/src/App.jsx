@@ -1,4 +1,5 @@
 import './App.css'
+import RentalApplicationsPage from './features/rentalApplications/pages/RentalApplicationsPage.jsx'
 import ViewingRequestsPage from './features/viewings/pages/ViewingRequestsPage.jsx'
 
 function App() {
@@ -11,11 +12,17 @@ function App() {
         </a>
         <div className="app-nav__current">
           <span className="dev-label">Development</span>
-          <a href="#viewing-requests">Viewing requests</a>
+          <div className="app-nav__links">
+            <a href="#viewing-requests">Viewing requests</a>
+            <a href="#rental-applications">Rental applications</a>
+          </div>
         </div>
       </nav>
       <div id="viewing-requests">
         <ViewingRequestsPage />
+      </div>
+      <div id="rental-applications" className="app-section app-section--alternate">
+        <RentalApplicationsPage />
       </div>
     </div>
   )

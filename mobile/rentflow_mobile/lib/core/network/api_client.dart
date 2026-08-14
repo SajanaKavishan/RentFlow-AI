@@ -29,6 +29,10 @@ class ApiClient {
     return httpClient.post(uri, headers: _jsonHeaders, body: body);
   }
 
+  Future<http.Response> put(Uri uri, {Object? body}) {
+    return httpClient.put(uri, headers: _jsonHeaders, body: body);
+  }
+
   Future<http.Response> patch(Uri uri, {Object? body}) {
     return httpClient.patch(uri, headers: _jsonHeaders, body: body);
   }
