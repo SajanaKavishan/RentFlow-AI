@@ -9,6 +9,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
 
+    public DbSet<ApplicationDocument> ApplicationDocuments => Set<ApplicationDocument>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -89,6 +91,43 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(application => application.TenantId);
             entity.HasIndex(application => application.PropertyId);
             entity.HasIndex(application => application.Status);
+        });
+
+        modelBuilder.Entity<ApplicationDocument>(entity =>
+        {
+            entity.HasKey(document => document.Id);
+
+            entity.Property(document => document.ApplicationId)
+                .IsRequired();
+
+            entity.Property(document => document.DocumentType)
+                .IsRequired();
+
+            entity.Property(document => document.OriginalFileName)
+                .HasMaxLength(255)
+                .IsRequired();
+
+            entity.Property(document => document.StorageKey)
+                .HasMaxLength(512)
+                .IsRequired();
+
+            entity.Property(document => document.ContentType)
+                .HasMaxLength(255)
+                .IsRequired();
+
+            entity.Property(document => document.FileSizeBytes)
+                .IsRequired();
+
+            entity.Property(document => document.UploadedAt)
+                .IsRequired();
+
+            entity.HasOne<RentalApplication>()
+                .WithMany()
+                .HasForeignKey(document => document.ApplicationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(document => document.ApplicationId);
+            entity.HasIndex(document => document.DocumentType);
         });
     }
 }

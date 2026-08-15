@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using RentFlow.Api.Configuration;
 using RentFlow.Api.Data;
 using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
@@ -14,8 +15,15 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
+builder.Services.AddOptions<CloudflareR2Options>()
+    .Bind(builder.Configuration.GetSection(CloudflareR2Options.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 builder.Services.AddScoped<IViewingService, ViewingService>();
 builder.Services.AddScoped<IRentalApplicationService, RentalApplicationService>();
+builder.Services.AddScoped<IApplicationDocumentService, ApplicationDocumentService>();
+builder.Services.AddSingleton<IFileStorageService, CloudflareR2StorageService>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
