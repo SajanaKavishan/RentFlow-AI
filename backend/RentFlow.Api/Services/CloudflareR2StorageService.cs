@@ -33,23 +33,20 @@ public sealed class CloudflareR2StorageService : IFileStorageService, IDisposabl
         });
     }
 
-    public async Task<string> UploadAsync(
+    public async Task UploadAsync(
         Stream content,
-        string originalFileName,
+        string storageKey,
         string contentType,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(content);
-        ArgumentException.ThrowIfNullOrWhiteSpace(originalFileName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentType);
 
         if (!content.CanRead)
         {
             throw new ArgumentException("The upload stream must be readable.", nameof(content));
         }
-
-        var now = DateTimeOffset.UtcNow;
-        var storageKey = $"application-documents/{now:yyyy/MM}/{Guid.NewGuid():N}";
 
         var request = new PutObjectRequest
         {
@@ -62,8 +59,6 @@ public sealed class CloudflareR2StorageService : IFileStorageService, IDisposabl
         };
 
         await client.PutObjectAsync(request, cancellationToken);
-
-        return storageKey;
     }
 
     public async Task DeleteAsync(

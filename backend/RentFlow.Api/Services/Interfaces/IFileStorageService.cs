@@ -5,9 +5,9 @@ namespace RentFlow.Api.Services.Interfaces;
 /// </summary>
 public interface IFileStorageService
 {
-    Task<string> UploadAsync(
+    Task UploadAsync(
         Stream content,
-        string originalFileName,
+        string storageKey,
         string contentType,
         CancellationToken cancellationToken = default);
 
