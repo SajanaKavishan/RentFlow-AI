@@ -1,0 +1,187 @@
+.application-documents {
+  margin-top: 22px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--cream-50);
+}
+
+.application-documents__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.application-documents__header h3 {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.application-documents__header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.application-documents__list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.application-documents__state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.application-documents__state--empty {
+  justify-content: center;
+  border: 1px dashed #cfcec5;
+  border-radius: 10px;
+}
+
+.application-documents__state--error {
+  display: block;
+  padding: 13px;
+  border-radius: 10px;
+  color: var(--danger);
+  background: #fbefee;
+}
+
+.application-documents__state--error p {
+  margin: 0 0 10px;
+}
+
+.application-documents__spinner {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 3px solid var(--olive-100);
+  border-top-color: var(--olive-700);
+  border-radius: 50%;
+  animation: application-spin 800ms linear infinite;
+}
+
+.application-document-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid #e2dfd4;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.application-document-card__main {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.application-document-card__details {
+  min-width: 0;
+}
+
+.application-document-card__details h4 {
+  margin: 1px 0 5px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.94rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.application-document-card__details p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.application-document-type {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: var(--olive-900);
+  background: var(--olive-100);
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.application-document-type--income {
+  color: #35613b;
+  background: #ddecdd;
+}
+
+.application-document-type--employment {
+  color: #43556a;
+  background: #dde7ef;
+}
+
+.application-document-type--other {
+  color: #655c4a;
+  background: #eee9dc;
+}
+
+.application-document-card__download {
+  min-height: 38px;
+  padding: 7px 12px;
+}
+
+.application-document-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .application-documents__spinner {
+    animation-duration: 1.8s;
+  }
+}
+
+@media (max-width: 680px) {
+  .application-documents {
+    padding: 16px;
+  }
+
+  .application-documents__header,
+  .application-document-card,
+  .application-document-card__main {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .application-document-card {
+    grid-template-columns: 1fr;
+  }
+
+  .application-document-card__main {
+    display: flex;
+  }
+
+  .application-document-card__details h4 {
+    white-space: normal;
+  }
+
+  .application-document-card__download {
+    width: 100%;
+  }
+}

@@ -1,4 +1,11 @@
 import { useState } from 'react'
+import ApplicationDocumentCard from '../../applicationDocuments/components/ApplicationDocumentCard.jsx'
+import {
+  ApplicationDocumentApiError,
+  downloadApplicationDocument,
+  getApplicationDocuments,
+} from '../../applicationDocuments/services/applicationDocumentApiService.js'
+import '../../applicationDocuments/applicationDocuments.css'
 import { RENTAL_APPLICATION_STATUS } from '../services/rentalApplicationApiService.js'
 import RentalApplicationStatusBadge from './RentalApplicationStatusBadge.jsx'
 
@@ -43,10 +50,67 @@ function RentalApplicationCard({
   const [action, setAction] = useState(null)
   const [response, setResponse] = useState('')
   const [validationError, setValidationError] = useState('')
+  const [documentsExpanded, setDocumentsExpanded] = useState(false)
+  const [documentsState, setDocumentsState] = useState({
+    status: 'idle',
+    items: [],
+    error: '',
+  })
+  const [downloadingId, setDownloadingId] = useState(null)
+  const [downloadError, setDownloadError] = useState({ id: null, message: '' })
   const isSubmitted = application.status === RENTAL_APPLICATION_STATUS.SUBMITTED
   const isUnderReview =
     application.status === RENTAL_APPLICATION_STATUS.UNDER_REVIEW
   const canAct = isSubmitted || isUnderReview
+
+  async function loadDocuments() {
+    setDocumentsState((current) => ({
+      ...current,
+      status: 'loading',
+      error: '',
+    }))
+
+    try {
+      const documents = await getApplicationDocuments(application.id)
+      setDocumentsState({ status: 'success', items: documents, error: '' })
+    } catch (error) {
+      setDocumentsState({
+        status: 'error',
+        items: [],
+        error:
+          error instanceof ApplicationDocumentApiError
+            ? error.message
+            : 'Unable to load documents. Please try again.',
+      })
+    }
+  }
+
+  function toggleDocuments() {
+    const shouldExpand = !documentsExpanded
+    setDocumentsExpanded(shouldExpand)
+    setDownloadError({ id: null, message: '' })
+    if (shouldExpand && documentsState.status === 'idle') loadDocuments()
+  }
+
+  async function handleDownload(applicationDocument) {
+    if (downloadingId) return
+
+    setDownloadingId(applicationDocument.id)
+    setDownloadError({ id: null, message: '' })
+    try {
+      await downloadApplicationDocument(applicationDocument.id)
+    } catch (error) {
+      setDownloadError({
+        id: applicationDocument.id,
+        message:
+          error instanceof ApplicationDocumentApiError
+            ? error.message
+            : 'Unable to download this document. Please try again.',
+      })
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   function openAction(nextAction) {
     setAction(nextAction)
@@ -144,6 +208,85 @@ function RentalApplicationCard({
           </div>
         )}
       </div>
+
+      <div className="application-card__document-action">
+        <button
+          type="button"
+          className="application-button application-button--quiet"
+          onClick={toggleDocuments}
+          aria-expanded={documentsExpanded}
+          aria-controls={`application-documents-${application.id}`}
+        >
+          {documentsExpanded ? 'Hide documents' : 'View documents'}
+        </button>
+      </div>
+
+      {documentsExpanded && (
+        <section
+          className="application-documents"
+          id={`application-documents-${application.id}`}
+          aria-label="Application documents"
+        >
+          <div className="application-documents__header">
+            <div>
+              <h3>Supporting documents</h3>
+              <p>Private files supplied with this rental application.</p>
+            </div>
+          </div>
+
+          {documentsState.status === 'loading' && (
+            <div className="application-documents__state" aria-live="polite">
+              <span
+                className="application-documents__spinner"
+                aria-hidden="true"
+              />
+              Loading documents...
+            </div>
+          )}
+
+          {documentsState.status === 'error' && (
+            <div
+              className="application-documents__state application-documents__state--error"
+              role="alert"
+            >
+              <p>{documentsState.error}</p>
+              <button
+                type="button"
+                className="application-button application-button--quiet"
+                onClick={loadDocuments}
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {documentsState.status === 'success' &&
+            documentsState.items.length === 0 && (
+              <p className="application-documents__state application-documents__state--empty">
+                No documents have been added to this application.
+              </p>
+            )}
+
+          {documentsState.status === 'success' &&
+            documentsState.items.length > 0 && (
+              <div className="application-documents__list">
+                {documentsState.items.map((applicationDocument) => (
+                  <ApplicationDocumentCard
+                    key={applicationDocument.id}
+                    document={applicationDocument}
+                    isDownloading={downloadingId === applicationDocument.id}
+                    downloadError={
+                      downloadError.id === applicationDocument.id
+                        ? downloadError.message
+                        : ''
+                    }
+                    onDownload={handleDownload}
+                  />
+                ))}
+              </div>
+            )}
+        </section>
+      )}
 
       {canAct && !action && (
         <div className="application-card__actions">
