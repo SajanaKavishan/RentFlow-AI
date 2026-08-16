@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'features/application_documents/screens/application_documents_screen.dart';
 import 'features/rental_applications/screens/my_rental_applications_screen.dart';
 import 'features/rental_applications/screens/rental_application_form_screen.dart';
 import 'features/viewings/screens/book_viewing_screen.dart';
@@ -12,6 +13,10 @@ const _temporaryTenantId = '11111111-1111-1111-1111-111111111111';
 // TODO(dev-only): Replace with the property ID supplied by property navigation
 // when property screens are implemented.
 const _temporaryPropertyId = '22222222-2222-2222-2222-222222222222';
+
+// TODO(dev-only): Replace with an existing rental application ID belonging to
+// [_temporaryTenantId] before testing document uploads.
+const _temporaryApplicationId = '33333333-3333-3333-3333-333333333333';
 
 void main() {
   runApp(const MyApp());
@@ -134,6 +139,21 @@ class ViewingDevelopmentHome extends StatelessWidget {
                       },
                       icon: const Icon(Icons.folder_open_outlined),
                       label: const Text('My Applications'),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const ApplicationDocumentsScreen(
+                              applicationId: _temporaryApplicationId,
+                              tenantId: _temporaryTenantId,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.file_upload_outlined),
+                      label: const Text('Application Documents'),
                     ),
                   ],
                 ),

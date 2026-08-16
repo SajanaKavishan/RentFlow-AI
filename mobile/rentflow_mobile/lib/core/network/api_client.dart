@@ -37,6 +37,10 @@ class ApiClient {
     return httpClient.patch(uri, headers: _jsonHeaders, body: body);
   }
 
+  Future<http.Response> delete(Uri uri) {
+    return httpClient.delete(uri, headers: _jsonHeaders);
+  }
+
   void close() => httpClient.close();
 
   static const Map<String, String> _jsonHeaders = {
