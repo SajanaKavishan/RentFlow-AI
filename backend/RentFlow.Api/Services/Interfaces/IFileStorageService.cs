@@ -15,7 +15,9 @@ public interface IFileStorageService
         string storageKey,
         CancellationToken cancellationToken = default);
 
-    Task<string> GenerateSignedGetUrlAsync(
+    Task<string> GenerateDownloadUrlAsync(
         string storageKey,
+        string originalFileName,
+        string contentType,
         TimeSpan lifetime);
 }

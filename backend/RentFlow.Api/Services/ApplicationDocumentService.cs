@@ -130,8 +130,10 @@ public class ApplicationDocumentService(
             cancellationToken)
             ?? throw DocumentNotFound();
 
-        return await fileStorageService.GenerateSignedGetUrlAsync(
+        return await fileStorageService.GenerateDownloadUrlAsync(
             document.StorageKey,
+            document.OriginalFileName,
+            document.ContentType,
             SignedUrlLifetime);
     }
 

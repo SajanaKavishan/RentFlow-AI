@@ -76,11 +76,22 @@ public sealed class CloudflareR2StorageService : IFileStorageService, IDisposabl
             cancellationToken);
     }
 
-    public Task<string> GenerateSignedGetUrlAsync(
+    public Task<string> GenerateDownloadUrlAsync(
         string storageKey,
+        string originalFileName,
+        string contentType,
         TimeSpan lifetime)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(originalFileName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(contentType);
+
+        if (contentType.Contains('\r') || contentType.Contains('\n'))
+        {
+            throw new ArgumentException(
+                "The content type cannot contain newline characters.",
+                nameof(contentType));
+        }
 
         if (lifetime <= TimeSpan.Zero || lifetime > MaximumSignedUrlLifetime)
         {
@@ -89,13 +100,42 @@ public sealed class CloudflareR2StorageService : IFileStorageService, IDisposabl
                 "The signed URL lifetime must be greater than zero and no more than seven days.");
         }
 
-        return client.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+        var safeFileName = SanitizeDownloadFileName(originalFileName);
+        var request = new GetPreSignedUrlRequest
         {
             BucketName = options.BucketName,
             Key = storageKey,
             Verb = HttpVerb.GET,
             Expires = DateTime.UtcNow.Add(lifetime)
-        });
+        };
+
+        request.ResponseHeaderOverrides.ContentType = contentType;
+        request.ResponseHeaderOverrides.ContentDisposition =
+            $"attachment; filename=\"{safeFileName}\"";
+
+        return client.GetPreSignedURLAsync(request);
+    }
+
+    private static string SanitizeDownloadFileName(string originalFileName)
+    {
+        var normalized = originalFileName.Replace('\\', '/');
+        var fileName = normalized[(normalized.LastIndexOf('/') + 1)..];
+        var sanitized = new string(fileName
+            .Select(character => character is >= 'a' and <= 'z'
+                or >= 'A' and <= 'Z'
+                or >= '0' and <= '9'
+                or '.' or '-' or '_' or ' '
+                    ? character
+                    : '_')
+            .ToArray())
+            .Trim(' ', '.');
+
+        if (string.IsNullOrWhiteSpace(sanitized))
+        {
+            sanitized = "document";
+        }
+
+        return sanitized.Length <= 255 ? sanitized : sanitized[..255];
     }
 
     public void Dispose()
