@@ -2,10 +2,6 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:5277'
 ).replace(/\/+$/, '')
 
-// TODO(auth): Replace this development tenant ID with the authenticated
-// tenant/authorized landlord identity once authentication is available.
-const TEMPORARY_TENANT_ID = '11111111-1111-1111-1111-111111111111'
-
 export const APPLICATION_DOCUMENT_TYPE = Object.freeze({
   IDENTITY_DOCUMENT: 0,
   INCOME_PROOF: 1,
@@ -21,9 +17,11 @@ export class ApplicationDocumentApiError extends Error {
   }
 }
 
-function withTenantId(path) {
+// TODO(auth): Remove this temporary tenantId query parameter once JWT
+// role-based authorization supplies the authorized identity.
+function withTenantId(path, tenantId) {
   const separator = path.includes('?') ? '&' : '?'
-  return `${path}${separator}tenantId=${encodeURIComponent(TEMPORARY_TENANT_ID)}`
+  return `${path}${separator}tenantId=${encodeURIComponent(tenantId)}`
 }
 
 async function readSafeErrorMessage(response) {
@@ -51,11 +49,11 @@ async function readSafeErrorMessage(response) {
   return fallback
 }
 
-async function requestJson(path) {
+async function requestJson(path, tenantId) {
   let response
 
   try {
-    response = await fetch(`${API_BASE_URL}${withTenantId(path)}`, {
+    response = await fetch(`${API_BASE_URL}${withTenantId(path, tenantId)}`, {
       headers: { Accept: 'application/json' },
       cache: 'no-store',
     })
@@ -82,9 +80,10 @@ async function requestJson(path) {
   }
 }
 
-export async function getApplicationDocuments(applicationId) {
+export async function getApplicationDocuments(applicationId, tenantId) {
   const documents = await requestJson(
     `/api/rental-applications/${encodeURIComponent(applicationId)}/documents`,
+    tenantId,
   )
 
   if (!Array.isArray(documents)) {
@@ -96,13 +95,14 @@ export async function getApplicationDocuments(applicationId) {
   return documents
 }
 
-export function getApplicationDocument(documentId) {
+export function getApplicationDocument(documentId, tenantId) {
   return requestJson(
     `/api/application-documents/${encodeURIComponent(documentId)}`,
+    tenantId,
   )
 }
 
-export async function downloadApplicationDocument(documentId) {
+export async function downloadApplicationDocument(documentId, tenantId) {
   const downloadWindow = window.open('', '_blank')
   if (!downloadWindow) {
     throw new ApplicationDocumentApiError(
@@ -114,10 +114,11 @@ export async function downloadApplicationDocument(documentId) {
 
   try {
     // Validate access first so API failures can be shown safely in the UI.
-    await getApplicationDocument(documentId)
+    await getApplicationDocument(documentId, tenantId)
     downloadWindow.location.replace(
       `${API_BASE_URL}${withTenantId(
         `/api/application-documents/${encodeURIComponent(documentId)}/download`,
+        tenantId,
       )}`,
     )
   } catch (error) {

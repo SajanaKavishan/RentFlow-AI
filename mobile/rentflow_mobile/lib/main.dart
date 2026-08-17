@@ -6,17 +6,16 @@ import 'features/rental_applications/screens/rental_application_form_screen.dart
 import 'features/viewings/screens/book_viewing_screen.dart';
 import 'features/viewings/screens/my_viewings_screen.dart';
 
-// TODO(dev-only): Replace with the authenticated user's tenant ID when
-// authentication is implemented.
-const _temporaryTenantId = '11111111-1111-1111-1111-111111111111';
+// TODO(auth/navigation): Replace with the authenticated user's tenant ID.
+const _temporaryTenantId = '11111111-1111-1111-1111-111111111112';
 
 // TODO(dev-only): Replace with the property ID supplied by property navigation
 // when property screens are implemented.
 const _temporaryPropertyId = '22222222-2222-2222-2222-222222222222';
 
-// TODO(dev-only): Replace with an existing rental application ID belonging to
-// [_temporaryTenantId] before testing document uploads.
-const _temporaryApplicationId = '33333333-3333-3333-3333-333333333333';
+// TODO(auth/navigation): Replace with the rental application selected by the
+// authenticated user.
+const _temporaryApplicationId = '7d171d25-3c18-415d-a5e1-fbac06ed531d';
 
 void main() {
   runApp(const MyApp());
