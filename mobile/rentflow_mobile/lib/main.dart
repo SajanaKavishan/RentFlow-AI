@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 
+import 'features/application_documents/screens/application_documents_screen.dart';
 import 'features/rental_applications/screens/my_rental_applications_screen.dart';
 import 'features/rental_applications/screens/rental_application_form_screen.dart';
 import 'features/viewings/screens/book_viewing_screen.dart';
 import 'features/viewings/screens/my_viewings_screen.dart';
 
-// TODO(dev-only): Replace with the authenticated user's tenant ID when
-// authentication is implemented.
-const _temporaryTenantId = '11111111-1111-1111-1111-111111111111';
+// TODO(auth/navigation): Replace with the authenticated user's tenant ID.
+const _temporaryTenantId = '11111111-1111-1111-1111-111111111112';
 
 // TODO(dev-only): Replace with the property ID supplied by property navigation
 // when property screens are implemented.
 const _temporaryPropertyId = '22222222-2222-2222-2222-222222222222';
+
+// TODO(auth/navigation): Replace with the rental application selected by the
+// authenticated user.
+const _temporaryApplicationId = '7d171d25-3c18-415d-a5e1-fbac06ed531d';
 
 void main() {
   runApp(const MyApp());
@@ -134,6 +138,21 @@ class ViewingDevelopmentHome extends StatelessWidget {
                       },
                       icon: const Icon(Icons.folder_open_outlined),
                       label: const Text('My Applications'),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const ApplicationDocumentsScreen(
+                              applicationId: _temporaryApplicationId,
+                              tenantId: _temporaryTenantId,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.file_upload_outlined),
+                      label: const Text('Application Documents'),
                     ),
                   ],
                 ),

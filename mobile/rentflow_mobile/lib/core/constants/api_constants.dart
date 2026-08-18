@@ -6,4 +6,5 @@ abstract final class ApiConstants {
 
   static const String viewingsPath = '/api/viewings';
   static const String rentalApplicationsPath = '/api/rental-applications';
+  static const String applicationDocumentsPath = '/api/application-documents';
 }

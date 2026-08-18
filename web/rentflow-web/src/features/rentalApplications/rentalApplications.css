@@ -191,6 +191,12 @@
   margin-top: 22px;
 }
 
+.application-card__document-action {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
 .application-button {
   min-height: 42px;
   padding: 9px 16px;
