@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using RentFlow.Api.Data;
@@ -38,9 +37,8 @@ public class ApplicationValidationOrchestratorTests
             Assert.Equal(ApplicationValidationStepStatus.Completed, step.Status);
             Assert.NotNull(step.StartedAt);
             Assert.NotNull(step.CompletedAt);
-            Assert.False(string.IsNullOrWhiteSpace(step.ResultJson));
-            using var json = JsonDocument.Parse(step.ResultJson!);
-            Assert.Equal(JsonValueKind.Object, json.RootElement.ValueKind);
+            Assert.NotNull(step.Result);
+            Assert.Equal(System.Text.Json.JsonValueKind.Object, step.Result!.Value.ValueKind);
         });
         Assert.NotNull(result.Summary);
         Assert.True(result.Summary!.ApplicationData.IsValid);

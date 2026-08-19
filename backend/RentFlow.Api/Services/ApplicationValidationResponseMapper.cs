@@ -6,6 +6,8 @@ namespace RentFlow.Api.Services;
 
 internal static class ApplicationValidationResponseMapper
 {
+    private const string SafeStepErrorMessage = "The validation step failed unexpectedly.";
+
     internal static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static ApplicationValidationWorkflowResponseDto Map(ApplicationValidationWorkflow workflow)
@@ -33,16 +35,31 @@ internal static class ApplicationValidationResponseMapper
     {
         return new ApplicationValidationStepResponseDto
         {
-            Id = step.Id,
             AgentName = step.AgentName,
             StepOrder = step.StepOrder,
             Status = step.Status,
-            InputSummary = step.InputSummary,
-            ResultJson = step.ResultJson,
-            ErrorMessage = step.ErrorMessage,
+            Result = ParseStructuredResult(step.StepOrder, step.ResultJson),
+            ErrorMessage = string.IsNullOrWhiteSpace(step.ErrorMessage)
+                ? null
+                : SafeStepErrorMessage,
             StartedAt = step.StartedAt,
             CompletedAt = step.CompletedAt
         };
+    }
+
+    private static JsonElement? ParseStructuredResult(int stepOrder, string? json)
+    {
+        object? result = stepOrder switch
+        {
+            1 => Deserialize<ApplicationDataValidationResult>(json),
+            2 => Deserialize<DocumentValidationResult>(json),
+            3 => Deserialize<DeterministicRuleValidationResult>(json),
+            _ => null
+        };
+
+        return result is null
+            ? null
+            : JsonSerializer.SerializeToElement(result, result.GetType(), JsonOptions);
     }
 
     private static ApplicationValidationSummaryDto? CreateSummary(

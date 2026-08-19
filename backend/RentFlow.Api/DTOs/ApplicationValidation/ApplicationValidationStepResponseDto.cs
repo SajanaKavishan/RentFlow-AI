@@ -1,3 +1,4 @@
+using System.Text.Json;
 using RentFlow.Api.Models;
 
 namespace RentFlow.Api.DTOs.ApplicationValidation;
@@ -7,17 +8,13 @@ namespace RentFlow.Api.DTOs.ApplicationValidation;
 /// </summary>
 public class ApplicationValidationStepResponseDto
 {
-    public Guid Id { get; set; }
-
     public string AgentName { get; set; } = string.Empty;
 
     public int StepOrder { get; set; }
 
     public ApplicationValidationStepStatus Status { get; set; }
 
-    public string? InputSummary { get; set; }
-
-    public string? ResultJson { get; set; }
+    public JsonElement? Result { get; set; }
 
     public string? ErrorMessage { get; set; }
 
