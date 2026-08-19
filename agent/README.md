@@ -86,16 +86,36 @@ and deterministic findings it has authorized and prepared:
 Copy `.env.example` values into your environment (the service does not load `.env`
 files or commit secrets):
 
-- `AI_PROVIDER`: `gemini` (aliases: `google`, `google-genai`)
-- `AI_MODEL`: Gemini model identifier, for example `gemini-2.5-flash`
-- `AI_API_KEY`: provider credential
+- `AI_PROVIDER`: `groq` or `gemini` (Gemini aliases: `google`, `google-genai`)
+- `AI_MODEL`: provider model identifier; development defaults to `openai/gpt-oss-20b`
+- `GROQ_API_KEY`: Groq credential, used only when `AI_PROVIDER=groq`
+- `AI_API_KEY`: Gemini credential, used only when `AI_PROVIDER=gemini`
 - `AI_TIMEOUT_SECONDS`: per-call timeout; defaults to 30
 - `AGENT_VERSION`: version returned in validated summaries; defaults to 0.1.0
+- `AI_DEVELOPMENT_DIAGNOSTICS`: temporary sanitized node diagnostics; defaults to disabled
 
 The service and `/health` start without AI configuration. Analysis then returns a
-sanitized `provider_not_configured` error. No production response is faked. With all
-three AI settings present, the provider adapter uses Google's supported `google-genai`
-SDK and Gemini structured output. Unsupported provider names fail safely.
+sanitized `provider_not_configured` error. No production response is faked. Groq uses
+the official asynchronous Groq SDK with strict JSON Schema Structured Outputs for
+`openai/gpt-oss-20b`; Gemini uses Google's supported `google-genai` SDK. Both paths
+retain the full local Pydantic validation after provider output. Unsupported provider
+names fail safely.
+
+Development Groq configuration:
+
+```text
+AI_PROVIDER=groq
+AI_MODEL=openai/gpt-oss-20b
+GROQ_API_KEY=<deployment secret>
+```
+
+Gemini remains available:
+
+```text
+AI_PROVIDER=gemini
+AI_MODEL=gemini-2.5-flash
+AI_API_KEY=<deployment secret>
+```
 
 The ASP.NET client is configured separately with `AgentService:BaseUrl` and
 `AgentService:TimeoutSeconds` (environment names `AgentService__BaseUrl` and

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi.testclient import TestClient
 
 from app.config import Settings
@@ -107,9 +109,12 @@ def test_model_failure_returns_sanitized_error(settings: Settings) -> None:
 
 
 def test_graph_runs_nodes_in_fixed_order(
-    client: TestClient, fake_provider: FakeModelProvider
+    client: TestClient,
+    fake_provider: FakeModelProvider,
+    caplog,
 ) -> None:
-    response = client.post("/internal/application-validation/analyze", json=valid_request())
+    with caplog.at_level(logging.DEBUG, logger="app.services.model_provider"):
+        response = client.post("/internal/application-validation/analyze", json=valid_request())
 
     assert response.status_code == 200
     body = response.json()
@@ -130,3 +135,12 @@ def test_graph_runs_nodes_in_fixed_order(
         "ConsistencyAnalysis",
         "FinalAgentSummary",
     ]
+    for node_name in (
+        "planner",
+        "application_data_analysis",
+        "document_analysis",
+        "consistency_analysis",
+        "final_summary",
+    ):
+        assert f"event=model_invocation_started node={node_name}" in caplog.text
+        assert f"event=model_invocation_succeeded node={node_name}" in caplog.text

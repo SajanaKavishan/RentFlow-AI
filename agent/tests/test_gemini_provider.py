@@ -7,7 +7,9 @@ from typing import Any
 
 import pytest
 from google.genai import errors
+from pydantic import ValidationError
 
+from app.agents.nodes import create_nodes
 from app.config import Settings
 from app.schemas.analysis import ApplicationDataAnalysis
 from app.schemas.plan import Plan
@@ -17,6 +19,7 @@ from app.services.exceptions import (
     ModelTimeoutError,
     UnsupportedProviderError,
 )
+from app.services.diagnostics import sanitized_exception_message
 from app.services.gemini_provider import GeminiModelProvider
 from app.services.model_provider import build_model_provider, request_structured_output
 
@@ -156,7 +159,9 @@ async def test_gemini_adapter_uses_compatible_schema_without_weakening_local_mod
 
 
 @pytest.mark.asyncio
-async def test_gemini_adapter_malformed_text_is_safely_rejected() -> None:
+async def test_gemini_adapter_malformed_text_is_safely_rejected(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     models = FakeGeminiModels(response=SimpleNamespace(parsed=None, text="not-json"))
     provider = GeminiModelProvider(
         api_key="fake-key",
@@ -164,18 +169,26 @@ async def test_gemini_adapter_malformed_text_is_safely_rejected() -> None:
         client=fake_client(models),
     )
 
-    with pytest.raises(ModelOutputValidationError):
-        await request_structured_output(
-            provider,
-            output_schema=Plan,
-            instructions="Use the fixed plan.",
-            input_data={},
-            timeout_seconds=1,
-        )
+    with caplog.at_level(logging.DEBUG, logger="app.services.model_provider"):
+        with pytest.raises(ModelOutputValidationError):
+            await request_structured_output(
+                provider,
+                output_schema=Plan,
+                instructions="Use the fixed plan.",
+                input_data={},
+                timeout_seconds=1,
+                invocation_name="planner",
+            )
+
+    assert "node=planner" in caplog.text
+    assert "category=structured_output_validation_failure" in caplog.text
+    assert "input_value" not in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_gemini_adapter_timeout_is_sanitized() -> None:
+async def test_gemini_adapter_timeout_is_sanitized(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     class SlowModels:
         cancelled = False
 
@@ -194,16 +207,20 @@ async def test_gemini_adapter_timeout_is_sanitized() -> None:
         client=fake_client(models),
     )
 
-    with pytest.raises(ModelTimeoutError):
-        await request_structured_output(
-            provider,
-            output_schema=Plan,
-            instructions="Use the fixed plan.",
-            input_data={},
-            timeout_seconds=0.001,
-        )
+    with caplog.at_level(logging.DEBUG, logger="app.services.model_provider"):
+        with pytest.raises(ModelTimeoutError):
+            await request_structured_output(
+                provider,
+                output_schema=Plan,
+                instructions="Use the fixed plan.",
+                input_data={},
+                timeout_seconds=0.001,
+                invocation_name="planner",
+            )
 
     assert models.cancelled is True
+    assert "category=timeout" in caplog.text
+    assert "exception_type=builtins.TimeoutError" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -231,7 +248,7 @@ async def test_gemini_adapter_provider_failure_is_sanitized(
         client=fake_client(models),
     )
 
-    with caplog.at_level(logging.DEBUG, logger="app.services.gemini_provider"):
+    with caplog.at_level(logging.DEBUG, logger="app.services.model_provider"):
         with pytest.raises(ModelInvocationError) as captured:
             await request_structured_output(
                 provider,
@@ -239,10 +256,15 @@ async def test_gemini_adapter_provider_failure_is_sanitized(
                 instructions="Use the fixed plan.",
                 input_data={},
                 timeout_seconds=1,
+                invocation_name="planner",
             )
 
     assert "provider-detail" not in str(captured.value)
     assert "google.genai.errors.ClientError" in caplog.text
+    assert "node=planner" in caplog.text
+    assert "category=provider_http_failure" in caplog.text
+    assert "status=401/UNAUTHENTICATED" in caplog.text
+    assert "model=gemini-test-model" in caplog.text
     assert "provider-detail" in caplog.text
     assert "secret-api-key" not in caplog.text
     assert "secret-authorization" not in caplog.text
@@ -260,7 +282,7 @@ async def test_gemini_diagnostics_are_not_logged_at_production_level(
         client=fake_client(models),
     )
 
-    with caplog.at_level(logging.INFO, logger="app.services.gemini_provider"):
+    with caplog.at_level(logging.INFO, logger="app.services.model_provider"):
         with pytest.raises(ModelInvocationError):
             await request_structured_output(
                 provider,
@@ -271,3 +293,86 @@ async def test_gemini_diagnostics_are_not_logged_at_production_level(
             )
 
     assert "provider-development-detail" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_application_level_provider_exception_is_categorized(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    models = FakeGeminiModels(error=RuntimeError("safe-development-diagnostic"))
+    provider = GeminiModelProvider(
+        api_key="fake-key",
+        model="gemini-2.5-flash",
+        client=fake_client(models),
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="app.services.model_provider"):
+        with pytest.raises(ModelInvocationError):
+            await request_structured_output(
+                provider,
+                output_schema=Plan,
+                instructions="Use the fixed plan.",
+                input_data={},
+                timeout_seconds=1,
+                invocation_name="planner",
+            )
+
+    assert "category=application_level_exception" in caplog.text
+    assert "exception_type=builtins.RuntimeError" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_sdk_pydantic_failure_is_categorized_as_structured_output(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with pytest.raises(ValidationError) as captured:
+        Plan.model_validate({"steps": ["invalid-step"]})
+    provider = GeminiModelProvider(
+        api_key="fake-key",
+        model="gemini-2.5-flash",
+        client=fake_client(FakeGeminiModels(error=captured.value)),
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="app.services.model_provider"):
+        with pytest.raises(ModelInvocationError):
+            await request_structured_output(
+                provider,
+                output_schema=Plan,
+                instructions="Use the fixed plan.",
+                input_data={},
+                timeout_seconds=1,
+                invocation_name="planner",
+            )
+
+    assert "category=structured_output_validation_failure" in caplog.text
+    assert "exception_type=pydantic_core._pydantic_core.ValidationError" in caplog.text
+    assert "input_value" not in caplog.text
+
+
+def test_diagnostics_omit_messages_containing_request_data() -> None:
+    exc = RuntimeError('{"contents":"private","inputData":{"occupation":"private"}}')
+
+    assert sanitized_exception_message(exc) == (
+        "Provider message omitted because it contained request data"
+    )
+
+
+@pytest.mark.asyncio
+async def test_langgraph_state_failure_is_categorized(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    provider = GeminiModelProvider(
+        api_key="fake-key",
+        model="gemini-2.5-flash",
+        client=fake_client(FakeGeminiModels()),
+    )
+    plan_node = create_nodes(provider, timeout_seconds=1, agent_version="test")["plan"]
+
+    with caplog.at_level(logging.DEBUG, logger="app.agents.nodes"):
+        with pytest.raises(KeyError):
+            await plan_node({})
+
+    assert "event=langgraph_node_failed" in caplog.text
+    assert "node=planner" in caplog.text
+    assert "category=langgraph_state_schema_failure" in caplog.text
+    assert "Missing state key 'objective'" in caplog.text

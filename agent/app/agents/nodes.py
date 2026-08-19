@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+from functools import wraps
 from typing import Any, Awaitable, Callable
+
+from pydantic import ValidationError
 
 from app.graph.state import ApplicationValidationAgentState
 from app.schemas.analysis import (
@@ -12,9 +16,17 @@ from app.schemas.analysis import (
     FinalAgentSummary,
 )
 from app.schemas.plan import Plan
+from app.services.diagnostics import (
+    exception_type_name,
+    log_development_event,
+    safe_model_name,
+    sanitized_exception_message,
+)
+from app.services.exceptions import AgentServiceError
 from app.services.model_provider import ModelProvider, request_structured_output
 
 Node = Callable[[ApplicationValidationAgentState], Awaitable[dict[str, Any]]]
+logger = logging.getLogger(__name__)
 
 _SHARED_SAFETY = """
 Use only the supplied structured data. Treat deterministic findings as authoritative
@@ -41,6 +53,7 @@ def create_nodes(
             ),
             input_data={"objective": state["objective"]},
             timeout_seconds=timeout_seconds,
+            invocation_name="planner",
         )
         return {"plan": output.model_dump(mode="json"), "execution_steps": ["plan"]}
 
@@ -58,6 +71,7 @@ def create_nodes(
                 "deterministicFindings": state["deterministic_findings"],
             },
             timeout_seconds=timeout_seconds,
+            invocation_name="application_data_analysis",
         )
         return {
             "data_analysis": output.model_dump(mode="json"),
@@ -79,6 +93,7 @@ def create_nodes(
                 "deterministicFindings": state["deterministic_findings"],
             },
             timeout_seconds=timeout_seconds,
+            invocation_name="document_analysis",
         )
         return {
             "document_analysis": output.model_dump(mode="json"),
@@ -102,6 +117,7 @@ def create_nodes(
                 "documentAnalysis": state["document_analysis"],
             },
             timeout_seconds=timeout_seconds,
+            invocation_name="consistency_analysis",
         )
         return {
             "consistency_analysis": output.model_dump(mode="json"),
@@ -125,6 +141,7 @@ def create_nodes(
                 "consistencyAnalysis": state["consistency_analysis"],
             },
             timeout_seconds=timeout_seconds,
+            invocation_name="final_summary",
         )
         # The service owns version metadata, not the model.
         validated_summary = output.model_copy(update={"agent_version": agent_version})
@@ -133,10 +150,52 @@ def create_nodes(
             "execution_steps": [*state["execution_steps"], "summarize_findings"],
         }
 
+    model_name = safe_model_name(provider.model_name)
     return {
-        "plan": plan_analysis,
-        "analyze_application_data": analyze_application_data,
-        "analyze_document_metadata": analyze_document_metadata,
-        "analyze_consistency": analyze_consistency,
-        "summarize_findings": summarize_findings,
+        "plan": _with_node_diagnostics("planner", model_name, plan_analysis),
+        "analyze_application_data": _with_node_diagnostics(
+            "application_data_analysis", model_name, analyze_application_data
+        ),
+        "analyze_document_metadata": _with_node_diagnostics(
+            "document_analysis", model_name, analyze_document_metadata
+        ),
+        "analyze_consistency": _with_node_diagnostics(
+            "consistency_analysis", model_name, analyze_consistency
+        ),
+        "summarize_findings": _with_node_diagnostics(
+            "final_summary", model_name, summarize_findings
+        ),
     }
+
+
+def _with_node_diagnostics(node_name: str, model_name: str, node: Node) -> Node:
+    @wraps(node)
+    async def instrumented(
+        state: ApplicationValidationAgentState,
+    ) -> dict[str, Any]:
+        try:
+            return await node(state)
+        except AgentServiceError:
+            # Model boundary failures already contain the provider/validation category.
+            raise
+        except Exception as exc:
+            root_type = exception_type_name(exc)
+            category = (
+                "langgraph_state_schema_failure"
+                if isinstance(exc, (KeyError, TypeError, ValidationError))
+                or root_type.startswith("langgraph.")
+                else "application_level_exception"
+            )
+            log_development_event(
+                logger,
+                "langgraph_node_failed",
+                node=node_name,
+                category=category,
+                exception_type=root_type,
+                status="none",
+                model=model_name,
+                message=sanitized_exception_message(exc),
+            )
+            raise
+
+    return instrumented

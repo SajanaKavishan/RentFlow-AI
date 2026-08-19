@@ -13,6 +13,7 @@ class Settings:
     ai_api_key: str | None
     ai_timeout_seconds: float
     agent_version: str
+    groq_api_key: str | None = None
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -22,11 +23,19 @@ class Settings:
             ai_api_key=_optional_environment_value("AI_API_KEY"),
             ai_timeout_seconds=_positive_float("AI_TIMEOUT_SECONDS", default=30.0),
             agent_version=os.getenv("AGENT_VERSION", "0.1.0").strip() or "0.1.0",
+            groq_api_key=_optional_environment_value("GROQ_API_KEY"),
         )
 
     @property
     def provider_is_configured(self) -> bool:
-        return bool(self.ai_provider and self.ai_model and self.ai_api_key)
+        if not self.ai_provider or not self.ai_model:
+            return False
+        provider_name = self.ai_provider.casefold()
+        if provider_name in {"gemini", "google", "google-genai"}:
+            return bool(self.ai_api_key)
+        if provider_name == "groq":
+            return bool(self.groq_api_key)
+        return True
 
 
 def _optional_environment_value(name: str) -> str | None:

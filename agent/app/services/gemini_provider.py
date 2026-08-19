@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
-import re
 from typing import Any
 
 from google import genai
@@ -12,26 +10,6 @@ from google.genai import types
 
 from app.services.exceptions import ModelInvocationError
 from app.services.model_provider import ModelProvider, StructuredOutput
-
-logger = logging.getLogger(__name__)
-
-_SENSITIVE_MESSAGE_PATTERNS = (
-    re.compile(
-        r"(?i)\b(?:authorization|proxy-authorization)\s*[:=]\s*"
-        r"(?:bearer\s+)?[^\s,;}]+"
-    ),
-    re.compile(r"(?i)\b(?:x-goog-api-key|api[_-]?key)\s*[:=]\s*[^\s,;}]+"),
-    re.compile(r"(?i)\bbearer\s+[a-z0-9._~+/=-]+"),
-    re.compile(r"\bAIza[0-9A-Za-z_-]{20,}\b"),
-)
-
-
-def _sanitize_exception_message(exc: Exception) -> str:
-    """Remove common credential forms before development diagnostics are logged."""
-    message = str(exc).replace("\r", " ").replace("\n", " ")
-    for pattern in _SENSITIVE_MESSAGE_PATTERNS:
-        message = pattern.sub("[REDACTED]", message)
-    return message[:2000]
 
 
 def _simplify_gemini_schema(value: Any) -> None:
@@ -91,6 +69,10 @@ class GeminiModelProvider(ModelProvider):
             http_options=types.HttpOptions(api_version="v1beta"),
         )
 
+    @property
+    def model_name(self) -> str:
+        return self._model
+
     async def generate_structured(
         self,
         *,
@@ -115,14 +97,6 @@ class GeminiModelProvider(ModelProvider):
                 ),
             )
         except Exception as exc:
-            # DEBUG is intentionally development-only. The message is still
-            # sanitized in case a development exception includes request headers.
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(
-                    "Gemini provider exception type=%s message=%s",
-                    f"{type(exc).__module__}.{type(exc).__qualname__}",
-                    _sanitize_exception_message(exc),
-                )
             # Provider messages can contain request details; expose only our safe taxonomy.
             raise ModelInvocationError from exc
 
