@@ -6,7 +6,7 @@ using RentFlow.Api.Services.Interfaces;
 namespace RentFlow.Api.Controllers;
 
 /// <summary>
-/// Exposes deterministic application validation runs for landlord review.
+/// Exposes authoritative validation runs with optional AI-assisted landlord review.
 /// </summary>
 [ApiController]
 [Route("api")]

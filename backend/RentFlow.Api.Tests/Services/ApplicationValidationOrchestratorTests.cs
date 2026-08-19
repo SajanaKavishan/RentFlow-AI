@@ -27,10 +27,15 @@ public class ApplicationValidationOrchestratorTests
         Assert.True(result.RequiresHumanApproval);
         Assert.Equal(100m, result.CompletenessScore);
         Assert.Equal("Ready for landlord review", result.Recommendation);
-        Assert.Equal(3, result.CurrentStep);
-        Assert.Equal([1, 2, 3], result.Steps.Select(step => step.StepOrder));
+        Assert.Equal(4, result.CurrentStep);
+        Assert.Equal([1, 2, 3, 4], result.Steps.Select(step => step.StepOrder));
         Assert.Equal(
-            ["Application Data Validator", "Document Validation Agent", "Deterministic Rule Checker"],
+            [
+                "Application Data Validator",
+                "Document Validation Agent",
+                "Deterministic Rule Checker",
+                "Agentic Application Review"
+            ],
             result.Steps.Select(step => step.AgentName));
         Assert.All(result.Steps, step =>
         {
@@ -44,11 +49,14 @@ public class ApplicationValidationOrchestratorTests
         Assert.True(result.Summary!.ApplicationData.IsValid);
         Assert.True(result.Summary.Documents.IsValid);
         Assert.True(result.Summary.DeterministicRules.Passed);
+        Assert.NotNull(result.Summary.AgenticReview);
+        Assert.True(result.Summary.AgenticReview!.RequiresHumanApproval);
 
         var stored = await context.ApplicationValidationWorkflows
             .Include(workflow => workflow.Steps)
             .SingleAsync();
-        Assert.Equal(3, stored.Steps.Count);
+        Assert.Equal(4, stored.Steps.Count);
+        Assert.Contains("agentVersion", stored.Steps.Single(step => step.StepOrder == 4).ResultJson);
     }
 
     [Fact]
@@ -69,7 +77,7 @@ public class ApplicationValidationOrchestratorTests
         Assert.NotEqual(first.Id, second.Id);
         Assert.Equal(2, workflows.Count);
         Assert.NotNull(queriedFirst);
-        Assert.Equal([1, 2, 3], queriedFirst!.Steps.Select(step => step.StepOrder));
+        Assert.Equal([1, 2, 3, 4], queriedFirst!.Steps.Select(step => step.StepOrder));
     }
 
     [Fact]
@@ -92,6 +100,7 @@ public class ApplicationValidationOrchestratorTests
         Assert.Equal(ApplicationValidationStepStatus.Completed, result.Steps.ElementAt(0).Status);
         Assert.Equal(ApplicationValidationStepStatus.Failed, result.Steps.ElementAt(1).Status);
         Assert.Equal(ApplicationValidationStepStatus.Pending, result.Steps.ElementAt(2).Status);
+        Assert.Equal(ApplicationValidationStepStatus.Pending, result.Steps.ElementAt(3).Status);
         Assert.Equal("The validation step failed unexpectedly.", result.Steps.ElementAt(1).ErrorMessage);
         Assert.DoesNotContain("sensitive", result.Steps.ElementAt(1).ErrorMessage!, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, ruleTool.CallCount);
@@ -152,6 +161,96 @@ public class ApplicationValidationOrchestratorTests
         Assert.DoesNotContain("Approved", result.Recommendation, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Rejected", result.Recommendation, StringComparison.OrdinalIgnoreCase);
         Assert.True(result.RequiresHumanApproval);
+        Assert.Equal(RentalApplicationStatus.UnderReview, application.Status);
+    }
+
+    [Fact]
+    public async Task StartValidationAsync_SendsOnlyAuthorizedMetadataToAgent()
+    {
+        await using var context = CreateContext();
+        var application = AddApplication(context);
+        AddRequiredDocuments(context, application.Id);
+        await context.SaveChangesAsync();
+        var agentClient = new FakeAgentClient();
+
+        await CreateOrchestrator(context, agentClient: agentClient)
+            .StartValidationAsync(application.Id);
+
+        var request = Assert.IsType<ApplicationValidationAgentRequest>(agentClient.LastRequest);
+        Assert.Equal(application.Id, request.ApplicationId);
+        Assert.Equal(2, request.DocumentMetadata.Count);
+        Assert.All(request.DocumentMetadata, document =>
+        {
+            Assert.EndsWith(".pdf", document.FileName);
+            Assert.True(document.IsRequired);
+        });
+        var requestJson = System.Text.Json.JsonSerializer.Serialize(request);
+        Assert.DoesNotContain("storageKey", requestJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fileBytes", requestJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("content", requestJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StartValidationAsync_AgentFailurePreservesDeterministicResultsAndPersistsSafeFailure()
+    {
+        await using var context = CreateContext();
+        var application = AddApplication(context);
+        AddRequiredDocuments(context, application.Id);
+        await context.SaveChangesAsync();
+        var agentClient = new FakeAgentClient
+        {
+            Exception = new ApplicationValidationAgentClientException(
+                ApplicationValidationAgentClientError.ServiceUnavailable,
+                "Sensitive upstream detail")
+        };
+
+        var result = await CreateOrchestrator(context, agentClient: agentClient)
+            .StartValidationAsync(application.Id);
+
+        Assert.Equal(ApplicationValidationWorkflowStatus.Failed, result.Status);
+        Assert.Equal("Ready for landlord review", result.Recommendation);
+        Assert.True(result.RequiresHumanApproval);
+        Assert.All(result.Steps.Take(3), step =>
+            Assert.Equal(ApplicationValidationStepStatus.Completed, step.Status));
+        var aiStep = result.Steps.Single(step => step.StepOrder == 4);
+        Assert.Equal(ApplicationValidationStepStatus.Failed, aiStep.Status);
+        Assert.Equal("The validation step failed unexpectedly.", aiStep.ErrorMessage);
+        Assert.DoesNotContain("Sensitive", aiStep.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+
+        context.ChangeTracker.Clear();
+        var stored = await context.ApplicationValidationWorkflows
+            .Include(workflow => workflow.Steps)
+            .SingleAsync();
+        Assert.Equal(3, stored.Steps.Count(step =>
+            step.Status == ApplicationValidationStepStatus.Completed));
+        Assert.Equal(ApplicationValidationStepStatus.Failed,
+            stored.Steps.Single(step => step.StepOrder == 4).Status);
+    }
+
+    [Fact]
+    public async Task StartValidationAsync_ConflictingAiRecommendationCannotOverrideDeterministicFinding()
+    {
+        await using var context = CreateContext();
+        var application = AddApplication(context);
+        AddDocument(context, application.Id, ApplicationDocumentType.IdentityDocument);
+        await context.SaveChangesAsync();
+        var agentClient = new FakeAgentClient
+        {
+            Result = CreateAgentResult("Ready for landlord review")
+        };
+
+        var result = await CreateOrchestrator(context, agentClient: agentClient)
+            .StartValidationAsync(application.Id);
+
+        Assert.Equal("Request missing documents", result.Recommendation);
+        Assert.Equal(ApplicationValidationWorkflowStatus.AwaitingHumanReview, result.Status);
+        Assert.True(result.RequiresHumanApproval);
+        Assert.Equal(RentalApplicationStatus.Submitted, application.Status);
+        var aiResult = result.Summary!.AgenticReview!;
+        Assert.Equal("Request missing documents", aiResult.Recommendation);
+        Assert.Contains(
+            "AI recommendation differed from deterministic validation; deterministic findings retained.",
+            aiResult.Warnings);
     }
 
     [Fact]
@@ -171,7 +270,8 @@ public class ApplicationValidationOrchestratorTests
     private static ApplicationValidationOrchestrator CreateOrchestrator(
         ApplicationDbContext context,
         IDocumentValidationTool? documentTool = null,
-        IDeterministicApplicationRuleTool? ruleTool = null)
+        IDeterministicApplicationRuleTool? ruleTool = null,
+        IApplicationValidationAgentClient? agentClient = null)
     {
         var timeProvider = new FixedTimeProvider(Now);
         return new ApplicationValidationOrchestrator(
@@ -179,6 +279,7 @@ public class ApplicationValidationOrchestratorTests
             new ApplicationDataValidationTool(timeProvider),
             documentTool ?? new DocumentValidationTool(),
             ruleTool ?? new DeterministicApplicationRuleTool(timeProvider),
+            agentClient ?? new FakeAgentClient(),
             timeProvider,
             NullLogger<ApplicationValidationOrchestrator>.Instance);
     }
@@ -255,6 +356,40 @@ public class ApplicationValidationOrchestratorTests
         {
             CallCount++;
             return Task.FromResult(new DeterministicRuleValidationResult { Passed = true });
+        }
+    }
+
+    private static AgenticApplicationReviewResult CreateAgentResult(
+        string recommendation = "Ready for landlord review")
+    {
+        return new AgenticApplicationReviewResult
+        {
+            Recommendation = recommendation,
+            Summary = "Structured findings are ready for a landlord's manual review.",
+            KeyFindings = ["Deterministic findings were retained."],
+            Warnings = [],
+            RequiresHumanApproval = true,
+            AgentVersion = "test-agent"
+        };
+    }
+
+    private sealed class FakeAgentClient : IApplicationValidationAgentClient
+    {
+        public ApplicationValidationAgentRequest? LastRequest { get; private set; }
+
+        public AgenticApplicationReviewResult Result { get; init; } = CreateAgentResult();
+
+        public Exception? Exception { get; init; }
+
+        public Task<AgenticApplicationReviewResult> AnalyzeAsync(
+            ApplicationValidationAgentRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LastRequest = request;
+            return Exception is null
+                ? Task.FromResult(Result)
+                : Task.FromException<AgenticApplicationReviewResult>(Exception);
         }
     }
 }

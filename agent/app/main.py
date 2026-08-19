@@ -36,7 +36,10 @@ def create_app(
     ) -> JSONResponse:
         del request
         logger.warning("Agent analysis failed with code=%s", exc.code)
-        status_code = 503 if exc.code == "provider_not_configured" else 502
+        status_code = 503 if exc.code in {
+            "provider_not_configured",
+            "unsupported_provider",
+        } else 502
         body = ErrorResponse(
             error=ErrorDetail(
                 code=exc.code,

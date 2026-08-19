@@ -54,6 +54,7 @@ internal static class ApplicationValidationResponseMapper
             1 => Deserialize<ApplicationDataValidationResult>(json),
             2 => Deserialize<DocumentValidationResult>(json),
             3 => Deserialize<DeterministicRuleValidationResult>(json),
+            4 => Deserialize<AgenticApplicationReviewResult>(json),
             _ => null
         };
 
@@ -68,7 +69,7 @@ internal static class ApplicationValidationResponseMapper
     {
         if (workflow.CompletenessScore is null
             || workflow.Recommendation is null
-            || steps.Count != 3
+            || steps.Count is not (3 or 4)
             || steps.Any(step => step.Status != ApplicationValidationStepStatus.Completed))
         {
             return null;
@@ -77,8 +78,14 @@ internal static class ApplicationValidationResponseMapper
         var applicationData = Deserialize<ApplicationDataValidationResult>(steps[0].ResultJson);
         var documents = Deserialize<DocumentValidationResult>(steps[1].ResultJson);
         var deterministicRules = Deserialize<DeterministicRuleValidationResult>(steps[2].ResultJson);
+        var agenticReview = steps.Count == 4
+            ? Deserialize<AgenticApplicationReviewResult>(steps[3].ResultJson)
+            : null;
 
-        if (applicationData is null || documents is null || deterministicRules is null)
+        if (applicationData is null
+            || documents is null
+            || deterministicRules is null
+            || (steps.Count == 4 && agenticReview is null))
         {
             return null;
         }
@@ -90,7 +97,8 @@ internal static class ApplicationValidationResponseMapper
             RequiresHumanApproval = workflow.RequiresHumanApproval,
             ApplicationData = applicationData,
             Documents = documents,
-            DeterministicRules = deterministicRules
+            DeterministicRules = deterministicRules,
+            AgenticReview = agenticReview
         };
     }
 

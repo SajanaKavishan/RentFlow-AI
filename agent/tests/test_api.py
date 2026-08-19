@@ -65,6 +65,22 @@ def test_provider_not_configured_returns_safe_failure(settings: Settings) -> Non
     assert "traceback" not in response.text.lower()
 
 
+def test_unsupported_provider_does_not_break_startup(settings: Settings) -> None:
+    configured = Settings(
+        ai_provider="unsupported",
+        ai_model="model",
+        ai_api_key="test-key",
+        ai_timeout_seconds=settings.ai_timeout_seconds,
+        agent_version=settings.agent_version,
+    )
+    client = TestClient(create_app(settings=configured))
+
+    assert client.get("/health").json() == {"status": "healthy"}
+    response = client.post("/internal/application-validation/analyze", json=valid_request())
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "unsupported_provider"
+
+
 def test_malformed_model_output_returns_safe_failure(settings: Settings) -> None:
     provider = FakeModelProvider({"Plan": {"steps": ["invent_a_tool"]}})
     client = TestClient(create_app(settings=settings, model_provider=provider))

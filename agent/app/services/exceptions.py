@@ -13,6 +13,12 @@ class ProviderConfigurationError(AgentServiceError):
     retryable = False
 
 
+class UnsupportedProviderError(AgentServiceError):
+    code = "unsupported_provider"
+    public_message = "The configured AI provider is not supported."
+    retryable = False
+
+
 class ModelInvocationError(AgentServiceError):
     code = "model_invocation_failed"
     public_message = "The AI provider could not complete the analysis."

@@ -9,8 +9,8 @@ landlord, and every successful result requires human approval.
 
 ASP.NET Core remains RentFlow's only public application API and owns authentication,
 authorization, business rules, PostgreSQL persistence, document access, deterministic
-validation, rental decisions, and human approval. ASP.NET may call this service over a
-private service-to-service route.
+validation, rental decisions, and human approval. ASP.NET calls this service over a
+private service-to-service route only after its deterministic steps complete.
 
 React and Flutter must never call this service directly. This service never connects
 to PostgreSQL or Cloudflare R2 and accepts neither credentials nor arbitrary tools.
@@ -86,16 +86,20 @@ and deterministic findings it has authorized and prepared:
 Copy `.env.example` values into your environment (the service does not load `.env`
 files or commit secrets):
 
-- `AI_PROVIDER`: future provider adapter name
-- `AI_MODEL`: provider model identifier
+- `AI_PROVIDER`: `gemini` (aliases: `google`, `google-genai`)
+- `AI_MODEL`: Gemini model identifier, for example `gemini-2.5-flash`
 - `AI_API_KEY`: provider credential
 - `AI_TIMEOUT_SECONDS`: per-call timeout; defaults to 30
 - `AGENT_VERSION`: version returned in validated summaries; defaults to 0.1.0
 
 The service and `/health` start without AI configuration. Analysis then returns a
-sanitized `provider_not_configured` error. No production response is faked. Real LLM
-adapters are intentionally deferred; configuring environment values alone does not
-activate network access in this foundation.
+sanitized `provider_not_configured` error. No production response is faked. With all
+three AI settings present, the provider adapter uses Google's supported `google-genai`
+SDK and Gemini structured output. Unsupported provider names fail safely.
+
+The ASP.NET client is configured separately with `AgentService:BaseUrl` and
+`AgentService:TimeoutSeconds` (environment names `AgentService__BaseUrl` and
+`AgentService__TimeoutSeconds`). It is not called during ASP.NET startup.
 
 ## Tests
 

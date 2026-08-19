@@ -15,12 +15,23 @@ public class ApplicationValidationOrchestrator(
     IApplicationDataValidationTool applicationDataValidationTool,
     IDocumentValidationTool documentValidationTool,
     IDeterministicApplicationRuleTool deterministicRuleTool,
+    IApplicationValidationAgentClient applicationValidationAgentClient,
     TimeProvider timeProvider,
     ILogger<ApplicationValidationOrchestrator> logger) : IApplicationValidationOrchestrator
 {
     private const string WorkflowObjective =
         "Validate submitted rental application data and document metadata for landlord review.";
     private const string SafeStepErrorMessage = "The validation step failed unexpectedly.";
+    private const string RecommendationConflictWarning =
+        "AI recommendation differed from deterministic validation; deterministic findings retained.";
+
+    private static readonly HashSet<string> AllowedRecommendations =
+    [
+        "Ready for landlord review",
+        "Request missing information",
+        "Request missing documents",
+        "Manual review required"
+    ];
 
     public async Task<ApplicationValidationWorkflowResponseDto> StartValidationAsync(
         Guid applicationId,
@@ -69,7 +80,9 @@ public class ApplicationValidationOrchestrator(
                 CreateStep("Document Validation Agent", 2,
                     $"{documents.Count} application document metadata record(s)."),
                 CreateStep("Deterministic Rule Checker", 3,
-                    "Allow-listed eligibility, income, move-in date, and document-presence rules.")
+                    "Allow-listed eligibility, income, move-in date, and document-presence rules."),
+                CreateStep("Agentic Application Review", 4,
+                    "Authorized application fields, document metadata, and deterministic findings.")
             ]
         };
 
@@ -106,11 +119,34 @@ public class ApplicationValidationOrchestrator(
             return ApplicationValidationResponseMapper.Map(workflow);
         }
 
-        workflow.CompletenessScore = applicationDataResult.CompletenessScore;
-        workflow.Recommendation = DetermineRecommendation(
+        var deterministicRecommendation = DetermineRecommendation(
             applicationDataResult,
             documentResult,
             ruleResult);
+        workflow.CompletenessScore = applicationDataResult.CompletenessScore;
+        workflow.Recommendation = deterministicRecommendation;
+        workflow.RequiresHumanApproval = true;
+
+        var agentRequest = CreateAgentRequest(
+            workflow,
+            application,
+            documents,
+            applicationDataResult,
+            documentResult,
+            ruleResult);
+        var agentResult = await ExecuteStepAsync(
+            workflow,
+            workflow.Steps.Single(step => step.StepOrder == 4),
+            async token => ReconcileAgentResult(
+                deterministicRecommendation,
+                await applicationValidationAgentClient.AnalyzeAsync(agentRequest, token)),
+            cancellationToken);
+        if (agentResult is null)
+        {
+            return ApplicationValidationResponseMapper.Map(workflow);
+        }
+
+        workflow.Recommendation = agentResult.Recommendation;
         workflow.RequiresHumanApproval = true;
         workflow.Status = ApplicationValidationWorkflowStatus.AwaitingHumanReview;
         workflow.UpdatedAt = timeProvider.GetUtcNow();
@@ -201,5 +237,129 @@ public class ApplicationValidationOrchestrator(
         return rules.Passed
             ? "Ready for landlord review"
             : "Request missing information";
+    }
+
+    private static ApplicationValidationAgentRequest CreateAgentRequest(
+        ApplicationValidationWorkflow workflow,
+        RentalApplication application,
+        IReadOnlyCollection<ApplicationDocument> documents,
+        ApplicationDataValidationResult applicationData,
+        DocumentValidationResult documentResult,
+        DeterministicRuleValidationResult rules)
+    {
+        return new ApplicationValidationAgentRequest
+        {
+            WorkflowId = workflow.Id,
+            ApplicationId = workflow.ApplicationId,
+            Objective = workflow.Objective,
+            ApplicationData = new ApplicationValidationAgentApplicationData
+            {
+                MoveInDate = application.MoveInDate,
+                MonthlyIncome = application.MonthlyIncome,
+                Occupation = application.Occupation,
+                NumberOfOccupants = application.NumberOfOccupants
+            },
+            DocumentMetadata = documents.Select(document =>
+                new ApplicationValidationAgentDocumentMetadata
+                {
+                    DocumentId = document.Id,
+                    DocumentType = document.DocumentType.ToString(),
+                    FileName = document.OriginalFileName,
+                    IsRequired = document.DocumentType is ApplicationDocumentType.IdentityDocument
+                        or ApplicationDocumentType.IncomeProof
+                }).ToArray(),
+            DeterministicFindings = CreateDeterministicFindings(
+                applicationData,
+                documentResult,
+                rules)
+        };
+    }
+
+    private static IReadOnlyCollection<ApplicationValidationAgentDeterministicFinding>
+        CreateDeterministicFindings(
+            ApplicationDataValidationResult applicationData,
+            DocumentValidationResult documents,
+            DeterministicRuleValidationResult rules)
+    {
+        var findings = new List<ApplicationValidationAgentDeterministicFinding>();
+        findings.AddRange(applicationData.MissingFields.Select(field => CreateFinding(
+            $"application.missing.{field}",
+            "error",
+            "A required application field is missing or invalid.",
+            field)));
+        findings.AddRange(applicationData.Warnings.Select((warning, index) => CreateFinding(
+            $"application.warning.{index + 1}", "warning", warning)));
+        findings.AddRange(documents.MissingDocumentTypes.Select(documentType => CreateFinding(
+            $"document.missing.{documentType}",
+            "error",
+            $"Required {documentType} document metadata is missing.",
+            "documentMetadata")));
+        findings.AddRange(documents.Warnings.Select((warning, index) => CreateFinding(
+            $"document.warning.{index + 1}", "warning", warning)));
+        findings.AddRange(rules.FailedRules.Select(rule => CreateFinding(
+            $"rule.failed.{rule}",
+            "error",
+            $"Deterministic rule {rule} failed.")));
+        findings.AddRange(rules.Warnings.Select((warning, index) => CreateFinding(
+            $"rule.warning.{index + 1}", "warning", warning)));
+        return findings;
+    }
+
+    private static ApplicationValidationAgentDeterministicFinding CreateFinding(
+        string code,
+        string severity,
+        string message,
+        string? field = null)
+    {
+        return new ApplicationValidationAgentDeterministicFinding
+        {
+            Code = code,
+            Severity = severity,
+            Message = message,
+            Field = field
+        };
+    }
+
+    private static AgenticApplicationReviewResult ReconcileAgentResult(
+        string deterministicRecommendation,
+        AgenticApplicationReviewResult agentResult)
+    {
+        if (agentResult is null
+            || !agentResult.RequiresHumanApproval
+            || !AllowedRecommendations.Contains(agentResult.Recommendation)
+            || string.IsNullOrWhiteSpace(agentResult.Summary)
+            || string.IsNullOrWhiteSpace(agentResult.AgentVersion)
+            || agentResult.KeyFindings is null
+            || agentResult.Warnings is null)
+        {
+            throw new InvalidOperationException("The agent returned an unsafe result.");
+        }
+
+        var recommendationsDiffer = !string.Equals(
+            deterministicRecommendation,
+            agentResult.Recommendation,
+            StringComparison.Ordinal);
+        var recommendation = recommendationsDiffer
+            ? deterministicRecommendation == "Ready for landlord review"
+                ? "Manual review required"
+                : deterministicRecommendation
+            : deterministicRecommendation;
+
+        var warnings = recommendationsDiffer
+            ? agentResult.Warnings
+                .Append(RecommendationConflictWarning)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray()
+            : agentResult.Warnings.ToArray();
+
+        return new AgenticApplicationReviewResult
+        {
+            Recommendation = recommendation,
+            Summary = agentResult.Summary,
+            KeyFindings = agentResult.KeyFindings.ToArray(),
+            Warnings = warnings,
+            RequiresHumanApproval = true,
+            AgentVersion = agentResult.AgentVersion
+        };
     }
 }

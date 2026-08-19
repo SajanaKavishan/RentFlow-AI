@@ -10,10 +10,12 @@ from pydantic import BaseModel, ValidationError
 
 from app.config import Settings
 from app.services.exceptions import (
+    AgentServiceError,
     ModelInvocationError,
     ModelOutputValidationError,
     ModelTimeoutError,
     ProviderConfigurationError,
+    UnsupportedProviderError,
 )
 
 StructuredOutput = TypeVar("StructuredOutput", bound=BaseModel)
@@ -48,9 +50,32 @@ class UnavailableModelProvider(ModelProvider):
         raise ProviderConfigurationError("Configured provider adapter is not installed")
 
 
+class UnsupportedModelProvider(ModelProvider):
+    async def generate_structured(
+        self,
+        *,
+        output_schema: type[StructuredOutput],
+        instructions: str,
+        input_data: dict[str, Any],
+    ) -> Any:
+        del output_schema, instructions, input_data
+        raise UnsupportedProviderError
+
+
 def build_model_provider(settings: Settings) -> ModelProvider:
-    # Real provider adapters are deliberately deferred. This never silently fakes output.
-    return UnavailableModelProvider(configured=settings.provider_is_configured)
+    if not settings.provider_is_configured:
+        return UnavailableModelProvider(configured=False)
+
+    provider_name = settings.ai_provider.casefold() if settings.ai_provider else ""
+    if provider_name in {"gemini", "google", "google-genai"}:
+        from app.services.gemini_provider import GeminiModelProvider
+
+        return GeminiModelProvider(
+            api_key=settings.ai_api_key or "",
+            model=settings.ai_model or "",
+        )
+    # Configuration errors are reported on analysis; health/startup remain available.
+    return UnsupportedModelProvider()
 
 
 async def request_structured_output(
@@ -70,10 +95,12 @@ async def request_structured_output(
             ),
             timeout=timeout_seconds,
         )
-    except ProviderConfigurationError:
+    except (ProviderConfigurationError, UnsupportedProviderError):
         raise
     except TimeoutError as exc:
         raise ModelTimeoutError from exc
+    except AgentServiceError:
+        raise
     except Exception as exc:
         raise ModelInvocationError from exc
 

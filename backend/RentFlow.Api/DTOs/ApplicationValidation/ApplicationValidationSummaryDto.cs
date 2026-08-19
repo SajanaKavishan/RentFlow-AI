@@ -13,4 +13,6 @@ public class ApplicationValidationSummaryDto
     public DocumentValidationResult Documents { get; init; } = new();
 
     public DeterministicRuleValidationResult DeterministicRules { get; init; } = new();
+
+    public AgenticApplicationReviewResult? AgenticReview { get; init; }
 }
