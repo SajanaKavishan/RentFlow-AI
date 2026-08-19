@@ -11,6 +11,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<ApplicationDocument> ApplicationDocuments => Set<ApplicationDocument>();
 
+    public DbSet<ApplicationValidationWorkflow> ApplicationValidationWorkflows => Set<ApplicationValidationWorkflow>();
+
+    public DbSet<ApplicationValidationStep> ApplicationValidationSteps => Set<ApplicationValidationStep>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -128,6 +132,92 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(document => document.ApplicationId);
             entity.HasIndex(document => document.DocumentType);
+        });
+
+        modelBuilder.Entity<ApplicationValidationWorkflow>(entity =>
+        {
+            entity.HasKey(workflow => workflow.Id);
+
+            entity.Property(workflow => workflow.ApplicationId)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.Objective)
+                .HasMaxLength(2000)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.Status)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.CurrentStep)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.CompletenessScore)
+                .HasPrecision(5, 2)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.Recommendation)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.RequiresHumanApproval)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.CreatedAt)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.UpdatedAt)
+                .IsRequired();
+
+            entity.HasOne(workflow => workflow.Application)
+                .WithMany()
+                .HasForeignKey(workflow => workflow.ApplicationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(workflow => workflow.ApplicationId);
+        });
+
+        modelBuilder.Entity<ApplicationValidationStep>(entity =>
+        {
+            entity.HasKey(step => step.Id);
+
+            entity.Property(step => step.WorkflowId)
+                .IsRequired();
+
+            entity.Property(step => step.AgentName)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(step => step.StepOrder)
+                .IsRequired();
+
+            entity.Property(step => step.Status)
+                .IsRequired();
+
+            entity.Property(step => step.InputSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.ResultJson)
+                .HasColumnType("text")
+                .IsRequired(false);
+
+            entity.Property(step => step.ErrorMessage)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.StartedAt)
+                .IsRequired(false);
+
+            entity.Property(step => step.CompletedAt)
+                .IsRequired(false);
+
+            entity.HasOne(step => step.Workflow)
+                .WithMany(workflow => workflow.Steps)
+                .HasForeignKey(step => step.WorkflowId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(step => new { step.WorkflowId, step.StepOrder })
+                .IsUnique();
         });
     }
 }
