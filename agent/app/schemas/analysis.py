@@ -7,6 +7,10 @@ from enum import Enum
 from pydantic import Field, field_validator
 
 from app.schemas.common import Finding, StrictModel
+from app.schemas.supporting_documents import (
+    CrossDocumentConsistencyResult,
+    SupportingDocumentVerificationResult,
+)
 
 
 class ApplicationDataAnalysis(StrictModel):
@@ -48,6 +52,15 @@ class FinalAgentSummary(StrictModel):
     warnings: list[str] = Field(default_factory=list, max_length=100)
     requires_human_approval: bool = Field(alias="requiresHumanApproval")
     agent_version: str = Field(min_length=1, max_length=100, alias="agentVersion")
+    supporting_document_verification: list[SupportingDocumentVerificationResult] = Field(
+        default_factory=list,
+        max_length=100,
+        alias="supportingDocumentVerification",
+    )
+    cross_document_consistency: CrossDocumentConsistencyResult = Field(
+        default_factory=lambda: CrossDocumentConsistencyResult(requires_manual_review=True),
+        alias="crossDocumentConsistency",
+    )
 
     @field_validator("requires_human_approval")
     @classmethod

@@ -37,6 +37,8 @@ def valid_model_responses() -> dict[str, Any]:
             "steps": [
                 "analyze_application_data",
                 "analyze_document_metadata",
+                "verify_supporting_documents",
+                "analyze_cross_document_consistency",
                 "analyze_consistency",
                 "summarize_findings",
             ]
@@ -84,6 +86,7 @@ def valid_request() -> dict[str, Any]:
             }
         ],
         "deterministicFindings": [],
+        "supportingDocuments": [],
     }
 
 

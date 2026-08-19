@@ -15,6 +15,9 @@ public class ApplicationValidationAgentRequest
 
     public IReadOnlyCollection<ApplicationValidationAgentDeterministicFinding> DeterministicFindings { get; init; }
         = Array.Empty<ApplicationValidationAgentDeterministicFinding>();
+
+    public IReadOnlyCollection<SupportingDocumentAnalysisInput> SupportingDocuments { get; init; }
+        = Array.Empty<SupportingDocumentAnalysisInput>();
 }
 
 public class ApplicationValidationAgentApplicationData
@@ -74,6 +77,64 @@ public class AgenticApplicationReviewResult
     public bool RequiresHumanApproval { get; init; }
 
     public string AgentVersion { get; init; } = string.Empty;
+
+    public IReadOnlyCollection<SupportingDocumentVerificationResult>
+        SupportingDocumentVerification { get; init; }
+        = Array.Empty<SupportingDocumentVerificationResult>();
+
+    public CrossDocumentConsistencyResult CrossDocumentConsistency { get; init; } = new();
+}
+
+public sealed class SupportingDocumentVerificationResult
+{
+    public Guid DocumentId { get; init; }
+
+    public string DocumentType { get; init; } = string.Empty;
+
+    public bool Readable { get; init; }
+
+    public string DetectedDocumentCategory { get; init; } = string.Empty;
+
+    public SupportingDocumentExtractedFacts ExtractedFacts { get; init; } = new();
+
+    public IReadOnlyCollection<string> Warnings { get; init; } = Array.Empty<string>();
+
+    public string ConfidenceLabel { get; init; } = string.Empty;
+}
+
+public sealed class SupportingDocumentExtractedFacts
+{
+    public string? ApplicantName { get; init; }
+
+    public decimal? IncomeAmount { get; init; }
+
+    public string? PayPeriod { get; init; }
+
+    public string? EmployerName { get; init; }
+
+    public string? JobTitle { get; init; }
+
+    public DateOnly? DocumentDate { get; init; }
+}
+
+public sealed class CrossDocumentConsistencyResult
+{
+    public IReadOnlyCollection<CrossDocumentConsistencyFinding> MatchedFacts { get; init; }
+        = Array.Empty<CrossDocumentConsistencyFinding>();
+
+    public IReadOnlyCollection<CrossDocumentConsistencyFinding> Mismatches { get; init; }
+        = Array.Empty<CrossDocumentConsistencyFinding>();
+
+    public IReadOnlyCollection<string> Warnings { get; init; } = Array.Empty<string>();
+
+    public bool RequiresManualReview { get; init; }
+}
+
+public sealed class CrossDocumentConsistencyFinding
+{
+    public string Comparison { get; init; } = string.Empty;
+
+    public string Message { get; init; } = string.Empty;
 }
 
 public class ApplicationValidationAgentExecutionMetadata

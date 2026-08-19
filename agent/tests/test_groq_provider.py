@@ -144,6 +144,7 @@ async def test_groq_structured_success_uses_strict_json_schema() -> None:
     completions = FakeGroqCompletions(
         response=completion_response(
             '{"steps":["analyze_application_data","analyze_document_metadata",'
+            '"verify_supporting_documents","analyze_cross_document_consistency",'
             '"analyze_consistency","summarize_findings"]}'
         )
     )

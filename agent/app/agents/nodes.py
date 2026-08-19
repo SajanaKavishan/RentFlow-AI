@@ -16,6 +16,11 @@ from app.schemas.analysis import (
     FinalAgentSummary,
 )
 from app.schemas.plan import Plan
+from app.schemas.supporting_documents import (
+    CrossDocumentConsistencyResult,
+    SupportingDocumentInput,
+    SupportingDocumentVerificationResult,
+)
 from app.services.diagnostics import (
     exception_type_name,
     log_development_event,
@@ -24,6 +29,12 @@ from app.services.diagnostics import (
 )
 from app.services.exceptions import AgentServiceError
 from app.services.model_provider import ModelProvider, request_structured_output
+from app.services.supporting_document_verification import (
+    CrossDocumentConsistencyAnalyzer,
+    PhaseAFakeCrossDocumentConsistencyAnalyzer,
+    PhaseAFakeSupportingDocumentVerifier,
+    SupportingDocumentVerifier,
+)
 
 Node = Callable[[ApplicationValidationAgentState], Awaitable[dict[str, Any]]]
 logger = logging.getLogger(__name__)
@@ -41,7 +52,13 @@ def create_nodes(
     *,
     timeout_seconds: float,
     agent_version: str,
+    supporting_document_verifier: SupportingDocumentVerifier | None = None,
+    cross_document_analyzer: CrossDocumentConsistencyAnalyzer | None = None,
 ) -> dict[str, Node]:
+    document_verifier = supporting_document_verifier or PhaseAFakeSupportingDocumentVerifier()
+    document_consistency_analyzer = (
+        cross_document_analyzer or PhaseAFakeCrossDocumentConsistencyAnalyzer()
+    )
     async def plan_analysis(state: ApplicationValidationAgentState) -> dict[str, Any]:
         output = await request_structured_output(
             provider,
@@ -49,6 +66,7 @@ def create_nodes(
             instructions=(
                 "Create the fixed application-validation plan. The only valid ordered "
                 "steps are analyze_application_data, analyze_document_metadata, "
+                "verify_supporting_documents, analyze_cross_document_consistency, "
                 "analyze_consistency, summarize_findings. " + _SHARED_SAFETY
             ),
             input_data={"objective": state["objective"]},
@@ -124,6 +142,44 @@ def create_nodes(
             "execution_steps": [*state["execution_steps"], "analyze_consistency"],
         }
 
+    async def verify_supporting_documents(
+        state: ApplicationValidationAgentState,
+    ) -> dict[str, Any]:
+        inputs = [
+            SupportingDocumentInput.model_validate(item)
+            for item in state["supporting_document_inputs"]
+        ]
+        results = await document_verifier.verify(inputs)
+        validated = [
+            SupportingDocumentVerificationResult.model_validate(item)
+            for item in results
+        ]
+        return {
+            "supporting_document_verification": [
+                item.model_dump(mode="json") for item in validated
+            ],
+            "execution_steps": [*state["execution_steps"], "verify_supporting_documents"],
+        }
+
+    async def analyze_cross_document_consistency(
+        state: ApplicationValidationAgentState,
+    ) -> dict[str, Any]:
+        verification = [
+            SupportingDocumentVerificationResult.model_validate(item)
+            for item in state["supporting_document_verification"]
+        ]
+        result = await document_consistency_analyzer.analyze(
+            state["application_data"], verification
+        )
+        validated = CrossDocumentConsistencyResult.model_validate(result)
+        return {
+            "cross_document_consistency": validated.model_dump(mode="json"),
+            "execution_steps": [
+                *state["execution_steps"],
+                "analyze_cross_document_consistency",
+            ],
+        }
+
     async def summarize_findings(state: ApplicationValidationAgentState) -> dict[str, Any]:
         output = await request_structured_output(
             provider,
@@ -144,7 +200,18 @@ def create_nodes(
             invocation_name="final_summary",
         )
         # The service owns version metadata, not the model.
-        validated_summary = output.model_copy(update={"agent_version": agent_version})
+        validated_summary = output.model_copy(
+            update={
+                "agent_version": agent_version,
+                "supporting_document_verification": [
+                    SupportingDocumentVerificationResult.model_validate(item)
+                    for item in state["supporting_document_verification"]
+                ],
+                "cross_document_consistency": CrossDocumentConsistencyResult.model_validate(
+                    state["cross_document_consistency"]
+                ),
+            }
+        )
         return {
             "final_summary": validated_summary.model_dump(mode="json", by_alias=True),
             "execution_steps": [*state["execution_steps"], "summarize_findings"],
@@ -158,6 +225,12 @@ def create_nodes(
         ),
         "analyze_document_metadata": _with_node_diagnostics(
             "document_analysis", model_name, analyze_document_metadata
+        ),
+        "verify_supporting_documents": _with_node_diagnostics(
+            "supporting_document_verification", model_name, verify_supporting_documents
+        ),
+        "analyze_cross_document_consistency": _with_node_diagnostics(
+            "cross_document_consistency", model_name, analyze_cross_document_consistency
         ),
         "analyze_consistency": _with_node_diagnostics(
             "consistency_analysis", model_name, analyze_consistency

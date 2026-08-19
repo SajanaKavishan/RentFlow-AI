@@ -14,8 +14,10 @@ private service-to-service route only after its deterministic steps complete.
 
 React and Flutter must never call this service directly. This service never connects
 to PostgreSQL or Cloudflare R2 and accepts neither credentials nor arbitrary tools.
-The current document node analyzes metadata supplied by ASP.NET; it performs no OCR or
-file reads.
+ASP.NET may also send bounded PDF/JPEG/PNG content as Base64 after it performs application
+authorization and private R2 retrieval. Python receives no storage key, URL, credential,
+or database access. Phase A validates the in-memory content contract but performs no OCR,
+multimodal extraction, file persistence, or supporting-document network call.
 
 ## Workflow
 
@@ -24,8 +26,11 @@ file reads.
 1. `plan` validates the one allow-listed plan.
 2. `analyze_application_data` describes completeness and visible inconsistencies.
 3. `analyze_document_metadata` checks metadata coverage, missing types, and duplicates.
-4. `analyze_consistency` compares all structured inputs and authoritative deterministic findings.
-5. `summarize_findings` returns one allowed landlord-review recommendation.
+4. `verify_supporting_documents` returns fake Phase A verification placeholders.
+5. `analyze_cross_document_consistency` returns a fake Phase A consistency placeholder.
+6. `analyze_consistency` compares existing structured inputs and authoritative findings.
+7. `summarize_findings` returns one allowed landlord-review recommendation and attaches the
+   deterministic document placeholders.
 
 The state remains JSON serializable. Each model response is validated with its own
 Pydantic schema. Hidden reasoning is neither requested nor returned; only concise
@@ -77,9 +82,25 @@ and deterministic findings it has authorized and prepared:
       "isRequired": true
     }
   ],
-  "deterministicFindings": []
+  "deterministicFindings": [],
+  "supportingDocuments": [
+    {
+      "documentId": "document-789",
+      "documentType": "IncomeProof",
+      "originalFileName": "income.pdf",
+      "contentType": "application/pdf",
+      "sizeBytes": 4,
+      "contentBase64": "JVBERg=="
+    }
+  ]
 }
 ```
+
+Supporting-document inputs reject unknown fields, malformed Base64, decoded size above
+5 MiB, mismatched `sizeBytes`, unsupported MIME types, and unsupported document types.
+Output schemas allow only the narrow facts and comparisons documented in
+`docs/application-validation-agent-integration.md`; sensitive identity data and all
+tenant/trust/fraud/risk scores are absent.
 
 ## Configuration
 

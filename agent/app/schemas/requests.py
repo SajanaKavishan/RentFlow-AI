@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import AliasChoices, Field, field_validator
 
 from app.schemas.common import StrictModel, reject_sensitive_input_keys
+from app.schemas.supporting_documents import SupportingDocumentInput
 
 
 class DocumentMetadata(StrictModel):
@@ -69,6 +70,12 @@ class ApplicationValidationRequest(StrictModel):
         max_length=200,
         validation_alias=AliasChoices("deterministicFindings", "deterministic_findings"),
         serialization_alias="deterministicFindings",
+    )
+    supporting_documents: list[SupportingDocumentInput] = Field(
+        default_factory=list,
+        max_length=100,
+        validation_alias=AliasChoices("supportingDocuments", "supporting_documents"),
+        serialization_alias="supportingDocuments",
     )
 
     @field_validator("application_data")

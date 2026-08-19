@@ -41,6 +41,11 @@ async def analyze_application_validation(
         "deterministic_findings": [
             item.model_dump(mode="json") for item in payload.deterministic_findings
         ],
+        "supporting_document_inputs": [
+            item.model_dump(mode="json") for item in payload.supporting_documents
+        ],
+        "supporting_document_verification": [],
+        "cross_document_consistency": None,
         "plan": None,
         "data_analysis": None,
         "document_analysis": None,

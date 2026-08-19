@@ -29,7 +29,7 @@ public class ApplicationValidationAgentClientTests
     }
 
     [Fact]
-    public async Task AnalyzeAsync_RequestNeverContainsStorageKeysOrFileBytes()
+    public async Task AnalyzeAsync_RequestNeverContainsStorageKeysOrUrls()
     {
         var request = CreateRequest();
         string? requestBody = null;
@@ -45,8 +45,11 @@ public class ApplicationValidationAgentClientTests
         Assert.NotNull(requestBody);
         Assert.DoesNotContain("storageKey", requestBody, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("fileBytes", requestBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("signedUrl", requestBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("publicUrl", requestBody, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("documentMetadata", requestBody, StringComparison.Ordinal);
         Assert.Contains("deterministicFindings", requestBody, StringComparison.Ordinal);
+        Assert.Contains("supportingDocuments", requestBody, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -180,6 +183,8 @@ public class ApplicationValidationAgentClientTests
                   "plan",
                   "analyze_application_data",
                   "analyze_document_metadata",
+                  "verify_supporting_documents",
+                  "analyze_cross_document_consistency",
                   "analyze_consistency",
                   "summarize_findings"
                 ]

@@ -165,11 +165,13 @@ public class ApplicationValidationOrchestratorTests
     }
 
     [Fact]
-    public async Task StartValidationAsync_SendsOnlyAuthorizedMetadataToAgent()
+    public async Task StartValidationAsync_SendsOnlyCurrentApplicationDocumentsWithoutStorageDetails()
     {
         await using var context = CreateContext();
         var application = AddApplication(context);
         AddRequiredDocuments(context, application.Id);
+        var otherApplication = AddApplication(context);
+        AddDocument(context, otherApplication.Id, ApplicationDocumentType.IncomeProof);
         await context.SaveChangesAsync();
         var agentClient = new FakeAgentClient();
 
@@ -179,6 +181,13 @@ public class ApplicationValidationOrchestratorTests
         var request = Assert.IsType<ApplicationValidationAgentRequest>(agentClient.LastRequest);
         Assert.Equal(application.Id, request.ApplicationId);
         Assert.Equal(2, request.DocumentMetadata.Count);
+        Assert.Equal(2, request.SupportingDocuments.Count);
+        Assert.All(request.SupportingDocuments, document =>
+        {
+            Assert.Contains(document.DocumentId, request.DocumentMetadata.Select(item => item.DocumentId));
+            Assert.False(string.IsNullOrWhiteSpace(document.ContentBase64));
+            Assert.Equal(100, document.SizeBytes);
+        });
         Assert.All(request.DocumentMetadata, document =>
         {
             Assert.EndsWith(".pdf", document.FileName);
@@ -186,8 +195,8 @@ public class ApplicationValidationOrchestratorTests
         });
         var requestJson = System.Text.Json.JsonSerializer.Serialize(request);
         Assert.DoesNotContain("storageKey", requestJson, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("fileBytes", requestJson, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("content", requestJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("signedUrl", requestJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("publicUrl", requestJson, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -225,6 +234,29 @@ public class ApplicationValidationOrchestratorTests
             step.Status == ApplicationValidationStepStatus.Completed));
         Assert.Equal(ApplicationValidationStepStatus.Failed,
             stored.Steps.Single(step => step.StepOrder == 4).Status);
+    }
+
+    [Fact]
+    public async Task StartValidationAsync_DocumentPreparationFailureDoesNotFailWorkflow()
+    {
+        await using var context = CreateContext();
+        var application = AddApplication(context);
+        AddRequiredDocuments(context, application.Id);
+        await context.SaveChangesAsync();
+        var agentClient = new FakeAgentClient();
+
+        var result = await CreateOrchestrator(
+                context,
+                agentClient: agentClient,
+                contentService: new ExcludingDocumentContentService())
+            .StartValidationAsync(application.Id);
+
+        Assert.Equal(ApplicationValidationWorkflowStatus.AwaitingHumanReview, result.Status);
+        Assert.Empty(agentClient.LastRequest!.SupportingDocuments);
+        Assert.Contains(agentClient.LastRequest.DeterministicFindings,
+            finding => finding.Code == "document.analysis.retrieval_failed");
+        Assert.Contains("The document content could not be prepared for analysis.",
+            result.Summary!.AgenticReview!.Warnings);
     }
 
     [Fact]
@@ -271,7 +303,8 @@ public class ApplicationValidationOrchestratorTests
         ApplicationDbContext context,
         IDocumentValidationTool? documentTool = null,
         IDeterministicApplicationRuleTool? ruleTool = null,
-        IApplicationValidationAgentClient? agentClient = null)
+        IApplicationValidationAgentClient? agentClient = null,
+        IApplicationDocumentContentService? contentService = null)
     {
         var timeProvider = new FixedTimeProvider(Now);
         return new ApplicationValidationOrchestrator(
@@ -280,8 +313,48 @@ public class ApplicationValidationOrchestratorTests
             documentTool ?? new DocumentValidationTool(),
             ruleTool ?? new DeterministicApplicationRuleTool(timeProvider),
             agentClient ?? new FakeAgentClient(),
+            contentService ?? new FakeApplicationDocumentContentService(),
             timeProvider,
             NullLogger<ApplicationValidationOrchestrator>.Instance);
+    }
+
+    private sealed class ExcludingDocumentContentService : IApplicationDocumentContentService
+    {
+        public Task<SupportingDocumentPreparationResult> PrepareForAnalysisAsync(
+            Guid applicationId,
+            ApplicationDocument authorizedDocument,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SupportingDocumentPreparationResult
+            {
+                DocumentId = authorizedDocument.Id,
+                WarningCode = "retrieval_failed",
+                Warning = "The document content could not be prepared for analysis."
+            });
+    }
+
+    private sealed class FakeApplicationDocumentContentService
+        : IApplicationDocumentContentService
+    {
+        public Task<SupportingDocumentPreparationResult> PrepareForAnalysisAsync(
+            Guid applicationId,
+            ApplicationDocument authorizedDocument,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal(applicationId, authorizedDocument.ApplicationId);
+            return Task.FromResult(new SupportingDocumentPreparationResult
+            {
+                DocumentId = authorizedDocument.Id,
+                Input = new SupportingDocumentAnalysisInput
+                {
+                    DocumentId = authorizedDocument.Id,
+                    DocumentType = authorizedDocument.DocumentType,
+                    OriginalFileName = authorizedDocument.OriginalFileName,
+                    ContentType = authorizedDocument.ContentType,
+                    SizeBytes = authorizedDocument.FileSizeBytes,
+                    ContentBase64 = Convert.ToBase64String(new byte[authorizedDocument.FileSizeBytes])
+                }
+            });
+        }
     }
 
     private static ApplicationDbContext CreateContext()

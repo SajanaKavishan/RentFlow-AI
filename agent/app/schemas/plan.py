@@ -12,6 +12,8 @@ from app.schemas.common import StrictModel
 PlanStep = Literal[
     "analyze_application_data",
     "analyze_document_metadata",
+    "verify_supporting_documents",
+    "analyze_cross_document_consistency",
     "analyze_consistency",
     "summarize_findings",
 ]
@@ -19,13 +21,15 @@ PlanStep = Literal[
 ALLOWED_PLAN_STEPS: tuple[PlanStep, ...] = (
     "analyze_application_data",
     "analyze_document_metadata",
+    "verify_supporting_documents",
+    "analyze_cross_document_consistency",
     "analyze_consistency",
     "summarize_findings",
 )
 
 
 class Plan(StrictModel):
-    steps: list[PlanStep] = Field(min_length=4, max_length=4)
+    steps: list[PlanStep] = Field(min_length=6, max_length=6)
 
     @model_validator(mode="after")
     def require_fixed_order(self) -> "Plan":

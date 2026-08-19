@@ -125,6 +125,8 @@ def test_graph_runs_nodes_in_fixed_order(
         "plan",
         "analyze_application_data",
         "analyze_document_metadata",
+        "verify_supporting_documents",
+        "analyze_cross_document_consistency",
         "analyze_consistency",
         "summarize_findings",
     ]

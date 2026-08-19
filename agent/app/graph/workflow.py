@@ -14,12 +14,16 @@ def build_application_validation_graph(
     *,
     timeout_seconds: float,
     agent_version: str,
+    supporting_document_verifier=None,
+    cross_document_analyzer=None,
 ):
     graph = StateGraph(ApplicationValidationAgentState)
     nodes = create_nodes(
         provider,
         timeout_seconds=timeout_seconds,
         agent_version=agent_version,
+        supporting_document_verifier=supporting_document_verifier,
+        cross_document_analyzer=cross_document_analyzer,
     )
     for name, node in nodes.items():
         graph.add_node(name, node)
@@ -27,7 +31,9 @@ def build_application_validation_graph(
     graph.add_edge(START, "plan")
     graph.add_edge("plan", "analyze_application_data")
     graph.add_edge("analyze_application_data", "analyze_document_metadata")
-    graph.add_edge("analyze_document_metadata", "analyze_consistency")
+    graph.add_edge("analyze_document_metadata", "verify_supporting_documents")
+    graph.add_edge("verify_supporting_documents", "analyze_cross_document_consistency")
+    graph.add_edge("analyze_cross_document_consistency", "analyze_consistency")
     graph.add_edge("analyze_consistency", "summarize_findings")
     graph.add_edge("summarize_findings", END)
     return graph.compile()

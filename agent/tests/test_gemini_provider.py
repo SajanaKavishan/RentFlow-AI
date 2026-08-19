@@ -77,10 +77,12 @@ async def test_gemini_adapter_returns_fake_structured_success() -> None:
     models = FakeGeminiModels(
         response=SimpleNamespace(
             parsed={
-                "steps": [
-                    "analyze_application_data",
-                    "analyze_document_metadata",
-                    "analyze_consistency",
+                    "steps": [
+                        "analyze_application_data",
+                        "analyze_document_metadata",
+                        "verify_supporting_documents",
+                        "analyze_cross_document_consistency",
+                        "analyze_consistency",
                     "summarize_findings",
                 ]
             },
