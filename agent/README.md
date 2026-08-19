@@ -83,8 +83,9 @@ and deterministic findings it has authorized and prepared:
 
 ## Configuration
 
-Copy `.env.example` values into your environment (the service does not load `.env`
-files or commit secrets):
+Copy `.env.example` to `agent/.env` for local development. The service loads that
+agent-root file automatically; real operating-system environment variables take
+precedence. The `.env` file is ignored by Git and must never be committed:
 
 - `AI_PROVIDER`: `groq` or `gemini` (Gemini aliases: `google`, `google-genai`)
 - `AI_MODEL`: provider model identifier; development defaults to `openai/gpt-oss-20b`

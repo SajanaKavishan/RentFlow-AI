@@ -3,27 +3,44 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from dotenv import dotenv_values
+
+_DEFAULT_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
 @dataclass(frozen=True, slots=True)
 class Settings:
     ai_provider: str | None
     ai_model: str | None
-    ai_api_key: str | None
+    ai_api_key: str | None = field(repr=False)
     ai_timeout_seconds: float
     agent_version: str
-    groq_api_key: str | None = None
+    groq_api_key: str | None = field(default=None, repr=False)
 
     @classmethod
-    def from_environment(cls) -> "Settings":
+    def from_environment(
+        cls,
+        env_file: str | os.PathLike[str] | None = None,
+    ) -> "Settings":
+        file_values = _dotenv_values(env_file)
         return cls(
-            ai_provider=_optional_environment_value("AI_PROVIDER"),
-            ai_model=_optional_environment_value("AI_MODEL"),
-            ai_api_key=_optional_environment_value("AI_API_KEY"),
-            ai_timeout_seconds=_positive_float("AI_TIMEOUT_SECONDS", default=30.0),
-            agent_version=os.getenv("AGENT_VERSION", "0.1.0").strip() or "0.1.0",
-            groq_api_key=_optional_environment_value("GROQ_API_KEY"),
+            ai_provider=_optional_configuration_value("AI_PROVIDER", file_values),
+            ai_model=_optional_configuration_value("AI_MODEL", file_values),
+            ai_api_key=_optional_configuration_value("AI_API_KEY", file_values),
+            ai_timeout_seconds=_positive_float(
+                "AI_TIMEOUT_SECONDS",
+                file_values,
+                default=30.0,
+            ),
+            agent_version=(
+                _configuration_value("AGENT_VERSION", file_values) or "0.1.0"
+            ).strip()
+            or "0.1.0",
+            groq_api_key=_optional_configuration_value("GROQ_API_KEY", file_values),
         )
 
     @property
@@ -38,16 +55,43 @@ class Settings:
         return True
 
 
-def _optional_environment_value(name: str) -> str | None:
-    value = os.getenv(name)
+def _dotenv_values(
+    env_file: str | os.PathLike[str] | None,
+) -> Mapping[str, str | None]:
+    path = Path(env_file) if env_file is not None else _DEFAULT_ENV_FILE
+    if not path.is_file():
+        return {}
+    return dotenv_values(dotenv_path=path)
+
+
+def _configuration_value(
+    name: str,
+    file_values: Mapping[str, str | None],
+) -> str | None:
+    # A real process variable wins even when it is intentionally empty.
+    if name in os.environ:
+        return os.environ[name]
+    return file_values.get(name)
+
+
+def _optional_configuration_value(
+    name: str,
+    file_values: Mapping[str, str | None],
+) -> str | None:
+    value = _configuration_value(name, file_values)
     if value is None:
         return None
     value = value.strip()
     return value or None
 
 
-def _positive_float(name: str, *, default: float) -> float:
-    raw_value = os.getenv(name)
+def _positive_float(
+    name: str,
+    file_values: Mapping[str, str | None],
+    *,
+    default: float,
+) -> float:
+    raw_value = _configuration_value(name, file_values)
     if not raw_value:
         return default
     try:

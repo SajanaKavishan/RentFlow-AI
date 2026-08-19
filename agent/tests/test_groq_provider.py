@@ -80,13 +80,16 @@ def _schema_keys(value: Any) -> set[str]:
 
 def test_groq_provider_configuration_uses_dedicated_key(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
     monkeypatch.setenv("AI_PROVIDER", "groq")
     monkeypatch.setenv("AI_MODEL", "openai/gpt-oss-20b")
     monkeypatch.setenv("GROQ_API_KEY", "groq-only-key")
     monkeypatch.delenv("AI_API_KEY", raising=False)
+    isolated_env_file = tmp_path / ".env"
+    isolated_env_file.write_text("", encoding="utf-8")
 
-    settings = Settings.from_environment()
+    settings = Settings.from_environment(isolated_env_file)
     provider = build_model_provider(settings)
 
     assert settings.provider_is_configured is True
