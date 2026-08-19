@@ -28,6 +28,7 @@ class _MyRentalApplicationsScreenState
   ApiClient? _ownedApiClient;
   late final RentalApplicationApiService _apiService;
   late Future<List<RentalApplication>> _applications;
+  final Set<String> _submittingIds = {};
   final Set<String> _withdrawingIds = {};
 
   @override
@@ -70,8 +71,66 @@ class _MyRentalApplicationsScreenState
     };
   }
 
+  Future<void> _confirmSubmission(RentalApplication application) async {
+    if (application.status != RentalApplicationStatus.draft ||
+        _submittingIds.contains(application.id) ||
+        _withdrawingIds.contains(application.id)) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Submit application?'),
+        content: const Text(
+          'Submit this rental application for landlord review?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Submit application'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    setState(() => _submittingIds.add(application.id));
+    try {
+      final submitted = await _apiService.submitApplication(
+        id: application.id,
+        tenantId: widget.tenantId,
+      );
+      final currentApplications = await _applications;
+      if (!mounted) return;
+      final updatedApplications = currentApplications
+          .map((item) => item.id == submitted.id ? submitted : item)
+          .toList(growable: false);
+      setState(() => _applications = Future.value(updatedApplications));
+      _showMessage('Application submitted successfully.');
+    } on RentalApplicationApiException catch (error) {
+      if (mounted) _showMessage(error.message, isError: true);
+    } catch (_) {
+      if (mounted) {
+        _showMessage(
+          'Unable to submit your application right now. Please try again.',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submittingIds.remove(application.id));
+    }
+  }
+
   Future<void> _confirmWithdrawal(RentalApplication application) async {
-    if (_withdrawingIds.contains(application.id)) return;
+    if (_withdrawingIds.contains(application.id) ||
+        _submittingIds.contains(application.id)) {
+      return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -185,10 +244,18 @@ class _MyRentalApplicationsScreenState
                 separatorBuilder: (_, _) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final application = applications[index];
+                  final isSubmitting = _submittingIds.contains(application.id);
+                  final isWithdrawing = _withdrawingIds.contains(
+                    application.id,
+                  );
                   return _ApplicationCard(
                     application: application,
+                    canSubmit:
+                        application.status == RentalApplicationStatus.draft,
                     canWithdraw: _canWithdraw(application),
-                    isWithdrawing: _withdrawingIds.contains(application.id),
+                    isSubmitting: isSubmitting,
+                    isWithdrawing: isWithdrawing,
+                    onSubmit: () => _confirmSubmission(application),
                     onWithdraw: () => _confirmWithdrawal(application),
                   );
                 },
@@ -204,14 +271,20 @@ class _MyRentalApplicationsScreenState
 class _ApplicationCard extends StatelessWidget {
   const _ApplicationCard({
     required this.application,
+    required this.canSubmit,
     required this.canWithdraw,
+    required this.isSubmitting,
     required this.isWithdrawing,
+    required this.onSubmit,
     required this.onWithdraw,
   });
 
   final RentalApplication application;
+  final bool canSubmit;
   final bool canWithdraw;
+  final bool isSubmitting;
   final bool isWithdrawing;
+  final VoidCallback onSubmit;
   final VoidCallback onWithdraw;
 
   @override
@@ -219,6 +292,8 @@ class _ApplicationCard extends StatelessWidget {
     final date = MaterialLocalizations.of(
       context,
     ).formatMediumDate(application.moveInDate);
+    final submittedAt = application.submittedAt;
+    final isBusy = isSubmitting || isWithdrawing;
 
     return Card(
       color: Colors.white,
@@ -287,12 +362,42 @@ class _ApplicationCard extends StatelessWidget {
                 highlighted: true,
               ),
             ],
-            if (canWithdraw) ...[
+            if (submittedAt != null) ...[
+              const SizedBox(height: 12),
+              _SubmittedAt(timestamp: submittedAt),
+            ],
+            if (canSubmit) ...[
               const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: isBusy ? null : onSubmit,
+                  icon: isSubmitting
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send_outlined),
+                  label: Text(
+                    isSubmitting ? 'Submitting...' : 'Submit application',
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _MyRentalApplicationsScreenState._olive,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                ),
+              ),
+            ],
+            if (canWithdraw) ...[
+              SizedBox(height: canSubmit ? 4 : 16),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                  onPressed: isWithdrawing ? null : onWithdraw,
+                  onPressed: isBusy ? null : onWithdraw,
                   icon: isWithdrawing
                       ? const SizedBox.square(
                           dimension: 16,
@@ -315,6 +420,34 @@ class _ApplicationCard extends StatelessWidget {
   }
 
   bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
+}
+
+class _SubmittedAt extends StatelessWidget {
+  const _SubmittedAt({required this.timestamp});
+
+  final DateTime timestamp;
+
+  @override
+  Widget build(BuildContext context) {
+    final localTimestamp = timestamp.toLocal();
+    final localizations = MaterialLocalizations.of(context);
+    final date = localizations.formatMediumDate(localTimestamp);
+    final time = localizations.formatTimeOfDay(
+      TimeOfDay.fromDateTime(localTimestamp),
+    );
+
+    return Row(
+      children: [
+        const Icon(
+          Icons.schedule_outlined,
+          size: 18,
+          color: _MyRentalApplicationsScreenState._olive,
+        ),
+        const SizedBox(width: 6),
+        Expanded(child: Text('Submitted $date at $time')),
+      ],
+    );
+  }
 }
 
 class _SummaryItem extends StatelessWidget {
