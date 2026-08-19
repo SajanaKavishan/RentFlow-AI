@@ -23,7 +23,13 @@ builder.Services.AddOptions<CloudflareR2Options>()
 builder.Services.AddScoped<IViewingService, ViewingService>();
 builder.Services.AddScoped<IRentalApplicationService, RentalApplicationService>();
 builder.Services.AddScoped<IApplicationDocumentService, ApplicationDocumentService>();
+builder.Services.AddScoped<IApplicationDataValidationTool, ApplicationDataValidationTool>();
+builder.Services.AddScoped<IDocumentValidationTool, DocumentValidationTool>();
+builder.Services.AddScoped<IDeterministicApplicationRuleTool, DeterministicApplicationRuleTool>();
+builder.Services.AddScoped<IApplicationValidationOrchestrator, ApplicationValidationOrchestrator>();
+builder.Services.AddScoped<IApplicationValidationQueryService, ApplicationValidationQueryService>();
 builder.Services.AddSingleton<IFileStorageService, CloudflareR2StorageService>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

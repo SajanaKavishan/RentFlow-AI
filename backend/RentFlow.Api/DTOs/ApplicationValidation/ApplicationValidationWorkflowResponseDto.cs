@@ -29,4 +29,6 @@ public class ApplicationValidationWorkflowResponseDto
 
     public IReadOnlyCollection<ApplicationValidationStepResponseDto> Steps { get; set; }
         = Array.Empty<ApplicationValidationStepResponseDto>();
+
+    public ApplicationValidationSummaryDto? Summary { get; set; }
 }
