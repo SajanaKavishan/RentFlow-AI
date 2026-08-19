@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from google.genai import errors
 
 from app.config import Settings
+from app.schemas.analysis import ApplicationDataAnalysis
 from app.schemas.plan import Plan
 from app.services.exceptions import (
     ModelInvocationError,
@@ -38,7 +41,7 @@ def fake_client(models: FakeGeminiModels):
 def configured_settings(provider: str = "gemini") -> Settings:
     return Settings(
         ai_provider=provider,
-        ai_model="gemini-test-model",
+        ai_model="gemini-2.5-flash",
         ai_api_key="test-key-not-a-real-secret",
         ai_timeout_seconds=1,
         agent_version="test",
@@ -49,6 +52,7 @@ def test_gemini_provider_configuration_builds_real_adapter() -> None:
     provider = build_model_provider(configured_settings())
 
     assert isinstance(provider, GeminiModelProvider)
+    assert provider._model == "gemini-2.5-flash"
 
 
 @pytest.mark.asyncio
@@ -97,6 +101,58 @@ async def test_gemini_adapter_returns_fake_structured_success() -> None:
     assert isinstance(result, Plan)
     assert models.calls[0]["model"] == "gemini-test-model"
     assert models.calls[0]["config"].response_mime_type == "application/json"
+    provider_schema = models.calls[0]["config"].response_schema
+    assert isinstance(provider_schema, type)
+    assert issubclass(provider_schema, Plan)
+
+
+def _schema_keys(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        return set(value).union(*(_schema_keys(item) for item in value.values()))
+    if isinstance(value, list):
+        return set().union(*(_schema_keys(item) for item in value))
+    return set()
+
+
+@pytest.mark.asyncio
+async def test_gemini_adapter_uses_compatible_schema_without_weakening_local_model() -> None:
+    models = FakeGeminiModels(
+        response=SimpleNamespace(
+            parsed={
+                "completeness_findings": [],
+                "inconsistency_findings": [],
+                "explanation": "Complete.",
+            },
+            text=None,
+        )
+    )
+    provider = GeminiModelProvider(
+        api_key="fake-key",
+        model="gemini-2.5-flash",
+        client=fake_client(models),
+    )
+
+    result = await request_structured_output(
+        provider,
+        output_schema=ApplicationDataAnalysis,
+        instructions="Analyze the data.",
+        input_data={},
+        timeout_seconds=1,
+    )
+
+    assert isinstance(result, ApplicationDataAnalysis)
+    provider_schema = models.calls[0]["config"].response_schema
+    assert isinstance(provider_schema, type)
+    assert issubclass(provider_schema, ApplicationDataAnalysis)
+    assert {
+        "additionalProperties",
+        "minLength",
+        "maxLength",
+        "maxItems",
+    }.isdisjoint(_schema_keys(provider_schema.model_json_schema()))
+    assert "additionalProperties" in _schema_keys(ApplicationDataAnalysis.model_json_schema())
+    assert "maxLength" in _schema_keys(ApplicationDataAnalysis.model_json_schema())
+    assert "maxItems" in _schema_keys(ApplicationDataAnalysis.model_json_schema())
 
 
 @pytest.mark.asyncio
@@ -121,14 +177,21 @@ async def test_gemini_adapter_malformed_text_is_safely_rejected() -> None:
 @pytest.mark.asyncio
 async def test_gemini_adapter_timeout_is_sanitized() -> None:
     class SlowModels:
+        cancelled = False
+
         async def generate_content(self, **kwargs):
             del kwargs
-            await asyncio.sleep(0.1)
+            try:
+                await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
 
+    models = SlowModels()
     provider = GeminiModelProvider(
         api_key="fake-key",
         model="gemini-test-model",
-        client=fake_client(SlowModels()),
+        client=fake_client(models),
     )
 
     with pytest.raises(ModelTimeoutError):
@@ -140,15 +203,22 @@ async def test_gemini_adapter_timeout_is_sanitized() -> None:
             timeout_seconds=0.001,
         )
 
+    assert models.cancelled is True
+
 
 @pytest.mark.asyncio
-async def test_gemini_adapter_provider_failure_is_sanitized() -> None:
+async def test_gemini_adapter_provider_failure_is_sanitized(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     provider_error = errors.ClientError(
         401,
         {
             "error": {
                 "code": 401,
-                "message": "provider-secret-detail",
+                "message": (
+                    "provider-detail api_key=secret-api-key "
+                    "Authorization:Bearer secret-authorization"
+                ),
                 "status": "UNAUTHENTICATED",
             }
         },
@@ -161,13 +231,43 @@ async def test_gemini_adapter_provider_failure_is_sanitized() -> None:
         client=fake_client(models),
     )
 
-    with pytest.raises(ModelInvocationError) as captured:
-        await request_structured_output(
-            provider,
-            output_schema=Plan,
-            instructions="Use the fixed plan.",
-            input_data={},
-            timeout_seconds=1,
-        )
+    with caplog.at_level(logging.DEBUG, logger="app.services.gemini_provider"):
+        with pytest.raises(ModelInvocationError) as captured:
+            await request_structured_output(
+                provider,
+                output_schema=Plan,
+                instructions="Use the fixed plan.",
+                input_data={},
+                timeout_seconds=1,
+            )
 
-    assert "provider-secret-detail" not in str(captured.value)
+    assert "provider-detail" not in str(captured.value)
+    assert "google.genai.errors.ClientError" in caplog.text
+    assert "provider-detail" in caplog.text
+    assert "secret-api-key" not in caplog.text
+    assert "secret-authorization" not in caplog.text
+    assert "[REDACTED]" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_gemini_diagnostics_are_not_logged_at_production_level(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    models = FakeGeminiModels(error=RuntimeError("provider-development-detail"))
+    provider = GeminiModelProvider(
+        api_key="fake-key",
+        model="gemini-2.5-flash",
+        client=fake_client(models),
+    )
+
+    with caplog.at_level(logging.INFO, logger="app.services.gemini_provider"):
+        with pytest.raises(ModelInvocationError):
+            await request_structured_output(
+                provider,
+                output_schema=Plan,
+                instructions="Use the fixed plan.",
+                input_data={},
+                timeout_seconds=1,
+            )
+
+    assert "provider-development-detail" not in caplog.text
