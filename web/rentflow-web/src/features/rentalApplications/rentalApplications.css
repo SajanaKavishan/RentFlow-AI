@@ -427,6 +427,105 @@
   padding-left: 18px;
 }
 
+.structured-validation-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #d6d9c8;
+}
+
+.structured-validation-section > h4 {
+  margin: 0 0 10px;
+  color: var(--olive-900);
+  font-size: 0.92rem;
+}
+
+.structured-validation-section__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.supporting-document-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.supporting-document-card {
+  padding: 14px;
+  border: 1px solid #d9dccd;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.supporting-document-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.supporting-document-card__header h6,
+.supporting-document-card__facts h6 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.supporting-document-card__review {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.supporting-document-card__review--required {
+  color: #775315;
+  background: #fff0c9;
+}
+
+.supporting-document-card__review--clear {
+  color: #315a37;
+  background: #e5f1e3;
+}
+
+.supporting-document-card__metadata,
+.supporting-document-card__facts dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin: 12px 0 0;
+}
+
+.supporting-document-card__metadata div,
+.supporting-document-card__facts dl div {
+  min-width: 0;
+}
+
+.supporting-document-card dt {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.supporting-document-card dd,
+.supporting-document-card__facts p {
+  margin: 3px 0 0;
+  color: #52584d;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.supporting-document-card__facts {
+  margin-top: 14px;
+}
+
+.supporting-document-card > .validation-findings__group {
+  margin-top: 12px;
+}
+
 .validation-steps {
   margin-top: 12px;
   border-top: 1px solid #d6d9c8;
@@ -691,8 +790,14 @@
   .application-card__notes,
   .validation-workflow__summary,
   .validation-findings,
-  .validation-step__result {
+  .validation-step__result,
+  .supporting-document-card__metadata,
+  .supporting-document-card__facts dl {
     grid-template-columns: 1fr;
+  }
+
+  .supporting-document-card__header {
+    flex-direction: column;
   }
 
   .validation-step__result {

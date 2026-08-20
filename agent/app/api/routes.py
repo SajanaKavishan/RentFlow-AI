@@ -31,6 +31,12 @@ async def analyze_application_validation(
         request.app.state.model_provider,
         timeout_seconds=settings.ai_timeout_seconds,
         agent_version=settings.agent_version,
+        vision_provider=request.app.state.vision_model_provider,
+        max_pdf_pages=settings.max_pdf_pages,
+        max_extracted_characters=settings.max_extracted_characters,
+        max_model_input_characters=settings.max_model_input_characters,
+        extraction_timeout_seconds=settings.extraction_timeout_seconds,
+        income_tolerance_percent=settings.income_tolerance_percent,
     )
     state = {
         "workflow_id": payload.workflow_id,

@@ -53,21 +53,34 @@ function humanizeKey(value) {
 function displayValue(value) {
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
   if (value === null || value === undefined || value === '') return 'None'
-  if (Array.isArray(value)) return value.length ? value.join(', ') : 'None'
-  if (typeof value === 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) {
+    const displayItems = value.filter(
+      (item) => ['string', 'number', 'boolean'].includes(typeof item),
+    )
+    return displayItems.length ? displayItems.join(', ') : 'None'
+  }
+  if (typeof value === 'object') return 'See structured details below'
   return String(value)
 }
 
+function displayFinding(item) {
+  if (typeof item === 'string') return item
+  if (item && typeof item.message === 'string') return item.message
+  return null
+}
+
 function FindingList({ title, items, emptyMessage, tone = '' }) {
-  const findings = Array.isArray(items) ? items : []
+  const findings = (Array.isArray(items) ? items : [])
+    .map(displayFinding)
+    .filter(Boolean)
 
   return (
     <div className={`validation-findings__group${tone ? ` validation-findings__group--${tone}` : ''}`}>
       <h5>{title}</h5>
       {findings.length ? (
         <ul>
-          {findings.map((item) => (
-            <li key={item}>{item}</li>
+          {findings.map((item, index) => (
+            <li key={`${item}-${index}`}>{item}</li>
           ))}
         </ul>
       ) : (
@@ -77,10 +90,145 @@ function FindingList({ title, items, emptyMessage, tone = '' }) {
   )
 }
 
+const DOCUMENT_FACT_FIELDS = {
+  IncomeProof: [
+    ['applicantName', 'Applicant name'],
+    ['incomeAmount', 'Income amount'],
+    ['payPeriod', 'Pay period'],
+    ['employerName', 'Employer name'],
+    ['documentDate', 'Document date'],
+  ],
+  EmploymentLetter: [
+    ['applicantName', 'Applicant name'],
+    ['jobTitle', 'Job title'],
+    ['employerName', 'Employer name'],
+    ['documentDate', 'Document date'],
+  ],
+  IdentityDocument: [['applicantName', 'Applicant name']],
+}
+
+function formatFactValue(key, value) {
+  if (key === 'incomeAmount') {
+    const amount = Number(value)
+    return Number.isFinite(amount)
+      ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(amount)
+      : displayValue(value)
+  }
+  return displayValue(value)
+}
+
+function SupportingDocumentCard({ document }) {
+  const facts = document.extractedFacts || {}
+  const factFields = DOCUMENT_FACT_FIELDS[document.documentType] || []
+  const populatedFacts = factFields.filter(
+    ([key]) => facts[key] !== null && facts[key] !== undefined && facts[key] !== '',
+  )
+
+  return (
+    <article className="supporting-document-card">
+      <div className="supporting-document-card__header">
+        <h6>{document.documentType || 'Supporting document'}</h6>
+        <span
+          className={`supporting-document-card__review supporting-document-card__review--${document.requiresManualReview ? 'required' : 'clear'}`}
+        >
+          Manual review: {document.requiresManualReview ? 'Required' : 'Not required'}
+        </span>
+      </div>
+
+      <dl className="supporting-document-card__metadata">
+        <div><dt>Readable</dt><dd>{document.readable ? 'Yes' : 'No'}</dd></div>
+        <div><dt>Detected category</dt><dd>{document.detectedDocumentCategory || 'Unknown'}</dd></div>
+        <div><dt>Confidence</dt><dd>{document.confidenceLabel || 'Unknown'}</dd></div>
+        <div><dt>Extraction method</dt><dd>{document.extractionMethod || 'None'}</dd></div>
+      </dl>
+
+      <div className="supporting-document-card__facts">
+        <h6>Extracted allowed facts</h6>
+        {populatedFacts.length ? (
+          <dl>
+            {populatedFacts.map(([key, label]) => (
+              <div key={key}>
+                <dt>{label}</dt>
+                <dd>{formatFactValue(key, facts[key])}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p>No reliable allowed facts were extracted.</p>
+        )}
+      </div>
+
+      <FindingList
+        title="Warnings"
+        items={document.warnings}
+        emptyMessage="No document warnings were reported."
+        tone={document.warnings?.length ? 'warning' : 'success'}
+      />
+    </article>
+  )
+}
+
+function SupportingDocumentVerification({ documents }) {
+  const verification = Array.isArray(documents) ? documents : []
+  return (
+    <section className="structured-validation-section" aria-label="Supporting document verification">
+      <h4>Supporting document verification</h4>
+      {verification.length ? (
+        <div className="supporting-document-grid">
+          {verification.map((document, index) => (
+            <SupportingDocumentCard
+              key={document.documentId || `${document.documentType}-${index}`}
+              document={document}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="structured-validation-section__empty">No supporting documents were analyzed.</p>
+      )}
+    </section>
+  )
+}
+
+function CrossDocumentConsistency({ consistency }) {
+  if (!consistency) return null
+  return (
+    <section className="structured-validation-section" aria-label="Cross document consistency">
+      <h4>Cross-document consistency</h4>
+      <div className="validation-findings">
+        <FindingList
+          title="Matched facts"
+          items={consistency.matchedFacts}
+          emptyMessage="No matched facts were reported."
+          tone="success"
+        />
+        <FindingList
+          title="Mismatches"
+          items={consistency.mismatches}
+          emptyMessage="No mismatches were reported."
+          tone={consistency.mismatches?.length ? 'danger' : 'success'}
+        />
+        <FindingList
+          title="Warnings"
+          items={consistency.warnings}
+          emptyMessage="No consistency warnings were reported."
+          tone={consistency.warnings?.length ? 'warning' : 'success'}
+        />
+        <div className="validation-findings__group">
+          <h5>Manual review</h5>
+          <p>{consistency.requiresManualReview ? 'Required' : 'Not required'}</p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function ValidationStep({ step }) {
   const entries =
     step.result && typeof step.result === 'object' && !Array.isArray(step.result)
-      ? Object.entries(step.result)
+      ? Object.entries(step.result).filter(([, value]) =>
+          value === null || typeof value !== 'object' ||
+          (Array.isArray(value) && value.every((item) => typeof item !== 'object')),
+        )
       : []
 
   return (
@@ -133,6 +281,7 @@ function WorkflowResult({ workflow }) {
   const orderedSteps = [...(workflow.steps || [])].sort(
     (left, right) => left.stepOrder - right.stepOrder,
   )
+  const agenticReview = summary?.agenticReview
 
   return (
     <div className="validation-workflow">
@@ -188,6 +337,17 @@ function WorkflowResult({ workflow }) {
             tone="danger"
           />
         </div>
+      )}
+
+      {agenticReview && (
+        <>
+          <SupportingDocumentVerification
+            documents={agenticReview.supportingDocumentVerification}
+          />
+          <CrossDocumentConsistency
+            consistency={agenticReview.crossDocumentConsistency}
+          />
+        </>
       )}
 
       <details className="validation-steps">

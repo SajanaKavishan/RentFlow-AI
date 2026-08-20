@@ -200,6 +200,113 @@ public class ApplicationValidationOrchestratorTests
     }
 
     [Fact]
+    public async Task StartValidationAsync_PersistsOnlySafeStructuredDocumentFindings()
+    {
+        await using var context = CreateContext();
+        var application = AddApplication(context);
+        AddRequiredDocuments(context, application.Id);
+        await context.SaveChangesAsync();
+        var documents = await context.ApplicationDocuments
+            .Where(document => document.ApplicationId == application.Id)
+            .ToListAsync();
+        var identity = documents.Single(document =>
+            document.DocumentType == ApplicationDocumentType.IdentityDocument);
+        var income = documents.Single(document =>
+            document.DocumentType == ApplicationDocumentType.IncomeProof);
+        var agentClient = new FakeAgentClient
+        {
+            Result = new AgenticApplicationReviewResult
+            {
+                Recommendation = "Manual review required",
+                Summary = "Structured findings require landlord review.",
+                KeyFindings = ["Income evidence was analyzed conservatively."],
+                Warnings = ["One document could not be read reliably."],
+                RequiresHumanApproval = true,
+                AgentVersion = "phase-b-test",
+                SupportingDocumentVerification =
+                [
+                    new SupportingDocumentVerificationResult
+                    {
+                        DocumentId = income.Id,
+                        DocumentType = "IncomeProof",
+                        Readable = true,
+                        DetectedDocumentCategory = "IncomeProof",
+                        ExtractedFacts = new SupportingDocumentExtractedFacts
+                        {
+                            ApplicantName = "Ada Lovelace",
+                            IncomeAmount = 5000m,
+                            PayPeriod = "monthly",
+                            EmployerName = "ACME"
+                        },
+                        ConfidenceLabel = "High",
+                        ExtractionMethod = "PdfText",
+                        RequiresManualReview = false
+                    },
+                    new SupportingDocumentVerificationResult
+                    {
+                        DocumentId = identity.Id,
+                        DocumentType = "IdentityDocument",
+                        Readable = false,
+                        DetectedDocumentCategory = "Unknown",
+                        ExtractedFacts = new SupportingDocumentExtractedFacts(),
+                        Warnings = ["Document text could not be extracted reliably."],
+                        ConfidenceLabel = "Unknown",
+                        ExtractionMethod = "None",
+                        RequiresManualReview = true
+                    }
+                ],
+                CrossDocumentConsistency = new CrossDocumentConsistencyResult
+                {
+                    MatchedFacts =
+                    [
+                        new CrossDocumentConsistencyFinding
+                        {
+                            Comparison = "monthly_income_vs_income_amount",
+                            Message = "Monthly income matched within configured tolerance."
+                        }
+                    ],
+                    Warnings = ["Identity text requires manual review."],
+                    RequiresManualReview = true
+                }
+            }
+        };
+
+        var result = await CreateOrchestrator(context, agentClient: agentClient)
+            .StartValidationAsync(application.Id);
+
+        Assert.Equal(ApplicationValidationWorkflowStatus.AwaitingHumanReview, result.Status);
+        Assert.True(result.RequiresHumanApproval);
+        var responseReview = Assert.IsType<AgenticApplicationReviewResult>(
+            result.Summary!.AgenticReview);
+        var responseIncome = Assert.Single(responseReview.SupportingDocumentVerification,
+            verification => verification.DocumentType == "IncomeProof");
+        Assert.True(responseIncome.Readable);
+        Assert.Equal("IncomeProof", responseIncome.DetectedDocumentCategory);
+        Assert.Equal("PdfText", responseIncome.ExtractionMethod);
+        Assert.Equal("Ada Lovelace", responseIncome.ExtractedFacts.ApplicantName);
+        Assert.Equal(5000m, responseIncome.ExtractedFacts.IncomeAmount);
+        Assert.Single(responseReview.CrossDocumentConsistency.MatchedFacts);
+        var responseJson = System.Text.Json.JsonSerializer.Serialize(result);
+        Assert.DoesNotContain("contentBase64", responseJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("extractedText", responseJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("storageKey", responseJson, StringComparison.OrdinalIgnoreCase);
+        context.ChangeTracker.Clear();
+        var stored = await context.ApplicationValidationWorkflows
+            .Include(workflow => workflow.Steps)
+            .SingleAsync();
+        var persisted = stored.Steps.Single(step => step.StepOrder == 4).ResultJson!;
+        Assert.Contains("supportingDocumentVerification", persisted, StringComparison.Ordinal);
+        Assert.Contains("extractionMethod", persisted, StringComparison.Ordinal);
+        Assert.Contains("crossDocumentConsistency", persisted, StringComparison.Ordinal);
+        Assert.DoesNotContain("contentBase64", persisted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("extractedText", persisted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("storageKey", persisted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("signedUrl", persisted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(identity.StorageKey, persisted, StringComparison.Ordinal);
+        Assert.DoesNotContain(income.StorageKey, persisted, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StartValidationAsync_AgentFailurePreservesDeterministicResultsAndPersistsSafeFailure()
     {
         await using var context = CreateContext();

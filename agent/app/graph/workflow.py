@@ -16,6 +16,12 @@ def build_application_validation_graph(
     agent_version: str,
     supporting_document_verifier=None,
     cross_document_analyzer=None,
+    vision_provider: ModelProvider | None = None,
+    max_pdf_pages: int = 5,
+    max_extracted_characters: int = 50_000,
+    max_model_input_characters: int = 20_000,
+    extraction_timeout_seconds: float = 20.0,
+    income_tolerance_percent: float = 5.0,
 ):
     graph = StateGraph(ApplicationValidationAgentState)
     nodes = create_nodes(
@@ -24,6 +30,12 @@ def build_application_validation_graph(
         agent_version=agent_version,
         supporting_document_verifier=supporting_document_verifier,
         cross_document_analyzer=cross_document_analyzer,
+        vision_provider=vision_provider,
+        max_pdf_pages=max_pdf_pages,
+        max_extracted_characters=max_extracted_characters,
+        max_model_input_characters=max_model_input_characters,
+        extraction_timeout_seconds=extraction_timeout_seconds,
+        income_tolerance_percent=income_tolerance_percent,
     )
     for name, node in nodes.items():
         graph.add_node(name, node)

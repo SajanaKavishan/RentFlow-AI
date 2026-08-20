@@ -9,7 +9,12 @@ from google import genai
 from google.genai import types
 
 from app.services.exceptions import ModelInvocationError
-from app.services.model_provider import ModelProvider, StructuredOutput
+from app.services.model_provider import (
+    ModelCapabilities,
+    ModelMedia,
+    ModelProvider,
+    StructuredOutput,
+)
 
 
 def _simplify_gemini_schema(value: Any) -> None:
@@ -73,6 +78,13 @@ class GeminiModelProvider(ModelProvider):
     def model_name(self) -> str:
         return self._model
 
+    @property
+    def capabilities(self) -> ModelCapabilities:
+        return ModelCapabilities(
+            text_structured_reasoning=True,
+            vision_document_images=True,
+        )
+
     async def generate_structured(
         self,
         *,
@@ -111,4 +123,47 @@ class GeminiModelProvider(ModelProvider):
             return json.loads(response_text)
         except (json.JSONDecodeError, TypeError):
             # Central schema validation maps this to a sanitized malformed-output error.
+            return response_text
+
+    async def generate_structured_with_media(
+        self,
+        *,
+        output_schema: type[StructuredOutput],
+        instructions: str,
+        input_data: dict[str, Any],
+        media: list[ModelMedia],
+    ) -> Any:
+        prompt = json.dumps(
+            {"instructions": instructions, "inputData": input_data},
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+        contents: list[Any] = [prompt]
+        contents.extend(
+            types.Part.from_bytes(data=item.content, mime_type=item.content_type)
+            for item in media
+        )
+        provider_schema = _gemini_output_schema(output_schema)
+        try:
+            response = await self._client.aio.models.generate_content(
+                model=self._model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=provider_schema,
+                    temperature=0,
+                ),
+            )
+        except Exception as exc:
+            raise ModelInvocationError from exc
+
+        parsed = getattr(response, "parsed", None)
+        if parsed is not None:
+            return parsed
+        response_text = getattr(response, "text", None)
+        if not response_text:
+            return None
+        try:
+            return json.loads(response_text)
+        except (json.JSONDecodeError, TypeError):
             return response_text

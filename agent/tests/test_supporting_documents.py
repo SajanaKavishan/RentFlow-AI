@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import base64
-from pathlib import Path
-
 import pytest
 from pydantic import ValidationError
 
@@ -17,8 +15,7 @@ from app.schemas.supporting_documents import (
     SupportingDocumentVerificationResult,
 )
 from app.services.supporting_document_verification import (
-    PhaseAFakeCrossDocumentConsistencyAnalyzer,
-    PhaseAFakeSupportingDocumentVerifier,
+    DeterministicCrossDocumentConsistencyAnalyzer,
 )
 
 
@@ -148,20 +145,11 @@ def test_consistency_schema_supports_only_allowed_comparisons(comparison: str) -
 
 
 @pytest.mark.asyncio
-async def test_phase_a_fakes_make_no_network_calls_or_file_writes(monkeypatch) -> None:
-    def fail_write(*args, **kwargs):
-        del args, kwargs
-        raise AssertionError("file persistence is forbidden")
+async def test_empty_consistency_analysis_is_deterministic_and_requires_no_network() -> None:
+    analyzer = DeterministicCrossDocumentConsistencyAnalyzer()
 
-    monkeypatch.setattr(Path, "write_text", fail_write)
-    monkeypatch.setattr(Path, "write_bytes", fail_write)
-    verifier = PhaseAFakeSupportingDocumentVerifier()
-    analyzer = PhaseAFakeCrossDocumentConsistencyAnalyzer()
-    document = SupportingDocumentInput.model_validate(_input())
+    consistency = await analyzer.analyze({}, [])
 
-    verification = await verifier.verify([document])
-    consistency = await analyzer.analyze({}, verification)
-
-    assert verification[0].readable is False
-    assert verification[0].extracted_facts == SupportingDocumentExtractedFacts()
-    assert consistency.requires_manual_review is True
+    assert consistency.matched_facts == []
+    assert consistency.mismatches == []
+    assert consistency.requires_manual_review is False

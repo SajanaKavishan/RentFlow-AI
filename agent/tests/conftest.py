@@ -60,13 +60,12 @@ def valid_model_responses() -> dict[str, Any]:
             "findings": [],
             "explanation": "No contradiction is visible in the supplied structured data.",
         },
-        "FinalAgentSummary": {
+        "FinalAgentSummaryDraft": {
             "recommendation": "Ready for landlord review",
             "summary": "The application is ready for a landlord's manual review.",
             "key_findings": ["No deterministic blocking findings were supplied."],
             "warnings": [],
             "requires_human_approval": True,
-            "agent_version": "model-supplied-value-is-overridden",
         },
     }
 

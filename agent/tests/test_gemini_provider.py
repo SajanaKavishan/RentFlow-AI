@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from app.agents.nodes import create_nodes
 from app.config import Settings
 from app.schemas.analysis import ApplicationDataAnalysis
+from app.schemas.document_extraction import VisionExtractionOutput
 from app.schemas.plan import Plan
 from app.services.exceptions import (
     ModelInvocationError,
@@ -21,7 +22,12 @@ from app.services.exceptions import (
 )
 from app.services.diagnostics import sanitized_exception_message
 from app.services.gemini_provider import GeminiModelProvider
-from app.services.model_provider import build_model_provider, request_structured_output
+from app.services.model_provider import (
+    ModelMedia,
+    build_model_provider,
+    request_structured_media_output,
+    request_structured_output,
+)
 
 
 class FakeGeminiModels:
@@ -378,3 +384,31 @@ async def test_langgraph_state_failure_is_categorized(
     assert "node=planner" in caplog.text
     assert "category=langgraph_state_schema_failure" in caplog.text
     assert "Missing state key 'objective'" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_gemini_vision_uses_provider_neutral_in_memory_media_parts() -> None:
+    parsed = VisionExtractionOutput(
+        extracted_text="Readable printed document text for analysis",
+        detected_language="English",
+        confidence_label="High",
+        content_style="Printed",
+    )
+    models = FakeGeminiModels(response=SimpleNamespace(parsed=parsed, text=None))
+    provider = GeminiModelProvider(
+        api_key="fake-key", model="gemini-2.5-flash", client=fake_client(models)
+    )
+
+    result = await request_structured_media_output(
+        provider,
+        output_schema=VisionExtractionOutput,
+        instructions="Perform conservative OCR.",
+        input_data={"documentId": "document-1"},
+        media=[ModelMedia(content_type="image/png", content=b"image-bytes")],
+        timeout_seconds=1,
+        invocation_name="document_vision_ocr",
+    )
+
+    assert result.detected_language == "English"
+    assert len(models.calls[0]["contents"]) == 2
+    assert models.calls[0]["contents"][1].inline_data.mime_type == "image/png"

@@ -16,8 +16,9 @@ React and Flutter must never call this service directly. This service never conn
 to PostgreSQL or Cloudflare R2 and accepts neither credentials nor arbitrary tools.
 ASP.NET may also send bounded PDF/JPEG/PNG content as Base64 after it performs application
 authorization and private R2 retrieval. Python receives no storage key, URL, credential,
-or database access. Phase A validates the in-memory content contract but performs no OCR,
-multimodal extraction, file persistence, or supporting-document network call.
+or database access. Phase B decodes content in memory, extracts selectable PDF text with
+`pypdf`, and uses bounded vision OCR for scanned PDFs and images. It never writes extracted
+text or document media to permanent files.
 
 ## Workflow
 
@@ -26,11 +27,11 @@ multimodal extraction, file persistence, or supporting-document network call.
 1. `plan` validates the one allow-listed plan.
 2. `analyze_application_data` describes completeness and visible inconsistencies.
 3. `analyze_document_metadata` checks metadata coverage, missing types, and duplicates.
-4. `verify_supporting_documents` returns fake Phase A verification placeholders.
-5. `analyze_cross_document_consistency` returns a fake Phase A consistency placeholder.
+4. `verify_supporting_documents` runs bounded hybrid extraction and allow-listed fact analysis.
+5. `analyze_cross_document_consistency` performs deterministic conservative comparisons.
 6. `analyze_consistency` compares existing structured inputs and authoritative findings.
 7. `summarize_findings` returns one allowed landlord-review recommendation and attaches the
-   deterministic document placeholders.
+   structured document findings.
 
 The state remains JSON serializable. Each model response is validated with its own
 Pydantic schema. Hidden reasoning is neither requested nor returned; only concise
@@ -111,8 +112,19 @@ precedence. The `.env` file is ignored by Git and must never be committed:
 - `AI_PROVIDER`: `groq` or `gemini` (Gemini aliases: `google`, `google-genai`)
 - `AI_MODEL`: provider model identifier; development defaults to `openai/gpt-oss-20b`
 - `GROQ_API_KEY`: Groq credential, used only when `AI_PROVIDER=groq`
-- `AI_API_KEY`: Gemini credential, used only when `AI_PROVIDER=gemini`
+- `GEMINI_API_KEY`: Gemini credential for either text or vision (`AI_API_KEY` remains a
+  backwards-compatible alias)
+- `VISION_PROVIDER` / `VISION_MODEL`: optional dedicated OCR/vision provider; when omitted,
+  a vision-capable primary provider may be reused; a text-only primary fails safely to
+  manual review without receiving image content
+- `VISION_API_KEY`: optional dedicated vision credential; otherwise the matching primary key
+  is reused
 - `AI_TIMEOUT_SECONDS`: per-call timeout; defaults to 30
+- `EXTRACTION_TIMEOUT_SECONDS`: whole-document extraction deadline; defaults to 20
+- `MAX_PDF_PAGES`: maximum selectable-text/rendered pages; defaults to 5
+- `MAX_EXTRACTED_CHARACTERS`: in-memory extracted-text cap; defaults to 50,000
+- `MAX_MODEL_INPUT_CHARACTERS`: fact-analysis input cap; defaults to 20,000
+- `INCOME_TOLERANCE_PERCENT`: monthly-income comparison tolerance; defaults to 5
 - `AGENT_VERSION`: version returned in validated summaries; defaults to 0.1.0
 - `AI_DEVELOPMENT_DIAGNOSTICS`: temporary sanitized node diagnostics; defaults to disabled
 
@@ -123,12 +135,20 @@ the official asynchronous Groq SDK with strict JSON Schema Structured Outputs fo
 retain the full local Pydantic validation after provider output. Unsupported provider
 names fail safely.
 
-Development Groq configuration:
+Digital PDFs with sufficient selectable text do not require `VISION_PROVIDER` or a vision
+credential. Scanned PDFs and JPEG/PNG inputs require an explicitly vision-capable adapter;
+otherwise that document is marked unavailable for analysis and sent to manual review while
+the rest of the workflow continues.
+
+Development Groq text plus Gemini vision configuration:
 
 ```text
 AI_PROVIDER=groq
 AI_MODEL=openai/gpt-oss-20b
 GROQ_API_KEY=<deployment secret>
+VISION_PROVIDER=gemini
+VISION_MODEL=gemini-2.5-flash
+GEMINI_API_KEY=<deployment secret>
 ```
 
 Gemini remains available:
@@ -136,7 +156,7 @@ Gemini remains available:
 ```text
 AI_PROVIDER=gemini
 AI_MODEL=gemini-2.5-flash
-AI_API_KEY=<deployment secret>
+GEMINI_API_KEY=<deployment secret>
 ```
 
 The ASP.NET client is configured separately with `AgentService:BaseUrl` and
@@ -151,5 +171,6 @@ python -m pytest
 ```
 
 Tests use an in-memory fake provider, actively block external network connections,
-and cover request validation, plan restrictions, output safety, safe failures, and
-ordered graph execution.
+and cover digital/scanned PDF routing, image OCR routing, limits, English/Sinhala and
+handwriting confidence, fact allow-lists, provider failures, deterministic comparisons,
+output safety, plan restrictions, and ordered graph execution.

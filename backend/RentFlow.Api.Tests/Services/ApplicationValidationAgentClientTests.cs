@@ -53,6 +53,34 @@ public class ApplicationValidationAgentClientTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_AcceptsSafePhaseBStructuredDocumentResult()
+    {
+        var documentId = Guid.NewGuid();
+        var request = CreateRequest(documentId);
+        var handler = new StubHttpMessageHandler((_, _) => Task.FromResult(
+            JsonResponse(CreateSuccessJson(
+                request.WorkflowId,
+                request.ApplicationId,
+                documentId))));
+        var client = CreateClient(handler);
+
+        var result = await client.AnalyzeAsync(request);
+
+        var verification = Assert.Single(result.SupportingDocumentVerification);
+        Assert.Equal("PdfText", verification.ExtractionMethod);
+        Assert.Equal("High", verification.ConfidenceLabel);
+        Assert.False(verification.RequiresManualReview);
+        Assert.Equal("Ada Lovelace", verification.ExtractedFacts.ApplicantName);
+        Assert.Equal(5000m, verification.ExtractedFacts.IncomeAmount);
+        Assert.Equal("monthly", verification.ExtractedFacts.PayPeriod);
+        Assert.Equal("ACME", verification.ExtractedFacts.EmployerName);
+        Assert.Equal(new DateOnly(2026, 8, 1), verification.ExtractedFacts.DocumentDate);
+        Assert.Contains(result.CrossDocumentConsistency.MatchedFacts,
+            finding => finding.Comparison == "monthly_income_vs_income_amount");
+        Assert.True(result.RequiresHumanApproval);
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_TimeoutIsMappedSafely()
     {
         var handler = new StubHttpMessageHandler(async (_, cancellationToken) =>
@@ -128,7 +156,7 @@ public class ApplicationValidationAgentClientTests
         return new ApplicationValidationAgentClient(new HttpClient(handler), options);
     }
 
-    private static ApplicationValidationAgentRequest CreateRequest()
+    private static ApplicationValidationAgentRequest CreateRequest(Guid? documentId = null)
     {
         return new ApplicationValidationAgentRequest
         {
@@ -160,12 +188,51 @@ public class ApplicationValidationAgentClientTests
                     Severity = "info",
                     Message = "Deterministic checks completed."
                 }
-            ]
+            ],
+            SupportingDocuments = documentId is null
+                ? []
+                :
+                [
+                    new SupportingDocumentAnalysisInput
+                    {
+                        DocumentId = documentId.Value,
+                        DocumentType = RentFlow.Api.Models.ApplicationDocumentType.IncomeProof,
+                        OriginalFileName = "income.pdf",
+                        ContentType = "application/pdf",
+                        SizeBytes = 4,
+                        ContentBase64 = "JVBERg=="
+                    }
+                ]
         };
     }
 
-    private static string CreateSuccessJson(Guid workflowId, Guid applicationId)
+    private static string CreateSuccessJson(
+        Guid workflowId,
+        Guid applicationId,
+        Guid? documentId = null)
     {
+        var verification = documentId is null
+            ? "[]"
+            : $$"""
+                [{
+                  "documentId": "{{documentId}}",
+                  "documentType": "IncomeProof",
+                  "readable": true,
+                  "detectedDocumentCategory": "IncomeProof",
+                  "extractedFacts": {
+                    "applicantName": "Ada Lovelace",
+                    "incomeAmount": 5000,
+                    "payPeriod": "monthly",
+                    "employerName": "ACME",
+                    "jobTitle": null,
+                    "documentDate": "2026-08-01"
+                  },
+                  "warnings": [],
+                  "confidenceLabel": "High",
+                  "extractionMethod": "PdfText",
+                  "requiresManualReview": false
+                }]
+                """;
         return $$"""
             {
               "workflowId": "{{workflowId}}",
@@ -176,7 +243,17 @@ public class ApplicationValidationAgentClientTests
                 "keyFindings": ["No blocking deterministic findings."],
                 "warnings": [],
                 "requiresHumanApproval": true,
-                "agentVersion": "python-test"
+                "agentVersion": "python-test",
+                "supportingDocumentVerification": {{verification}},
+                "crossDocumentConsistency": {
+                  "matchedFacts": [{
+                    "comparison": "monthly_income_vs_income_amount",
+                    "message": "Monthly income matched within configured tolerance."
+                  }],
+                  "mismatches": [],
+                  "warnings": [],
+                  "requiresManualReview": false
+                }
               },
               "executionMetadata": {
                 "executedSteps": [

@@ -34,10 +34,13 @@ public class ApplicationValidationAgentClient(
         ["IncomeProof", "EmploymentLetter", "IdentityDocument"];
 
     private static readonly HashSet<string> AllowedDocumentCategories =
-        ["IncomeProof", "EmploymentLetter", "IdentityDocument", "Unknown", "NotAssessed"];
+        ["IncomeProof", "EmploymentLetter", "IdentityDocument", "Unknown"];
 
     private static readonly HashSet<string> AllowedConfidenceLabels =
-        ["Low", "Medium", "High", "NotAssessed"];
+        ["Low", "Medium", "High", "Unknown"];
+
+    private static readonly HashSet<string> AllowedExtractionMethods =
+        ["PdfText", "VisionOcr", "None"];
 
     private static readonly HashSet<string> AllowedConsistencyComparisons =
     [
@@ -172,7 +175,11 @@ public class ApplicationValidationAgentClient(
                 || verification.Warnings is null
                 || !AllowedDocumentTypes.Contains(verification.DocumentType)
                 || !AllowedDocumentCategories.Contains(verification.DetectedDocumentCategory)
-                || !AllowedConfidenceLabels.Contains(verification.ConfidenceLabel))
+                || !AllowedConfidenceLabels.Contains(verification.ConfidenceLabel)
+                || !AllowedExtractionMethods.Contains(verification.ExtractionMethod)
+                || (!verification.Readable && !verification.RequiresManualReview)
+                || (verification.ConfidenceLabel is "Low" or "Unknown"
+                    && !verification.RequiresManualReview))
             {
                 return false;
             }

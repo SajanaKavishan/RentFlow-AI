@@ -100,6 +100,10 @@ public sealed class SupportingDocumentVerificationResult
     public IReadOnlyCollection<string> Warnings { get; init; } = Array.Empty<string>();
 
     public string ConfidenceLabel { get; init; } = string.Empty;
+
+    public string ExtractionMethod { get; init; } = string.Empty;
+
+    public bool RequiresManualReview { get; init; }
 }
 
 public sealed class SupportingDocumentExtractedFacts

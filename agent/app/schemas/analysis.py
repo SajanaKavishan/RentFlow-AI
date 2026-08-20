@@ -40,7 +40,9 @@ class Recommendation(str, Enum):
     MANUAL_REVIEW_REQUIRED = "Manual review required"
 
 
-class FinalAgentSummary(StrictModel):
+class FinalAgentSummaryDraft(StrictModel):
+    """Only fields the text model owns; deterministic results are service-owned."""
+
     # Provider JSON represents enum values as strings; the enum still rejects all unknown values.
     recommendation: Recommendation = Field(strict=False)
     summary: str = Field(min_length=1, max_length=2000)
@@ -51,6 +53,16 @@ class FinalAgentSummary(StrictModel):
     )
     warnings: list[str] = Field(default_factory=list, max_length=100)
     requires_human_approval: bool = Field(alias="requiresHumanApproval")
+
+    @field_validator("requires_human_approval")
+    @classmethod
+    def human_approval_is_mandatory(cls, value: bool) -> bool:
+        if value is not True:
+            raise ValueError("requiresHumanApproval must always be true")
+        return value
+
+
+class FinalAgentSummary(FinalAgentSummaryDraft):
     agent_version: str = Field(min_length=1, max_length=100, alias="agentVersion")
     supporting_document_verification: list[SupportingDocumentVerificationResult] = Field(
         default_factory=list,
@@ -61,10 +73,3 @@ class FinalAgentSummary(StrictModel):
         default_factory=lambda: CrossDocumentConsistencyResult(requires_manual_review=True),
         alias="crossDocumentConsistency",
     )
-
-    @field_validator("requires_human_approval")
-    @classmethod
-    def human_approval_is_mandatory(cls, value: bool) -> bool:
-        if value is not True:
-            raise ValueError("requiresHumanApproval must always be true")
-        return value

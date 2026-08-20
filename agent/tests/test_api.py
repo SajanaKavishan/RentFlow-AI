@@ -1,19 +1,58 @@
 from __future__ import annotations
 
+import base64
 import logging
+from io import BytesIO
 
 from fastapi.testclient import TestClient
+from pypdf import PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from app.config import Settings
 from app.main import create_app
 from app.services.model_provider import build_model_provider
-from tests.conftest import FakeModelProvider, valid_request
+from tests.conftest import FakeModelProvider, valid_model_responses, valid_request
 
 
 class FailingModelProvider(FakeModelProvider):
     async def generate_structured(self, **kwargs):
         del kwargs
         raise RuntimeError("secret-provider-detail-must-not-escape")
+
+
+class SupportingDocumentModelProvider(FakeModelProvider):
+    async def generate_structured_with_media(self, **kwargs):
+        del kwargs
+        return {
+            "extractedText": "unique in-memory handwritten Sinhala OCR text " * 3,
+            "detectedLanguage": "Sinhala",
+            "confidenceLabel": "Low",
+            "contentStyle": "Handwritten",
+            "warnings": ["uncertain"],
+        }
+
+
+def selectable_pdf(text: str) -> bytes:
+    writer = PdfWriter()
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    font_ref = writer._add_object(font)
+    page = writer.add_blank_page(width=612, height=792)
+    page[NameObject("/Resources")] = DictionaryObject(
+        {NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref})}
+    )
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream = DecodedStreamObject()
+    stream.set_data(f"BT /F1 11 Tf 40 740 Td ({escaped}) Tj ET".encode("latin-1"))
+    page[NameObject("/Contents")] = writer._add_object(stream)
+    buffer = BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
 
 
 def test_health_endpoint(client: TestClient) -> None:
@@ -135,7 +174,7 @@ def test_graph_runs_nodes_in_fixed_order(
         "ApplicationDataAnalysis",
         "DocumentAnalysis",
         "ConsistencyAnalysis",
-        "FinalAgentSummary",
+        "FinalAgentSummaryDraft",
     ]
     for node_name in (
         "planner",
@@ -146,3 +185,146 @@ def test_graph_runs_nodes_in_fixed_order(
     ):
         assert f"event=model_invocation_started node={node_name}" in caplog.text
         assert f"event=model_invocation_succeeded node={node_name}" in caplog.text
+
+
+def test_supporting_document_analysis_returns_only_safe_structured_output(
+    settings: Settings,
+) -> None:
+    responses = valid_model_responses()
+    responses["SupportingDocumentFactAnalysis"] = {
+        "detectedDocumentCategory": "IdentityDocument",
+        "extractedFacts": {
+            "applicantName": "නිමල් පෙරේරා",
+            "incomeAmount": None,
+            "payPeriod": None,
+            "employerName": None,
+            "jobTitle": None,
+            "documentDate": None,
+        },
+        "warnings": [],
+        "confidenceLabel": "Low",
+    }
+    provider = SupportingDocumentModelProvider(responses)
+    client = TestClient(
+        create_app(
+            settings=settings,
+            model_provider=provider,
+            vision_model_provider=provider,
+        )
+    )
+    payload = valid_request()
+    raw_content = b"super-secret-raw-document"
+    payload["supportingDocuments"] = [
+        {
+            "documentId": "identity-1",
+            "documentType": "IdentityDocument",
+            "originalFileName": "identity.png",
+            "contentType": "image/png",
+            "sizeBytes": len(raw_content),
+            "contentBase64": base64.b64encode(raw_content).decode("ascii"),
+        }
+    ]
+
+    response = client.post("/internal/application-validation/analyze", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    verification = body["result"]["supportingDocumentVerification"][0]
+    assert body["result"]["recommendation"] == "Manual review required"
+    assert verification["confidenceLabel"] == "Low"
+    assert verification["requiresManualReview"] is True
+    assert verification["extractionMethod"] == "VisionOcr"
+    assert payload["supportingDocuments"][0]["contentBase64"] not in response.text
+    assert "unique in-memory handwritten Sinhala OCR text" not in response.text
+    assert "extractedText" not in response.text
+
+
+def test_missing_vision_provider_warns_without_failing_workflow(
+    settings: Settings,
+    fake_provider: FakeModelProvider,
+) -> None:
+    client = TestClient(create_app(settings=settings, model_provider=fake_provider))
+    payload = valid_request()
+    raw_content = b"synthetic-image"
+    payload["supportingDocuments"] = [
+        {
+            "documentId": "scan-1",
+            "documentType": "IncomeProof",
+            "originalFileName": "scan.png",
+            "contentType": "image/png",
+            "sizeBytes": len(raw_content),
+            "contentBase64": base64.b64encode(raw_content).decode("ascii"),
+        }
+    ]
+
+    response = client.post("/internal/application-validation/analyze", json=payload)
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    verification = result["supportingDocumentVerification"][0]
+    assert verification["readable"] is False
+    assert verification["requiresManualReview"] is True
+    assert "Vision analysis is not configured" in " ".join(verification["warnings"])
+    assert result["requiresHumanApproval"] is True
+
+
+def test_income_proof_api_response_is_structured_without_raw_transport_data(
+    settings: Settings,
+) -> None:
+    responses = valid_model_responses()
+    responses["SupportingDocumentFactAnalysis"] = {
+        "detectedDocumentCategory": "IncomeProof",
+        "extractedFacts": {
+            "applicantName": "Test Applicant",
+            "incomeAmount": "LKR 185,000",
+            "payPeriod": "July 2026",
+            "employerName": "Example Solutions (Pvt) Ltd",
+            "jobTitle": "Software Engineer",
+            "documentDate": "01 August 2026",
+        },
+        "warnings": [],
+        "confidenceLabel": "High",
+    }
+    provider = FakeModelProvider(responses)
+    client = TestClient(create_app(settings=settings, model_provider=provider))
+    raw_content = selectable_pdf(
+        "INCOME PROOF Employee Name Test Applicant Employer Example Solutions Gross "
+        "Monthly Income LKR 185,000 Pay Period July 2026 Payment Date 01 August 2026"
+    )
+    payload = valid_request()
+    payload["supportingDocuments"] = [
+        {
+            "documentId": "income-1",
+            "documentType": "IncomeProof",
+            "originalFileName": "income-proof.pdf",
+            "contentType": "application/pdf",
+            "sizeBytes": len(raw_content),
+            "contentBase64": base64.b64encode(raw_content).decode("ascii"),
+        }
+    ]
+
+    response = client.post("/internal/application-validation/analyze", json=payload)
+
+    assert response.status_code == 200
+    verification = response.json()["result"]["supportingDocumentVerification"][0]
+    assert verification == {
+        "documentId": "income-1",
+        "documentType": "IncomeProof",
+        "readable": True,
+        "detectedDocumentCategory": "IncomeProof",
+        "extractedFacts": {
+            "applicantName": "Test Applicant",
+            "incomeAmount": "185000",
+            "payPeriod": "July 2026",
+            "employerName": "Example Solutions (Pvt) Ltd",
+            "jobTitle": None,
+            "documentDate": "2026-08-01",
+        },
+        "warnings": [],
+        "confidenceLabel": "High",
+        "extractionMethod": "PdfText",
+        "requiresManualReview": False,
+    }
+    assert payload["supportingDocuments"][0]["contentBase64"] not in response.text
+    assert "extractedText" not in response.text
+    assert "storageKey" not in response.text
