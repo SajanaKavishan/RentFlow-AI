@@ -7,6 +7,7 @@ import {
 } from '../../applicationDocuments/services/applicationDocumentApiService.js'
 import '../../applicationDocuments/applicationDocuments.css'
 import { RENTAL_APPLICATION_STATUS } from '../services/rentalApplicationApiService.js'
+import ApplicationValidationSection from './ApplicationValidationSection.jsx'
 import RentalApplicationStatusBadge from './RentalApplicationStatusBadge.jsx'
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
@@ -293,6 +294,11 @@ function RentalApplicationCard({
             )}
         </section>
       )}
+
+      <ApplicationValidationSection
+        applicationId={application.id}
+        canRun={canAct}
+      />
 
       {canAct && !action && (
         <div className="application-card__actions">
