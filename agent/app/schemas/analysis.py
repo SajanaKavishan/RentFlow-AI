@@ -7,6 +7,10 @@ from enum import Enum
 from pydantic import Field, field_validator
 
 from app.schemas.common import Finding, StrictModel
+from app.schemas.supporting_documents import (
+    CrossDocumentConsistencyResult,
+    SupportingDocumentVerificationResult,
+)
 
 
 class ApplicationDataAnalysis(StrictModel):
@@ -36,7 +40,9 @@ class Recommendation(str, Enum):
     MANUAL_REVIEW_REQUIRED = "Manual review required"
 
 
-class FinalAgentSummary(StrictModel):
+class FinalAgentSummaryDraft(StrictModel):
+    """Only fields the text model owns; deterministic results are service-owned."""
+
     # Provider JSON represents enum values as strings; the enum still rejects all unknown values.
     recommendation: Recommendation = Field(strict=False)
     summary: str = Field(min_length=1, max_length=2000)
@@ -47,7 +53,6 @@ class FinalAgentSummary(StrictModel):
     )
     warnings: list[str] = Field(default_factory=list, max_length=100)
     requires_human_approval: bool = Field(alias="requiresHumanApproval")
-    agent_version: str = Field(min_length=1, max_length=100, alias="agentVersion")
 
     @field_validator("requires_human_approval")
     @classmethod
@@ -55,3 +60,16 @@ class FinalAgentSummary(StrictModel):
         if value is not True:
             raise ValueError("requiresHumanApproval must always be true")
         return value
+
+
+class FinalAgentSummary(FinalAgentSummaryDraft):
+    agent_version: str = Field(min_length=1, max_length=100, alias="agentVersion")
+    supporting_document_verification: list[SupportingDocumentVerificationResult] = Field(
+        default_factory=list,
+        max_length=100,
+        alias="supportingDocumentVerification",
+    )
+    cross_document_consistency: CrossDocumentConsistencyResult = Field(
+        default_factory=lambda: CrossDocumentConsistencyResult(requires_manual_review=True),
+        alias="crossDocumentConsistency",
+    )

@@ -474,6 +474,12 @@ public class ApplicationDocumentServiceTests
             return Task.CompletedTask;
         }
 
+        public Task<byte[]> DownloadBytesAsync(
+            string storageKey,
+            long maximumBytes,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Array.Empty<byte>());
+
         public Task<string> GenerateDownloadUrlAsync(
             string storageKey,
             string originalFileName,

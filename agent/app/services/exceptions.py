@@ -23,6 +23,16 @@ class ModelInvocationError(AgentServiceError):
     code = "model_invocation_failed"
     public_message = "The AI provider could not complete the analysis."
 
+    def __init__(
+        self,
+        *,
+        diagnostic_category: str | None = None,
+        diagnostic_message: str | None = None,
+    ) -> None:
+        super().__init__()
+        self.diagnostic_category = diagnostic_category
+        self.diagnostic_message = diagnostic_message
+
 
 class ModelOutputValidationError(AgentServiceError):
     code = "invalid_model_output"
@@ -33,3 +43,9 @@ class ModelOutputValidationError(AgentServiceError):
 class ModelTimeoutError(AgentServiceError):
     code = "model_timeout"
     public_message = "The AI provider timed out before completing the analysis."
+
+
+class VisionCapabilityUnavailableError(AgentServiceError):
+    code = "vision_not_available"
+    public_message = "Vision extraction is not available for the configured provider."
+    retryable = False

@@ -16,6 +16,7 @@ public class ApplicationValidationOrchestrator(
     IDocumentValidationTool documentValidationTool,
     IDeterministicApplicationRuleTool deterministicRuleTool,
     IApplicationValidationAgentClient applicationValidationAgentClient,
+    IApplicationDocumentContentService applicationDocumentContentService,
     TimeProvider timeProvider,
     ILogger<ApplicationValidationOrchestrator> logger) : IApplicationValidationOrchestrator
 {
@@ -127,10 +128,15 @@ public class ApplicationValidationOrchestrator(
         workflow.Recommendation = deterministicRecommendation;
         workflow.RequiresHumanApproval = true;
 
+        var documentPreparations = await PrepareSupportingDocumentsAsync(
+            applicationId,
+            documents,
+            cancellationToken);
         var agentRequest = CreateAgentRequest(
             workflow,
             application,
             documents,
+            documentPreparations,
             applicationDataResult,
             documentResult,
             ruleResult);
@@ -139,7 +145,11 @@ public class ApplicationValidationOrchestrator(
             workflow.Steps.Single(step => step.StepOrder == 4),
             async token => ReconcileAgentResult(
                 deterministicRecommendation,
-                await applicationValidationAgentClient.AnalyzeAsync(agentRequest, token)),
+                await applicationValidationAgentClient.AnalyzeAsync(agentRequest, token),
+                documentPreparations
+                    .Where(result => result.Warning is not null)
+                    .Select(result => result.Warning!)
+                    .ToArray()),
             cancellationToken);
         if (agentResult is null)
         {
@@ -243,6 +253,7 @@ public class ApplicationValidationOrchestrator(
         ApplicationValidationWorkflow workflow,
         RentalApplication application,
         IReadOnlyCollection<ApplicationDocument> documents,
+        IReadOnlyCollection<SupportingDocumentPreparationResult> documentPreparations,
         ApplicationDataValidationResult applicationData,
         DocumentValidationResult documentResult,
         DeterministicRuleValidationResult rules)
@@ -268,11 +279,60 @@ public class ApplicationValidationOrchestrator(
                     IsRequired = document.DocumentType is ApplicationDocumentType.IdentityDocument
                         or ApplicationDocumentType.IncomeProof
                 }).ToArray(),
+            SupportingDocuments = documentPreparations
+                .Where(result => result.Input is not null)
+                .Select(result => result.Input!)
+                .ToArray(),
             DeterministicFindings = CreateDeterministicFindings(
                 applicationData,
                 documentResult,
                 rules)
+                .Concat(documentPreparations
+                    .Where(result => result.WarningCode is not null && result.Warning is not null)
+                    .Select(result => CreateFinding(
+                        $"document.analysis.{result.WarningCode}",
+                        "warning",
+                        result.Warning!,
+                        $"document:{result.DocumentId}")))
+                .ToArray()
         };
+    }
+
+    private async Task<IReadOnlyCollection<SupportingDocumentPreparationResult>>
+        PrepareSupportingDocumentsAsync(
+            Guid applicationId,
+            IReadOnlyCollection<ApplicationDocument> documents,
+            CancellationToken cancellationToken)
+    {
+        var results = new List<SupportingDocumentPreparationResult>(documents.Count);
+        foreach (var document in documents)
+        {
+            try
+            {
+                results.Add(await applicationDocumentContentService.PrepareForAnalysisAsync(
+                    applicationId,
+                    document,
+                    cancellationToken));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception,
+                    "Application document {DocumentId} could not be prepared for analysis.",
+                    document.Id);
+                results.Add(new SupportingDocumentPreparationResult
+                {
+                    DocumentId = document.Id,
+                    WarningCode = "preparation_failed",
+                    Warning = "The document content could not be prepared for analysis."
+                });
+            }
+        }
+
+        return results;
     }
 
     private static IReadOnlyCollection<ApplicationValidationAgentDeterministicFinding>
@@ -322,7 +382,8 @@ public class ApplicationValidationOrchestrator(
 
     private static AgenticApplicationReviewResult ReconcileAgentResult(
         string deterministicRecommendation,
-        AgenticApplicationReviewResult agentResult)
+        AgenticApplicationReviewResult agentResult,
+        IReadOnlyCollection<string> documentPreparationWarnings)
     {
         if (agentResult is null
             || !agentResult.RequiresHumanApproval
@@ -330,7 +391,9 @@ public class ApplicationValidationOrchestrator(
             || string.IsNullOrWhiteSpace(agentResult.Summary)
             || string.IsNullOrWhiteSpace(agentResult.AgentVersion)
             || agentResult.KeyFindings is null
-            || agentResult.Warnings is null)
+            || agentResult.Warnings is null
+            || agentResult.SupportingDocumentVerification is null
+            || agentResult.CrossDocumentConsistency is null)
         {
             throw new InvalidOperationException("The agent returned an unsafe result.");
         }
@@ -345,21 +408,22 @@ public class ApplicationValidationOrchestrator(
                 : deterministicRecommendation
             : deterministicRecommendation;
 
-        var warnings = recommendationsDiffer
-            ? agentResult.Warnings
-                .Append(RecommendationConflictWarning)
-                .Distinct(StringComparer.Ordinal)
-                .ToArray()
-            : agentResult.Warnings.ToArray();
+        var warnings = agentResult.Warnings.Concat(documentPreparationWarnings);
+        if (recommendationsDiffer)
+        {
+            warnings = warnings.Append(RecommendationConflictWarning);
+        }
 
         return new AgenticApplicationReviewResult
         {
             Recommendation = recommendation,
             Summary = agentResult.Summary,
             KeyFindings = agentResult.KeyFindings.ToArray(),
-            Warnings = warnings,
+            Warnings = warnings.Distinct(StringComparer.Ordinal).ToArray(),
             RequiresHumanApproval = true,
-            AgentVersion = agentResult.AgentVersion
+            AgentVersion = agentResult.AgentVersion,
+            SupportingDocumentVerification = agentResult.SupportingDocumentVerification.ToArray(),
+            CrossDocumentConsistency = agentResult.CrossDocumentConsistency
         };
     }
 }

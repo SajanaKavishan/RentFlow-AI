@@ -70,7 +70,10 @@ def test_protected_characteristic_and_risk_fields_are_absent_from_schemas() -> N
         ConsistencyAnalysis,
         FinalAgentSummary,
     ]
-    prohibited = {"race", "religion", "gender", "age", "risk_score", "risk_rating"}
+    prohibited = {
+        "race", "religion", "gender", "age", "risk_score", "risk_rating",
+        "fraud_score", "tenant_score", "trust_score",
+    }
 
     for schema_model in schema_models:
         assert prohibited.isdisjoint(schema_model.model_fields)

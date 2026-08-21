@@ -23,9 +23,18 @@ builder.Services.AddOptions<CloudflareR2Options>()
 builder.Services.AddOptions<AgentServiceOptions>()
     .Bind(builder.Configuration.GetSection(AgentServiceOptions.SectionName));
 
+builder.Services.AddOptions<DocumentAnalysisOptions>()
+    .Bind(builder.Configuration.GetSection(DocumentAnalysisOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(options => options.AllowedContentTypes.All(contentType =>
+        contentType is "application/pdf" or "image/jpeg" or "image/png"),
+        "DocumentAnalysis contains an unsupported content type.")
+    .ValidateOnStart();
+
 builder.Services.AddScoped<IViewingService, ViewingService>();
 builder.Services.AddScoped<IRentalApplicationService, RentalApplicationService>();
 builder.Services.AddScoped<IApplicationDocumentService, ApplicationDocumentService>();
+builder.Services.AddScoped<IApplicationDocumentContentService, ApplicationDocumentContentService>();
 builder.Services.AddScoped<IApplicationDataValidationTool, ApplicationDataValidationTool>();
 builder.Services.AddScoped<IDocumentValidationTool, DocumentValidationTool>();
 builder.Services.AddScoped<IDeterministicApplicationRuleTool, DeterministicApplicationRuleTool>();

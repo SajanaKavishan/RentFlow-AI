@@ -16,6 +16,8 @@ public class ApplicationValidationAgentClient(
         "plan",
         "analyze_application_data",
         "analyze_document_metadata",
+        "verify_supporting_documents",
+        "analyze_cross_document_consistency",
         "analyze_consistency",
         "summarize_findings"
     ];
@@ -26,6 +28,27 @@ public class ApplicationValidationAgentClient(
         "Request missing information",
         "Request missing documents",
         "Manual review required"
+    ];
+
+    private static readonly HashSet<string> AllowedDocumentTypes =
+        ["IncomeProof", "EmploymentLetter", "IdentityDocument"];
+
+    private static readonly HashSet<string> AllowedDocumentCategories =
+        ["IncomeProof", "EmploymentLetter", "IdentityDocument", "Unknown"];
+
+    private static readonly HashSet<string> AllowedConfidenceLabels =
+        ["Low", "Medium", "High", "Unknown"];
+
+    private static readonly HashSet<string> AllowedExtractionMethods =
+        ["PdfText", "VisionOcr", "None"];
+
+    private static readonly HashSet<string> AllowedConsistencyComparisons =
+    [
+        "occupation_vs_job_title",
+        "monthly_income_vs_income_amount",
+        "applicant_name_consistency",
+        "employer_name_consistency",
+        "document_category_vs_uploaded_type"
     ];
 
     public async Task<AgenticApplicationReviewResult> AnalyzeAsync(
@@ -120,6 +143,9 @@ public class ApplicationValidationAgentClient(
             || string.IsNullOrWhiteSpace(response.Result.AgentVersion)
             || response.Result.KeyFindings is null
             || response.Result.Warnings is null
+            || response.Result.SupportingDocumentVerification is null
+            || !HasSafeDocumentVerification(request, response.Result)
+            || !HasSafeConsistencyResult(response.Result.CrossDocumentConsistency)
             || !AllowedRecommendations.Contains(response.Result.Recommendation)
             || response.ExecutionMetadata is null
             || response.ExecutionMetadata.ExecutedSteps is null
@@ -127,6 +153,89 @@ public class ApplicationValidationAgentClient(
         {
             throw MalformedResponse();
         }
+    }
+
+    private static bool HasSafeDocumentVerification(
+        ApplicationValidationAgentRequest request,
+        AgenticApplicationReviewResult result)
+    {
+        var inputs = request.SupportingDocuments.ToDictionary(document => document.DocumentId);
+        if (result.SupportingDocumentVerification.Count != inputs.Count)
+        {
+            return false;
+        }
+        foreach (var verification in result.SupportingDocumentVerification)
+        {
+            if (!inputs.TryGetValue(verification.DocumentId, out var input)
+                || !string.Equals(
+                    verification.DocumentType,
+                    input.DocumentType.ToString(),
+                    StringComparison.Ordinal)
+                || verification.ExtractedFacts is null
+                || verification.Warnings is null
+                || !AllowedDocumentTypes.Contains(verification.DocumentType)
+                || !AllowedDocumentCategories.Contains(verification.DetectedDocumentCategory)
+                || !AllowedConfidenceLabels.Contains(verification.ConfidenceLabel)
+                || !AllowedExtractionMethods.Contains(verification.ExtractionMethod)
+                || (!verification.Readable && !verification.RequiresManualReview)
+                || (verification.ConfidenceLabel is "Low" or "Unknown"
+                    && !verification.RequiresManualReview))
+            {
+                return false;
+            }
+
+            var facts = verification.ExtractedFacts;
+            if (!verification.Readable
+                && (facts.ApplicantName is not null
+                    || facts.IncomeAmount is not null
+                    || facts.PayPeriod is not null
+                    || facts.EmployerName is not null
+                    || facts.JobTitle is not null
+                    || facts.DocumentDate is not null))
+            {
+                return false;
+            }
+
+            if (input.DocumentType == RentFlow.Api.Models.ApplicationDocumentType.IdentityDocument
+                && (facts.IncomeAmount is not null
+                    || facts.PayPeriod is not null
+                    || facts.EmployerName is not null
+                    || facts.JobTitle is not null
+                    || facts.DocumentDate is not null))
+            {
+                return false;
+            }
+
+            if (input.DocumentType == RentFlow.Api.Models.ApplicationDocumentType.IncomeProof
+                && facts.JobTitle is not null)
+            {
+                return false;
+            }
+
+            if (input.DocumentType == RentFlow.Api.Models.ApplicationDocumentType.EmploymentLetter
+                && (facts.IncomeAmount is not null || facts.PayPeriod is not null))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasSafeConsistencyResult(CrossDocumentConsistencyResult result)
+    {
+        if (result is null
+            || result.MatchedFacts is null
+            || result.Mismatches is null
+            || result.Warnings is null)
+        {
+            return false;
+        }
+
+        return result.MatchedFacts.Concat(result.Mismatches).All(finding =>
+            finding is not null
+            && AllowedConsistencyComparisons.Contains(finding.Comparison)
+            && !string.IsNullOrWhiteSpace(finding.Message));
     }
 
     private static ApplicationValidationAgentClientException MalformedResponse(
