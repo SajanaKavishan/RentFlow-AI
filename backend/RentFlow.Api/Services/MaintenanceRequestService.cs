@@ -215,6 +215,233 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         return MapToResponse(maintenanceRequest);
     }
 
+    public async Task<MaintenanceRequestResponseDto> MarkEstimatePendingAsync(
+        Guid requestId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequestId(requestId);
+
+        var maintenanceRequest = await GetTrackedRequestAsync(requestId, cancellationToken);
+        EnsureStatus(maintenanceRequest, "prepared for an estimate", MaintenanceRequestStatus.Assigned);
+
+        maintenanceRequest.Status = MaintenanceRequestStatus.EstimatePending;
+        maintenanceRequest.UpdatedAt = DateTimeOffset.UtcNow;
+        AddHistory(
+            maintenanceRequest,
+            MaintenanceRequestStatus.Assigned,
+            MaintenanceRequestStatus.EstimatePending,
+            maintenanceRequest.TechnicianId,
+            "Technician estimate requested.");
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return MapToResponse(maintenanceRequest);
+    }
+
+    public async Task<RepairEstimateResponseDto> SubmitEstimateAsync(
+        Guid requestId,
+        Guid technicianId,
+        SubmitRepairEstimateDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequestId(requestId);
+        ValidateTechnicianId(technicianId);
+        ValidateEstimateSubmission(request);
+
+        var maintenanceRequest = await GetTrackedRequestAsync(requestId, cancellationToken);
+        EnsureStatus(maintenanceRequest, "submitted for estimation", MaintenanceRequestStatus.EstimatePending);
+
+        if (maintenanceRequest.TechnicianId != technicianId)
+        {
+            throw MaintenanceRequestServiceException.Conflict(
+                "Only the assigned technician can submit a repair estimate.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var latestVersion = await dbContext.RepairEstimates
+            .Where(estimate => estimate.MaintenanceRequestId == requestId)
+            .Select(estimate => (int?)estimate.VersionNumber)
+            .MaxAsync(cancellationToken) ?? 0;
+
+        var estimate = new RepairEstimate
+        {
+            MaintenanceRequestId = requestId,
+            TechnicianId = technicianId,
+            VersionNumber = latestVersion + 1,
+            LaborCost = request.LaborCost,
+            PartsCost = request.PartsCost,
+            AdditionalCost = request.AdditionalCost,
+            TotalCost = CalculateTotalCost(request.LaborCost, request.PartsCost, request.AdditionalCost),
+            Notes = NormalizeOptionalText(request.Notes),
+            Status = RepairEstimateStatus.Submitted,
+            CreatedAt = now,
+            SubmittedAt = now
+        };
+
+        dbContext.RepairEstimates.Add(estimate);
+        maintenanceRequest.Status = MaintenanceRequestStatus.EstimateSubmitted;
+        maintenanceRequest.UpdatedAt = now;
+        AddHistory(
+            maintenanceRequest,
+            MaintenanceRequestStatus.EstimatePending,
+            MaintenanceRequestStatus.EstimateSubmitted,
+            technicianId,
+            "Repair estimate submitted.");
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return MapToEstimateResponse(estimate);
+    }
+
+    public async Task<MaintenanceRequestResponseDto> SubmitEstimateForReviewAsync(
+        Guid requestId,
+        Guid estimateId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequestId(requestId);
+        ValidateEstimateId(estimateId);
+
+        var maintenanceRequest = await GetTrackedRequestAsync(requestId, cancellationToken);
+        EnsureStatus(maintenanceRequest, "sent for landlord approval", MaintenanceRequestStatus.EstimateSubmitted);
+        var estimate = await GetTrackedEstimateAsync(requestId, estimateId, cancellationToken);
+
+        EnsureEstimateStatus(estimate, "sent for landlord approval", RepairEstimateStatus.Submitted);
+
+        maintenanceRequest.Status = MaintenanceRequestStatus.AwaitingLandlordApproval;
+        maintenanceRequest.UpdatedAt = DateTimeOffset.UtcNow;
+        AddHistory(
+            maintenanceRequest,
+            MaintenanceRequestStatus.EstimateSubmitted,
+            MaintenanceRequestStatus.AwaitingLandlordApproval,
+            estimate.TechnicianId,
+            "Repair estimate submitted for landlord approval.");
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return MapToResponse(maintenanceRequest);
+    }
+
+    public Task<RepairEstimateResponseDto> ApproveEstimateAsync(
+        Guid requestId,
+        Guid estimateId,
+        Guid landlordId,
+        ReviewRepairEstimateDto request,
+        CancellationToken cancellationToken = default) =>
+        ReviewEstimateAsync(
+            requestId,
+            estimateId,
+            landlordId,
+            request,
+            RepairEstimateStatus.Approved,
+            MaintenanceRequestStatus.Approved,
+            false,
+            cancellationToken);
+
+    public Task<RepairEstimateResponseDto> RejectEstimateAsync(
+        Guid requestId,
+        Guid estimateId,
+        Guid landlordId,
+        ReviewRepairEstimateDto request,
+        CancellationToken cancellationToken = default) =>
+        ReviewEstimateAsync(
+            requestId,
+            estimateId,
+            landlordId,
+            request,
+            RepairEstimateStatus.Rejected,
+            MaintenanceRequestStatus.Rejected,
+            true,
+            cancellationToken);
+
+    public Task<RepairEstimateResponseDto> RequestEstimateRevisionAsync(
+        Guid requestId,
+        Guid estimateId,
+        Guid landlordId,
+        ReviewRepairEstimateDto request,
+        CancellationToken cancellationToken = default) =>
+        ReviewEstimateAsync(
+            requestId,
+            estimateId,
+            landlordId,
+            request,
+            RepairEstimateStatus.RevisionRequested,
+            MaintenanceRequestStatus.EstimatePending,
+            true,
+            cancellationToken);
+
+    public async Task<IReadOnlyList<RepairEstimateResponseDto>> GetEstimatesAsync(
+        Guid requestId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequestId(requestId);
+        await EnsureRequestExistsAsync(requestId, cancellationToken);
+
+        var estimates = await dbContext.RepairEstimates
+            .AsNoTracking()
+            .Where(estimate => estimate.MaintenanceRequestId == requestId)
+            .OrderBy(estimate => estimate.CreatedAt)
+            .ThenBy(estimate => estimate.VersionNumber)
+            .ToListAsync(cancellationToken);
+
+        return estimates.Select(MapToEstimateResponse).ToList();
+    }
+
+    public async Task<RepairEstimateResponseDto?> GetLatestEstimateAsync(
+        Guid requestId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequestId(requestId);
+        await EnsureRequestExistsAsync(requestId, cancellationToken);
+
+        var estimate = await dbContext.RepairEstimates
+            .AsNoTracking()
+            .Where(item => item.MaintenanceRequestId == requestId)
+            .OrderByDescending(item => item.VersionNumber)
+            .ThenByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return estimate is null ? null : MapToEstimateResponse(estimate);
+    }
+
+    private async Task<RepairEstimateResponseDto> ReviewEstimateAsync(
+        Guid requestId,
+        Guid estimateId,
+        Guid landlordId,
+        ReviewRepairEstimateDto request,
+        RepairEstimateStatus estimateStatus,
+        MaintenanceRequestStatus requestStatus,
+        bool requiresReviewNotes,
+        CancellationToken cancellationToken)
+    {
+        ValidateRequestId(requestId);
+        ValidateEstimateId(estimateId);
+        ValidateLandlordId(landlordId);
+        ValidateReviewNotes(request.ReviewNotes, requiresReviewNotes);
+
+        var maintenanceRequest = await GetTrackedRequestAsync(requestId, cancellationToken);
+        EnsureStatus(
+            maintenanceRequest,
+            "reviewed",
+            MaintenanceRequestStatus.AwaitingLandlordApproval);
+        var estimate = await GetTrackedEstimateAsync(requestId, estimateId, cancellationToken);
+        EnsureEstimateStatus(estimate, "reviewed", RepairEstimateStatus.Submitted);
+
+        var now = DateTimeOffset.UtcNow;
+        estimate.Status = estimateStatus;
+        estimate.ReviewNotes = NormalizeOptionalText(request.ReviewNotes);
+        estimate.ReviewedByUserId = landlordId;
+        estimate.ReviewedAt = now;
+        estimate.UpdatedAt = now;
+        maintenanceRequest.Status = requestStatus;
+        maintenanceRequest.UpdatedAt = now;
+        AddHistory(
+            maintenanceRequest,
+            MaintenanceRequestStatus.AwaitingLandlordApproval,
+            requestStatus,
+            landlordId,
+            estimate.ReviewNotes);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return MapToEstimateResponse(estimate);
+    }
+
     private async Task<MaintenanceRequest> GetTenantRequestAsync(
         Guid requestId,
         Guid tenantId,
@@ -240,6 +467,33 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         return maintenanceRequest
             ?? throw MaintenanceRequestServiceException.NotFound(
                 $"Maintenance request '{requestId}' was not found.");
+    }
+
+    private async Task<RepairEstimate> GetTrackedEstimateAsync(
+        Guid requestId,
+        Guid estimateId,
+        CancellationToken cancellationToken)
+    {
+        var estimate = await dbContext.RepairEstimates.SingleOrDefaultAsync(
+            item => item.Id == estimateId && item.MaintenanceRequestId == requestId,
+            cancellationToken);
+
+        return estimate
+            ?? throw MaintenanceRequestServiceException.NotFound(
+                $"Repair estimate '{estimateId}' was not found for maintenance request '{requestId}'.");
+    }
+
+    private async Task EnsureRequestExistsAsync(Guid requestId, CancellationToken cancellationToken)
+    {
+        var requestExists = await dbContext.MaintenanceRequests
+            .AsNoTracking()
+            .AnyAsync(item => item.Id == requestId, cancellationToken);
+
+        if (!requestExists)
+        {
+            throw MaintenanceRequestServiceException.NotFound(
+                $"Maintenance request '{requestId}' was not found.");
+        }
     }
 
     private static void ValidateRequestDetails(
@@ -289,6 +543,30 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         }
     }
 
+    private static void ValidateTechnicianId(Guid technicianId)
+    {
+        if (technicianId == Guid.Empty)
+        {
+            throw MaintenanceRequestServiceException.Validation("A technician ID is required.");
+        }
+    }
+
+    private static void ValidateLandlordId(Guid landlordId)
+    {
+        if (landlordId == Guid.Empty)
+        {
+            throw MaintenanceRequestServiceException.Validation("A landlord ID is required.");
+        }
+    }
+
+    private static void ValidateEstimateId(Guid estimateId)
+    {
+        if (estimateId == Guid.Empty)
+        {
+            throw MaintenanceRequestServiceException.Validation("A repair estimate ID is required.");
+        }
+    }
+
     private static void ValidatePropertyId(Guid propertyId)
     {
         if (propertyId == Guid.Empty)
@@ -322,6 +600,41 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         }
     }
 
+    private static void ValidateEstimateSubmission(SubmitRepairEstimateDto request)
+    {
+        if (request.LaborCost < 0 || request.PartsCost < 0 || request.AdditionalCost < 0)
+        {
+            throw MaintenanceRequestServiceException.Validation(
+                "Repair estimate costs cannot be negative.");
+        }
+
+        ValidateMaxLength(request.Notes, 4000, "Estimate notes");
+    }
+
+    private static void ValidateReviewNotes(string? reviewNotes, bool required)
+    {
+        if (required && string.IsNullOrWhiteSpace(reviewNotes))
+        {
+            throw MaintenanceRequestServiceException.Validation(
+                "Review notes are required for rejection or revision requests.");
+        }
+
+        ValidateMaxLength(reviewNotes, 2000, "Review notes");
+    }
+
+    private static decimal CalculateTotalCost(decimal laborCost, decimal partsCost, decimal additionalCost)
+    {
+        try
+        {
+            return checked(laborCost + partsCost + additionalCost);
+        }
+        catch (OverflowException)
+        {
+            throw MaintenanceRequestServiceException.Validation(
+                "Repair estimate total cost is outside the supported range.");
+        }
+    }
+
     private static void EnsureStatus(
         MaintenanceRequest maintenanceRequest,
         string action,
@@ -331,6 +644,18 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         {
             throw MaintenanceRequestServiceException.Conflict(
                 $"A {maintenanceRequest.Status} maintenance request cannot be {action}.");
+        }
+    }
+
+    private static void EnsureEstimateStatus(
+        RepairEstimate estimate,
+        string action,
+        params RepairEstimateStatus[] allowedStatuses)
+    {
+        if (!allowedStatuses.Contains(estimate.Status))
+        {
+            throw MaintenanceRequestServiceException.Conflict(
+                $"A {estimate.Status} repair estimate cannot be {action}.");
         }
     }
 
@@ -375,6 +700,27 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             CompletedAt = request.CompletedAt,
             CreatedAt = request.CreatedAt,
             UpdatedAt = request.UpdatedAt
+        };
+    }
+
+    private static RepairEstimateResponseDto MapToEstimateResponse(RepairEstimate estimate)
+    {
+        return new RepairEstimateResponseDto
+        {
+            Id = estimate.Id,
+            MaintenanceRequestId = estimate.MaintenanceRequestId,
+            TechnicianId = estimate.TechnicianId,
+            VersionNumber = estimate.VersionNumber,
+            LaborCost = estimate.LaborCost,
+            PartsCost = estimate.PartsCost,
+            AdditionalCost = estimate.AdditionalCost,
+            TotalCost = estimate.TotalCost,
+            Notes = estimate.Notes,
+            Status = estimate.Status,
+            CreatedAt = estimate.CreatedAt,
+            SubmittedAt = estimate.SubmittedAt,
+            ReviewedAt = estimate.ReviewedAt,
+            ReviewNotes = estimate.ReviewNotes
         };
     }
 

@@ -43,4 +43,48 @@ public interface IMaintenanceRequestService
         Guid requestId,
         AssignTechnicianDto request,
         CancellationToken cancellationToken = default);
+
+    Task<MaintenanceRequestResponseDto> MarkEstimatePendingAsync(
+        Guid requestId,
+        CancellationToken cancellationToken = default);
+
+    Task<RepairEstimateResponseDto> SubmitEstimateAsync(
+        Guid requestId,
+        Guid technicianId,
+        SubmitRepairEstimateDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<MaintenanceRequestResponseDto> SubmitEstimateForReviewAsync(
+        Guid requestId,
+        Guid estimateId,
+        CancellationToken cancellationToken = default);
+
+    Task<RepairEstimateResponseDto> ApproveEstimateAsync(
+        Guid requestId,
+        Guid estimateId,
+        Guid landlordId,
+        ReviewRepairEstimateDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<RepairEstimateResponseDto> RejectEstimateAsync(
+        Guid requestId,
+        Guid estimateId,
+        Guid landlordId,
+        ReviewRepairEstimateDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<RepairEstimateResponseDto> RequestEstimateRevisionAsync(
+        Guid requestId,
+        Guid estimateId,
+        Guid landlordId,
+        ReviewRepairEstimateDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<RepairEstimateResponseDto>> GetEstimatesAsync(
+        Guid requestId,
+        CancellationToken cancellationToken = default);
+
+    Task<RepairEstimateResponseDto?> GetLatestEstimateAsync(
+        Guid requestId,
+        CancellationToken cancellationToken = default);
 }

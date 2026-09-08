@@ -19,6 +19,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<MaintenanceStatusHistory> MaintenanceStatusHistories => Set<MaintenanceStatusHistory>();
 
+    public DbSet<RepairEstimate> RepairEstimates => Set<RepairEstimate>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -319,6 +321,73 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(history => history.MaintenanceRequestId);
             entity.HasIndex(history => new { history.MaintenanceRequestId, history.ChangedAt });
+        });
+
+        modelBuilder.Entity<RepairEstimate>(entity =>
+        {
+            entity.HasKey(estimate => estimate.Id);
+
+            entity.Property(estimate => estimate.MaintenanceRequestId)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.TechnicianId)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.VersionNumber)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.LaborCost)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.PartsCost)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.AdditionalCost)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.TotalCost)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.Notes)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(estimate => estimate.Status)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.CreatedAt)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.UpdatedAt)
+                .IsRequired(false);
+
+            entity.Property(estimate => estimate.SubmittedAt)
+                .IsRequired(false);
+
+            entity.Property(estimate => estimate.ReviewedAt)
+                .IsRequired(false);
+
+            entity.Property(estimate => estimate.ReviewNotes)
+                .HasMaxLength(2000)
+                .IsRequired(false);
+
+            entity.Property(estimate => estimate.ReviewedByUserId)
+                .IsRequired(false);
+
+            entity.HasOne(estimate => estimate.MaintenanceRequest)
+                .WithMany()
+                .HasForeignKey(estimate => estimate.MaintenanceRequestId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(estimate => estimate.MaintenanceRequestId);
+            entity.HasIndex(estimate => new { estimate.MaintenanceRequestId, estimate.CreatedAt });
+            entity.HasIndex(estimate => new { estimate.MaintenanceRequestId, estimate.Status });
+            entity.HasIndex(estimate => new { estimate.MaintenanceRequestId, estimate.VersionNumber })
+                .IsUnique();
         });
     }
 }

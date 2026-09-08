@@ -131,6 +131,153 @@ public class MaintenanceRequestsController(
             result => Ok(result));
     }
 
+    [HttpPatch("{id:guid}/estimate-pending")]
+    [ProducesResponseType<MaintenanceRequestResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<MaintenanceRequestResponseDto>> MarkEstimatePending(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        // TODO: Authorize this operation using authenticated landlord claims.
+        return ExecuteAsync(
+            () => maintenanceRequestService.MarkEstimatePendingAsync(id, cancellationToken),
+            result => Ok(result));
+    }
+
+    [HttpPost("{id:guid}/estimates")]
+    [ProducesResponseType<RepairEstimateResponseDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<RepairEstimateResponseDto>> SubmitEstimate(
+        Guid id,
+        [FromQuery] Guid technicianId,
+        [FromBody] SubmitRepairEstimateDto request,
+        CancellationToken cancellationToken)
+    {
+        // TODO: Replace technicianId with the authenticated user's technician claim.
+        return ExecuteAsync(
+            () => maintenanceRequestService.SubmitEstimateAsync(
+                id,
+                technicianId,
+                request,
+                cancellationToken),
+            result => CreatedAtAction(nameof(GetLatestEstimate), new { id }, result));
+    }
+
+    [HttpPatch("{id:guid}/estimates/{estimateId:guid}/submit-for-review")]
+    [ProducesResponseType<MaintenanceRequestResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<MaintenanceRequestResponseDto>> SubmitEstimateForReview(
+        Guid id,
+        Guid estimateId,
+        CancellationToken cancellationToken)
+    {
+        // TODO: Authorize this operation using authenticated maintenance workflow claims.
+        return ExecuteAsync(
+            () => maintenanceRequestService.SubmitEstimateForReviewAsync(
+                id,
+                estimateId,
+                cancellationToken),
+            result => Ok(result));
+    }
+
+    [HttpPatch("{id:guid}/estimates/{estimateId:guid}/approve")]
+    [ProducesResponseType<RepairEstimateResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<RepairEstimateResponseDto>> ApproveEstimate(
+        Guid id,
+        Guid estimateId,
+        [FromQuery] Guid landlordId,
+        [FromBody] ReviewRepairEstimateDto request,
+        CancellationToken cancellationToken)
+    {
+        // TODO: Replace landlordId with the authenticated landlord or property-manager claim.
+        return ExecuteAsync(
+            () => maintenanceRequestService.ApproveEstimateAsync(
+                id,
+                estimateId,
+                landlordId,
+                request,
+                cancellationToken),
+            result => Ok(result));
+    }
+
+    [HttpPatch("{id:guid}/estimates/{estimateId:guid}/reject")]
+    [ProducesResponseType<RepairEstimateResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<RepairEstimateResponseDto>> RejectEstimate(
+        Guid id,
+        Guid estimateId,
+        [FromQuery] Guid landlordId,
+        [FromBody] ReviewRepairEstimateDto request,
+        CancellationToken cancellationToken)
+    {
+        // TODO: Replace landlordId with the authenticated landlord or property-manager claim.
+        return ExecuteAsync(
+            () => maintenanceRequestService.RejectEstimateAsync(
+                id,
+                estimateId,
+                landlordId,
+                request,
+                cancellationToken),
+            result => Ok(result));
+    }
+
+    [HttpPatch("{id:guid}/estimates/{estimateId:guid}/request-revision")]
+    [ProducesResponseType<RepairEstimateResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<RepairEstimateResponseDto>> RequestEstimateRevision(
+        Guid id,
+        Guid estimateId,
+        [FromQuery] Guid landlordId,
+        [FromBody] ReviewRepairEstimateDto request,
+        CancellationToken cancellationToken)
+    {
+        // TODO: Replace landlordId with the authenticated landlord or property-manager claim.
+        return ExecuteAsync(
+            () => maintenanceRequestService.RequestEstimateRevisionAsync(
+                id,
+                estimateId,
+                landlordId,
+                request,
+                cancellationToken),
+            result => Ok(result));
+    }
+
+    [HttpGet("{id:guid}/estimates")]
+    [ProducesResponseType<IReadOnlyList<RepairEstimateResponseDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public Task<ActionResult<IReadOnlyList<RepairEstimateResponseDto>>> GetEstimates(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteAsync(
+            () => maintenanceRequestService.GetEstimatesAsync(id, cancellationToken),
+            result => Ok(result));
+    }
+
+    [HttpGet("{id:guid}/estimates/latest")]
+    [ProducesResponseType<RepairEstimateResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public Task<ActionResult<RepairEstimateResponseDto?>> GetLatestEstimate(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteAsync(
+            () => maintenanceRequestService.GetLatestEstimateAsync(id, cancellationToken),
+            result => result is null ? NoContent() : Ok(result));
+    }
+
     private async Task<MaintenanceRequestResponseDto> GetRequiredRequestAsync(
         Guid id,
         CancellationToken cancellationToken)

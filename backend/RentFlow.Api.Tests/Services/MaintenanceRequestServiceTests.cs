@@ -385,6 +385,191 @@ public class MaintenanceRequestServiceTests
         Assert.Empty(context.MaintenanceStatusHistories);
     }
 
+    [Fact]
+    public async Task SubmitEstimateAsync_CreatesServerCalculatedEstimateAndStatusHistory()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = await AddEstimatePendingRequestAsync(context, technicianId);
+        var service = new MaintenanceRequestService(context);
+
+        var estimate = await service.SubmitEstimateAsync(
+            maintenanceRequest.Id,
+            technicianId,
+            new SubmitRepairEstimateDto { LaborCost = 125.50m, PartsCost = 50m, AdditionalCost = 24.50m });
+
+        Assert.Equal(1, estimate.VersionNumber);
+        Assert.Equal(200m, estimate.TotalCost);
+        Assert.Equal(RepairEstimateStatus.Submitted, estimate.Status);
+        Assert.Equal(MaintenanceRequestStatus.EstimateSubmitted, maintenanceRequest.Status);
+        var history = await context.MaintenanceStatusHistories.OrderBy(item => item.ChangedAt).LastAsync();
+        Assert.Equal(MaintenanceRequestStatus.EstimatePending, history.FromStatus);
+        Assert.Equal(MaintenanceRequestStatus.EstimateSubmitted, history.ToStatus);
+        Assert.Equal(technicianId, history.ChangedByUserId);
+    }
+
+    [Fact]
+    public async Task SubmitEstimateAsync_RejectsWrongTechnicianAndNegativeCosts()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = await AddEstimatePendingRequestAsync(context, technicianId);
+        var service = new MaintenanceRequestService(context);
+
+        var wrongTechnician = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            service.SubmitEstimateAsync(maintenanceRequest.Id, Guid.NewGuid(), CreateEstimate()));
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, wrongTechnician.Error);
+
+        var negativeCost = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            service.SubmitEstimateAsync(
+                maintenanceRequest.Id,
+                technicianId,
+                new SubmitRepairEstimateDto { LaborCost = -1m }));
+        Assert.Equal(MaintenanceRequestServiceError.Validation, negativeCost.Error);
+        Assert.Empty(context.RepairEstimates);
+    }
+
+    [Fact]
+    public async Task SubmitEstimateForReviewAsync_TransitionsEstimateSubmittedToAwaitingApproval()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = await AddEstimatePendingRequestAsync(context, technicianId);
+        var service = new MaintenanceRequestService(context);
+        var estimate = await service.SubmitEstimateAsync(maintenanceRequest.Id, technicianId, CreateEstimate());
+
+        var result = await service.SubmitEstimateForReviewAsync(maintenanceRequest.Id, estimate.Id);
+
+        Assert.Equal(MaintenanceRequestStatus.AwaitingLandlordApproval, result.Status);
+        Assert.Contains(await service.GetHistoryAsync(maintenanceRequest.Id), history =>
+            history.FromStatus == MaintenanceRequestStatus.EstimateSubmitted
+            && history.ToStatus == MaintenanceRequestStatus.AwaitingLandlordApproval);
+    }
+
+    [Fact]
+    public async Task ApproveEstimateAsync_ApprovesEstimateAndRequest()
+    {
+        await using var context = CreateContext();
+        var (service, maintenanceRequest, estimate) = await AddEstimateAwaitingReviewAsync(context);
+        var landlordId = Guid.NewGuid();
+
+        var result = await service.ApproveEstimateAsync(
+            maintenanceRequest.Id,
+            estimate.Id,
+            landlordId,
+            new ReviewRepairEstimateDto { ReviewNotes = "Approved." });
+
+        Assert.Equal(RepairEstimateStatus.Approved, result.Status);
+        Assert.Equal(MaintenanceRequestStatus.Approved, maintenanceRequest.Status);
+        Assert.Contains(await service.GetHistoryAsync(maintenanceRequest.Id), history =>
+            history.ToStatus == MaintenanceRequestStatus.Approved && history.ChangedByUserId == landlordId);
+    }
+
+    [Fact]
+    public async Task RejectEstimateAsync_RequiresNotesAndRejectsRequest()
+    {
+        await using var context = CreateContext();
+        var (service, maintenanceRequest, estimate) = await AddEstimateAwaitingReviewAsync(context);
+
+        var missingNotes = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            service.RejectEstimateAsync(
+                maintenanceRequest.Id,
+                estimate.Id,
+                Guid.NewGuid(),
+                new ReviewRepairEstimateDto()));
+        Assert.Equal(MaintenanceRequestServiceError.Validation, missingNotes.Error);
+
+        var result = await service.RejectEstimateAsync(
+            maintenanceRequest.Id,
+            estimate.Id,
+            Guid.NewGuid(),
+            new ReviewRepairEstimateDto { ReviewNotes = "Cost exceeds approved budget." });
+        Assert.Equal(RepairEstimateStatus.Rejected, result.Status);
+        Assert.Equal(MaintenanceRequestStatus.Rejected, maintenanceRequest.Status);
+    }
+
+    [Fact]
+    public async Task RequestEstimateRevisionAsync_PreservesOldEstimateAndNewSubmissionCreatesNewVersion()
+    {
+        await using var context = CreateContext();
+        var (service, maintenanceRequest, firstEstimate) = await AddEstimateAwaitingReviewAsync(context);
+        var technicianId = maintenanceRequest.TechnicianId!.Value;
+
+        await service.RequestEstimateRevisionAsync(
+            maintenanceRequest.Id,
+            firstEstimate.Id,
+            Guid.NewGuid(),
+            new ReviewRepairEstimateDto { ReviewNotes = "Provide a lower-cost alternative." });
+
+        Assert.Equal(MaintenanceRequestStatus.EstimatePending, maintenanceRequest.Status);
+        Assert.Equal(RepairEstimateStatus.RevisionRequested, firstEstimate.Status);
+
+        var secondEstimate = await service.SubmitEstimateAsync(
+            maintenanceRequest.Id,
+            technicianId,
+            new SubmitRepairEstimateDto { LaborCost = 90m, PartsCost = 25m });
+
+        Assert.Equal(2, secondEstimate.VersionNumber);
+        var estimates = await service.GetEstimatesAsync(maintenanceRequest.Id);
+        Assert.Equal([firstEstimate.Id, secondEstimate.Id], estimates.Select(item => item.Id));
+        Assert.Equal(RepairEstimateStatus.RevisionRequested, estimates[0].Status);
+        Assert.Equal("Provide a lower-cost alternative.", estimates[0].ReviewNotes);
+        Assert.Equal(secondEstimate.Id, (await service.GetLatestEstimateAsync(maintenanceRequest.Id))!.Id);
+    }
+
+    [Fact]
+    public async Task EstimateOperations_RejectInvalidRequestStates()
+    {
+        await using var context = CreateContext();
+        var maintenanceRequest = AddRequest(context, status: MaintenanceRequestStatus.Assigned);
+        maintenanceRequest.TechnicianId = Guid.NewGuid();
+        await context.SaveChangesAsync();
+        var service = new MaintenanceRequestService(context);
+
+        var invalidSubmission = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            service.SubmitEstimateAsync(maintenanceRequest.Id, maintenanceRequest.TechnicianId.Value, CreateEstimate()));
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, invalidSubmission.Error);
+
+        var markedPending = await service.MarkEstimatePendingAsync(maintenanceRequest.Id);
+        Assert.Equal(MaintenanceRequestStatus.EstimatePending, markedPending.Status);
+
+        var invalidReview = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            service.ApproveEstimateAsync(
+                maintenanceRequest.Id,
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                new ReviewRepairEstimateDto()));
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, invalidReview.Error);
+    }
+
+    private static SubmitRepairEstimateDto CreateEstimate() =>
+        new() { LaborCost = 100m, PartsCost = 25m, AdditionalCost = 5m, Notes = "Replace worn fittings." };
+
+    private static async Task<MaintenanceRequest> AddEstimatePendingRequestAsync(
+        ApplicationDbContext context,
+        Guid technicianId)
+    {
+        var maintenanceRequest = AddRequest(context, status: MaintenanceRequestStatus.EstimatePending);
+        maintenanceRequest.TechnicianId = technicianId;
+        await context.SaveChangesAsync();
+        return maintenanceRequest;
+    }
+
+    private static async Task<(MaintenanceRequestService Service, MaintenanceRequest Request, RepairEstimate Estimate)>
+        AddEstimateAwaitingReviewAsync(ApplicationDbContext context)
+    {
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = await AddEstimatePendingRequestAsync(context, technicianId);
+        var service = new MaintenanceRequestService(context);
+        var estimateResponse = await service.SubmitEstimateAsync(
+            maintenanceRequest.Id,
+            technicianId,
+            CreateEstimate());
+        await service.SubmitEstimateForReviewAsync(maintenanceRequest.Id, estimateResponse.Id);
+        var estimate = await context.RepairEstimates.SingleAsync(item => item.Id == estimateResponse.Id);
+        return (service, maintenanceRequest, estimate);
+    }
+
     private static ApplicationDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
