@@ -39,6 +39,12 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         };
 
         dbContext.MaintenanceRequests.Add(maintenanceRequest);
+        AddHistory(
+            maintenanceRequest,
+            fromStatus: null,
+            toStatus: MaintenanceRequestStatus.Submitted,
+            changedByUserId: tenantId,
+            notes: "Maintenance request submitted.");
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return MapToResponse(maintenanceRequest);
@@ -85,6 +91,32 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .ToListAsync(cancellationToken);
 
         return requests.Select(MapToSummary).ToList();
+    }
+
+    public async Task<IReadOnlyList<MaintenanceStatusHistoryResponseDto>> GetHistoryAsync(
+        Guid requestId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequestId(requestId);
+
+        var requestExists = await dbContext.MaintenanceRequests
+            .AsNoTracking()
+            .AnyAsync(item => item.Id == requestId, cancellationToken);
+
+        if (!requestExists)
+        {
+            throw MaintenanceRequestServiceException.NotFound(
+                $"Maintenance request '{requestId}' was not found.");
+        }
+
+        var history = await dbContext.MaintenanceStatusHistories
+            .AsNoTracking()
+            .Where(item => item.MaintenanceRequestId == requestId)
+            .OrderBy(item => item.ChangedAt)
+            .ThenBy(item => item.Id)
+            .ToListAsync(cancellationToken);
+
+        return history.Select(MapToHistoryResponse).ToList();
     }
 
     public async Task<MaintenanceRequestResponseDto> UpdateTenantRequestAsync(
@@ -138,6 +170,12 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         maintenanceRequest.TriageNotes = NormalizeOptionalText(request.TriageNotes);
         maintenanceRequest.Status = MaintenanceRequestStatus.Triaged;
         maintenanceRequest.UpdatedAt = DateTimeOffset.UtcNow;
+        AddHistory(
+            maintenanceRequest,
+            fromStatus: MaintenanceRequestStatus.Submitted,
+            toStatus: MaintenanceRequestStatus.Triaged,
+            changedByUserId: null,
+            notes: maintenanceRequest.TriageNotes);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -165,6 +203,12 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         maintenanceRequest.AssignmentNotes = NormalizeOptionalText(request.AssignmentNotes);
         maintenanceRequest.Status = MaintenanceRequestStatus.Assigned;
         maintenanceRequest.UpdatedAt = DateTimeOffset.UtcNow;
+        AddHistory(
+            maintenanceRequest,
+            fromStatus: MaintenanceRequestStatus.Triaged,
+            toStatus: MaintenanceRequestStatus.Assigned,
+            changedByUserId: null,
+            notes: maintenanceRequest.AssignmentNotes);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -293,6 +337,24 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
     private static string? NormalizeOptionalText(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private void AddHistory(
+        MaintenanceRequest maintenanceRequest,
+        MaintenanceRequestStatus? fromStatus,
+        MaintenanceRequestStatus toStatus,
+        Guid? changedByUserId,
+        string? notes)
+    {
+        dbContext.MaintenanceStatusHistories.Add(new MaintenanceStatusHistory
+        {
+            MaintenanceRequest = maintenanceRequest,
+            FromStatus = fromStatus,
+            ToStatus = toStatus,
+            ChangedByUserId = changedByUserId,
+            ChangedAt = DateTimeOffset.UtcNow,
+            Notes = NormalizeOptionalText(notes)
+        });
+    }
+
     private static MaintenanceRequestResponseDto MapToResponse(MaintenanceRequest request)
     {
         return new MaintenanceRequestResponseDto
@@ -330,6 +392,20 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             Status = request.Status,
             CreatedAt = request.CreatedAt,
             UpdatedAt = request.UpdatedAt
+        };
+    }
+
+    private static MaintenanceStatusHistoryResponseDto MapToHistoryResponse(
+        MaintenanceStatusHistory history)
+    {
+        return new MaintenanceStatusHistoryResponseDto
+        {
+            Id = history.Id,
+            FromStatus = history.FromStatus,
+            ToStatus = history.ToStatus,
+            ChangedByUserId = history.ChangedByUserId,
+            ChangedAt = history.ChangedAt,
+            Notes = history.Notes
         };
     }
 }

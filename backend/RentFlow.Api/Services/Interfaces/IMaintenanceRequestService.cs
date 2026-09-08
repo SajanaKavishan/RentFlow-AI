@@ -24,6 +24,10 @@ public interface IMaintenanceRequestService
         Guid propertyId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<MaintenanceStatusHistoryResponseDto>> GetHistoryAsync(
+        Guid requestId,
+        CancellationToken cancellationToken = default);
+
     Task<MaintenanceRequestResponseDto> UpdateTenantRequestAsync(
         Guid requestId,
         Guid tenantId,

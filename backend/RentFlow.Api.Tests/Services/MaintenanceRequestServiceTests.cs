@@ -254,6 +254,137 @@ public class MaintenanceRequestServiceTests
         Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
     }
 
+    [Fact]
+    public async Task CreateAsync_CreatesInitialSubmittedHistoryEntry()
+    {
+        await using var context = CreateContext();
+        var tenantId = Guid.NewGuid();
+
+        var result = await new MaintenanceRequestService(context)
+            .CreateAsync(tenantId, CreateValidRequest());
+
+        var history = await context.MaintenanceStatusHistories.SingleAsync();
+        Assert.Equal(result.Id, history.MaintenanceRequestId);
+        Assert.Null(history.FromStatus);
+        Assert.Equal(MaintenanceRequestStatus.Submitted, history.ToStatus);
+        Assert.Equal(tenantId, history.ChangedByUserId);
+    }
+
+    [Fact]
+    public async Task TriageAsync_CreatesSubmittedToTriagedHistoryEntry()
+    {
+        await using var context = CreateContext();
+        var maintenanceRequest = AddRequest(context);
+        await context.SaveChangesAsync();
+
+        await new MaintenanceRequestService(context).TriageAsync(
+            maintenanceRequest.Id,
+            new TriageMaintenanceRequestDto
+            {
+                Category = MaintenanceCategory.Plumbing,
+                Priority = MaintenancePriority.High,
+                TriageNotes = "Urgent water damage risk."
+            });
+
+        var history = await context.MaintenanceStatusHistories.SingleAsync();
+        Assert.Equal(MaintenanceRequestStatus.Submitted, history.FromStatus);
+        Assert.Equal(MaintenanceRequestStatus.Triaged, history.ToStatus);
+        Assert.Equal("Urgent water damage risk.", history.Notes);
+    }
+
+    [Fact]
+    public async Task AssignTechnicianAsync_CreatesTriagedToAssignedHistoryEntry()
+    {
+        await using var context = CreateContext();
+        var maintenanceRequest = AddRequest(context, status: MaintenanceRequestStatus.Triaged);
+        await context.SaveChangesAsync();
+
+        await new MaintenanceRequestService(context).AssignTechnicianAsync(
+            maintenanceRequest.Id,
+            new AssignTechnicianDto
+            {
+                TechnicianId = Guid.NewGuid(),
+                AssignmentNotes = "Take replacement washers."
+            });
+
+        var history = await context.MaintenanceStatusHistories.SingleAsync();
+        Assert.Equal(MaintenanceRequestStatus.Triaged, history.FromStatus);
+        Assert.Equal(MaintenanceRequestStatus.Assigned, history.ToStatus);
+        Assert.Equal("Take replacement washers.", history.Notes);
+    }
+
+    [Fact]
+    public async Task UpdateTenantRequestAsync_DoesNotCreateHistoryWhenStatusIsUnchanged()
+    {
+        await using var context = CreateContext();
+        var service = new MaintenanceRequestService(context);
+        var tenantId = Guid.NewGuid();
+        var maintenanceRequest = await service.CreateAsync(tenantId, CreateValidRequest());
+
+        await service.UpdateTenantRequestAsync(
+            maintenanceRequest.Id,
+            tenantId,
+            CreateValidUpdate());
+
+        Assert.Equal(1, await context.MaintenanceStatusHistories.CountAsync());
+        var history = await context.MaintenanceStatusHistories.SingleAsync();
+        Assert.Null(history.FromStatus);
+        Assert.Equal(MaintenanceRequestStatus.Submitted, history.ToStatus);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_ReturnsHistoryInChronologicalOrder()
+    {
+        await using var context = CreateContext();
+        var maintenanceRequest = AddRequest(context);
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+        var firstChangedAt = DateTimeOffset.UtcNow.AddMinutes(-2);
+        var secondChangedAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        context.MaintenanceStatusHistories.AddRange(
+            new MaintenanceStatusHistory
+            {
+                Id = secondId,
+                MaintenanceRequest = maintenanceRequest,
+                FromStatus = MaintenanceRequestStatus.Submitted,
+                ToStatus = MaintenanceRequestStatus.Triaged,
+                ChangedAt = secondChangedAt
+            },
+            new MaintenanceStatusHistory
+            {
+                Id = firstId,
+                MaintenanceRequest = maintenanceRequest,
+                FromStatus = null,
+                ToStatus = MaintenanceRequestStatus.Submitted,
+                ChangedAt = firstChangedAt
+            });
+        await context.SaveChangesAsync();
+
+        var history = await new MaintenanceRequestService(context)
+            .GetHistoryAsync(maintenanceRequest.Id);
+
+        Assert.Equal([firstId, secondId], history.Select(item => item.Id));
+    }
+
+    [Fact]
+    public async Task TriageAsync_DoesNotPersistHistoryWhenTransitionFails()
+    {
+        await using var context = CreateContext();
+        var maintenanceRequest = AddRequest(context, status: MaintenanceRequestStatus.Assigned);
+        await context.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            new MaintenanceRequestService(context).TriageAsync(
+                maintenanceRequest.Id,
+                new TriageMaintenanceRequestDto
+                {
+                    Category = MaintenanceCategory.Plumbing,
+                    Priority = MaintenancePriority.Normal
+                }));
+
+        Assert.Empty(context.MaintenanceStatusHistories);
+    }
+
     private static ApplicationDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()

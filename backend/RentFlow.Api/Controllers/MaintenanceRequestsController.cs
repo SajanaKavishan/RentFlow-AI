@@ -66,6 +66,18 @@ public class MaintenanceRequestsController(
             result => Ok(result));
     }
 
+    [HttpGet("{id:guid}/history")]
+    [ProducesResponseType<IReadOnlyList<MaintenanceStatusHistoryResponseDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public Task<ActionResult<IReadOnlyList<MaintenanceStatusHistoryResponseDto>>> GetHistory(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteAsync(
+            () => maintenanceRequestService.GetHistoryAsync(id, cancellationToken),
+            result => Ok(result));
+    }
+
     [HttpPut("{id:guid}")]
     [ProducesResponseType<MaintenanceRequestResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

@@ -17,6 +17,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<MaintenanceRequest> MaintenanceRequests => Set<MaintenanceRequest>();
 
+    public DbSet<MaintenanceStatusHistory> MaintenanceStatusHistories => Set<MaintenanceStatusHistory>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -285,6 +287,38 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(request => new { request.TenantId, request.CreatedAt });
             entity.HasIndex(request => new { request.TechnicianId, request.Status });
             entity.HasIndex(request => new { request.Priority, request.Status });
+        });
+
+        modelBuilder.Entity<MaintenanceStatusHistory>(entity =>
+        {
+            entity.HasKey(history => history.Id);
+
+            entity.Property(history => history.MaintenanceRequestId)
+                .IsRequired();
+
+            entity.Property(history => history.FromStatus)
+                .IsRequired(false);
+
+            entity.Property(history => history.ToStatus)
+                .IsRequired();
+
+            entity.Property(history => history.ChangedByUserId)
+                .IsRequired(false);
+
+            entity.Property(history => history.ChangedAt)
+                .IsRequired();
+
+            entity.Property(history => history.Notes)
+                .HasMaxLength(2000)
+                .IsRequired(false);
+
+            entity.HasOne(history => history.MaintenanceRequest)
+                .WithMany()
+                .HasForeignKey(history => history.MaintenanceRequestId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(history => history.MaintenanceRequestId);
+            entity.HasIndex(history => new { history.MaintenanceRequestId, history.ChangedAt });
         });
     }
 }
