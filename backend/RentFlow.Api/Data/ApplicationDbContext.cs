@@ -5,6 +5,8 @@ namespace RentFlow.Api.Data;
 
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
 {
+    public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
+
     public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
 
     public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
@@ -26,6 +28,48 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<ApplicationUser>(entity =>
+        {
+            entity.HasKey(user => user.Id);
+
+            entity.Property(user => user.FullName)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(user => user.Email)
+                .HasMaxLength(320)
+                .IsRequired();
+
+            entity.Property(user => user.NormalizedEmail)
+                .HasMaxLength(320)
+                .IsRequired();
+
+            entity.Property(user => user.PhoneNumber)
+                .HasMaxLength(32)
+                .IsRequired();
+
+            entity.Property(user => user.PasswordHash)
+                .HasMaxLength(512)
+                .IsRequired();
+
+            entity.Property(user => user.Role)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired();
+
+            entity.Property(user => user.IsActive)
+                .IsRequired();
+
+            entity.Property(user => user.CreatedAt)
+                .IsRequired();
+
+            entity.Property(user => user.UpdatedAt)
+                .IsRequired();
+
+            entity.HasIndex(user => user.NormalizedEmail)
+                .IsUnique();
+        });
 
         modelBuilder.Entity<ViewingRequest>(entity =>
         {

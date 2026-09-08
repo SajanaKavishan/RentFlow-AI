@@ -71,19 +71,31 @@ class _MyRentalApplicationsScreenState
     };
   }
 
+  bool _canSubmit(RentalApplication application) {
+    return application.status == RentalApplicationStatus.draft ||
+        application.status == RentalApplicationStatus.changesRequested;
+  }
+
   Future<void> _confirmSubmission(RentalApplication application) async {
-    if (application.status != RentalApplicationStatus.draft ||
+    if (!_canSubmit(application) ||
         _submittingIds.contains(application.id) ||
         _withdrawingIds.contains(application.id)) {
       return;
     }
 
+    final isResubmission =
+        application.status == RentalApplicationStatus.changesRequested;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Submit application?'),
-        content: const Text(
-          'Submit this rental application for landlord review?',
+        title: Text(
+          isResubmission ? 'Resubmit application?' : 'Submit application?',
+        ),
+        content: Text(
+          isResubmission
+              ? 'Resubmit this rental application for landlord review?'
+              : 'Submit this rental application for landlord review?',
         ),
         actions: [
           TextButton(
@@ -92,7 +104,9 @@ class _MyRentalApplicationsScreenState
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Submit application'),
+            child: Text(
+              isResubmission ? 'Resubmit application' : 'Submit application',
+            ),
           ),
         ],
       ),
@@ -111,7 +125,11 @@ class _MyRentalApplicationsScreenState
           .map((item) => item.id == submitted.id ? submitted : item)
           .toList(growable: false);
       setState(() => _applications = Future.value(updatedApplications));
-      _showMessage('Application submitted successfully.');
+      _showMessage(
+        isResubmission
+            ? 'Application resubmitted successfully.'
+            : 'Application submitted successfully.',
+      );
     } on RentalApplicationApiException catch (error) {
       if (mounted) _showMessage(error.message, isError: true);
     } catch (_) {
@@ -250,8 +268,7 @@ class _MyRentalApplicationsScreenState
                   );
                   return _ApplicationCard(
                     application: application,
-                    canSubmit:
-                        application.status == RentalApplicationStatus.draft,
+                    canSubmit: _canSubmit(application),
                     canWithdraw: _canWithdraw(application),
                     isSubmitting: isSubmitting,
                     isWithdrawing: isWithdrawing,
@@ -294,6 +311,8 @@ class _ApplicationCard extends StatelessWidget {
     ).formatMediumDate(application.moveInDate);
     final submittedAt = application.submittedAt;
     final isBusy = isSubmitting || isWithdrawing;
+    final isResubmission =
+        application.status == RentalApplicationStatus.changesRequested;
 
     return Card(
       color: Colors.white,
@@ -382,7 +401,13 @@ class _ApplicationCard extends StatelessWidget {
                         )
                       : const Icon(Icons.send_outlined),
                   label: Text(
-                    isSubmitting ? 'Submitting...' : 'Submit application',
+                    isSubmitting
+                        ? (isResubmission
+                              ? 'Resubmitting...'
+                              : 'Submitting...')
+                        : (isResubmission
+                              ? 'Resubmit application'
+                              : 'Submit application'),
                   ),
                   style: FilledButton.styleFrom(
                     backgroundColor: _MyRentalApplicationsScreenState._olive,

@@ -165,11 +165,13 @@ public class ApplicationValidationOrchestratorTests
     }
 
     [Fact]
-    public async Task StartValidationAsync_SendsOnlyAuthorizedMetadataToAgent()
+    public async Task StartValidationAsync_SendsOnlyCurrentApplicationDocumentsWithoutStorageDetails()
     {
         await using var context = CreateContext();
         var application = AddApplication(context);
         AddRequiredDocuments(context, application.Id);
+        var otherApplication = AddApplication(context);
+        AddDocument(context, otherApplication.Id, ApplicationDocumentType.IncomeProof);
         await context.SaveChangesAsync();
         var agentClient = new FakeAgentClient();
 
@@ -179,6 +181,13 @@ public class ApplicationValidationOrchestratorTests
         var request = Assert.IsType<ApplicationValidationAgentRequest>(agentClient.LastRequest);
         Assert.Equal(application.Id, request.ApplicationId);
         Assert.Equal(2, request.DocumentMetadata.Count);
+        Assert.Equal(2, request.SupportingDocuments.Count);
+        Assert.All(request.SupportingDocuments, document =>
+        {
+            Assert.Contains(document.DocumentId, request.DocumentMetadata.Select(item => item.DocumentId));
+            Assert.False(string.IsNullOrWhiteSpace(document.ContentBase64));
+            Assert.Equal(100, document.SizeBytes);
+        });
         Assert.All(request.DocumentMetadata, document =>
         {
             Assert.EndsWith(".pdf", document.FileName);
@@ -186,8 +195,115 @@ public class ApplicationValidationOrchestratorTests
         });
         var requestJson = System.Text.Json.JsonSerializer.Serialize(request);
         Assert.DoesNotContain("storageKey", requestJson, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("fileBytes", requestJson, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("content", requestJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("signedUrl", requestJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("publicUrl", requestJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StartValidationAsync_PersistsOnlySafeStructuredDocumentFindings()
+    {
+        await using var context = CreateContext();
+        var application = AddApplication(context);
+        AddRequiredDocuments(context, application.Id);
+        await context.SaveChangesAsync();
+        var documents = await context.ApplicationDocuments
+            .Where(document => document.ApplicationId == application.Id)
+            .ToListAsync();
+        var identity = documents.Single(document =>
+            document.DocumentType == ApplicationDocumentType.IdentityDocument);
+        var income = documents.Single(document =>
+            document.DocumentType == ApplicationDocumentType.IncomeProof);
+        var agentClient = new FakeAgentClient
+        {
+            Result = new AgenticApplicationReviewResult
+            {
+                Recommendation = "Manual review required",
+                Summary = "Structured findings require landlord review.",
+                KeyFindings = ["Income evidence was analyzed conservatively."],
+                Warnings = ["One document could not be read reliably."],
+                RequiresHumanApproval = true,
+                AgentVersion = "phase-b-test",
+                SupportingDocumentVerification =
+                [
+                    new SupportingDocumentVerificationResult
+                    {
+                        DocumentId = income.Id,
+                        DocumentType = "IncomeProof",
+                        Readable = true,
+                        DetectedDocumentCategory = "IncomeProof",
+                        ExtractedFacts = new SupportingDocumentExtractedFacts
+                        {
+                            ApplicantName = "Ada Lovelace",
+                            IncomeAmount = 5000m,
+                            PayPeriod = "monthly",
+                            EmployerName = "ACME"
+                        },
+                        ConfidenceLabel = "High",
+                        ExtractionMethod = "PdfText",
+                        RequiresManualReview = false
+                    },
+                    new SupportingDocumentVerificationResult
+                    {
+                        DocumentId = identity.Id,
+                        DocumentType = "IdentityDocument",
+                        Readable = false,
+                        DetectedDocumentCategory = "Unknown",
+                        ExtractedFacts = new SupportingDocumentExtractedFacts(),
+                        Warnings = ["Document text could not be extracted reliably."],
+                        ConfidenceLabel = "Unknown",
+                        ExtractionMethod = "None",
+                        RequiresManualReview = true
+                    }
+                ],
+                CrossDocumentConsistency = new CrossDocumentConsistencyResult
+                {
+                    MatchedFacts =
+                    [
+                        new CrossDocumentConsistencyFinding
+                        {
+                            Comparison = "monthly_income_vs_income_amount",
+                            Message = "Monthly income matched within configured tolerance."
+                        }
+                    ],
+                    Warnings = ["Identity text requires manual review."],
+                    RequiresManualReview = true
+                }
+            }
+        };
+
+        var result = await CreateOrchestrator(context, agentClient: agentClient)
+            .StartValidationAsync(application.Id);
+
+        Assert.Equal(ApplicationValidationWorkflowStatus.AwaitingHumanReview, result.Status);
+        Assert.True(result.RequiresHumanApproval);
+        var responseReview = Assert.IsType<AgenticApplicationReviewResult>(
+            result.Summary!.AgenticReview);
+        var responseIncome = Assert.Single(responseReview.SupportingDocumentVerification,
+            verification => verification.DocumentType == "IncomeProof");
+        Assert.True(responseIncome.Readable);
+        Assert.Equal("IncomeProof", responseIncome.DetectedDocumentCategory);
+        Assert.Equal("PdfText", responseIncome.ExtractionMethod);
+        Assert.Equal("Ada Lovelace", responseIncome.ExtractedFacts.ApplicantName);
+        Assert.Equal(5000m, responseIncome.ExtractedFacts.IncomeAmount);
+        Assert.Single(responseReview.CrossDocumentConsistency.MatchedFacts);
+        var responseJson = System.Text.Json.JsonSerializer.Serialize(result);
+        Assert.DoesNotContain("contentBase64", responseJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("extractedText", responseJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("storageKey", responseJson, StringComparison.OrdinalIgnoreCase);
+        context.ChangeTracker.Clear();
+        var stored = await context.ApplicationValidationWorkflows
+            .Include(workflow => workflow.Steps)
+            .SingleAsync();
+        var persisted = stored.Steps.Single(step => step.StepOrder == 4).ResultJson!;
+        Assert.Contains("supportingDocumentVerification", persisted, StringComparison.Ordinal);
+        Assert.Contains("extractionMethod", persisted, StringComparison.Ordinal);
+        Assert.Contains("crossDocumentConsistency", persisted, StringComparison.Ordinal);
+        Assert.DoesNotContain("contentBase64", persisted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("extractedText", persisted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("storageKey", persisted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("signedUrl", persisted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(identity.StorageKey, persisted, StringComparison.Ordinal);
+        Assert.DoesNotContain(income.StorageKey, persisted, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -225,6 +341,29 @@ public class ApplicationValidationOrchestratorTests
             step.Status == ApplicationValidationStepStatus.Completed));
         Assert.Equal(ApplicationValidationStepStatus.Failed,
             stored.Steps.Single(step => step.StepOrder == 4).Status);
+    }
+
+    [Fact]
+    public async Task StartValidationAsync_DocumentPreparationFailureDoesNotFailWorkflow()
+    {
+        await using var context = CreateContext();
+        var application = AddApplication(context);
+        AddRequiredDocuments(context, application.Id);
+        await context.SaveChangesAsync();
+        var agentClient = new FakeAgentClient();
+
+        var result = await CreateOrchestrator(
+                context,
+                agentClient: agentClient,
+                contentService: new ExcludingDocumentContentService())
+            .StartValidationAsync(application.Id);
+
+        Assert.Equal(ApplicationValidationWorkflowStatus.AwaitingHumanReview, result.Status);
+        Assert.Empty(agentClient.LastRequest!.SupportingDocuments);
+        Assert.Contains(agentClient.LastRequest.DeterministicFindings,
+            finding => finding.Code == "document.analysis.retrieval_failed");
+        Assert.Contains("The document content could not be prepared for analysis.",
+            result.Summary!.AgenticReview!.Warnings);
     }
 
     [Fact]
@@ -271,7 +410,8 @@ public class ApplicationValidationOrchestratorTests
         ApplicationDbContext context,
         IDocumentValidationTool? documentTool = null,
         IDeterministicApplicationRuleTool? ruleTool = null,
-        IApplicationValidationAgentClient? agentClient = null)
+        IApplicationValidationAgentClient? agentClient = null,
+        IApplicationDocumentContentService? contentService = null)
     {
         var timeProvider = new FixedTimeProvider(Now);
         return new ApplicationValidationOrchestrator(
@@ -280,8 +420,48 @@ public class ApplicationValidationOrchestratorTests
             documentTool ?? new DocumentValidationTool(),
             ruleTool ?? new DeterministicApplicationRuleTool(timeProvider),
             agentClient ?? new FakeAgentClient(),
+            contentService ?? new FakeApplicationDocumentContentService(),
             timeProvider,
             NullLogger<ApplicationValidationOrchestrator>.Instance);
+    }
+
+    private sealed class ExcludingDocumentContentService : IApplicationDocumentContentService
+    {
+        public Task<SupportingDocumentPreparationResult> PrepareForAnalysisAsync(
+            Guid applicationId,
+            ApplicationDocument authorizedDocument,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SupportingDocumentPreparationResult
+            {
+                DocumentId = authorizedDocument.Id,
+                WarningCode = "retrieval_failed",
+                Warning = "The document content could not be prepared for analysis."
+            });
+    }
+
+    private sealed class FakeApplicationDocumentContentService
+        : IApplicationDocumentContentService
+    {
+        public Task<SupportingDocumentPreparationResult> PrepareForAnalysisAsync(
+            Guid applicationId,
+            ApplicationDocument authorizedDocument,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal(applicationId, authorizedDocument.ApplicationId);
+            return Task.FromResult(new SupportingDocumentPreparationResult
+            {
+                DocumentId = authorizedDocument.Id,
+                Input = new SupportingDocumentAnalysisInput
+                {
+                    DocumentId = authorizedDocument.Id,
+                    DocumentType = authorizedDocument.DocumentType,
+                    OriginalFileName = authorizedDocument.OriginalFileName,
+                    ContentType = authorizedDocument.ContentType,
+                    SizeBytes = authorizedDocument.FileSizeBytes,
+                    ContentBase64 = Convert.ToBase64String(new byte[authorizedDocument.FileSizeBytes])
+                }
+            });
+        }
     }
 
     private static ApplicationDbContext CreateContext()

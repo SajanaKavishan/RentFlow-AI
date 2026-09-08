@@ -76,6 +76,40 @@ public sealed class CloudflareR2StorageService : IFileStorageService, IDisposabl
             cancellationToken);
     }
 
+    public async Task<byte[]> DownloadBytesAsync(
+        string storageKey,
+        long maximumBytes,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageKey);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumBytes, 1);
+
+        using var response = await client.GetObjectAsync(
+            new GetObjectRequest
+            {
+                BucketName = options.BucketName,
+                Key = storageKey
+            },
+            cancellationToken);
+        using var content = new MemoryStream();
+        var buffer = new byte[81920];
+        while (true)
+        {
+            var read = await response.ResponseStream.ReadAsync(buffer, cancellationToken);
+            if (read == 0)
+            {
+                return content.ToArray();
+            }
+
+            if (content.Length + read > maximumBytes)
+            {
+                throw new InvalidDataException("The private object exceeds the permitted retrieval size.");
+            }
+
+            await content.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+        }
+    }
+
     public Task<string> GenerateDownloadUrlAsync(
         string storageKey,
         string originalFileName,

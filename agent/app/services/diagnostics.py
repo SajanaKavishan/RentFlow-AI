@@ -22,9 +22,12 @@ _SENSITIVE_MESSAGE_PATTERNS = (
 _REQUEST_DATA_MARKERS = (
     '"inputdata"',
     '"applicationdata"',
+    '"contentbase64"',
     '"documentmetadata"',
     '"deterministicfindings"',
+    '"extractedtext"',
     '"contents"',
+    '"messages"',
 )
 
 
@@ -53,20 +56,32 @@ def exception_type_name(exc: BaseException) -> str:
 
 
 def sanitized_exception_message(exc: BaseException) -> str:
-    root = root_exception(exc)
-    if isinstance(root, ValidationError):
+    return _sanitize_exception_message(root_exception(exc))
+
+
+def sanitized_provider_error_message(exc: BaseException) -> str:
+    """Sanitize an SDK error without exposing its raw response body.
+
+    Provider SDK exception text can contain a useful categorical 400 reason. The
+    shared sanitizer suppresses it entirely whenever request-data markers occur.
+    """
+    return _sanitize_exception_message(exc)
+
+
+def _sanitize_exception_message(exc: BaseException) -> str:
+    if isinstance(exc, ValidationError):
         parts = []
-        for error in root.errors(include_input=False, include_url=False):
+        for error in exc.errors(include_input=False, include_url=False):
             location = ".".join(str(item) for item in error.get("loc", ())) or "root"
             parts.append(
                 f"{location}: {error.get('type', 'validation_error')}: "
                 f"{error.get('msg', 'validation failed')}"
             )
         message = "; ".join(parts)
-    elif isinstance(root, KeyError):
-        message = f"Missing state key {root.args[0]!r}" if root.args else "Missing state key"
+    elif isinstance(exc, KeyError):
+        message = f"Missing state key {exc.args[0]!r}" if exc.args else "Missing state key"
     else:
-        message = str(root)
+        message = str(exc)
 
     message = message.replace("\r", " ").replace("\n", " ")
     if any(marker in message.casefold() for marker in _REQUEST_DATA_MARKERS):

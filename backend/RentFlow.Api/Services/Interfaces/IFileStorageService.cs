@@ -15,6 +15,14 @@ public interface IFileStorageService
         string storageKey,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Retrieves a private object for trusted server-side processing only.
+    /// </summary>
+    Task<byte[]> DownloadBytesAsync(
+        string storageKey,
+        long maximumBytes,
+        CancellationToken cancellationToken = default);
+
     Task<string> GenerateDownloadUrlAsync(
         string storageKey,
         string originalFileName,

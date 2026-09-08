@@ -10,9 +10,18 @@ _CONFIGURATION_NAMES = (
     "AI_PROVIDER",
     "AI_MODEL",
     "AI_API_KEY",
+    "GEMINI_API_KEY",
     "GROQ_API_KEY",
     "AI_TIMEOUT_SECONDS",
     "AGENT_VERSION",
+    "VISION_PROVIDER",
+    "VISION_MODEL",
+    "VISION_API_KEY",
+    "MAX_PDF_PAGES",
+    "MAX_EXTRACTED_CHARACTERS",
+    "MAX_MODEL_INPUT_CHARACTERS",
+    "EXTRACTION_TIMEOUT_SECONDS",
+    "INCOME_TOLERANCE_PERCENT",
 )
 
 
@@ -33,8 +42,14 @@ def test_dotenv_values_load_when_os_environment_is_absent(
                 "AI_PROVIDER=groq",
                 "AI_MODEL=openai/gpt-oss-20b",
                 "GROQ_API_KEY=file-groq-secret",
+                "VISION_API_KEY=file-vision-secret",
                 "AI_TIMEOUT_SECONDS=12.5",
                 "AGENT_VERSION=dotenv-test",
+                "MAX_PDF_PAGES=7",
+                "MAX_EXTRACTED_CHARACTERS=12000",
+                "MAX_MODEL_INPUT_CHARACTERS=6000",
+                "EXTRACTION_TIMEOUT_SECONDS=8",
+                "INCOME_TOLERANCE_PERCENT=7.5",
             )
         ),
         encoding="utf-8",
@@ -49,6 +64,11 @@ def test_dotenv_values_load_when_os_environment_is_absent(
     assert settings.groq_api_key == "file-groq-secret"
     assert settings.ai_timeout_seconds == 12.5
     assert settings.agent_version == "dotenv-test"
+    assert settings.max_pdf_pages == 7
+    assert settings.max_extracted_characters == 12000
+    assert settings.max_model_input_characters == 6000
+    assert settings.extraction_timeout_seconds == 8
+    assert settings.income_tolerance_percent == 7.5
     assert settings.provider_is_configured is True
 
 
@@ -98,6 +118,7 @@ def test_configuration_secrets_are_not_exposed_in_repr_or_diagnostics(
                 "AI_MODEL=openai/gpt-oss-20b",
                 "AI_API_KEY=file-gemini-secret",
                 "GROQ_API_KEY=file-groq-secret",
+                "VISION_API_KEY=file-vision-secret",
             )
         ),
         encoding="utf-8",
@@ -114,5 +135,35 @@ def test_configuration_secrets_are_not_exposed_in_repr_or_diagnostics(
 
     assert "file-gemini-secret" not in repr(settings)
     assert "file-groq-secret" not in repr(settings)
+    assert "file-vision-secret" not in repr(settings)
     assert "file-gemini-secret" not in caplog.text
     assert "file-groq-secret" not in caplog.text
+    assert "file-vision-secret" not in caplog.text
+
+
+def test_gemini_api_key_alias_supports_dedicated_vision_with_groq_text(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _clear_configuration(monkeypatch)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            (
+                "AI_PROVIDER=groq",
+                "AI_MODEL=openai/gpt-oss-20b",
+                "GROQ_API_KEY=groq-secret",
+                "VISION_PROVIDER=gemini",
+                "VISION_MODEL=gemini-2.5-flash",
+                "GEMINI_API_KEY=gemini-secret",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    settings = Settings.from_environment(env_file)
+
+    assert settings.ai_provider == "groq"
+    assert settings.gemini_api_key == "gemini-secret"
+    assert settings.vision_provider == "gemini"
+    assert settings.vision_model == "gemini-2.5-flash"

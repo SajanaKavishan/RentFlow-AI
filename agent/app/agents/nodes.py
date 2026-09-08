@@ -14,8 +14,16 @@ from app.schemas.analysis import (
     ConsistencyAnalysis,
     DocumentAnalysis,
     FinalAgentSummary,
+    FinalAgentSummaryDraft,
+    Recommendation,
 )
 from app.schemas.plan import Plan
+from app.schemas.supporting_documents import (
+    CrossDocumentConsistencyResult,
+    SupportingDocumentInput,
+    SupportingDocumentVerificationResult,
+)
+from app.services.document_extraction import HybridDocumentExtractor, ModelVisionTextExtractor
 from app.services.diagnostics import (
     exception_type_name,
     log_development_event,
@@ -23,7 +31,17 @@ from app.services.diagnostics import (
     sanitized_exception_message,
 )
 from app.services.exceptions import AgentServiceError
-from app.services.model_provider import ModelProvider, request_structured_output
+from app.services.model_provider import (
+    ModelProvider,
+    UnavailableModelProvider,
+    request_structured_output,
+)
+from app.services.supporting_document_verification import (
+    CrossDocumentConsistencyAnalyzer,
+    DeterministicCrossDocumentConsistencyAnalyzer,
+    ModelSupportingDocumentVerifier,
+    SupportingDocumentVerifier,
+)
 
 Node = Callable[[ApplicationValidationAgentState], Awaitable[dict[str, Any]]]
 logger = logging.getLogger(__name__)
@@ -41,7 +59,40 @@ def create_nodes(
     *,
     timeout_seconds: float,
     agent_version: str,
+    supporting_document_verifier: SupportingDocumentVerifier | None = None,
+    cross_document_analyzer: CrossDocumentConsistencyAnalyzer | None = None,
+    vision_provider: ModelProvider | None = None,
+    max_pdf_pages: int = 5,
+    max_extracted_characters: int = 50_000,
+    max_model_input_characters: int = 20_000,
+    extraction_timeout_seconds: float = 20.0,
+    income_tolerance_percent: float = 5.0,
 ) -> dict[str, Node]:
+    resolved_vision_provider = vision_provider or (
+        provider
+        if provider.capabilities.vision_document_images
+        else UnavailableModelProvider(configured=False)
+    )
+    document_verifier = supporting_document_verifier or ModelSupportingDocumentVerifier(
+        provider,
+        HybridDocumentExtractor(
+            ModelVisionTextExtractor(
+                resolved_vision_provider,
+                timeout_seconds=extraction_timeout_seconds,
+            ),
+            max_pdf_pages=max_pdf_pages,
+            max_extracted_characters=max_extracted_characters,
+            extraction_timeout_seconds=extraction_timeout_seconds,
+        ),
+        timeout_seconds=timeout_seconds,
+        max_model_input_characters=max_model_input_characters,
+    )
+    document_consistency_analyzer = (
+        cross_document_analyzer
+        or DeterministicCrossDocumentConsistencyAnalyzer(
+            income_tolerance_percent=income_tolerance_percent
+        )
+    )
     async def plan_analysis(state: ApplicationValidationAgentState) -> dict[str, Any]:
         output = await request_structured_output(
             provider,
@@ -49,6 +100,7 @@ def create_nodes(
             instructions=(
                 "Create the fixed application-validation plan. The only valid ordered "
                 "steps are analyze_application_data, analyze_document_metadata, "
+                "verify_supporting_documents, analyze_cross_document_consistency, "
                 "analyze_consistency, summarize_findings. " + _SHARED_SAFETY
             ),
             input_data={"objective": state["objective"]},
@@ -115,6 +167,8 @@ def create_nodes(
                 "deterministicFindings": state["deterministic_findings"],
                 "dataAnalysis": state["data_analysis"],
                 "documentAnalysis": state["document_analysis"],
+                "supportingDocumentVerification": state["supporting_document_verification"],
+                "crossDocumentConsistency": state["cross_document_consistency"],
             },
             timeout_seconds=timeout_seconds,
             invocation_name="consistency_analysis",
@@ -124,27 +178,99 @@ def create_nodes(
             "execution_steps": [*state["execution_steps"], "analyze_consistency"],
         }
 
+    async def verify_supporting_documents(
+        state: ApplicationValidationAgentState,
+    ) -> dict[str, Any]:
+        inputs = [
+            SupportingDocumentInput.model_validate(item)
+            for item in state["supporting_document_inputs"]
+        ]
+        results = await document_verifier.verify(inputs)
+        validated = [
+            SupportingDocumentVerificationResult.model_validate(item)
+            for item in results
+        ]
+        return {
+            "supporting_document_verification": [
+                item.model_dump(mode="json") for item in validated
+            ],
+            "execution_steps": [*state["execution_steps"], "verify_supporting_documents"],
+        }
+
+    async def analyze_cross_document_consistency(
+        state: ApplicationValidationAgentState,
+    ) -> dict[str, Any]:
+        verification = [
+            SupportingDocumentVerificationResult.model_validate(item)
+            for item in state["supporting_document_verification"]
+        ]
+        result = await document_consistency_analyzer.analyze(
+            state["application_data"], verification
+        )
+        validated = CrossDocumentConsistencyResult.model_validate(result)
+        return {
+            "cross_document_consistency": validated.model_dump(mode="json"),
+            "execution_steps": [
+                *state["execution_steps"],
+                "analyze_cross_document_consistency",
+            ],
+        }
+
     async def summarize_findings(state: ApplicationValidationAgentState) -> dict[str, Any]:
         output = await request_structured_output(
             provider,
-            output_schema=FinalAgentSummary,
+            output_schema=FinalAgentSummaryDraft,
             instructions=(
                 "Create a concise landlord review summary. Recommendation must be exactly one of: "
                 "Ready for landlord review; Request missing information; Request missing documents; "
-                "Manual review required. requiresHumanApproval must be true and agentVersion must be "
-                f"'{agent_version}'. " + _SHARED_SAFETY
+                "Manual review required. requiresHumanApproval must be true. "
+                + _SHARED_SAFETY
             ),
             input_data={
                 "deterministicFindings": state["deterministic_findings"],
                 "dataAnalysis": state["data_analysis"],
                 "documentAnalysis": state["document_analysis"],
                 "consistencyAnalysis": state["consistency_analysis"],
+                "supportingDocumentVerification": state["supporting_document_verification"],
+                "crossDocumentConsistency": state["cross_document_consistency"],
             },
             timeout_seconds=timeout_seconds,
             invocation_name="final_summary",
         )
         # The service owns version metadata, not the model.
-        validated_summary = output.model_copy(update={"agent_version": agent_version})
+        document_results = [
+            SupportingDocumentVerificationResult.model_validate(item)
+            for item in state["supporting_document_verification"]
+        ]
+        document_consistency = CrossDocumentConsistencyResult.model_validate(
+            state["cross_document_consistency"]
+        )
+        document_warnings = [
+            warning for result in document_results for warning in result.warnings
+        ] + list(document_consistency.warnings)
+        recommendation = output.recommendation
+        if (
+            recommendation == Recommendation.READY_FOR_LANDLORD_REVIEW
+            and (
+                document_consistency.requires_manual_review
+                or any(result.requires_manual_review for result in document_results)
+            )
+        ):
+            recommendation = Recommendation.MANUAL_REVIEW_REQUIRED
+        validated_summary = FinalAgentSummary.model_validate(
+            {
+                **output.model_dump(mode="json", by_alias=True),
+                "agent_version": agent_version,
+                "recommendation": recommendation,
+                "warnings": list(
+                    dict.fromkeys([*output.warnings, *document_warnings])
+                )[:100],
+                "supporting_document_verification": document_results,
+                "cross_document_consistency": document_consistency.model_dump(
+                    mode="json", by_alias=True
+                ),
+            }
+        )
         return {
             "final_summary": validated_summary.model_dump(mode="json", by_alias=True),
             "execution_steps": [*state["execution_steps"], "summarize_findings"],
@@ -158,6 +284,12 @@ def create_nodes(
         ),
         "analyze_document_metadata": _with_node_diagnostics(
             "document_analysis", model_name, analyze_document_metadata
+        ),
+        "verify_supporting_documents": _with_node_diagnostics(
+            "supporting_document_verification", model_name, verify_supporting_documents
+        ),
+        "analyze_cross_document_consistency": _with_node_diagnostics(
+            "cross_document_consistency", model_name, analyze_cross_document_consistency
         ),
         "analyze_consistency": _with_node_diagnostics(
             "consistency_analysis", model_name, analyze_consistency

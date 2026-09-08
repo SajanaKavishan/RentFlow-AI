@@ -37,6 +37,8 @@ def valid_model_responses() -> dict[str, Any]:
             "steps": [
                 "analyze_application_data",
                 "analyze_document_metadata",
+                "verify_supporting_documents",
+                "analyze_cross_document_consistency",
                 "analyze_consistency",
                 "summarize_findings",
             ]
@@ -58,13 +60,12 @@ def valid_model_responses() -> dict[str, Any]:
             "findings": [],
             "explanation": "No contradiction is visible in the supplied structured data.",
         },
-        "FinalAgentSummary": {
+        "FinalAgentSummaryDraft": {
             "recommendation": "Ready for landlord review",
             "summary": "The application is ready for a landlord's manual review.",
             "key_findings": ["No deterministic blocking findings were supplied."],
             "warnings": [],
             "requires_human_approval": True,
-            "agent_version": "model-supplied-value-is-overridden",
         },
     }
 
@@ -84,6 +85,7 @@ def valid_request() -> dict[str, Any]:
             }
         ],
         "deterministicFindings": [],
+        "supportingDocuments": [],
     }
 
 

@@ -23,7 +23,7 @@ public class RentalApplicationsController(
         [FromBody] CreateRentalApplicationDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim.
+        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
             () => rentalApplicationService.CreateAsync(tenantId, request, cancellationToken),
             result => CreatedAtAction(nameof(GetById), new { id = result.Id }, result));
@@ -48,7 +48,7 @@ public class RentalApplicationsController(
         Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize tenantId against the authenticated user's tenant claim.
+        // TODO(auth): Authorize tenantId against the authenticated user's ID claim.
         return ExecuteAsync(
             () => rentalApplicationService.GetByTenantAsync(tenantId, cancellationToken),
             result => Ok(result));
@@ -61,7 +61,7 @@ public class RentalApplicationsController(
         Guid propertyId,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize property access using authenticated landlord claims.
+        // TODO(auth): Authorize property access using the authenticated landlord.
         return ExecuteAsync(
             () => rentalApplicationService.GetByPropertyAsync(propertyId, cancellationToken),
             result => Ok(result));
@@ -78,7 +78,7 @@ public class RentalApplicationsController(
         [FromBody] UpdateRentalApplicationDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim.
+        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
             () => rentalApplicationService.UpdateAsync(id, tenantId, request, cancellationToken),
             result => Ok(result));
@@ -94,7 +94,7 @@ public class RentalApplicationsController(
         [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim.
+        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
             () => rentalApplicationService.SubmitAsync(id, tenantId, cancellationToken),
             result => Ok(result));
@@ -108,7 +108,7 @@ public class RentalApplicationsController(
         Guid id,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize this operation using authenticated landlord claims.
+        // TODO(auth): Authorize this operation using the authenticated landlord.
         return ExecuteAsync(
             () => rentalApplicationService.MarkUnderReviewAsync(id, cancellationToken),
             result => Ok(result));
@@ -123,7 +123,7 @@ public class RentalApplicationsController(
         [FromBody] LandlordApplicationDecisionDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize this operation using authenticated landlord claims.
+        // TODO(auth): Authorize this operation using the authenticated landlord.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
             () => rentalApplicationService.ApproveAsync(
@@ -143,7 +143,7 @@ public class RentalApplicationsController(
         [FromBody] LandlordApplicationDecisionDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize this operation using authenticated landlord claims.
+        // TODO(auth): Authorize this operation using the authenticated landlord.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
             () => rentalApplicationService.RejectAsync(
@@ -163,7 +163,7 @@ public class RentalApplicationsController(
         [FromBody] LandlordApplicationDecisionDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize this operation using authenticated landlord claims.
+        // TODO(auth): Authorize this operation using the authenticated landlord.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
             () => rentalApplicationService.RequestChangesAsync(
@@ -183,7 +183,7 @@ public class RentalApplicationsController(
         [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim.
+        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
             () => rentalApplicationService.WithdrawAsync(id, tenantId, cancellationToken),
             result => Ok(result));
