@@ -15,6 +15,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<ApplicationValidationStep> ApplicationValidationSteps => Set<ApplicationValidationStep>();
 
+    public DbSet<MaintenanceRequest> MaintenanceRequests => Set<MaintenanceRequest>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -218,6 +220,71 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(step => new { step.WorkflowId, step.StepOrder })
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<MaintenanceRequest>(entity =>
+        {
+            entity.HasKey(request => request.Id);
+
+            entity.Property(request => request.PropertyId)
+                .IsRequired();
+
+            entity.Property(request => request.TenantId)
+                .IsRequired();
+
+            entity.Property(request => request.TechnicianId)
+                .IsRequired(false);
+
+            entity.Property(request => request.Title)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(request => request.Description)
+                .HasMaxLength(4000)
+                .IsRequired();
+
+            entity.Property(request => request.Category)
+                .IsRequired();
+
+            entity.Property(request => request.Priority)
+                .IsRequired();
+
+            entity.Property(request => request.Status)
+                .IsRequired();
+
+            entity.Property(request => request.TenantAccessNotes)
+                .HasMaxLength(1000)
+                .IsRequired(false);
+
+            entity.Property(request => request.TriageNotes)
+                .HasMaxLength(2000)
+                .IsRequired(false);
+
+            entity.Property(request => request.AssignmentNotes)
+                .HasMaxLength(2000)
+                .IsRequired(false);
+
+            entity.Property(request => request.CancellationReason)
+                .HasMaxLength(2000)
+                .IsRequired(false);
+
+            entity.Property(request => request.CompletedAt)
+                .IsRequired(false);
+
+            entity.Property(request => request.CreatedAt)
+                .IsRequired();
+
+            entity.Property(request => request.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasIndex(request => request.PropertyId);
+            entity.HasIndex(request => request.TenantId);
+            entity.HasIndex(request => request.TechnicianId);
+            entity.HasIndex(request => request.Status);
+            entity.HasIndex(request => new { request.PropertyId, request.Status });
+            entity.HasIndex(request => new { request.TenantId, request.CreatedAt });
+            entity.HasIndex(request => new { request.TechnicianId, request.Status });
+            entity.HasIndex(request => new { request.Priority, request.Status });
         });
     }
 }

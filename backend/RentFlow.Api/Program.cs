@@ -25,6 +25,7 @@ builder.Services.AddOptions<AgentServiceOptions>()
 
 builder.Services.AddScoped<IViewingService, ViewingService>();
 builder.Services.AddScoped<IRentalApplicationService, RentalApplicationService>();
+builder.Services.AddScoped<IMaintenanceRequestService, MaintenanceRequestService>();
 builder.Services.AddScoped<IApplicationDocumentService, ApplicationDocumentService>();
 builder.Services.AddScoped<IApplicationDataValidationTool, ApplicationDataValidationTool>();
 builder.Services.AddScoped<IDocumentValidationTool, DocumentValidationTool>();
