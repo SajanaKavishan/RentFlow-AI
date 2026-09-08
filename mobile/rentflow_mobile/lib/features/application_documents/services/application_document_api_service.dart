@@ -49,9 +49,7 @@ class ApplicationDocumentApiService {
         ),
       );
 
-    final response = await _sendStreamed(
-      () => apiClient.httpClient.send(request),
-    );
+    final response = await _sendStreamed(() => apiClient.send(request));
     return _parseDocument(response.body);
   }
 
@@ -82,7 +80,7 @@ class ApplicationDocumentApiService {
 
     late final http.StreamedResponse streamedResponse;
     try {
-      streamedResponse = await apiClient.httpClient.send(request);
+      streamedResponse = await apiClient.send(request);
     } on http.ClientException {
       throw const ApplicationDocumentApiException(
         'Unable to connect to the document service.',
