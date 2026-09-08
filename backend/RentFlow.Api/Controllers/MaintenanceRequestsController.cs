@@ -12,6 +12,7 @@ namespace RentFlow.Api.Controllers;
 [Route("api/maintenance-requests")]
 public class MaintenanceRequestsController(
     IMaintenanceRequestService maintenanceRequestService,
+    IMaintenanceAttachmentService maintenanceAttachmentService,
     ILogger<MaintenanceRequestsController> logger) : ControllerBase
 {
     [HttpPost]
@@ -278,6 +279,49 @@ public class MaintenanceRequestsController(
             result => result is null ? NoContent() : Ok(result));
     }
 
+    [HttpPost("{id:guid}/attachments")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<MaintenanceAttachmentResponseDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MaintenanceAttachmentResponseDto>> UploadAttachment(
+        Guid id,
+        [FromQuery] Guid tenantId,
+        [FromForm] UploadMaintenanceAttachmentDto request,
+        CancellationToken cancellationToken)
+    {
+        // TODO: Replace tenantId with the authenticated user's tenant claim.
+        await using var content = request.File.OpenReadStream();
+        return await ExecuteAsync(
+            () => maintenanceAttachmentService.UploadAsync(id, tenantId, content, request.File.FileName,
+                request.File.ContentType, request.File.Length, request.AttachmentType, cancellationToken),
+            result => CreatedAtAction(nameof(DownloadAttachment), new { id, attachmentId = result.Id, tenantId }, result));
+    }
+
+    [HttpGet("{id:guid}/attachments")]
+    [ProducesResponseType<IReadOnlyList<MaintenanceAttachmentResponseDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public Task<ActionResult<IReadOnlyList<MaintenanceAttachmentResponseDto>>> GetAttachments(
+        Guid id, [FromQuery] Guid tenantId, CancellationToken cancellationToken) =>
+        ExecuteAsync(() => maintenanceAttachmentService.GetByRequestAsync(id, tenantId, cancellationToken), result => Ok(result));
+
+    [HttpGet("{id:guid}/attachments/{attachmentId:guid}")]
+    [ProducesResponseType(StatusCodes.Status302Found)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> DownloadAttachment(
+        Guid id, Guid attachmentId, [FromQuery] Guid tenantId, CancellationToken cancellationToken) =>
+        ExecuteAttachmentAsync(async () => Redirect(await maintenanceAttachmentService.GenerateDownloadUrlAsync(id, attachmentId, tenantId, cancellationToken)));
+
+    [HttpDelete("{id:guid}/attachments/{attachmentId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> DeleteAttachment(
+        Guid id, Guid attachmentId, [FromQuery] Guid tenantId, CancellationToken cancellationToken) =>
+        ExecuteAttachmentAsync(async () => { await maintenanceAttachmentService.DeleteAsync(id, attachmentId, tenantId, cancellationToken); return NoContent(); });
+
     private async Task<MaintenanceRequestResponseDto> GetRequiredRequestAsync(
         Guid id,
         CancellationToken cancellationToken)
@@ -312,6 +356,18 @@ public class MaintenanceRequestsController(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "An unexpected error occurred.",
                 detail: "The request could not be completed.");
+        }
+    }
+
+    private async Task<IActionResult> ExecuteAttachmentAsync(Func<Task<IActionResult>> operation)
+    {
+        try { return await operation(); }
+        catch (MaintenanceRequestServiceException exception) { return MapServiceException(exception); }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested) { throw; }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "An unexpected error occurred while processing a maintenance attachment.");
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, title: "An unexpected error occurred.", detail: "The request could not be completed.");
         }
     }
 

@@ -21,6 +21,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<RepairEstimate> RepairEstimates => Set<RepairEstimate>();
 
+    public DbSet<MaintenanceAttachment> MaintenanceAttachments => Set<MaintenanceAttachment>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -388,6 +390,29 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(estimate => new { estimate.MaintenanceRequestId, estimate.Status });
             entity.HasIndex(estimate => new { estimate.MaintenanceRequestId, estimate.VersionNumber })
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<MaintenanceAttachment>(entity =>
+        {
+            entity.HasKey(attachment => attachment.Id);
+
+            entity.Property(attachment => attachment.MaintenanceRequestId).IsRequired();
+            entity.Property(attachment => attachment.StorageKey).HasMaxLength(512).IsRequired();
+            entity.Property(attachment => attachment.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(attachment => attachment.ContentType).HasMaxLength(255).IsRequired();
+            entity.Property(attachment => attachment.FileSize).IsRequired();
+            entity.Property(attachment => attachment.AttachmentType).HasMaxLength(100).IsRequired(false);
+            entity.Property(attachment => attachment.UploadedByUserId).IsRequired();
+            entity.Property(attachment => attachment.CreatedAt).IsRequired();
+
+            entity.HasOne<MaintenanceRequest>()
+                .WithMany()
+                .HasForeignKey(attachment => attachment.MaintenanceRequestId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(attachment => attachment.MaintenanceRequestId);
+            entity.HasIndex(attachment => new { attachment.MaintenanceRequestId, attachment.CreatedAt });
+            entity.HasIndex(attachment => attachment.UploadedByUserId);
         });
     }
 }
