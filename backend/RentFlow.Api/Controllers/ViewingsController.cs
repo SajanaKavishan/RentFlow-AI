@@ -23,7 +23,7 @@ public class ViewingsController(
         [FromBody] CreateViewingRequestDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim.
+        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
             () => viewingService.CreateAsync(tenantId, request, cancellationToken),
             result => CreatedAtAction(nameof(GetById), new { id = result.Id }, result));
@@ -104,7 +104,7 @@ public class ViewingsController(
         [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim.
+        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
             () => viewingService.CancelAsync(id, tenantId, cancellationToken),
             result => Ok(result));

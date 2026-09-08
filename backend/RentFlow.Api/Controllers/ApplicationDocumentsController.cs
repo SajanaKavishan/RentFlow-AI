@@ -26,7 +26,7 @@ public class ApplicationDocumentsController(
         [FromForm] UploadApplicationDocumentDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim.
+        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         await using var content = request.File.OpenReadStream();
 
         return await ExecuteAsync(
@@ -54,7 +54,7 @@ public class ApplicationDocumentsController(
         [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim or authorized landlord identity.
+        // TODO(auth): Replace tenantId with the authenticated user's ID or authorized landlord identity.
         return ExecuteAsync(
             () => applicationDocumentService.GetByApplicationAsync(
                 applicationId,
@@ -72,7 +72,7 @@ public class ApplicationDocumentsController(
         [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim or authorized landlord identity.
+        // TODO(auth): Replace tenantId with the authenticated user's ID or authorized landlord identity.
         return ExecuteAsync(
             async () => await applicationDocumentService.GetByIdAsync(
                 documentId,
@@ -92,7 +92,7 @@ public class ApplicationDocumentsController(
         [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim or authorized landlord identity.
+        // TODO(auth): Replace tenantId with the authenticated user's ID or authorized landlord identity.
         return ExecuteAsync(async () =>
         {
             var signedUrl = await applicationDocumentService.GenerateDownloadUrlAsync(
@@ -113,7 +113,7 @@ public class ApplicationDocumentsController(
         [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim.
+        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(async () =>
         {
             await applicationDocumentService.DeleteAsync(
