@@ -35,6 +35,9 @@ builder.Services.AddScoped<IApplicationValidationOrchestrator, ApplicationValida
 builder.Services.AddScoped<IApplicationValidationQueryService, ApplicationValidationQueryService>();
 builder.Services.AddHttpClient<IApplicationValidationAgentClient, ApplicationValidationAgentClient>(client =>
     client.Timeout = Timeout.InfiniteTimeSpan);
+builder.Services.AddScoped<IMaintenanceCoordinationService, MaintenanceCoordinationService>();
+builder.Services.AddHttpClient<IMaintenanceCoordinationAgentClient, MaintenanceCoordinationAgentClient>(client =>
+    client.Timeout = Timeout.InfiniteTimeSpan);
 builder.Services.AddSingleton<IFileStorageService, CloudflareR2StorageService>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddControllers();

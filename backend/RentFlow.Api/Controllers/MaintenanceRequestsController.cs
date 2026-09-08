@@ -13,6 +13,7 @@ namespace RentFlow.Api.Controllers;
 public class MaintenanceRequestsController(
     IMaintenanceRequestService maintenanceRequestService,
     IMaintenanceAttachmentService maintenanceAttachmentService,
+    IMaintenanceCoordinationService maintenanceCoordinationService,
     ILogger<MaintenanceRequestsController> logger) : ControllerBase
 {
     [HttpPost]
@@ -38,6 +39,19 @@ public class MaintenanceRequestsController(
     {
         return ExecuteAsync(
             () => GetRequiredRequestAsync(id, cancellationToken),
+            result => Ok(result));
+    }
+
+    [HttpPost("{id:guid}/coordination-analysis")]
+    [ProducesResponseType<MaintenanceCoordinationResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    public Task<ActionResult<MaintenanceCoordinationResult>> CoordinationAnalysis(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteAsync(
+            () => maintenanceCoordinationService.AnalyzeAsync(id, cancellationToken),
             result => Ok(result));
     }
 
@@ -343,6 +357,13 @@ public class MaintenanceRequestsController(
         catch (MaintenanceRequestServiceException exception)
         {
             return MapServiceException(exception);
+        }
+        catch (MaintenanceCoordinationAgentClientException)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status502BadGateway,
+                title: "Maintenance coordination agent unavailable.",
+                detail: "The coordination analysis could not be completed.");
         }
         catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
         {

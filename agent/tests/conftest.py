@@ -87,6 +87,30 @@ def valid_request() -> dict[str, Any]:
     }
 
 
+def valid_maintenance_request() -> dict[str, Any]:
+    return {
+        "maintenanceRequestId": "maintenance-123",
+        "title": "Leaking kitchen pipe",
+        "description": "Water is leaking under the kitchen sink.",
+        "category": "plumbing",
+        "priority": "high",
+        "currentStatus": "open",
+        "assignedTechnicianId": "technician-456",
+        "repairEstimate": {
+            "amount": 250.0,
+            "currency": "USD",
+            "notes": "Initial estimate",
+        },
+        "attachments": [
+            {
+                "attachmentId": "attachment-789",
+                "fileName": "leak.jpg",
+                "contentType": "image/jpeg",
+            }
+        ],
+    }
+
+
 @pytest.fixture(autouse=True)
 def block_external_network(monkeypatch: pytest.MonkeyPatch) -> None:
     original_connect: Callable[..., Any] = socket.socket.connect
