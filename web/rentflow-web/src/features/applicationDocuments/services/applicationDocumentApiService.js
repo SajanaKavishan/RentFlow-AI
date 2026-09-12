@@ -1,6 +1,5 @@
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5277'
-).replace(/\/+$/, '')
+import { ApiError, apiRequest } from '../../../core/api/apiClient.js'
+import { API_BASE_URL } from '../../../core/api/apiConfig.js'
 
 export const APPLICATION_DOCUMENT_TYPE = Object.freeze({
   IDENTITY_DOCUMENT: 0,
@@ -9,7 +8,7 @@ export const APPLICATION_DOCUMENT_TYPE = Object.freeze({
   OTHER: 3,
 })
 
-export class ApplicationDocumentApiError extends Error {
+export class ApplicationDocumentApiError extends ApiError {
   constructor(message, statusCode = null) {
     super(message)
     this.name = 'ApplicationDocumentApiError'
@@ -24,59 +23,16 @@ function withTenantId(path, tenantId) {
   return `${path}${separator}tenantId=${encodeURIComponent(tenantId)}`
 }
 
-async function readSafeErrorMessage(response) {
-  const fallback = 'The document request failed. Please try again.'
-
-  try {
-    const body = await response.json()
-    const directMessage = [body.detail, body.title, body.message].find(
-      (value) => typeof value === 'string' && value.trim(),
-    )
-
-    if (directMessage) return directMessage.trim()
-
-    if (body.errors && typeof body.errors === 'object') {
-      const validationMessage = Object.values(body.errors)
-        .flatMap((value) => (Array.isArray(value) ? value : [value]))
-        .find((value) => typeof value === 'string' && value.trim())
-
-      if (validationMessage) return validationMessage.trim()
-    }
-  } catch {
-    // Never expose R2/XML responses, proxy details, or server traces.
-  }
-
-  return fallback
-}
-
 async function requestJson(path, tenantId) {
-  let response
-
   try {
-    response = await fetch(`${API_BASE_URL}${withTenantId(path, tenantId)}`, {
-      headers: { Accept: 'application/json' },
+    return await apiRequest(withTenantId(path, tenantId), {
       cache: 'no-store',
+      errorMessage: 'The document request failed. Please try again.',
+      networkErrorMessage: 'Unable to connect to the document service. Please try again.',
     })
-  } catch {
-    throw new ApplicationDocumentApiError(
-      'Unable to connect to the document service. Please try again.',
-    )
-  }
-
-  if (!response.ok) {
-    throw new ApplicationDocumentApiError(
-      await readSafeErrorMessage(response),
-      response.status,
-    )
-  }
-
-  try {
-    return await response.json()
-  } catch {
-    throw new ApplicationDocumentApiError(
-      'The document service returned an invalid response.',
-      response.status,
-    )
+  } catch (error) {
+    if (error instanceof ApiError) throw new ApplicationDocumentApiError(error.message, error.statusCode)
+    throw error
   }
 }
 
@@ -113,7 +69,8 @@ export async function downloadApplicationDocument(documentId, tenantId) {
   downloadWindow.opener = null
 
   try {
-    // Validate access first so API failures can be shown safely in the UI.
+    // Authenticate the access check centrally, then preserve the existing
+    // browser navigation so private-storage redirects keep working.
     await getApplicationDocument(documentId, tenantId)
     downloadWindow.location.replace(
       `${API_BASE_URL}${withTenantId(
