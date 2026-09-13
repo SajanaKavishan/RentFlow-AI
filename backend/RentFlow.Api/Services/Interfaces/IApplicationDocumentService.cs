@@ -23,14 +23,26 @@ public interface IApplicationDocumentService
         Guid tenantId,
         CancellationToken cancellationToken = default);
 
+    Task<ApplicationDocumentResponseDto?> GetByIdForReviewAsync(
+        Guid documentId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<ApplicationDocumentResponseDto>> GetByApplicationAsync(
         Guid applicationId,
         Guid tenantId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ApplicationDocumentResponseDto>> GetByApplicationForReviewAsync(
+        Guid applicationId,
+        CancellationToken cancellationToken = default);
+
     Task<string> GenerateDownloadUrlAsync(
         Guid documentId,
         Guid tenantId,
+        CancellationToken cancellationToken = default);
+
+    Task<string> GenerateDownloadUrlForReviewAsync(
+        Guid documentId,
         CancellationToken cancellationToken = default);
 
     Task DeleteAsync(
