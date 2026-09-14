@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'core/auth/token_storage.dart';
 import 'core/network/api_client.dart';
-import 'features/application_documents/screens/application_documents_screen.dart';
 import 'features/auth/controllers/auth_controller.dart';
 import 'features/auth/models/current_user.dart';
 import 'features/auth/screens/login_screen.dart';
@@ -15,10 +14,6 @@ import 'features/viewings/screens/my_viewings_screen.dart';
 // TODO(dev-only): Replace with the property ID supplied by property navigation
 // when property screens are implemented.
 const _temporaryPropertyId = '22222222-2222-2222-2222-222222222222';
-
-// TODO(auth/navigation): Replace with the rental application selected by the
-// authenticated user.
-const _temporaryApplicationId = '7d171d25-3c18-415d-a5e1-fbac06ed531d';
 
 void main() {
   runApp(const MyApp());
@@ -114,8 +109,7 @@ class SessionRestorationScreen extends StatelessWidget {
   );
 }
 
-/// Tenant launcher that keeps Phase 2 endpoint contracts intact while using
-/// the authenticated current-user ID wherever a temporary tenant ID was used.
+/// Tenant launcher for JWT-owned tenant workflows.
 class TenantHome extends StatelessWidget {
   const TenantHome({super.key, required this.user});
   final CurrentUser user;
@@ -158,7 +152,6 @@ class TenantHome extends StatelessWidget {
                           MaterialPageRoute<void>(
                             builder: (_) => BookViewingScreen(
                               propertyId: _temporaryPropertyId,
-                              tenantId: user.id,
                             ),
                           ),
                         );
@@ -171,7 +164,7 @@ class TenantHome extends StatelessWidget {
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
-                            builder: (_) => MyViewingsScreen(tenantId: user.id),
+                            builder: (_) => const MyViewingsScreen(),
                           ),
                         );
                       },
@@ -188,7 +181,7 @@ class TenantHome extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Temporary tenant application flow for development testing.',
+                      'Manage your applications and documents in My Applications.',
                     ),
                     const SizedBox(height: 24),
                     FilledButton.icon(
@@ -197,7 +190,6 @@ class TenantHome extends StatelessWidget {
                           MaterialPageRoute<void>(
                             builder: (_) => RentalApplicationFormScreen(
                               propertyId: _temporaryPropertyId,
-                              tenantId: user.id,
                             ),
                           ),
                         );
@@ -210,28 +202,12 @@ class TenantHome extends StatelessWidget {
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
-                            builder: (_) =>
-                                MyRentalApplicationsScreen(tenantId: user.id),
+                            builder: (_) => const MyRentalApplicationsScreen(),
                           ),
                         );
                       },
                       icon: const Icon(Icons.folder_open_outlined),
                       label: const Text('My Applications'),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => ApplicationDocumentsScreen(
-                              applicationId: _temporaryApplicationId,
-                              tenantId: user.id,
-                            ),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.file_upload_outlined),
-                      label: const Text('Application Documents'),
                     ),
                   ],
                 ),

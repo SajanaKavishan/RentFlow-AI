@@ -1,5 +1,4 @@
 import { ApiError, apiRequest } from '../../../core/api/apiClient.js'
-import { API_BASE_URL } from '../../../core/api/apiConfig.js'
 
 export const APPLICATION_DOCUMENT_TYPE = Object.freeze({
   IDENTITY_DOCUMENT: 0,
@@ -16,16 +15,9 @@ export class ApplicationDocumentApiError extends ApiError {
   }
 }
 
-// TODO(auth): Remove this temporary tenantId query parameter once JWT
-// role-based authorization supplies the authorized identity.
-function withTenantId(path, tenantId) {
-  const separator = path.includes('?') ? '&' : '?'
-  return `${path}${separator}tenantId=${encodeURIComponent(tenantId)}`
-}
-
-async function requestJson(path, tenantId) {
+async function requestJson(path) {
   try {
-    return await apiRequest(withTenantId(path, tenantId), {
+    return await apiRequest(path, {
       cache: 'no-store',
       errorMessage: 'The document request failed. Please try again.',
       networkErrorMessage: 'Unable to connect to the document service. Please try again.',
@@ -36,10 +28,9 @@ async function requestJson(path, tenantId) {
   }
 }
 
-export async function getApplicationDocuments(applicationId, tenantId) {
+export async function getApplicationDocuments(applicationId) {
   const documents = await requestJson(
     `/api/rental-applications/${encodeURIComponent(applicationId)}/documents`,
-    tenantId,
   )
 
   if (!Array.isArray(documents)) {
@@ -51,14 +42,13 @@ export async function getApplicationDocuments(applicationId, tenantId) {
   return documents
 }
 
-export function getApplicationDocument(documentId, tenantId) {
+export function getApplicationDocument(documentId) {
   return requestJson(
     `/api/application-documents/${encodeURIComponent(documentId)}`,
-    tenantId,
   )
 }
 
-export async function downloadApplicationDocument(documentId, tenantId) {
+export async function downloadApplicationDocument(documentId) {
   const downloadWindow = window.open('', '_blank')
   if (!downloadWindow) {
     throw new ApplicationDocumentApiError(
@@ -69,17 +59,23 @@ export async function downloadApplicationDocument(documentId, tenantId) {
   downloadWindow.opener = null
 
   try {
-    // Authenticate the access check centrally, then preserve the existing
-    // browser navigation so private-storage redirects keep working.
-    await getApplicationDocument(documentId, tenantId)
-    downloadWindow.location.replace(
-      `${API_BASE_URL}${withTenantId(
-        `/api/application-documents/${encodeURIComponent(documentId)}/download`,
-        tenantId,
-      )}`,
+    const response = await apiRequest(
+      `/api/application-documents/${encodeURIComponent(documentId)}/download`,
+      {
+        cache: 'no-store',
+        parse: 'response',
+        errorMessage: 'Unable to open this document for download. Please try again.',
+        networkErrorMessage: 'Unable to connect to the document service. Please try again.',
+      },
     )
+    const objectUrl = URL.createObjectURL(await response.blob())
+    downloadWindow.location.replace(objectUrl)
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
   } catch (error) {
     downloadWindow.close()
+    if (error instanceof ApiError) {
+      throw new ApplicationDocumentApiError(error.message, error.statusCode)
+    }
     if (error instanceof ApplicationDocumentApiError) throw error
     throw new ApplicationDocumentApiError(
       'Unable to open this document for download. Please try again.',

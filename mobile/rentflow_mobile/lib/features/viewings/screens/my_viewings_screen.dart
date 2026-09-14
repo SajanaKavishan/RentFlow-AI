@@ -6,13 +6,8 @@ import '../services/viewing_api_service.dart';
 import '../widgets/viewing_status_chip.dart';
 
 class MyViewingsScreen extends StatefulWidget {
-  const MyViewingsScreen({
-    super.key,
-    required this.tenantId,
-    this.viewingApiService,
-  });
+  const MyViewingsScreen({super.key, this.viewingApiService});
 
-  final String tenantId;
   final ViewingApiService? viewingApiService;
 
   @override
@@ -37,7 +32,7 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
       _ownedApiClient = ApiClient();
       _viewingApiService = ViewingApiService(_ownedApiClient!);
     }
-    _viewings = _viewingApiService.getViewingsByTenant(widget.tenantId);
+    _viewings = _viewingApiService.getMyViewings();
   }
 
   @override
@@ -47,8 +42,10 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
   }
 
   Future<void> _refresh() async {
-    final request = _viewingApiService.getViewingsByTenant(widget.tenantId);
-    setState(() => _viewings = request);
+    final request = _viewingApiService.getMyViewings();
+    setState(() {
+      _viewings = request;
+    });
     try {
       await request;
     } catch (_) {
@@ -89,15 +86,10 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
 
     setState(() => _cancellingIds.add(viewing.id));
     try {
-      await _viewingApiService.cancelViewing(
-        id: viewing.id,
-        tenantId: widget.tenantId,
-      );
-      if (!mounted) return;
-      _showMessage('Viewing cancelled.');
-      await _refresh();
+      await _viewingApiService.cancelViewing(id: viewing.id);
     } on ViewingApiException catch (error) {
       if (mounted) _showMessage(error.message, isError: true);
+      return;
     } catch (_) {
       if (mounted) {
         _showMessage(
@@ -105,9 +97,57 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
           isError: true,
         );
       }
+      return;
     } finally {
       if (mounted) setState(() => _cancellingIds.remove(viewing.id));
     }
+
+    if (!mounted) return;
+    final optimisticViewings = _viewings.then(
+      (viewings) => viewings
+          .map((item) => item.id == viewing.id ? _asCancelled(item) : item)
+          .toList(growable: false),
+    );
+    setState(() {
+      _viewings = optimisticViewings;
+    });
+    _showMessage('Viewing cancelled.');
+    await _refreshAfterCancellation(optimisticViewings);
+  }
+
+  Future<void> _refreshAfterCancellation(
+    Future<List<Viewing>> optimisticViewings,
+  ) async {
+    try {
+      final refreshed = await _viewingApiService.getMyViewings();
+      if (mounted) {
+        setState(() {
+          _viewings = Future.value(refreshed);
+        });
+      }
+    } catch (_) {
+      // Cancellation already succeeded. Keep the optimistic cancelled state
+      // instead of reporting the refresh failure as a cancellation failure.
+      if (mounted) {
+        setState(() {
+          _viewings = optimisticViewings;
+        });
+      }
+    }
+  }
+
+  Viewing _asCancelled(Viewing viewing) {
+    return Viewing(
+      id: viewing.id,
+      tenantId: viewing.tenantId,
+      propertyId: viewing.propertyId,
+      requestedDateTime: viewing.requestedDateTime,
+      status: ViewingStatus.cancelled,
+      tenantMessage: viewing.tenantMessage,
+      landlordResponse: viewing.landlordResponse,
+      createdAt: viewing.createdAt,
+      updatedAt: viewing.updatedAt,
+    );
   }
 
   void _showMessage(String message, {bool isError = false}) {

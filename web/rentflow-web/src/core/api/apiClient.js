@@ -20,6 +20,14 @@ export function setUnauthorizedHandler(handler) {
 }
 
 export async function readSafeErrorMessage(response, fallback) {
+  if (response.status === 403) {
+    return 'You do not have permission to access this resource.'
+  }
+  if (response.status === 404) {
+    return 'The requested resource is unavailable.'
+  }
+  if (response.status >= 500) return fallback
+
   try {
     const body = await response.clone().json()
     const directMessage = [body.detail, body.title, body.message].find(

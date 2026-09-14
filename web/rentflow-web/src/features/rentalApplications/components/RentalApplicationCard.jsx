@@ -72,10 +72,7 @@ function RentalApplicationCard({
     }))
 
     try {
-      const documents = await getApplicationDocuments(
-        application.id,
-        application.tenantId,
-      )
+      const documents = await getApplicationDocuments(application.id)
       setDocumentsState({ status: 'success', items: documents, error: '' })
     } catch (error) {
       setDocumentsState({
@@ -102,10 +99,7 @@ function RentalApplicationCard({
     setDownloadingId(applicationDocument.id)
     setDownloadError({ id: null, message: '' })
     try {
-      await downloadApplicationDocument(
-        applicationDocument.id,
-        application.tenantId,
-      )
+      await downloadApplicationDocument(applicationDocument.id)
     } catch (error) {
       setDownloadError({
         id: applicationDocument.id,
