@@ -69,6 +69,20 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
         return application is null ? null : MapToResponse(application);
     }
 
+    public async Task<RentalApplicationResponseDto?> GetByIdForTenantAsync(
+        Guid applicationId,
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        var application = await dbContext.RentalApplications
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                item => item.Id == applicationId && item.TenantId == tenantId,
+                cancellationToken);
+
+        return application is null ? null : MapToResponse(application);
+    }
+
     public async Task<IReadOnlyList<RentalApplicationResponseDto>> GetByTenantAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default)

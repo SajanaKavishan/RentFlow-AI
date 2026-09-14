@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RentFlow.Api.DTOs.Viewings;
+using RentFlow.Api.Models;
 using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
 
@@ -10,26 +12,28 @@ namespace RentFlow.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/viewings")]
+[Authorize]
 public class ViewingsController(
     IViewingService viewingService,
+    ICurrentUserService currentUser,
     ILogger<ViewingsController> logger) : ControllerBase
 {
     [HttpPost]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType<ViewingResponseDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public Task<ActionResult<ViewingResponseDto>> Create(
-        [FromQuery] Guid tenantId,
         [FromBody] CreateViewingRequestDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
-            () => viewingService.CreateAsync(tenantId, request, cancellationToken),
+            () => viewingService.CreateAsync(GetRequiredUserId(), request, cancellationToken),
             result => CreatedAtAction(nameof(GetById), new { id = result.Id }, result));
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = $"{nameof(UserRole.Tenant)},{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<ViewingResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public Task<ActionResult<ViewingResponseDto>> GetById(
@@ -37,33 +41,36 @@ public class ViewingsController(
         CancellationToken cancellationToken)
     {
         return ExecuteAsync(
-            () => GetRequiredViewingAsync(id, cancellationToken),
+            () => GetAuthorizedViewingAsync(id, cancellationToken),
             result => Ok(result));
     }
 
-    [HttpGet("tenant/{tenantId:guid}")]
+    [HttpGet]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType<IReadOnlyList<ViewingResponseDto>>(StatusCodes.Status200OK)]
-    public Task<ActionResult<IReadOnlyList<ViewingResponseDto>>> GetByTenant(
-        Guid tenantId,
+    public Task<ActionResult<IReadOnlyList<ViewingResponseDto>>> GetMine(
         CancellationToken cancellationToken)
     {
         return ExecuteAsync(
-            () => viewingService.GetByTenantAsync(tenantId, cancellationToken),
+            () => viewingService.GetByTenantAsync(GetRequiredUserId(), cancellationToken),
             result => Ok(result));
     }
 
     [HttpGet("property/{propertyId:guid}")]
+    [Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<IReadOnlyList<ViewingResponseDto>>(StatusCodes.Status200OK)]
     public Task<ActionResult<IReadOnlyList<ViewingResponseDto>>> GetByProperty(
         Guid propertyId,
         CancellationToken cancellationToken)
     {
+        // TODO(cross-component-auth): Restrict landlords to properties they own/manage.
         return ExecuteAsync(
             () => viewingService.GetByPropertyAsync(propertyId, cancellationToken),
             result => Ok(result));
     }
 
     [HttpPatch("{id:guid}/approve")]
+    [Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<ViewingResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -72,6 +79,7 @@ public class ViewingsController(
         [FromBody] UpdateViewingStatusDto request,
         CancellationToken cancellationToken)
     {
+        // TODO(cross-component-auth): Restrict landlords to the viewing's property.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
             () => viewingService.ApproveAsync(id, request.LandlordResponse, cancellationToken),
@@ -79,6 +87,7 @@ public class ViewingsController(
     }
 
     [HttpPatch("{id:guid}/reject")]
+    [Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<ViewingResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -88,6 +97,7 @@ public class ViewingsController(
         [FromBody] UpdateViewingStatusDto request,
         CancellationToken cancellationToken)
     {
+        // TODO(cross-component-auth): Restrict landlords to the viewing's property.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
             () => viewingService.RejectAsync(id, request.LandlordResponse ?? string.Empty, cancellationToken),
@@ -95,28 +105,35 @@ public class ViewingsController(
     }
 
     [HttpPatch("{id:guid}/cancel")]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType<ViewingResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public Task<ActionResult<ViewingResponseDto>> Cancel(
         Guid id,
-        [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
-            () => viewingService.CancelAsync(id, tenantId, cancellationToken),
+            () => viewingService.CancelAsync(id, GetRequiredUserId(), cancellationToken),
             result => Ok(result));
     }
 
-    private async Task<ViewingResponseDto> GetRequiredViewingAsync(
+    private async Task<ViewingResponseDto> GetAuthorizedViewingAsync(
         Guid id,
         CancellationToken cancellationToken)
     {
-        return await viewingService.GetByIdAsync(id, cancellationToken)
+        var viewing = currentUser.Role == UserRole.Tenant
+            ? await viewingService.GetByIdForTenantAsync(id, GetRequiredUserId(), cancellationToken)
+            : await viewingService.GetByIdAsync(id, cancellationToken);
+
+        // TODO(cross-component-auth): Restrict landlord reads to the viewing's property.
+        return viewing
             ?? throw ViewingServiceException.NotFound($"Viewing request '{id}' was not found.");
     }
+
+    private Guid GetRequiredUserId() => currentUser.UserId
+        ?? throw new InvalidOperationException("The authenticated JWT has no valid user ID.");
 
     private async Task<ActionResult<T>> ExecuteAsync<T>(
         Func<Task<T>> operation,

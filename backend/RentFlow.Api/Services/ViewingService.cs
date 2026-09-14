@@ -73,6 +73,20 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
         return viewing is null ? null : MapToResponse(viewing);
     }
 
+    public async Task<ViewingResponseDto?> GetByIdForTenantAsync(
+        Guid viewingId,
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        var viewing = await dbContext.ViewingRequests
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                item => item.Id == viewingId && item.TenantId == tenantId,
+                cancellationToken);
+
+        return viewing is null ? null : MapToResponse(viewing);
+    }
+
     public async Task<IReadOnlyList<ViewingResponseDto>> GetByTenantAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default)

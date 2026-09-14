@@ -16,6 +16,11 @@ public interface IViewingService
         Guid viewingId,
         CancellationToken cancellationToken = default);
 
+    Task<ViewingResponseDto?> GetByIdForTenantAsync(
+        Guid viewingId,
+        Guid tenantId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<ViewingResponseDto>> GetByTenantAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default);
