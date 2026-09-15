@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../../core/api/apiClient.js'
+import Icon from '../../../shared/ui/Icons.jsx'
 import { useAuth } from '../useAuth.js'
+import AuthVisual from './AuthVisual.jsx'
 import './auth.css'
 
 export default function LoginPage() {
@@ -11,6 +13,7 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [passwordVisible, setPasswordVisible] = useState(false)
   if (isAuthenticated) return <Navigate to="/" replace />
 
   async function handleSubmit(event) {
@@ -27,14 +30,14 @@ export default function LoginPage() {
     } finally { setIsSubmitting(false) }
   }
 
-  return <main className="auth-page"><section className="auth-card" aria-labelledby="login-title">
+  return <main className="auth-page"><AuthVisual /><section className="auth-content"><div className="auth-card" aria-labelledby="login-title">
     <p className="auth-eyebrow">Welcome back</p><h1 id="login-title">Sign in to RentFlow</h1>
-    <p className="auth-intro">Manage your rental journey in one place.</p>
+    <p className="auth-intro">Enter your details to continue your rental journey.</p>
     <form onSubmit={handleSubmit} noValidate>
-      <label htmlFor="email">Email</label><input id="email" type="email" autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={isSubmitting} />
-      <label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} disabled={isSubmitting} />
+      <label htmlFor="email">Email</label><input id="email" type="email" autoComplete="email" placeholder="you@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={isSubmitting} />
+      <label htmlFor="password">Password</label><div className="auth-password"><input id="password" type={passwordVisible ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} disabled={isSubmitting} /><button type="button" aria-label={passwordVisible ? 'Hide password' : 'Show password'} aria-pressed={passwordVisible} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? 'eyeOff' : 'eye'} /></button></div>
       {error && <div className="auth-error" role="alert">{error}</div>}
-      <button className="auth-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in'}</button>
+      <button className="auth-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in'}<Icon name="arrow" size={18} /></button>
     </form><p className="auth-switch">New to RentFlow? <Link to="/register">Create an account</Link></p>
-  </section></main>
+  </div></section></main>
 }
