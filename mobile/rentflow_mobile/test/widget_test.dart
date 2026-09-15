@@ -151,7 +151,12 @@ void main() {
     final tenantController = buildController(MemoryTokenStorage('token'));
     await tester.pumpWidget(MyApp(authController: tenantController));
     await tester.pumpAndSettle();
-    expect(find.text('Book a Viewing'), findsOneWidget);
+    expect(find.text('Book a Viewing'), findsNothing);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(
+      find.textContaining('Property selection has not been integrated yet'),
+      findsOneWidget,
+    );
     await tester.pumpWidget(const SizedBox());
 
     final landlordController = buildController(
@@ -160,8 +165,23 @@ void main() {
     );
     await tester.pumpWidget(MyApp(authController: landlordController));
     await tester.pumpAndSettle();
-    expect(find.text('Book a Viewing'), findsNothing);
-    expect(find.textContaining('web dashboard'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.textContaining('web dashboard'), findsWidgets);
+  });
+
+  testWidgets('profile logout returns to login from the authenticated shell', (
+    tester,
+  ) async {
+    final storage = MemoryTokenStorage('token');
+    final controller = buildController(storage);
+    await tester.pumpWidget(MyApp(authController: controller));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Profile').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Logout'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('login-submit')), findsOneWidget);
+    expect(storage.token, isNull);
   });
 
   test('registration exposes only public roles', () {
