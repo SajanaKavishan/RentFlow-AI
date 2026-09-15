@@ -12,15 +12,11 @@ class ViewingApiService {
   final ApiClient apiClient;
 
   Future<Viewing> createViewing({
-    required String tenantId,
     required String propertyId,
     required DateTime requestedDateTime,
     String? tenantMessage,
   }) async {
-    final uri = apiClient.buildUri(
-      ApiConstants.viewingsPath,
-      queryParameters: {'tenantId': tenantId},
-    );
+    final uri = apiClient.buildUri(ApiConstants.viewingsPath);
     final body = jsonEncode({
       'propertyId': propertyId,
       'requestedDateTime': requestedDateTime.toUtc().toIso8601String(),
@@ -37,10 +33,8 @@ class ViewingApiService {
     return _parseViewing(response.body);
   }
 
-  Future<List<Viewing>> getViewingsByTenant(String tenantId) async {
-    final uri = apiClient.buildUri(
-      '${ApiConstants.viewingsPath}/tenant/$tenantId',
-    );
+  Future<List<Viewing>> getMyViewings() async {
+    final uri = apiClient.buildUri(ApiConstants.viewingsPath);
     final response = await _send(() => apiClient.get(uri));
     return _parseViewingList(response.body);
   }
@@ -53,16 +47,9 @@ class ViewingApiService {
     return _parseViewingList(response.body);
   }
 
-  Future<Viewing> cancelViewing({
-    required String id,
-    required String tenantId,
-  }) async {
-    final uri = apiClient.buildUri(
-      '${ApiConstants.viewingsPath}/$id/cancel',
-      queryParameters: {'tenantId': tenantId},
-    );
-    final response = await _send(() => apiClient.patch(uri));
-    return _parseViewing(response.body);
+  Future<void> cancelViewing({required String id}) async {
+    final uri = apiClient.buildUri('${ApiConstants.viewingsPath}/$id/cancel');
+    await _send(() => apiClient.patch(uri));
   }
 
   Future<http.Response> _send(Future<http.Response> Function() request) async {
@@ -77,13 +64,24 @@ class ViewingApiService {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ViewingApiException(
-        _readErrorMessage(response.body) ??
+        _safeErrorMessage(response) ??
             'The viewing request failed. Please try again.',
         statusCode: response.statusCode,
       );
     }
 
     return response;
+  }
+
+  String? _safeErrorMessage(http.Response response) {
+    if (response.statusCode == 403) {
+      return 'You do not have permission to access this resource.';
+    }
+    if (response.statusCode == 404) {
+      return 'The requested resource is unavailable.';
+    }
+    if (response.statusCode >= 500) return null;
+    return _readErrorMessage(response.body);
   }
 
   Viewing _parseViewing(String body) {

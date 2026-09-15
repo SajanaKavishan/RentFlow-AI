@@ -12,7 +12,6 @@ class RentalApplicationApiService {
   final ApiClient apiClient;
 
   Future<RentalApplication> createApplication({
-    required String tenantId,
     required String propertyId,
     required DateTime moveInDate,
     required double monthlyIncome,
@@ -20,10 +19,7 @@ class RentalApplicationApiService {
     required int numberOfOccupants,
     String? tenantNote,
   }) async {
-    final uri = apiClient.buildUri(
-      ApiConstants.rentalApplicationsPath,
-      queryParameters: {'tenantId': tenantId},
-    );
+    final uri = apiClient.buildUri(ApiConstants.rentalApplicationsPath);
     final response = await _send(
       () => apiClient.post(
         uri,
@@ -48,19 +44,14 @@ class RentalApplicationApiService {
     return _parseApplication(response.body);
   }
 
-  Future<List<RentalApplication>> getApplicationsByTenant(
-    String tenantId,
-  ) async {
-    final uri = apiClient.buildUri(
-      '${ApiConstants.rentalApplicationsPath}/tenant/$tenantId',
-    );
+  Future<List<RentalApplication>> getMyApplications() async {
+    final uri = apiClient.buildUri(ApiConstants.rentalApplicationsPath);
     final response = await _send(() => apiClient.get(uri));
     return _parseApplicationList(response.body);
   }
 
   Future<RentalApplication> updateApplication({
     required String id,
-    required String tenantId,
     required DateTime moveInDate,
     required double monthlyIncome,
     required String occupation,
@@ -69,7 +60,6 @@ class RentalApplicationApiService {
   }) async {
     final uri = apiClient.buildUri(
       '${ApiConstants.rentalApplicationsPath}/$id',
-      queryParameters: {'tenantId': tenantId},
     );
     final response = await _send(
       () => apiClient.put(
@@ -86,28 +76,25 @@ class RentalApplicationApiService {
     return _parseApplication(response.body);
   }
 
-  Future<RentalApplication> submitApplication({
-    required String id,
-    required String tenantId,
-  }) {
-    return _patchTenantAction(id: id, tenantId: tenantId, action: 'submit');
+  Future<RentalApplication?> submitApplication({required String id}) async {
+    final uri = apiClient.buildUri(
+      '${ApiConstants.rentalApplicationsPath}/$id/submit',
+    );
+    final response = await _send(() => apiClient.patch(uri));
+    if (response.body.trim().isEmpty) return null;
+    return _parseApplication(response.body);
   }
 
-  Future<RentalApplication> withdrawApplication({
-    required String id,
-    required String tenantId,
-  }) {
-    return _patchTenantAction(id: id, tenantId: tenantId, action: 'withdraw');
+  Future<RentalApplication> withdrawApplication({required String id}) {
+    return _patchAction(id: id, action: 'withdraw');
   }
 
-  Future<RentalApplication> _patchTenantAction({
+  Future<RentalApplication> _patchAction({
     required String id,
-    required String tenantId,
     required String action,
   }) async {
     final uri = apiClient.buildUri(
       '${ApiConstants.rentalApplicationsPath}/$id/$action',
-      queryParameters: {'tenantId': tenantId},
     );
     final response = await _send(() => apiClient.patch(uri));
     return _parseApplication(response.body);
@@ -150,13 +137,24 @@ class RentalApplicationApiService {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw RentalApplicationApiException(
-        _readErrorMessage(response.body) ??
+        _safeErrorMessage(response) ??
             'The rental application request failed. Please try again.',
         statusCode: response.statusCode,
       );
     }
 
     return response;
+  }
+
+  String? _safeErrorMessage(http.Response response) {
+    if (response.statusCode == 403) {
+      return 'You do not have permission to access this resource.';
+    }
+    if (response.statusCode == 404) {
+      return 'The requested resource is unavailable.';
+    }
+    if (response.statusCode >= 500) return null;
+    return _readErrorMessage(response.body);
   }
 
   RentalApplication _parseApplication(String body) {

@@ -1,0 +1,100 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { apiRequest } from '../../../core/api/apiClient.js'
+import { tokenStorage } from '../../../core/auth/tokenStorage.js'
+import { getApplicationDocuments } from '../../applicationDocuments/services/applicationDocumentApiService.js'
+import {
+  getApplicationValidationRuns,
+  runApplicationValidation,
+} from './applicationValidationApiService.js'
+import {
+  approveApplication,
+  getApplicationsByProperty,
+} from './rentalApplicationApiService.js'
+
+const applicationId = '33333333-3333-3333-3333-333333333333'
+const propertyId = '22222222-2222-2222-2222-222222222222'
+
+function jsonResponse(body = [], status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+describe('JWT client contracts', () => {
+  beforeEach(() => {
+    tokenStorage.setToken('test-token')
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(jsonResponse())))
+  })
+
+  afterEach(() => {
+    tokenStorage.clearToken()
+    vi.unstubAllGlobals()
+  })
+
+  it('uses the authenticated shared client for validation routes', async () => {
+    await getApplicationValidationRuns(applicationId)
+    await runApplicationValidation(applicationId)
+
+    expect(fetch).toHaveBeenCalledTimes(2)
+    for (const [url, options] of fetch.mock.calls) {
+      expect(url).toContain(
+        `/api/rental-applications/${applicationId}/validation-runs`,
+      )
+      expect(url).not.toContain('tenantId')
+      expect(options.headers.Authorization).toBe('Bearer test-token')
+    }
+    expect(fetch.mock.calls[0][1].method).toBeUndefined()
+    expect(fetch.mock.calls[1][1].method).toBe('POST')
+  })
+
+  it('keeps landlord review resource IDs without tenant identity parameters', async () => {
+    await getApplicationsByProperty(propertyId)
+    await approveApplication(applicationId, 'Approved')
+
+    expect(fetch.mock.calls[0][0]).toContain(
+      `/api/rental-applications/property/${propertyId}`,
+    )
+    expect(fetch.mock.calls[1][0]).toContain(
+      `/api/rental-applications/${applicationId}/approve`,
+    )
+    for (const [url, options] of fetch.mock.calls) {
+      expect(url).not.toContain('tenantId')
+      expect(options.headers.Authorization).toBe('Bearer test-token')
+    }
+  })
+
+  it('loads application documents without a tenantId query parameter', async () => {
+    await getApplicationDocuments(applicationId)
+
+    const [url, options] = fetch.mock.calls[0]
+    expect(url).toContain(
+      `/api/rental-applications/${applicationId}/documents`,
+    )
+    expect(url).not.toContain('tenantId')
+    expect(options.headers.Authorization).toBe('Bearer test-token')
+  })
+
+  it.each([
+    [403, 'You do not have permission to access this resource.'],
+    [404, 'The requested resource is unavailable.'],
+    [409, 'This action conflicts with the current application state.'],
+  ])('returns a safe message for HTTP %s', async (status, message) => {
+    fetch.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          detail:
+            status === 409
+              ? 'This action conflicts with the current application state.'
+              : 'private implementation detail',
+        },
+        status,
+      ),
+    )
+
+    await expect(apiRequest('/api/test')).rejects.toMatchObject({
+      message,
+      statusCode: status,
+    })
+  })
+})

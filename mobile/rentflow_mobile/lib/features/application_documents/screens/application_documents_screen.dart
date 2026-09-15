@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -16,15 +15,15 @@ class ApplicationDocumentsScreen extends StatefulWidget {
   const ApplicationDocumentsScreen({
     super.key,
     required this.applicationId,
-    required this.tenantId,
     this.applicationDocumentApiService,
     this.rentalApplicationApiService,
+    this.documentPicker,
   });
 
   final String applicationId;
-  final String tenantId;
   final ApplicationDocumentApiService? applicationDocumentApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
+  final Future<SelectedDocumentFile?> Function()? documentPicker;
 
   @override
   State<ApplicationDocumentsScreen> createState() =>
@@ -44,7 +43,7 @@ class _ApplicationDocumentsScreenState
 
   ApplicationDocumentType _selectedType =
       ApplicationDocumentType.identityDocument;
-  _SelectedDocumentFile? _selectedFile;
+  SelectedDocumentFile? _selectedFile;
   bool _isPicking = false;
   bool _isUploading = false;
   final Set<String> _deletingIds = {};
@@ -78,15 +77,15 @@ class _ApplicationDocumentsScreenState
   }
 
   Future<_DocumentsData> _loadData() async {
-    final documentsFuture = _documentApiService.getDocumentsForApplication(
-      applicationId: widget.applicationId,
-      tenantId: widget.tenantId,
-    );
-    final applicationFuture = _rentalApplicationApiService.getApplicationById(
+    if (kDebugMode) {
+      debugPrint('[Documents] Load applicationId=${widget.applicationId}');
+    }
+    final application = await _rentalApplicationApiService.getApplicationById(
       widget.applicationId,
     );
-    final documents = await documentsFuture;
-    final application = await applicationFuture;
+    final documents = await _documentApiService.getDocumentsForApplication(
+      applicationId: widget.applicationId,
+    );
     return _DocumentsData(
       documents: documents,
       canChangeDocuments:
@@ -97,7 +96,9 @@ class _ApplicationDocumentsScreenState
 
   Future<void> _refresh() async {
     final request = _loadData();
-    setState(() => _data = request);
+    setState(() {
+      _data = request;
+    });
     try {
       await request;
     } catch (_) {
@@ -107,40 +108,53 @@ class _ApplicationDocumentsScreenState
 
   Future<void> _pickFile() async {
     if (_isPicking || _isUploading) return;
-    setState(() => _isPicking = true);
+    setState(() {
+      _isPicking = true;
+    });
     try {
-      final file = await FilePicker.pickFile(
-        type: FileType.custom,
-        allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
-      );
-      if (!mounted || file == null) return;
-      final size = await file.length();
-      if (!mounted) return;
-      if (size <= 0) {
+      final selectedFile = widget.documentPicker == null
+          ? await _pickDocumentFile()
+          : await widget.documentPicker!();
+      if (!mounted || selectedFile == null) return;
+      if (selectedFile.size <= 0) {
         _showMessage('The selected file could not be read.', isError: true);
         return;
       }
-      if (size > _maximumFileSizeBytes) {
+      if (selectedFile.size > _maximumFileSizeBytes) {
         _showMessage('Choose a file that is 5 MB or smaller.', isError: true);
         return;
       }
-      final bytes = await file.readAsBytes();
       if (!mounted) return;
-      setState(
-        () => _selectedFile = _SelectedDocumentFile(
-          name: file.name,
-          extension: _extensionFor(file.name),
-          size: size,
-          bytes: bytes,
-        ),
-      );
+      setState(() {
+        _selectedFile = selectedFile;
+      });
     } on Exception {
       if (mounted) {
         _showMessage('Unable to select a file right now.', isError: true);
       }
     } finally {
-      if (mounted) setState(() => _isPicking = false);
+      if (mounted) {
+        setState(() {
+          _isPicking = false;
+        });
+      }
     }
+  }
+
+  Future<SelectedDocumentFile?> _pickDocumentFile() async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+    );
+    if (file == null) return null;
+    final size = await file.length();
+    final bytes = await file.readAsBytes();
+    return SelectedDocumentFile(
+      name: file.name,
+      extension: _extensionFor(file.name),
+      size: size,
+      bytes: bytes,
+    );
   }
 
   Future<void> _upload() async {
@@ -160,22 +174,21 @@ class _ApplicationDocumentsScreenState
       return;
     }
 
-    setState(() => _isUploading = true);
+    setState(() {
+      _isUploading = true;
+    });
+    ApplicationDocument? uploadedDocument;
     try {
-      await _documentApiService.uploadDocument(
+      uploadedDocument = await _documentApiService.uploadDocument(
         applicationId: widget.applicationId,
-        tenantId: widget.tenantId,
         documentType: _selectedType,
         fileName: file.name,
         contentType: contentType,
         bytes: file.bytes,
       );
-      if (!mounted) return;
-      setState(() => _selectedFile = null);
-      _showMessage('Document uploaded.');
-      await _refresh();
     } on ApplicationDocumentApiException catch (error) {
       if (mounted) _showMessage(error.message, isError: true);
+      return;
     } catch (_) {
       if (mounted) {
         _showMessage(
@@ -183,8 +196,62 @@ class _ApplicationDocumentsScreenState
           isError: true,
         );
       }
+      return;
     } finally {
-      if (mounted) setState(() => _isUploading = false);
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+
+    if (!mounted) return;
+    final previousData = _data;
+    setState(() {
+      _selectedFile = null;
+      if (uploadedDocument != null) {
+        _data = _dataWithUploadedDocument(previousData, uploadedDocument);
+      }
+    });
+    _showMessage('Document uploaded.');
+
+    try {
+      final refreshedData = await _loadData();
+      if (!mounted) return;
+      setState(() {
+        _data = Future.value(refreshedData);
+      });
+    } catch (_) {
+      if (mounted) {
+        _showMessage(
+          'Document uploaded, but the document list could not be refreshed.',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<_DocumentsData> _dataWithUploadedDocument(
+    Future<_DocumentsData> previousData,
+    ApplicationDocument uploadedDocument,
+  ) async {
+    try {
+      final currentData = await previousData;
+      final documents = [
+        uploadedDocument,
+        ...currentData.documents.where(
+          (document) => document.id != uploadedDocument.id,
+        ),
+      ];
+      return _DocumentsData(
+        documents: documents,
+        canChangeDocuments: currentData.canChangeDocuments,
+      );
+    } catch (_) {
+      return _DocumentsData(
+        documents: [uploadedDocument],
+        canChangeDocuments: true,
+      );
     }
   }
 
@@ -212,12 +279,11 @@ class _ApplicationDocumentsScreenState
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _deletingIds.add(document.id));
+    setState(() {
+      _deletingIds.add(document.id);
+    });
     try {
-      await _documentApiService.deleteDocument(
-        documentId: document.id,
-        tenantId: widget.tenantId,
-      );
+      await _documentApiService.deleteDocument(documentId: document.id);
       if (!mounted) return;
       _showMessage('Document deleted.');
       await _refresh();
@@ -231,17 +297,22 @@ class _ApplicationDocumentsScreenState
         );
       }
     } finally {
-      if (mounted) setState(() => _deletingIds.remove(document.id));
+      if (mounted) {
+        setState(() {
+          _deletingIds.remove(document.id);
+        });
+      }
     }
   }
 
   Future<void> _openDocument(ApplicationDocument document) async {
     if (_openingIds.contains(document.id)) return;
-    setState(() => _openingIds.add(document.id));
+    setState(() {
+      _openingIds.add(document.id);
+    });
     try {
       final downloadUrl = await _documentApiService.requestDownloadUrl(
         documentId: document.id,
-        tenantId: widget.tenantId,
       );
       final opened = await launchUrl(
         downloadUrl,
@@ -260,7 +331,11 @@ class _ApplicationDocumentsScreenState
         _showMessage('Unable to open this document right now.', isError: true);
       }
     } finally {
-      if (mounted) setState(() => _openingIds.remove(document.id));
+      if (mounted) {
+        setState(() {
+          _openingIds.remove(document.id);
+        });
+      }
     }
   }
 
@@ -396,7 +471,11 @@ class _ApplicationDocumentsScreenState
               value: _selectedType,
               enabled: canChangeDocuments && !_isUploading,
               onChanged: (value) {
-                if (value != null) setState(() => _selectedType = value);
+                if (value != null) {
+                  setState(() {
+                    _selectedType = value;
+                  });
+                }
               },
             ),
             const SizedBox(height: 12),
@@ -445,7 +524,11 @@ class _ApplicationDocumentsScreenState
                       tooltip: 'Remove selected file',
                       onPressed: _isUploading
                           ? null
-                          : () => setState(() => _selectedFile = null),
+                          : () {
+                              setState(() {
+                                _selectedFile = null;
+                              });
+                            },
                       icon: const Icon(Icons.close),
                     ),
                   ],
@@ -486,8 +569,8 @@ class _DocumentsData {
   final bool canChangeDocuments;
 }
 
-class _SelectedDocumentFile {
-  const _SelectedDocumentFile({
+class SelectedDocumentFile {
+  const SelectedDocumentFile({
     required this.name,
     required this.extension,
     required this.size,

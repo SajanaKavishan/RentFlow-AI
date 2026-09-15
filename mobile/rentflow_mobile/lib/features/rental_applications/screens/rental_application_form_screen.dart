@@ -10,12 +10,10 @@ class RentalApplicationFormScreen extends StatefulWidget {
   const RentalApplicationFormScreen({
     super.key,
     required this.propertyId,
-    required this.tenantId,
     this.rentalApplicationApiService,
   });
 
   final String propertyId;
-  final String tenantId;
   final RentalApplicationApiService? rentalApplicationApiService;
 
   @override
@@ -74,7 +72,11 @@ class _RentalApplicationFormScreenState
       lastDate: DateTime(now.year + 5, now.month, now.day),
       helpText: 'Choose your move-in date',
     );
-    if (selected != null && mounted) setState(() => _moveInDate = selected);
+    if (selected != null && mounted) {
+      setState(() {
+        _moveInDate = selected;
+      });
+    }
   }
 
   String? _validateIncome(String? value) {
@@ -123,11 +125,12 @@ class _RentalApplicationFormScreenState
     if (!_formKey.currentState!.validate() || !_validateMoveInDate()) return;
 
     FocusScope.of(context).unfocus();
-    setState(() => _isSaving = true);
+    setState(() {
+      _isSaving = true;
+    });
     try {
       final note = _noteController.text.trim();
       final created = await _apiService.createApplication(
-        tenantId: widget.tenantId,
         propertyId: widget.propertyId,
         moveInDate: _moveInDate!,
         monthlyIncome: double.parse(_incomeController.text.trim()),
@@ -136,7 +139,9 @@ class _RentalApplicationFormScreenState
         tenantNote: note.isEmpty ? null : note,
       );
       if (!mounted) return;
-      setState(() => _application = created);
+      setState(() {
+        _application = created;
+      });
       _showMessage('Draft application created.');
     } on RentalApplicationApiException catch (error) {
       if (mounted) _showMessage(error.message, isError: true);
@@ -148,7 +153,11 @@ class _RentalApplicationFormScreenState
         );
       }
     } finally {
-      if (mounted) setState(() => _isSaving = false);
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
 
@@ -158,14 +167,22 @@ class _RentalApplicationFormScreenState
       return;
     }
 
-    setState(() => _isSubmitting = true);
+    setState(() {
+      _isSubmitting = true;
+    });
     try {
       final submitted = await _apiService.submitApplication(
         id: application!.id,
-        tenantId: widget.tenantId,
       );
       if (!mounted) return;
-      setState(() => _application = submitted);
+      final now = DateTime.now().toUtc();
+      setState(() {
+        _application = (submitted ?? application).copyWith(
+          status: RentalApplicationStatus.submitted,
+          submittedAt: submitted?.submittedAt ?? now,
+          updatedAt: submitted?.updatedAt ?? now,
+        );
+      });
       _showMessage('Application submitted successfully.');
     } on RentalApplicationApiException catch (error) {
       if (mounted) _showMessage(error.message, isError: true);
@@ -177,7 +194,11 @@ class _RentalApplicationFormScreenState
         );
       }
     } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../auth/token_storage.dart';
@@ -50,14 +51,20 @@ class ApiClient {
     };
   }
 
-  Future<http.Response> get(Uri uri, {bool authenticated = true}) async =>
-      _check(
-        await httpClient.get(
-          uri,
-          headers: await _headers(authenticated: authenticated),
-        ),
-        authenticated,
+  Future<http.Response> get(Uri uri, {bool authenticated = true}) async {
+    final headers = await _headers(authenticated: authenticated);
+    if (kDebugMode) {
+      debugPrint(
+        '[ApiClient] GET $uri '
+        'authorizationBearerPresent=${headers['Authorization']?.startsWith('Bearer ') ?? false}',
       );
+    }
+    final response = await httpClient.get(uri, headers: headers);
+    if (kDebugMode) {
+      debugPrint('[ApiClient] GET $uri status=${response.statusCode}');
+    }
+    return _check(response, authenticated);
+  }
 
   Future<http.Response> post(
     Uri uri, {
