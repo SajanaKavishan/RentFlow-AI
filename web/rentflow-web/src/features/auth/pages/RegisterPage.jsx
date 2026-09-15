@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../../core/api/apiClient.js'
 import Icon from '../../../shared/ui/Icons.jsx'
-import { BrandWordmark } from '../../../shared/ui/BrandLogo.jsx'
 import { useAuth } from '../useAuth.js'
 import { PUBLIC_REGISTRATION_ROLES, USER_ROLES } from '../authModel.js'
 import AuthVisual from './AuthVisual.jsx'
@@ -34,7 +33,7 @@ export default function RegisterPage() {
     } catch (caught) { setError(caught instanceof ApiError ? caught.message : 'Registration could not be completed.') }
     finally { setIsSubmitting(false) }
   }
-  return <main className="auth-page auth-page--register"><AuthVisual /><section className="auth-content"><div className="auth-card auth-card--wide" aria-labelledby="register-title"><BrandWordmark className="auth-card__logo" />
+  return <main className="auth-page auth-page--register"><AuthVisual /><section className="auth-content"><div className="auth-card auth-card--wide" aria-labelledby="register-title">
     <p className="auth-eyebrow">A new chapter starts here</p><h1 id="register-title">Create your RentFlow account</h1><p className="auth-intro">Tell us a little about yourself to get started.</p>
     <form onSubmit={handleSubmit} noValidate><div className="auth-grid">
       <div><label htmlFor="fullName">Full name</label><input id="fullName" autoComplete="name" placeholder="Your full name" value={form.fullName} onChange={update('fullName')} disabled={isSubmitting} /></div>
@@ -44,7 +43,7 @@ export default function RegisterPage() {
       <div><label htmlFor="registerPassword">Password</label><div className="auth-password"><input id="registerPassword" type={passwordVisible ? 'text' : 'password'} autoComplete="new-password" placeholder="At least 8 characters" value={form.password} onChange={update('password')} disabled={isSubmitting} /><button type="button" aria-label={passwordVisible ? 'Hide passwords' : 'Show passwords'} aria-pressed={passwordVisible} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? 'eyeOff' : 'eye'} /></button></div></div>
       <div><label htmlFor="confirmPassword">Confirm password</label><input id="confirmPassword" type={passwordVisible ? 'text' : 'password'} autoComplete="new-password" placeholder="Repeat your password" value={form.confirmPassword} onChange={update('confirmPassword')} disabled={isSubmitting} /></div>
     </div>{error && <div className="auth-error" role="alert">{error}</div>}
-    <button className="auth-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating account…' : 'Create account'}<Icon name="arrow" size={18} /></button></form>
+    <button className="auth-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating account…' : 'Create account'}</button></form>
     <p className="auth-switch">Already registered? <Link to="/login">Sign in</Link></p>
   </div></section></main>
 }

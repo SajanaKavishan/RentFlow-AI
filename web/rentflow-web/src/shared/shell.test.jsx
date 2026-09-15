@@ -22,7 +22,10 @@ describe('shared React shell', () => {
   it('keeps unauthenticated routes on login outside the shell', async () => {
     renderApp('Tenant', '/', false)
     expect(await screen.findByRole('heading', { name: 'Sign in to RentFlow' })).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'RentFlow AI' })).toHaveAttribute('src', expect.stringContaining('rentflow-wordmark'))
+    const authBrand = screen.getByRole('complementary')
+    expect(authBrand).toHaveTextContent('RentFlow AI')
+    expect(authBrand.querySelector('img')).toHaveAttribute('src', expect.stringContaining('rentflow-mark'))
+    expect(screen.queryByRole('img', { name: 'RentFlow AI' })).not.toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument()
   })
 
