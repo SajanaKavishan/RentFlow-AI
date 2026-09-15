@@ -13,6 +13,14 @@ abstract final class AppPalette {
   static const neutral = Color(0xFF5F625E);
   static const pending = Color(0xFFFFF1C7);
   static const progress = Color(0xFFDDE7EF);
+  static const authPrimary = Color(0xFF303C1F);
+  static const authPressed = Color(0xFF46552E);
+  static const authCard = Color(0xFFF7F4ED);
+  static const authInput = Color(0xFFF3F0E8);
+  static const authText = Color(0xFF20211D);
+  static const authMuted = Color(0xFF737368);
+  static const authBorder = Color(0xFFDED9CF);
+  static const authSage = Color(0xFFDDE5CC);
 }
 
 abstract final class AppSpacing {
@@ -27,6 +35,8 @@ abstract final class AppSpacing {
 abstract final class AppRadii {
   static const small = 10.0;
   static const card = 18.0;
+  static const authCard = 24.0;
+  static const authField = 12.0;
 }
 
 abstract final class AppTheme {

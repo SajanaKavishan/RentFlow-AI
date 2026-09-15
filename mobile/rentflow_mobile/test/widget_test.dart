@@ -8,6 +8,7 @@ import 'package:rentflow_mobile/core/auth/token_storage.dart';
 import 'package:rentflow_mobile/core/network/api_client.dart';
 import 'package:rentflow_mobile/features/auth/controllers/auth_controller.dart';
 import 'package:rentflow_mobile/features/auth/models/current_user.dart';
+import 'package:rentflow_mobile/features/auth/screens/login_screen.dart';
 import 'package:rentflow_mobile/features/auth/screens/register_screen.dart';
 import 'package:rentflow_mobile/features/auth/services/auth_service.dart';
 import 'package:rentflow_mobile/main.dart';
@@ -87,8 +88,7 @@ void main() {
       (widget) =>
           widget is Image &&
           widget.image is AssetImage &&
-          (widget.image as AssetImage).assetName ==
-              'assets/brand/wordmark.png',
+          (widget.image as AssetImage).assetName == 'assets/brand/wordmark.png',
     );
     await tester.pumpWidget(MyApp(authController: controller));
     await tester.pumpAndSettle();
@@ -96,6 +96,121 @@ void main() {
     await tester.tap(find.text('Create an account'));
     await tester.pumpAndSettle();
     expect(wordmark, findsOneWidget);
+  });
+
+  for (final width in [360.0, 390.0, 412.0, 430.0]) {
+    testWidgets('auth cards fit a $width logical pixel mobile screen', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 780);
+      addTearDown(tester.view.reset);
+
+      final controller = buildController(MemoryTokenStorage());
+      await tester.pumpWidget(MyApp(authController: controller));
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.byKey(const Key('auth-background')), findsOneWidget);
+      expect(find.byKey(const Key('auth-brand')), findsOneWidget);
+      expect(find.byKey(const Key('auth-card')), findsOneWidget);
+      expect(find.text('Sign in to RentFlow'), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('auth-brand'))).width, 172);
+      expect(
+        tester.getSize(find.byKey(const Key('auth-card'))).width,
+        width - 32,
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('Create an account'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('auth-background')), findsOneWidget);
+      expect(find.byKey(const Key('auth-card')), findsOneWidget);
+      for (final key in [
+        'register-name',
+        'register-email',
+        'register-phone',
+        'register-role',
+        'register-password',
+        'register-confirm',
+      ]) {
+        expect(find.byKey(Key(key)), findsOneWidget);
+      }
+      await tester.ensureVisible(find.byKey(const Key('register-submit')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'login visibility toggle and submission use the real controller',
+    (tester) async {
+      final storage = MemoryTokenStorage();
+      final controller = buildController(storage);
+      await tester.pumpWidget(MyApp(authController: controller));
+      await tester.pumpAndSettle();
+
+      final password = find.byKey(const Key('login-password'));
+      final passwordInput = find.descendant(
+        of: password,
+        matching: find.byType(TextField),
+      );
+      expect(tester.widget<TextField>(passwordInput).obscureText, isTrue);
+      await tester.tap(find.byTooltip('Show password'));
+      await tester.pump();
+      expect(tester.widget<TextField>(passwordInput).obscureText, isFalse);
+
+      await tester.enterText(
+        find.byKey(const Key('login-email')),
+        'tenant@example.com',
+      );
+      await tester.enterText(password, 'Password1!');
+      await tester.tap(find.byKey(const Key('login-submit')));
+      await tester.pumpAndSettle();
+      expect(controller.isAuthenticated, isTrue);
+      expect(storage.token, 'new-token');
+    },
+  );
+
+  testWidgets(
+    'registration only offers Tenant and Landlord in the role field',
+    (tester) async {
+      final controller = buildController(MemoryTokenStorage());
+      await tester.pumpWidget(MyApp(authController: controller));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Create an account'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('register-role')));
+      await tester.tap(find.byKey(const Key('register-role')));
+      await tester.pumpAndSettle();
+      expect(find.text('Tenant'), findsWidgets);
+      expect(find.text('Landlord'), findsOneWidget);
+      await tester.tap(find.text('Landlord').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Landlord'), findsOneWidget);
+    },
+  );
+
+  testWidgets('auth buttons remain reachable when the keyboard is open', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    addTearDown(tester.view.reset);
+
+    final controller = buildController(MemoryTokenStorage());
+    await tester.pumpWidget(MyApp(authController: controller));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('login-submit')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.ensureVisible(find.text('Create an account'));
+    await tester.tap(find.text('Create an account'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('register-submit')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('registration validates password confirmation', (tester) async {

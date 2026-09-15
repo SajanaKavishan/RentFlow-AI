@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/theme/app_theme.dart';
 import '../controllers/auth_controller.dart';
 import '../models/current_user.dart';
 import '../services/auth_service.dart';
+import '../widgets/auth_shell.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -66,160 +68,151 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Create account')),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Center(
-                        child: Image.asset(
-                          'assets/brand/wordmark.png',
-                          width: 230,
-                          fit: BoxFit.contain,
-                          semanticLabel: 'RentFlow AI',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Join RentFlow',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 20),
-                      TextFormField(
-                        key: const Key('register-name'),
-                        controller: _fullName,
-                        decoration: const InputDecoration(
-                          labelText: 'Full name',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) => (value?.trim().length ?? 0) < 2
-                            ? 'Enter your full name.'
-                            : null,
-                      ),
-                      const SizedBox(height: 14),
-                      TextFormField(
-                        key: const Key('register-email'),
-                        controller: _email,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) =>
-                            value == null ||
-                                !RegExp(
-                                  r'^\S+@\S+\.\S+$',
-                                ).hasMatch(value.trim())
-                            ? 'Enter a valid email address.'
-                            : null,
-                      ),
-                      const SizedBox(height: 14),
-                      TextFormField(
-                        key: const Key('register-phone'),
-                        controller: _phone,
-                        keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(
-                          labelText: 'Phone number',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) =>
-                            value == null ||
-                                !RegExp(
-                                  r'^[+\d][\d\s().-]{6,31}$',
-                                ).hasMatch(value.trim())
-                            ? 'Enter a valid phone number.'
-                            : null,
-                      ),
-                      const SizedBox(height: 14),
-                      DropdownButtonFormField<UserRole>(
-                        key: const Key('register-role'),
-                        initialValue: _role,
-                        decoration: const InputDecoration(
-                          labelText: 'Account type',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: RegisterScreen.publicRoles
-                            .map(
-                              (role) => DropdownMenuItem(
-                                value: role,
-                                child: Text(role.value),
-                              ),
-                            )
-                            .toList(growable: false),
-                        onChanged: _isSubmitting
-                            ? null
-                            : (role) {
-                                if (role != null) setState(() => _role = role);
-                              },
-                      ),
-                      const SizedBox(height: 14),
-                      TextFormField(
-                        key: const Key('register-password'),
-                        controller: _password,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) => (value?.length ?? 0) < 8
-                            ? 'Password must be at least 8 characters.'
-                            : null,
-                      ),
-                      const SizedBox(height: 14),
-                      TextFormField(
-                        key: const Key('register-confirm'),
-                        controller: _confirmPassword,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Confirm password',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) =>
-                            _required(value, 'Confirm your password.') ??
-                            (value != _password.text
-                                ? 'Passwords do not match.'
-                                : null),
-                      ),
-                      if (_error != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 16),
-                          child: Text(
-                            _error!,
-                            key: const Key('auth-error'),
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 20),
-                      FilledButton(
-                        key: const Key('register-submit'),
-                        onPressed: _isSubmitting ? null : _submit,
-                        child: _isSubmitting
-                            ? const SizedBox.square(
-                                dimension: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Create account'),
-                      ),
-                    ],
-                  ),
-                ),
+    return AuthShell(
+      showBackButton: true,
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'A NEW CHAPTER STARTS HERE',
+              style: TextStyle(
+                color: AppPalette.authPrimary,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.3,
               ),
             ),
-          ),
+            const SizedBox(height: 10),
+            const Text(
+              'Create your RentFlow account',
+              style: TextStyle(
+                color: AppPalette.authText,
+                fontSize: 26,
+                height: 1.16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.8,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Tell us a little about yourself to get started.',
+              style: TextStyle(
+                color: AppPalette.authMuted,
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 24),
+            TextFormField(
+              key: const Key('register-name'),
+              controller: _fullName,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.name],
+              decoration: const InputDecoration(labelText: 'Full name'),
+              validator: (value) => (value?.trim().length ?? 0) < 2
+                  ? 'Enter your full name.'
+                  : null,
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              key: const Key('register-email'),
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(labelText: 'Email'),
+              validator: (value) =>
+                  value == null ||
+                      !RegExp(r'^\S+@\S+\.\S+$').hasMatch(value.trim())
+                  ? 'Enter a valid email address.'
+                  : null,
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              key: const Key('register-phone'),
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.telephoneNumber],
+              decoration: const InputDecoration(labelText: 'Phone number'),
+              validator: (value) =>
+                  value == null ||
+                      !RegExp(r'^[+\d][\d\s().-]{6,31}$').hasMatch(value.trim())
+                  ? 'Enter a valid phone number.'
+                  : null,
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<UserRole>(
+              key: const Key('register-role'),
+              initialValue: _role,
+              decoration: const InputDecoration(labelText: 'Account type'),
+              items: RegisterScreen.publicRoles
+                  .map(
+                    (role) =>
+                        DropdownMenuItem(value: role, child: Text(role.value)),
+                  )
+                  .toList(growable: false),
+              onChanged: _isSubmitting
+                  ? null
+                  : (role) {
+                      if (role != null) setState(() => _role = role);
+                    },
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              key: const Key('register-password'),
+              controller: _password,
+              obscureText: true,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.newPassword],
+              decoration: const InputDecoration(labelText: 'Password'),
+              validator: (value) => (value?.length ?? 0) < 8
+                  ? 'Password must be at least 8 characters.'
+                  : null,
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              key: const Key('register-confirm'),
+              controller: _confirmPassword,
+              obscureText: true,
+              autofillHints: const [AutofillHints.newPassword],
+              decoration: const InputDecoration(labelText: 'Confirm password'),
+              validator: (value) =>
+                  _required(value, 'Confirm your password.') ??
+                  (value != _password.text ? 'Passwords do not match.' : null),
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Text(
+                  _error!,
+                  key: const Key('auth-error'),
+                  softWrap: true,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            const SizedBox(height: 20),
+            FilledButton(
+              key: const Key('register-submit'),
+              onPressed: _isSubmitting ? null : _submit,
+              child: _isSubmitting
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Create account'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _isSubmitting
+                  ? null
+                  : () => Navigator.of(context).pop(),
+              child: const Text('Already registered? Sign in'),
+            ),
+          ],
         ),
       ),
     );
