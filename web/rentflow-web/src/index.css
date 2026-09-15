@@ -1,57 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
 :root {
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  color: #31362a;
-  background: #f7f5ef;
+  font-family: Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #20211d;
+  background: #f7f4ed;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  --olive-900: #454f33;
-  --olive-800: #56623f;
-  --olive-700: #66734c;
-  --olive-100: #e8ecdd;
-  --cream-50: #fbfaf6;
-  --cream-100: #f7f5ef;
-  --cream-200: #eee9dc;
-  --ink: #31362a;
-  --muted: #6f7469;
-  --border: #dedbd0;
-  --danger: #9a3f3b;
+  --olive-900: #303c1f;
+  --olive-hover: #46552e;
+  --olive-800: #46552e;
+  --olive-700: #5f7144;
+  --olive-100: #dde5cc;
+  --olive-50: #eff2e6;
+  --cream-50: #fcfaf5;
+  --cream-100: #f7f4ed;
+  --cream-200: #f3f0e8;
+  --ink: #20211d;
+  --muted: #737368;
+  --border: #ded9cf;
+  --surface: #fff;
+  --danger: #a34b43;
+  --danger-bg: #f9ebe8;
+  --success: #436c42;
+  --success-bg: #e8f1e4;
+  --warning: #826125;
+  --warning-bg: #fbf1da;
+  --neutral: #686a60;
+  --neutral-bg: #f0eee8;
+  --progress: #e8eee8;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-sm: 12px;
+  --radius-card: 20px;
+  --card-shadow: 0 10px 32px rgb(48 60 31 / 5%);
 }
-
-* {
-  box-sizing: border-box;
-}
-
-html {
-  min-width: 320px;
-  min-height: 100%;
-  background: var(--cream-100);
-}
-
-body {
-  min-width: 320px;
-  min-height: 100vh;
-  margin: 0;
-}
-
-button,
-textarea {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-}
-
-:focus-visible {
-  outline: 3px solid rgb(102 115 76 / 35%);
-  outline-offset: 2px;
-}
+* { box-sizing: border-box; }
+html { min-width: 320px; min-height: 100%; background: var(--cream-100); }
+body { min-width: 320px; min-height: 100vh; margin: 0; }
+button, textarea, input, select { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+a { color: var(--olive-900); }
+:focus-visible { outline: 3px solid var(--olive-700); outline-offset: 3px; }

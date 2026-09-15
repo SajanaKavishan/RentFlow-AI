@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -26,7 +26,7 @@ function renderApp(api, initialEntry = '/login') {
 }
 
 describe('React authentication', () => {
-  afterEach(() => setUnauthorizedHandler(null))
+  afterEach(() => { cleanup(); setUnauthorizedHandler(null) })
 
   it('persists and clears the access token through the storage abstraction', () => {
     tokenStorage.setToken('access-token')
@@ -62,6 +62,20 @@ describe('React authentication', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Email or password is incorrect.')
     expect(tokenStorage.getToken()).toBeNull()
+  })
+
+  it('toggles password visibility without changing the real login payload', async () => {
+    const api = { login: vi.fn().mockResolvedValue({ accessToken: 'access-token', user: tenant }), register: vi.fn(), getCurrentUser: vi.fn().mockResolvedValue(tenant) }
+    renderApp(api)
+    const password = await screen.findByLabelText('Password')
+    await userEvent.type(screen.getByLabelText('Email'), tenant.email)
+    await userEvent.type(password, 'Password1!')
+    await userEvent.click(screen.getByRole('button', { name: 'Show password' }))
+    expect(password).toHaveAttribute('type', 'text')
+    await userEvent.click(screen.getByRole('button', { name: 'Hide password' }))
+    expect(password).toHaveAttribute('type', 'password')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(api.login).toHaveBeenCalledWith({ email: tenant.email, password: 'Password1!' })
   })
 
   it('restores a stored session from /me', async () => {
@@ -103,5 +117,18 @@ describe('React authentication', () => {
     expect(screen.queryByRole('option', { name: 'Admin' })).not.toBeInTheDocument()
     fireEvent.change(select, { target: { value: 'Landlord' } })
     expect(select).toHaveValue('Landlord')
+  })
+
+  it('registers with all real fields and only the selected public role', async () => {
+    const api = { login: vi.fn(), register: vi.fn().mockResolvedValue({ accessToken: 'registered-token', user: tenant }), getCurrentUser: vi.fn().mockResolvedValue(tenant) }
+    renderApp(api, '/register')
+    await userEvent.type(await screen.findByLabelText('Full name'), 'Taylor Tenant')
+    await userEvent.type(screen.getByLabelText('Email'), tenant.email)
+    await userEvent.type(screen.getByLabelText('Phone number'), tenant.phoneNumber)
+    await userEvent.type(screen.getByLabelText('Password', { exact: true }), 'Password1!')
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'Password1!')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    expect(api.register).toHaveBeenCalledWith({ fullName: 'Taylor Tenant', email: tenant.email, phoneNumber: tenant.phoneNumber, password: 'Password1!', role: 'Tenant' })
+    expect(await screen.findByRole('heading', { name: 'Welcome, Taylor Tenant' })).toBeInTheDocument()
   })
 })
