@@ -66,34 +66,36 @@ class _LoginScreenState extends State<LoginScreen> {
                 letterSpacing: 1.5,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             const Text(
               'Sign in to RentFlow',
               style: TextStyle(
                 color: AppPalette.authText,
-                fontSize: 27,
+                fontSize: 28,
                 height: 1.15,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.8,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             const Text(
-              'Welcome home. Sign in to continue your property journey.',
+              'Enter your details to continue your rental journey.',
               style: TextStyle(
                 color: AppPalette.authMuted,
-                fontSize: 14,
-                height: 1.5,
+                fontSize: 13,
+                height: 1.4,
               ),
             ),
-            const SizedBox(height: 26),
+            const SizedBox(height: 16),
+            const AuthFieldLabel('Email'),
+            const SizedBox(height: 6),
             TextFormField(
               key: const Key('login-email'),
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.email],
-              decoration: const InputDecoration(labelText: 'Email'),
+              decoration: const InputDecoration(),
               validator: (value) =>
                   value == null ||
                       !RegExp(r'^\S+@\S+\.\S+$').hasMatch(value.trim())
@@ -101,14 +103,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   : null,
               enabled: !_isSubmitting,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            const AuthFieldLabel('Password'),
+            const SizedBox(height: 6),
             TextFormField(
               key: const Key('login-password'),
               controller: _passwordController,
               obscureText: _obscurePassword,
               autofillHints: const [AutofillHints.password],
               decoration: InputDecoration(
-                labelText: 'Password',
                 suffixIcon: IconButton(
                   tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                   onPressed: () =>
@@ -136,7 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
             FilledButton(
               key: const Key('login-submit'),
               onPressed: _isSubmitting ? null : _submit,
@@ -147,8 +150,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     )
                   : const Text('Sign in'),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 4),
             TextButton(
+              key: const Key('login-register-link'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                minimumSize: const Size(44, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               onPressed: _isSubmitting
                   ? null
                   : () => Navigator.of(context).push(
@@ -156,7 +165,26 @@ class _LoginScreenState extends State<LoginScreen> {
                         builder: (_) => const RegisterScreen(),
                       ),
                     ),
-              child: const Text('Create an account'),
+              child: const Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'New to RentFlow? ',
+                      style: TextStyle(color: AppPalette.authMuted),
+                    ),
+                    TextSpan(
+                      text: 'Create an account',
+                      style: TextStyle(
+                        color: AppPalette.authPrimary,
+                        fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ],
+                ),
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12),
+              ),
             ),
           ],
         ),

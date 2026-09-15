@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../shared/theme/app_theme.dart';
 
@@ -29,13 +30,15 @@ class AuthShell extends StatelessWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
+        isDense: true,
         fillColor: AppPalette.authInput,
         labelStyle: const TextStyle(color: AppPalette.authMuted),
         floatingLabelStyle: const TextStyle(color: AppPalette.authPrimary),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
+          horizontal: 14,
+          vertical: 14,
         ),
+        constraints: const BoxConstraints(minHeight: 56),
         border: border,
         enabledBorder: border,
         focusedBorder: focusedBorder,
@@ -48,7 +51,7 @@ class AuthShell extends StatelessWidget {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
+          minimumSize: const Size.fromHeight(48),
           backgroundColor: AppPalette.authPrimary,
           foregroundColor: AppPalette.authCard,
           disabledBackgroundColor: AppPalette.authPressed,
@@ -67,119 +70,175 @@ class AuthShell extends StatelessWidget {
       ),
     );
 
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: Image.asset(
-              'assets/auth/residence.png',
-              key: const Key('auth-background'),
-              fit: BoxFit.cover,
-              alignment: Alignment.center,
-              excludeFromSemantics: true,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: Color(0xFF1C2619),
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Image.asset(
+                'assets/auth/residence.png',
+                key: const Key('auth-background'),
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
+                excludeFromSemantics: true,
+              ),
             ),
-          ),
-          const Positioned.fill(child: ColoredBox(color: Color(0xB81C2619))),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isCompact = constraints.maxHeight < 650;
-                final gap = showBackButton
-                    ? (isCompact ? 12.0 : 24.0)
-                    : (isCompact ? 16.0 : 56.0);
-                return SingleChildScrollView(
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 520),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            height: 60,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Image.asset(
-                                  'assets/brand/wordmark.png',
-                                  key: const Key('auth-brand'),
-                                  width: 172,
-                                  fit: BoxFit.contain,
-                                  semanticLabel: 'RentFlow AI',
-                                ),
-                                if (showBackButton)
-                                  Positioned(
-                                    left: 0,
-                                    child: IconButton(
-                                      tooltip: 'Back to sign in',
-                                      onPressed: () =>
-                                          Navigator.of(context).pop(),
-                                      icon: const Icon(
-                                        Icons.arrow_back_rounded,
-                                      ),
-                                      color: AppPalette.authCard,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          SizedBox(height: gap),
-                          Theme(
-                            data: authTheme,
-                            child: Container(
-                              key: const Key('auth-card'),
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(24),
-                              decoration: BoxDecoration(
-                                color: AppPalette.authCard,
-                                borderRadius: BorderRadius.circular(
-                                  AppRadii.authCard,
-                                ),
-                                border: Border.all(
-                                  color: AppPalette.authBorder,
-                                ),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x420F140D),
-                                    blurRadius: 42,
-                                    offset: Offset(0, 18),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
+            const Positioned.fill(child: ColoredBox(color: Color(0xB81C2619))),
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxHeight < 580;
+                  final gap = isCompact ? 18.0 : 46.0;
+                  return SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 380),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              height: 44,
+                              child: Stack(
+                                alignment: Alignment.center,
                                 children: [
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Container(
-                                      width: 36,
-                                      height: 4,
-                                      decoration: BoxDecoration(
-                                        color: AppPalette.authSage,
-                                        borderRadius: BorderRadius.circular(2),
-                                      ),
+                                  Semantics(
+                                    key: const Key('auth-brand'),
+                                    label: 'RentFlow AI',
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            11,
+                                          ),
+                                          child: Image.asset(
+                                            'assets/brand/auth-mark.png',
+                                            width: 38,
+                                            height: 38,
+                                            fit: BoxFit.cover,
+                                            excludeFromSemantics: true,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 7),
+                                        const Text(
+                                          'RentFlow',
+                                          style: TextStyle(
+                                            color: AppPalette.authCard,
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: -0.7,
+                                          ),
+                                        ),
+                                        Transform.translate(
+                                          offset: const Offset(2, -7),
+                                          child: const Text(
+                                            'AI',
+                                            style: TextStyle(
+                                              color: AppPalette.authCard,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(height: 18),
-                                  child,
+                                  if (showBackButton)
+                                    Positioned(
+                                      left: 0,
+                                      child: IconButton(
+                                        tooltip: 'Back to sign in',
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(),
+                                        icon: const Icon(
+                                          Icons.arrow_back_rounded,
+                                        ),
+                                        color: AppPalette.authCard,
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 16),
+                            const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'Find your perfect home, smarter.',
+                                key: Key('auth-hero'),
+                                maxLines: 1,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppPalette.authCard,
+                                  fontSize: 23,
+                                  height: 1.15,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.65,
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: gap),
+                            Theme(
+                              data: authTheme,
+                              child: Container(
+                                key: const Key('auth-card'),
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  color: AppPalette.authCard,
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadii.authCard,
+                                  ),
+                                  border: Border.all(
+                                    color: AppPalette.authBorder,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x420F140D),
+                                      blurRadius: 42,
+                                      offset: Offset(0, 18),
+                                    ),
+                                  ],
+                                ),
+                                child: child,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+}
+
+class AuthFieldLabel extends StatelessWidget {
+  const AuthFieldLabel(this.label, {super.key});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    label,
+    style: const TextStyle(
+      color: AppPalette.authText,
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+    ),
+  );
 }

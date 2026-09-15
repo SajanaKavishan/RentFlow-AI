@@ -80,22 +80,26 @@ void main() {
     expect(find.text('Enter your password.'), findsOneWidget);
   });
 
-  testWidgets('login and registration display the supplied RentFlow wordmark', (
+  testWidgets('login and registration display the compact RentFlow branding', (
     tester,
   ) async {
     final controller = buildController(MemoryTokenStorage());
-    final wordmark = find.byWidgetPredicate(
+    final mark = find.byWidgetPredicate(
       (widget) =>
           widget is Image &&
           widget.image is AssetImage &&
-          (widget.image as AssetImage).assetName == 'assets/brand/wordmark.png',
+          (widget.image as AssetImage).assetName ==
+              'assets/brand/auth-mark.png',
     );
     await tester.pumpWidget(MyApp(authController: controller));
     await tester.pumpAndSettle();
-    expect(wordmark, findsOneWidget);
-    await tester.tap(find.text('Create an account'));
+    expect(mark, findsOneWidget);
+    expect(find.text('Find your perfect home, smarter.'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('login-register-link')));
+    await tester.tap(find.byKey(const Key('login-register-link')));
     await tester.pumpAndSettle();
-    expect(wordmark, findsOneWidget);
+    expect(mark, findsOneWidget);
+    expect(find.text('Find your perfect home, smarter.'), findsOneWidget);
   });
 
   for (final width in [360.0, 390.0, 412.0, 430.0]) {
@@ -114,14 +118,27 @@ void main() {
       expect(find.byKey(const Key('auth-brand')), findsOneWidget);
       expect(find.byKey(const Key('auth-card')), findsOneWidget);
       expect(find.text('Sign in to RentFlow'), findsOneWidget);
-      expect(tester.getSize(find.byKey(const Key('auth-brand'))).width, 172);
+      expect(
+        tester.getSize(find.byKey(const Key('auth-brand'))).width,
+        lessThan(170),
+      );
       expect(
         tester.getSize(find.byKey(const Key('auth-card'))).width,
-        width - 32,
+        width - 48 > 380 ? 380 : width - 48,
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const Key('auth-brand'))).dy,
+        lessThan(tester.getTopLeft(find.byKey(const Key('auth-hero'))).dy),
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const Key('auth-hero'))).dy,
+        lessThan(tester.getTopLeft(find.byKey(const Key('auth-card'))).dy),
       );
       expect(tester.takeException(), isNull);
 
-      await tester.tap(find.text('Create an account'));
+      await tester.ensureVisible(find.byKey(const Key('login-register-link')));
+
+      await tester.tap(find.byKey(const Key('login-register-link')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('auth-background')), findsOneWidget);
       expect(find.byKey(const Key('auth-card')), findsOneWidget);
@@ -171,13 +188,36 @@ void main() {
     },
   );
 
+  testWidgets('auth navigation stays reachable on a short 360px screen', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 640);
+    addTearDown(tester.view.reset);
+
+    final controller = buildController(MemoryTokenStorage());
+    await tester.pumpWidget(MyApp(authController: controller));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('auth-hero')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('login-register-link')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const Key('login-register-link')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('register-submit')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'registration only offers Tenant and Landlord in the role field',
     (tester) async {
       final controller = buildController(MemoryTokenStorage());
       await tester.pumpWidget(MyApp(authController: controller));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Create an account'));
+      await tester.ensureVisible(find.byKey(const Key('login-register-link')));
+      await tester.tap(find.byKey(const Key('login-register-link')));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const Key('register-role')));
       await tester.tap(find.byKey(const Key('register-role')));
@@ -205,8 +245,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
 
-    await tester.ensureVisible(find.text('Create an account'));
-    await tester.tap(find.text('Create an account'));
+    await tester.ensureVisible(find.byKey(const Key('login-register-link')));
+    await tester.tap(find.byKey(const Key('login-register-link')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('register-submit')));
     await tester.pumpAndSettle();
@@ -217,7 +257,8 @@ void main() {
     final controller = buildController(MemoryTokenStorage());
     await tester.pumpWidget(MyApp(authController: controller));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Create an account'));
+    await tester.ensureVisible(find.byKey(const Key('login-register-link')));
+    await tester.tap(find.byKey(const Key('login-register-link')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('register-name')),

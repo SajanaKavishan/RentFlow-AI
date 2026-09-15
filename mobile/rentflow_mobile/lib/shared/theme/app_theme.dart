@@ -35,7 +35,7 @@ abstract final class AppSpacing {
 abstract final class AppRadii {
   static const small = 10.0;
   static const card = 18.0;
-  static const authCard = 24.0;
+  static const authCard = 22.0;
   static const authField = 12.0;
 }
 

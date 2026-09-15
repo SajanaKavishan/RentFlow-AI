@@ -85,7 +85,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 letterSpacing: 1.3,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             const Text(
               'Create your RentFlow account',
               style: TextStyle(
@@ -96,59 +96,67 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 letterSpacing: -0.8,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             const Text(
               'Tell us a little about yourself to get started.',
               style: TextStyle(
                 color: AppPalette.authMuted,
-                fontSize: 14,
-                height: 1.5,
+                fontSize: 13,
+                height: 1.4,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            const AuthFieldLabel('Full name'),
+            const SizedBox(height: 6),
             TextFormField(
               key: const Key('register-name'),
               controller: _fullName,
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.name],
-              decoration: const InputDecoration(labelText: 'Full name'),
+              decoration: const InputDecoration(),
               validator: (value) => (value?.trim().length ?? 0) < 2
                   ? 'Enter your full name.'
                   : null,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            const AuthFieldLabel('Email'),
+            const SizedBox(height: 6),
             TextFormField(
               key: const Key('register-email'),
               controller: _email,
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.email],
-              decoration: const InputDecoration(labelText: 'Email'),
+              decoration: const InputDecoration(),
               validator: (value) =>
                   value == null ||
                       !RegExp(r'^\S+@\S+\.\S+$').hasMatch(value.trim())
                   ? 'Enter a valid email address.'
                   : null,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            const AuthFieldLabel('Phone number'),
+            const SizedBox(height: 6),
             TextFormField(
               key: const Key('register-phone'),
               controller: _phone,
               keyboardType: TextInputType.phone,
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.telephoneNumber],
-              decoration: const InputDecoration(labelText: 'Phone number'),
+              decoration: const InputDecoration(),
               validator: (value) =>
                   value == null ||
                       !RegExp(r'^[+\d][\d\s().-]{6,31}$').hasMatch(value.trim())
                   ? 'Enter a valid phone number.'
                   : null,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            const AuthFieldLabel('Account type'),
+            const SizedBox(height: 6),
             DropdownButtonFormField<UserRole>(
               key: const Key('register-role'),
               initialValue: _role,
-              decoration: const InputDecoration(labelText: 'Account type'),
+              decoration: const InputDecoration(),
               items: RegisterScreen.publicRoles
                   .map(
                     (role) =>
@@ -161,25 +169,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (role != null) setState(() => _role = role);
                     },
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            const AuthFieldLabel('Password'),
+            const SizedBox(height: 6),
             TextFormField(
               key: const Key('register-password'),
               controller: _password,
               obscureText: true,
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.newPassword],
-              decoration: const InputDecoration(labelText: 'Password'),
+              decoration: const InputDecoration(),
               validator: (value) => (value?.length ?? 0) < 8
                   ? 'Password must be at least 8 characters.'
                   : null,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            const AuthFieldLabel('Confirm password'),
+            const SizedBox(height: 6),
             TextFormField(
               key: const Key('register-confirm'),
               controller: _confirmPassword,
               obscureText: true,
               autofillHints: const [AutofillHints.newPassword],
-              decoration: const InputDecoration(labelText: 'Confirm password'),
+              decoration: const InputDecoration(),
               validator: (value) =>
                   _required(value, 'Confirm your password.') ??
                   (value != _password.text ? 'Passwords do not match.' : null),
@@ -194,7 +206,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
             FilledButton(
               key: const Key('register-submit'),
               onPressed: _isSubmitting ? null : _submit,
@@ -205,7 +217,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     )
                   : const Text('Create account'),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             TextButton(
               onPressed: _isSubmitting
                   ? null
