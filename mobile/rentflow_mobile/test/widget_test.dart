@@ -79,6 +79,25 @@ void main() {
     expect(find.text('Enter your password.'), findsOneWidget);
   });
 
+  testWidgets('login and registration display the supplied RentFlow wordmark', (
+    tester,
+  ) async {
+    final controller = buildController(MemoryTokenStorage());
+    final wordmark = find.byWidgetPredicate(
+      (widget) =>
+          widget is Image &&
+          widget.image is AssetImage &&
+          (widget.image as AssetImage).assetName ==
+              'assets/brand/wordmark.png',
+    );
+    await tester.pumpWidget(MyApp(authController: controller));
+    await tester.pumpAndSettle();
+    expect(wordmark, findsOneWidget);
+    await tester.tap(find.text('Create an account'));
+    await tester.pumpAndSettle();
+    expect(wordmark, findsOneWidget);
+  });
+
   testWidgets('registration validates password confirmation', (tester) async {
     final controller = buildController(MemoryTokenStorage());
     await tester.pumpWidget(MyApp(authController: controller));

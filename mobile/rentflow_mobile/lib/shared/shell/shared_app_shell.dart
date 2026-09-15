@@ -57,9 +57,14 @@ class _SharedAppShellState extends State<SharedAppShell> {
       appBar: _featureTab
           ? null
           : AppBar(
-              title: Text(
-                title == 'Home' || title == 'Dashboard' ? 'RentFlow' : title,
-              ),
+              title: title == 'Home' || title == 'Dashboard'
+                  ? Image.asset(
+                      'assets/brand/wordmark.png',
+                      width: 155,
+                      fit: BoxFit.contain,
+                      semanticLabel: 'RentFlow AI',
+                    )
+                  : Text(title),
               actions: [
                 IconButton(
                   tooltip: 'Profile',
@@ -81,9 +86,18 @@ class _SharedAppShellState extends State<SharedAppShell> {
                 child: ListView(
                   children: [
                     DrawerHeader(
-                      child: PageHeader(
-                        title: 'RentFlow',
-                        subtitle: '${widget.user.role.value} workspace',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Image.asset(
+                            'assets/brand/wordmark.png',
+                            width: 210,
+                            fit: BoxFit.contain,
+                            semanticLabel: 'RentFlow AI',
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text('${widget.user.role.value} workspace'),
+                        ],
                       ),
                     ),
                     ListTile(

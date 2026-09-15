@@ -2,7 +2,7 @@
 .auth-visual { min-width: 0; min-height: 100vh; display: flex; flex-direction: column; justify-content: space-between; padding: clamp(32px, 5vw, 72px); color: var(--surface); background-color: var(--olive-900); background-position: center; background-size: cover; }
 .auth-visual__brand { display: flex; align-items: center; gap: 12px; font-size: 1.35rem; font-weight: 800; letter-spacing: -.05em; }
 .auth-visual__brand small { font-size: .6em; vertical-align: top; letter-spacing: 0; }
-.auth-visual__mark { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid rgb(255 255 255 / 50%); border-radius: 14px; background: rgb(255 255 255 / 12%); font-size: 1.25rem; letter-spacing: 0; }
+.auth-visual__mark { width: 44px; height: 44px; display: block; border-radius: 12px; object-fit: cover; }
 .auth-visual__copy { max-width: 530px; }
 .auth-visual__kicker { display: inline-block; margin-bottom: 18px; font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .14em; }
 .auth-visual__copy h2 { margin: 0; font-size: clamp(2.1rem, 4vw, 4.1rem); line-height: 1.13; letter-spacing: -.055em; overflow-wrap: anywhere; }
@@ -12,6 +12,7 @@
 .auth-content { min-width: 0; display: grid; place-items: center; padding: 48px clamp(24px, 5vw, 88px); }
 .auth-card { width: min(100%, 460px); }
 .auth-card--wide { width: min(100%, 680px); }
+.auth-card__logo { display: block; width: min(100%, 240px); height: auto; margin: 0 0 28px; }
 .auth-card h1 { margin: 0; color: var(--ink); font-size: clamp(2rem, 3vw, 2.75rem); line-height: 1.17; font-weight: 800; letter-spacing: -.055em; overflow-wrap: anywhere; }
 .auth-eyebrow { margin: 0 0 16px; color: var(--olive-700); font-size: .73rem; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
 .auth-intro { margin: 14px 0 0; color: var(--muted); line-height: 1.65; }

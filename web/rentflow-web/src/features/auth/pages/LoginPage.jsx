@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../../core/api/apiClient.js'
 import Icon from '../../../shared/ui/Icons.jsx'
+import { BrandWordmark } from '../../../shared/ui/BrandLogo.jsx'
 import { useAuth } from '../useAuth.js'
 import AuthVisual from './AuthVisual.jsx'
 import './auth.css'
@@ -30,7 +31,7 @@ export default function LoginPage() {
     } finally { setIsSubmitting(false) }
   }
 
-  return <main className="auth-page"><AuthVisual /><section className="auth-content"><div className="auth-card" aria-labelledby="login-title">
+  return <main className="auth-page"><AuthVisual /><section className="auth-content"><div className="auth-card" aria-labelledby="login-title"><BrandWordmark className="auth-card__logo" />
     <p className="auth-eyebrow">Welcome back</p><h1 id="login-title">Sign in to RentFlow</h1>
     <p className="auth-intro">Enter your details to continue your rental journey.</p>
     <form onSubmit={handleSubmit} noValidate>

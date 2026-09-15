@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/useAuth.js'
 import { navigationForRole } from '../navigation/roleNavigation.js'
 import Icon from '../ui/Icons.jsx'
+import { BrandWordmark } from '../ui/BrandLogo.jsx'
 import { initialsForName } from '../ui/userDisplay.js'
 import './shell.css'
 
@@ -50,7 +51,7 @@ export default function AppShell() {
 
   return <div className="shared-shell">
     <aside ref={sidebarRef} id="shared-navigation" role={menuOpen ? 'dialog' : undefined} aria-modal={menuOpen ? 'true' : undefined} aria-label={menuOpen ? 'Navigation menu' : undefined} className={`shared-sidebar${menuOpen ? ' shared-sidebar--open' : ''}`}>
-      <Link className="shared-brand" to="/" aria-label="RentFlow dashboard" onClick={closeMenu}><span className="shared-brand__mark" aria-hidden="true">R</span><span>RentFlow <small>AI</small></span></Link>
+      <Link className="shared-brand" to="/" aria-label="RentFlow dashboard" onClick={closeMenu}><BrandWordmark className="shared-brand__image" decorative /></Link>
       <div className="shared-sidebar__workspace"><span className="shared-sidebar__workspace-dot" aria-hidden="true" /><span>{user.role} workspace</span></div>
       <nav aria-label="Primary navigation" className="shared-sidebar__nav">
         <div className="shared-sidebar__nav-main">{items.filter((item) => item.path !== '/profile').map(navLink)}</div>

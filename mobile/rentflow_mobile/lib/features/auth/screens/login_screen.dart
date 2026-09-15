@@ -69,10 +69,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Icon(
-                              Icons.home_work_outlined,
-                              size: 44,
-                              color: Theme.of(context).colorScheme.primary,
+                            Center(
+                              child: Image.asset(
+                                'assets/brand/wordmark.png',
+                                width: 230,
+                                fit: BoxFit.contain,
+                                semanticLabel: 'RentFlow AI',
+                              ),
                             ),
                             const SizedBox(height: 16),
                             Text(

@@ -22,12 +22,14 @@ describe('shared React shell', () => {
   it('keeps unauthenticated routes on login outside the shell', async () => {
     renderApp('Tenant', '/', false)
     expect(await screen.findByRole('heading', { name: 'Sign in to RentFlow' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'RentFlow AI' })).toHaveAttribute('src', expect.stringContaining('rentflow-wordmark'))
     expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument()
   })
 
   it('renders a role dashboard and a landlord sidebar with working workflow links', async () => {
     renderApp('Landlord')
     expect(await screen.findByRole('heading', { name: 'Welcome, Taylor Example' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'RentFlow dashboard' }).querySelector('img')).toHaveAttribute('src', expect.stringContaining('rentflow-wordmark'))
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
     await userEvent.click(within(nav).getByRole('link', { name: 'Viewing Requests' }))
     expect(await screen.findByRole('heading', { name: 'Viewing requests workflow' })).toBeInTheDocument()

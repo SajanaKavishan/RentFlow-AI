@@ -80,6 +80,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      Center(
+                        child: Image.asset(
+                          'assets/brand/wordmark.png',
+                          width: 230,
+                          fit: BoxFit.contain,
+                          semanticLabel: 'RentFlow AI',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       Text(
                         'Join RentFlow',
                         style: Theme.of(context).textTheme.headlineMedium

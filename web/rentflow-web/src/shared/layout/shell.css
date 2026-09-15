@@ -1,8 +1,7 @@
 .shared-shell { min-height: 100vh; display: grid; grid-template-columns: 252px minmax(0, 1fr); background: var(--cream-100); }
 .shared-sidebar { position: sticky; top: 0; height: 100vh; min-width: 0; display: flex; flex-direction: column; padding: 32px 16px 20px; border-right: 1px solid var(--border); background: var(--surface); }
-.shared-brand { display: flex; align-items: center; gap: 12px; margin: 0 12px 36px; color: var(--olive-900); text-decoration: none; font-size: 1.24rem; font-weight: 800; letter-spacing: -.05em; white-space: nowrap; }
-.shared-brand small { font-size: .61em; letter-spacing: 0; vertical-align: top; }
-.shared-brand__mark { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 13px; color: var(--surface); background: var(--olive-900); font-size: 1.2rem; letter-spacing: 0; }
+.shared-brand { display: block; width: min(100% - 24px, 210px); margin: 0 12px 32px; text-decoration: none; }
+.shared-brand__image { display: block; width: 100%; height: auto; }
 .shared-sidebar__workspace { min-width: 0; display: flex; align-items: center; gap: 8px; margin: 0 12px 24px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--olive-700); background: var(--cream-50); font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .045em; overflow-wrap: anywhere; }
 .shared-sidebar__workspace-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--olive-700); }
 .shared-sidebar__nav { min-height: 0; display: flex; flex: 1; flex-direction: column; justify-content: space-between; gap: 24px; }

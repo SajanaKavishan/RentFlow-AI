@@ -1,11 +1,11 @@
 {
-    "name": "rentflow_mobile",
-    "short_name": "rentflow_mobile",
+    "name": "RentFlow AI",
+    "short_name": "RentFlow",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#f7f4ed",
+    "theme_color": "#303c1f",
+    "description": "RentFlow AI rental search and management.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

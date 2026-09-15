@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../../core/api/apiClient.js'
 import Icon from '../../../shared/ui/Icons.jsx'
+import { BrandWordmark } from '../../../shared/ui/BrandLogo.jsx'
 import { useAuth } from '../useAuth.js'
 import { PUBLIC_REGISTRATION_ROLES, USER_ROLES } from '../authModel.js'
 import AuthVisual from './AuthVisual.jsx'
@@ -33,7 +34,7 @@ export default function RegisterPage() {
     } catch (caught) { setError(caught instanceof ApiError ? caught.message : 'Registration could not be completed.') }
     finally { setIsSubmitting(false) }
   }
-  return <main className="auth-page auth-page--register"><AuthVisual /><section className="auth-content"><div className="auth-card auth-card--wide" aria-labelledby="register-title">
+  return <main className="auth-page auth-page--register"><AuthVisual /><section className="auth-content"><div className="auth-card auth-card--wide" aria-labelledby="register-title"><BrandWordmark className="auth-card__logo" />
     <p className="auth-eyebrow">A new chapter starts here</p><h1 id="register-title">Create your RentFlow account</h1><p className="auth-intro">Tell us a little about yourself to get started.</p>
     <form onSubmit={handleSubmit} noValidate><div className="auth-grid">
       <div><label htmlFor="fullName">Full name</label><input id="fullName" autoComplete="name" placeholder="Your full name" value={form.fullName} onChange={update('fullName')} disabled={isSubmitting} /></div>
