@@ -24,6 +24,7 @@ describe('shared React shell', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in to RentFlow' })).toBeInTheDocument()
     const authBrand = screen.getByRole('complementary')
     expect(authBrand).toHaveTextContent('RentFlow AI')
+    expect(within(authBrand).getByRole('link', { name: 'RentFlow AI home' })).toHaveAttribute('href', '/')
     expect(authBrand.querySelector('img')).toHaveAttribute('src', expect.stringContaining('rentflow-mark'))
     expect(screen.queryByRole('img', { name: 'RentFlow AI' })).not.toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument()
