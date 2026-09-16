@@ -7,8 +7,7 @@ import { useAutoHideNavbar } from '../useAutoHideNavbar.js'
 const links = [
   { href: '#platform', label: 'Platform' },
   { href: '#how-it-works', label: 'How It Works' },
-  { href: '#ai-review', label: 'AI Review' },
-  { href: '#roles', label: 'Roles' },
+  { href: '#smart-assistance', label: 'Smart Assistance' },
 ]
 
 export default function PublicHeader({ onSignIn, isSignInPending }) {

@@ -1,10 +1,10 @@
 import Icon from '../../../shared/ui/Icons.jsx'
 
 const features = [
-  { icon: 'search', title: 'Property Discovery', copy: 'Explore available rentals and move from discovery to viewing and application.' },
-  { icon: 'calendar', title: 'Viewings & Applications', copy: 'Manage viewing requests, rental applications and supporting documents.' },
+  { icon: 'search', title: 'Property Discovery', copy: "Explore available rentals and find places that fit what you're looking for." },
+  { icon: 'calendar', title: 'Viewings & Applications', copy: 'Request viewings, submit rental applications and manage supporting documents.' },
   { icon: 'document', title: 'Lease & Payments', copy: 'Keep rental agreements, schedules and payment activity organized.' },
-  { icon: 'tools', title: 'Maintenance & Support', copy: 'Coordinate maintenance requests and support throughout the rental lifecycle.' },
+  { icon: 'tools', title: 'Maintenance & Support', copy: 'Handle maintenance requests and ongoing rental support in one place.' },
 ]
 
 export default function PlatformSection() {

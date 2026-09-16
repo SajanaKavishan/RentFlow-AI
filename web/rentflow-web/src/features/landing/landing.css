@@ -13,7 +13,7 @@
 .landing-page a { text-decoration: none; }
 .public-header :focus-visible,
 .landing-hero :focus-visible,
-.landing-ai :focus-visible,
+.landing-smart :focus-visible,
 .landing-final :focus-visible { outline-color: var(--olive-100); }
 
 .landing-container {
@@ -104,7 +104,6 @@
 .landing-section__heading { max-width: 720px; margin-bottom: clamp(38px, 5vw, 60px); }
 .landing-section__heading--center { margin-right: auto; margin-left: auto; text-align: center; }
 .landing-section__heading h2,
-.landing-ai h2,
 .landing-final h2 { margin-bottom: 18px; font-size: clamp(2.25rem, 4.3vw, 4.25rem); font-weight: 600; letter-spacing: -.055em; line-height: 1.04; text-wrap: balance; }
 .landing-section__heading > p:last-child { max-width: 600px; margin: 0 auto; color: var(--muted); line-height: 1.7; }
 .landing-platform { background: var(--cream-100); }
@@ -123,44 +122,41 @@
 .landing-card p { margin-bottom: 0; color: var(--muted); font-size: .91rem; line-height: 1.7; }
 
 .landing-journey { background: var(--surface); }
-.landing-journey__steps { display: grid; position: relative; grid-template-columns: repeat(6, 1fr); margin: 0; padding: 0; list-style: none; }
+.landing-journey__steps { display: grid; position: relative; grid-template-columns: repeat(5, 1fr); margin: 0; padding: 0; list-style: none; }
 .landing-journey__steps::before { position: absolute; z-index: 0; top: 21px; right: 8%; left: 8%; height: 1px; content: ''; background: var(--border); }
 .landing-journey__steps li { position: relative; z-index: 1; display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 18px; padding: 0 8px; text-align: center; }
 .landing-journey__number { display: grid; width: 43px; height: 43px; place-items: center; border: 1px solid #cbd4b7; border-radius: 50%; color: var(--olive-900); background: var(--cream-50); font-size: .74rem; font-weight: 800; }
 .landing-journey__label { max-width: 130px; font-size: .85rem; font-weight: 700; line-height: 1.4; }
 
-.landing-ai { color: white; background: var(--olive-900); }
-.landing-ai__layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(430px, .82fr); align-items: center; gap: clamp(60px, 9vw, 126px); }
-.landing-ai__copy > p:not(.landing-eyebrow) { max-width: 610px; margin-bottom: 30px; color: rgb(255 255 255 / 72%); line-height: 1.8; }
-.landing-ai__statement { display: flex; max-width: 620px; align-items: flex-start; gap: 13px; padding-top: 24px; border-top: 1px solid rgb(255 255 255 / 16%); font-size: .92rem; line-height: 1.6; }
-.landing-ai__statement > span { display: grid; flex: 0 0 auto; width: 25px; height: 25px; margin-top: 1px; place-items: center; border-radius: 50%; color: var(--olive-900); background: var(--olive-100); font-size: .75rem; }
-.landing-review-card { overflow: hidden; padding: 12px; border: 1px solid rgb(255 255 255 / 17%); border-radius: 24px; color: var(--ink); background: var(--cream-100); box-shadow: 0 28px 70px rgb(8 12 5 / 24%); transform: rotate(1deg); }
-.landing-review-card__top { display: flex; align-items: center; justify-content: space-between; padding: 22px 20px 24px; }
-.landing-review-card__top div { display: flex; flex-direction: column; gap: 5px; }
-.landing-review-card__top span:not(.landing-review-card__mark),
-.landing-review-card__human span:not(.landing-review-card__avatar) { color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.landing-review-card__top strong { font-size: 1.18rem; }
-.landing-review-card__mark { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 14px; color: white; background: var(--olive-900); font-size: .77rem; font-weight: 800; }
-.landing-review-card__checks { overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: white; }
-.landing-review-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 17px 18px; font-size: .82rem; }
-.landing-review-row + .landing-review-row { border-top: 1px solid #ebe7de; }
-.landing-review-status { flex: 0 0 auto; padding: 6px 9px; border-radius: 999px; font-size: .68rem; }
-.landing-review-status--complete { color: #385c37; background: #e5efdf; }
-.landing-review-status--review { color: #7c5b20; background: #f8ebc9; }
-.landing-review-card__human { display: flex; align-items: center; gap: 13px; margin-top: 12px; padding: 16px 18px; border-radius: 15px; color: white; background: var(--olive-700); }
-.landing-review-card__human div { display: flex; flex-direction: column; gap: 4px; }
-.landing-review-card__human span:not(.landing-review-card__avatar) { color: rgb(255 255 255 / 67%); }
-.landing-review-card__human strong { font-size: .85rem; }
-.landing-review-card__avatar { display: grid; flex: 0 0 auto; width: 36px; height: 36px; place-items: center; border-radius: 50%; color: var(--olive-900); background: var(--olive-100); font-size: .68rem; font-weight: 800; }
+.landing-smart { color: white; background: var(--olive-900); }
+.landing-smart__intro { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(330px, .7fr); align-items: end; gap: clamp(40px, 8vw, 112px); margin-bottom: clamp(42px, 6vw, 68px); }
+.landing-smart__intro .landing-section__heading { margin-bottom: 0; }
+.landing-smart__intro h2 { margin-bottom: 0; font-size: clamp(2.25rem, 4.3vw, 4.25rem); font-weight: 600; letter-spacing: -.055em; line-height: 1.04; text-wrap: balance; }
+.landing-smart__lead { margin-bottom: 4px; color: rgb(255 255 255 / 70%); line-height: 1.75; }
+.landing-assistance-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.landing-assistance-card { display: flex; min-height: 164px; align-items: flex-start; gap: 20px; padding: 26px; border: 1px solid rgb(255 255 255 / 12%); border-radius: 20px; background: rgb(255 255 255 / 5%); }
+.landing-assistance-card:nth-child(2),
+.landing-assistance-card:nth-child(3) { background: rgb(221 229 204 / 8%); }
+.landing-assistance-card__icon { display: grid; flex: 0 0 auto; width: 46px; height: 46px; place-items: center; border-radius: 14px; color: var(--olive-900); background: var(--olive-100); }
+.landing-assistance-card h3 { margin-bottom: 9px; font-size: 1rem; }
+.landing-assistance-card p { margin-bottom: 0; color: rgb(255 255 255 / 66%); font-size: .87rem; line-height: 1.65; }
+.landing-smart__trust { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 24px 28px; border: 1px solid rgb(221 229 204 / 25%); border-radius: 20px; background: var(--olive-700); }
+.landing-smart__trust-mark { display: grid; flex: 0 0 auto; width: 38px; height: 38px; place-items: center; border-radius: 50%; color: var(--olive-900); background: var(--olive-100); font-weight: 900; }
+.landing-smart__trust h3 { margin-bottom: 4px; font-size: 1rem; }
+.landing-smart__trust p { margin-bottom: 0; color: rgb(255 255 255 / 70%); font-size: .85rem; }
 
-.landing-roles { background: var(--cream-200); }
-.landing-card-grid--roles { grid-template-columns: repeat(2, 1fr); }
-.landing-role-card { min-height: 310px; padding: 32px; }
-.landing-role-card .landing-card__icon { margin-bottom: 27px; }
-.landing-role-card h3 { font-size: 1.2rem; }
-.landing-role-card ul { display: grid; gap: 12px; margin: 22px 0 0; padding: 20px 0 0; border-top: 1px solid var(--border); color: var(--muted); list-style: none; }
-.landing-role-card li { display: flex; align-items: flex-start; gap: 9px; font-size: .88rem; line-height: 1.45; }
-.landing-role-card li span { color: var(--olive-700); font-weight: 900; }
+.landing-connected { background: var(--cream-200); }
+.landing-connected__layout { display: grid; grid-template-columns: minmax(270px, .62fr) minmax(0, 1.38fr); align-items: start; gap: clamp(50px, 8vw, 108px); }
+.landing-connected__layout > .landing-section__heading { position: sticky; top: 120px; margin-bottom: 0; }
+.landing-connected__cards { display: grid; gap: 14px; }
+.landing-connected-card { position: relative; overflow: hidden; min-height: 190px; padding: 30px 32px 30px 104px; border: 1px solid var(--border); border-radius: 22px; }
+.landing-connected-card--1 { background: var(--surface); }
+.landing-connected-card--2 { margin-left: 28px; background: var(--olive-100); }
+.landing-connected-card--3 { margin-left: 56px; color: white; background: var(--olive-700); }
+.landing-connected-card__icon { position: absolute; top: 30px; left: 30px; display: grid; width: 48px; height: 48px; place-items: center; border-radius: 15px; color: var(--olive-900); background: var(--cream-100); }
+.landing-connected-card h3 { margin: 3px 0 12px; font-size: 1.12rem; }
+.landing-connected-card p { max-width: 520px; margin-bottom: 0; color: var(--muted); font-size: .9rem; line-height: 1.7; }
+.landing-connected-card--3 p { color: rgb(255 255 255 / 72%); }
 
 .landing-final { padding: clamp(54px, 7vw, 88px) 0; background: var(--cream-100); }
 .landing-final__panel { display: flex; align-items: center; justify-content: space-between; gap: 50px; padding: clamp(38px, 6vw, 70px); border-radius: 24px; color: white; background: var(--olive-900); box-shadow: 0 24px 54px rgb(48 60 31 / 14%); }
@@ -190,7 +186,8 @@
   .public-header__actions .landing-button--light { min-width: 118px; }
   .landing-card-grid--features { grid-template-columns: repeat(2, 1fr); }
   .landing-feature-card { min-height: 255px; }
-  .landing-ai__layout { grid-template-columns: 1fr 410px; gap: 46px; }
+  .landing-smart__intro { grid-template-columns: 1fr .72fr; gap: 42px; }
+  .landing-connected__layout { gap: 46px; }
   .landing-final__panel { align-items: flex-start; flex-direction: column; gap: 30px; }
 }
 
@@ -215,15 +212,21 @@
   .landing-hero__content { padding-top: 124px; padding-bottom: 54px; }
   .landing-hero h1 { max-width: 620px; font-size: clamp(3rem, 10.5vw, 5rem); }
   .landing-hero__benefits { margin-top: 42px; gap: 12px 20px; }
-  .landing-card-grid--features,
-  .landing-card-grid--roles { grid-template-columns: 1fr 1fr; }
+  .landing-card-grid--features { grid-template-columns: 1fr 1fr; }
   .landing-journey__steps { grid-template-columns: 1fr; gap: 0; max-width: 430px; margin: 0 auto; }
   .landing-journey__steps::before { top: 20px; bottom: 20px; left: 21px; width: 1px; height: auto; }
   .landing-journey__steps li { min-height: 76px; align-items: center; flex-direction: row; gap: 18px; padding: 0; text-align: left; }
   .landing-journey__number { flex: 0 0 auto; }
   .landing-journey__label { max-width: none; }
-  .landing-ai__layout { grid-template-columns: 1fr; gap: 50px; }
-  .landing-review-card { width: min(100%, 520px); margin: 0 auto; transform: none; }
+  .landing-smart__intro,
+  .landing-connected__layout { grid-template-columns: 1fr; gap: 38px; }
+  .landing-smart__lead { max-width: 620px; }
+  .landing-connected__layout > .landing-section__heading { position: static; }
+  .landing-connected__cards { grid-template-columns: 1fr; }
+  .landing-connected-card { min-height: 0; padding: 28px 28px 28px 96px; }
+  .landing-connected-card--2,
+  .landing-connected-card--3 { margin-left: 0; }
+  .landing-connected-card__icon { top: 28px; left: 28px; }
   .public-footer__inner { grid-template-columns: 1fr; gap: 30px; }
   .public-footer__links { justify-content: flex-start; }
 }
@@ -247,18 +250,15 @@
   .landing-section { padding: 72px 0; }
   .landing-section__heading { margin-bottom: 34px; }
   .landing-section__heading h2,
-  .landing-ai h2 { font-size: 2.35rem; }
-  .landing-card-grid--features,
-  .landing-card-grid--roles { grid-template-columns: 1fr; }
-  .landing-feature-card,
-  .landing-role-card { min-height: 0; padding: 26px 24px; }
+  .landing-smart__intro h2 { font-size: 2.35rem; }
+  .landing-card-grid--features { grid-template-columns: 1fr; }
+  .landing-feature-card { min-height: 0; padding: 26px 24px; }
   .landing-card__icon { margin-bottom: 26px; }
-  .landing-ai__layout { gap: 38px; }
-  .landing-ai__statement { font-size: .84rem; }
-  .landing-review-card { padding: 9px; border-radius: 20px; }
-  .landing-review-card__top { padding: 18px 14px; }
-  .landing-review-row { align-items: flex-start; flex-direction: column; gap: 8px; padding: 15px; }
-  .landing-review-card__human { padding: 15px; }
+  .landing-assistance-grid,
+  .landing-connected__cards { grid-template-columns: 1fr; }
+  .landing-assistance-card { min-height: 0; padding: 23px; }
+  .landing-smart__trust { align-items: flex-start; padding: 22px; }
+  .landing-connected-card { min-height: 0; padding: 86px 24px 26px; }
   .landing-final { padding: 46px 0; }
   .landing-final__panel { gap: 26px; padding: 34px 24px; }
   .landing-final h2 { font-size: 2.25rem; }

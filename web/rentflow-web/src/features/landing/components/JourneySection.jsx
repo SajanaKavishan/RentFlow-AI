@@ -1,4 +1,4 @@
-const steps = ['Discover', 'Book a viewing', 'Apply & Upload', 'Human Review', 'Lease & Move In', 'Maintenance Support']
+const steps = ['Discover', 'View', 'Apply', 'Rent', 'Get Support']
 
 export default function JourneySection() {
   return <section id="how-it-works" className="landing-section landing-journey" aria-labelledby="journey-title">
