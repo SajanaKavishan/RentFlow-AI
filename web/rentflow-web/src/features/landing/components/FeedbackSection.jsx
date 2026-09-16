@@ -53,12 +53,12 @@ export default function FeedbackSection({ service = sendFeedback }) {
 
   return <section id="feedback" className="landing-section landing-feedback" aria-labelledby="feedback-title">
     <div className="landing-container landing-feedback__layout">
-      <div className="landing-feedback__copy">
+      <div className="landing-feedback__copy" data-reveal="left">
         <p className="landing-eyebrow">Let&apos;s talk</p>
         <h2 id="feedback-title">Have a question or feedback?</h2>
         <p>We&apos;d love to hear about your RentFlow experience.</p>
       </div>
-      <form className="landing-feedback__form" onSubmit={handleSubmit} noValidate>
+      <form className="landing-feedback__form" data-reveal="right" onSubmit={handleSubmit} noValidate>
         <div className="landing-feedback__field">
           <label htmlFor="feedback-name">Name</label>
           <input id="feedback-name" name="name" autoComplete="name" maxLength="80" value={values.name} onChange={update('name')} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? 'feedback-name-error' : undefined} disabled={isSubmitting} />

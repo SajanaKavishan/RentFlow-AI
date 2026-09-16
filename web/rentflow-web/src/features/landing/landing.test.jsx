@@ -176,7 +176,7 @@ describe('public landing experience', () => {
   it('renders a minimal footer without repeated navigation or auth actions', () => {
     renderApp()
     const footer = screen.getByRole('contentinfo')
-    expect(within(footer).getByRole('link', { name: 'RentFlow AI home' })).toBeInTheDocument()
+    expect(within(footer).queryByRole('link', { name: 'RentFlow AI home' })).not.toBeInTheDocument()
     expect(within(footer).getByText('© 2026 RentFlow AI. All rights reserved.')).toBeInTheDocument()
     expect(within(footer).queryByRole('navigation')).not.toBeInTheDocument()
     expect(within(footer).queryByText('Platform')).not.toBeInTheDocument()
