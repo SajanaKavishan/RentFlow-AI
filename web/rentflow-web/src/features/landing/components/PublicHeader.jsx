@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../../../shared/ui/Icons.jsx'
 import { BrandMark } from '../../../shared/ui/BrandLogo.jsx'
+import { useAutoHideNavbar } from '../useAutoHideNavbar.js'
 
 const links = [
   { href: '#platform', label: 'Platform' },
@@ -13,6 +14,7 @@ const links = [
 export default function PublicHeader({ onSignIn, isSignInPending }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuButtonRef = useRef(null)
+  const { isAtTop, isVisible } = useAutoHideNavbar(menuOpen)
 
   useEffect(() => {
     if (!menuOpen) return undefined
@@ -28,7 +30,14 @@ export default function PublicHeader({ onSignIn, isSignInPending }) {
 
   const closeMenu = () => setMenuOpen(false)
 
-  return <header className="public-header">
+  const headerClassName = [
+    'public-header',
+    isAtTop ? 'public-header--top' : 'public-header--scrolled',
+    isVisible ? 'public-header--visible' : 'public-header--hidden',
+    menuOpen ? 'public-header--menu-open' : '',
+  ].filter(Boolean).join(' ')
+
+  return <header className={headerClassName} data-surface={isAtTop ? 'transparent' : 'dark'} data-visible={isVisible ? 'true' : 'false'}>
     <div className="landing-container public-header__inner">
       <a className="public-header__brand" href="#top" aria-label="RentFlow AI home">
         <BrandMark className="public-header__mark" decorative />

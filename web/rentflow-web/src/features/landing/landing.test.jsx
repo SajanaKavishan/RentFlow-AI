@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -26,7 +26,16 @@ function renderApp(api = apiWith(), initialEntry = '/') {
   return render(<MemoryRouter initialEntries={[initialEntry]}><AuthProvider api={api}><App /></AuthProvider></MemoryRouter>)
 }
 
-afterEach(() => { cleanup(); tokenStorage.clearToken() })
+function scrollTo(y) {
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: y })
+  fireEvent.scroll(window)
+}
+
+afterEach(() => {
+  cleanup()
+  tokenStorage.clearToken()
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 })
+})
 
 describe('public landing experience', () => {
   it('renders the public landing page at the root route', () => {
@@ -34,6 +43,43 @@ describe('public landing experience', () => {
     expect(screen.getByRole('heading', { name: 'Find your perfect home, smarter.' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Everything you need for the rental journey.' })).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument()
+  })
+
+  it('shows a transparent navbar initially', () => {
+    renderApp()
+    const navbar = screen.getByRole('banner')
+    expect(navbar).toHaveAttribute('data-visible', 'true')
+    expect(navbar).toHaveAttribute('data-surface', 'transparent')
+  })
+
+  it('hides after meaningful downward scrolling', async () => {
+    renderApp()
+    const navbar = screen.getByRole('banner')
+    scrollTo(120)
+    await waitFor(() => expect(navbar).toHaveAttribute('data-visible', 'false'))
+    expect(navbar).toHaveAttribute('data-surface', 'dark')
+  })
+
+  it('reappears on upward movement from a lower landing section', async () => {
+    renderApp()
+    const navbar = screen.getByRole('banner')
+    scrollTo(1400)
+    await waitFor(() => expect(navbar).toHaveAttribute('data-visible', 'false'))
+    scrollTo(1370)
+    await waitFor(() => expect(navbar).toHaveAttribute('data-visible', 'true'))
+    expect(navbar).toHaveAttribute('data-surface', 'dark')
+  })
+
+  it('restores the visible transparent state at the top', async () => {
+    renderApp()
+    const navbar = screen.getByRole('banner')
+    scrollTo(180)
+    await waitFor(() => expect(navbar).toHaveAttribute('data-visible', 'false'))
+    scrollTo(0)
+    await waitFor(() => {
+      expect(navbar).toHaveAttribute('data-visible', 'true')
+      expect(navbar).toHaveAttribute('data-surface', 'transparent')
+    })
   })
 
   it('navigates Get Started to the real registration page', async () => {
@@ -84,5 +130,16 @@ describe('public landing experience', () => {
     expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute('aria-expanded', 'true')
     await userEvent.click(within(screen.getByRole('navigation', { name: 'Landing page navigation' })).getByRole('link', { name: 'Roles' }))
     expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('keeps the navbar visible while the mobile menu is open', async () => {
+    renderApp()
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    scrollTo(300)
+    const navbar = screen.getByRole('banner')
+    await waitFor(() => {
+      expect(navbar).toHaveAttribute('data-visible', 'true')
+      expect(navbar).toHaveAttribute('data-surface', 'dark')
+    })
   })
 })
