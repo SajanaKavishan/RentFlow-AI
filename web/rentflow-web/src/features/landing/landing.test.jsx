@@ -148,4 +148,61 @@ describe('public landing experience', () => {
       expect(navbar).toHaveAttribute('data-surface', 'dark')
     })
   })
+
+  it('renders product-value rail cards without testimonial claims or ratings', () => {
+    renderApp()
+    const rail = screen.getByLabelText('Product experience highlights')
+    expect(within(rail).getAllByText('Easy property discovery')).toHaveLength(2)
+    expect(within(rail).getAllByText('Human-controlled decisions')).toHaveLength(2)
+    expect(rail.querySelector('.experience-rail__list[aria-hidden="true"]')).toBeInTheDocument()
+    expect(rail).not.toHaveTextContent('★')
+    expect(screen.queryByText(/what customers say|testimonial/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps one complete semantic value list available without animation', () => {
+    renderApp()
+    const rail = screen.getByLabelText('Product experience highlights')
+    const primaryList = rail.querySelector('.experience-rail__list:not([aria-hidden])')
+    expect(primaryList).toBeInTheDocument()
+    expect(within(primaryList).getAllByRole('listitem')).toHaveLength(12)
+    expect(rail.querySelector('.experience-rail__list[aria-hidden="true"]')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('validates feedback fields and never fakes successful delivery', async () => {
+    renderApp()
+    const sendButton = screen.getByRole('button', { name: 'Send message' })
+    await userEvent.click(sendButton)
+    expect(screen.getByText('Enter your name.')).toBeInTheDocument()
+    expect(screen.getByText('Enter your email address.')).toBeInTheDocument()
+    expect(screen.getByText('Enter your message.')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Name'), 'Taylor Example')
+    await userEvent.type(screen.getByLabelText('Email'), 'taylor@example.com')
+    await userEvent.type(screen.getByLabelText('Message'), 'I have a question about RentFlow.')
+    await userEvent.click(sendButton)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Message delivery is not connected yet.')
+    expect(screen.queryByText(/message sent|sent successfully/i)).not.toBeInTheDocument()
+  })
+
+  it('renders a minimal footer without repeated navigation or auth actions', () => {
+    renderApp()
+    const footer = screen.getByRole('contentinfo')
+    expect(within(footer).getByRole('link', { name: 'RentFlow AI home' })).toBeInTheDocument()
+    expect(within(footer).getByText('© 2026 RentFlow AI. All rights reserved.')).toBeInTheDocument()
+    expect(within(footer).queryByRole('navigation')).not.toBeInTheDocument()
+    expect(within(footer).queryByText('Platform')).not.toBeInTheDocument()
+    expect(within(footer).queryByText('How It Works')).not.toBeInTheDocument()
+    expect(within(footer).queryByText('Smart Assistance')).not.toBeInTheDocument()
+    expect(within(footer).queryByText('Sign In')).not.toBeInTheDocument()
+    expect(within(footer).queryByText('Create Account')).not.toBeInTheDocument()
+  })
+
+  it('removes the repeated Final CTA while preserving navbar auth actions', () => {
+    renderApp()
+    expect(screen.queryByRole('heading', { name: 'Ready to start your rental journey?' })).not.toBeInTheDocument()
+    const navigation = screen.getByRole('navigation', { name: 'Landing page navigation' })
+    expect(within(navigation).getByRole('button', { name: 'Sign In' })).toBeInTheDocument()
+    expect(within(navigation).getByRole('link', { name: 'Get Started' })).toHaveAttribute('href', '/register')
+  })
 })

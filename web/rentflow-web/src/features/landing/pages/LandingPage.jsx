@@ -1,5 +1,6 @@
 import ConnectedExperienceSection from '../components/ConnectedExperienceSection.jsx'
-import FinalCtaSection from '../components/FinalCtaSection.jsx'
+import ExperienceRailSection from '../components/ExperienceRailSection.jsx'
+import FeedbackSection from '../components/FeedbackSection.jsx'
 import HeroSection from '../components/HeroSection.jsx'
 import JourneySection from '../components/JourneySection.jsx'
 import PlatformSection from '../components/PlatformSection.jsx'
@@ -22,8 +23,9 @@ export default function LandingPage() {
       <JourneySection />
       <SmartAssistanceSection />
       <ConnectedExperienceSection />
-      <FinalCtaSection {...signIn} />
+      <ExperienceRailSection />
+      <FeedbackSection />
     </main>
-    <PublicFooter {...signIn} />
+    <PublicFooter />
   </div>
 }
