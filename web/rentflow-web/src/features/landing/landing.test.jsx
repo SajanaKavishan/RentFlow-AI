@@ -128,25 +128,13 @@ describe('public landing experience', () => {
     expect(screen.getByRole('heading', { name: 'Everything you need for the rental journey.' })).toBeInTheDocument()
   })
 
-  it('opens and closes the accessible mobile menu', async () => {
+  it('uses a simplified mobile header without drawer controls', () => {
     renderApp()
-    const openButton = screen.getByRole('button', { name: 'Open menu' })
-    expect(openButton).toHaveAttribute('aria-expanded', 'false')
-    await userEvent.click(openButton)
-    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute('aria-expanded', 'true')
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'Landing page navigation' })).getByRole('link', { name: 'Smart Assistance' }))
-    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false')
-  })
-
-  it('keeps the navbar visible while the mobile menu is open', async () => {
-    renderApp()
-    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
-    scrollTo(300)
-    const navbar = screen.getByRole('banner')
-    await waitFor(() => {
-      expect(navbar).toHaveAttribute('data-visible', 'true')
-      expect(navbar).toHaveAttribute('data-surface', 'dark')
-    })
+    const header = screen.getByRole('banner')
+    expect(within(header).queryByRole('button', { name: 'Open menu' })).not.toBeInTheDocument()
+    expect(within(header).queryByRole('button', { name: 'Close menu' })).not.toBeInTheDocument()
+    expect(header.querySelector('.public-header__mobile-signin')).toHaveTextContent('Sign In')
+    expect(header.querySelector('.public-header__menu')).not.toBeInTheDocument()
   })
 
   it('renders product-value rail cards without testimonial claims or ratings', () => {

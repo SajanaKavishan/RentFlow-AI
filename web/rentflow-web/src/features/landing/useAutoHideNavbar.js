@@ -4,7 +4,7 @@ const TOP_THRESHOLD = 12
 const HIDE_AFTER = 100
 const DIRECTION_THRESHOLD = 8
 
-export function useAutoHideNavbar(forceVisible = false) {
+export function useAutoHideNavbar() {
   const initialY = typeof window === 'undefined' ? 0 : window.scrollY
   const [isVisible, setIsVisible] = useState(true)
   const [isAtTop, setIsAtTop] = useState(initialY <= TOP_THRESHOLD)
@@ -37,10 +37,8 @@ export function useAutoHideNavbar(forceVisible = false) {
         updateVisibility(true)
         lastMeaningfulY.current = currentY
       } else if (Math.abs(delta) >= DIRECTION_THRESHOLD) {
-        if (!forceVisible) {
-          if (delta > 0 && currentY > HIDE_AFTER) updateVisibility(false)
-          if (delta < 0) updateVisibility(true)
-        }
+        if (delta > 0 && currentY > HIDE_AFTER) updateVisibility(false)
+        if (delta < 0) updateVisibility(true)
         lastMeaningfulY.current = currentY
       }
 
@@ -56,7 +54,7 @@ export function useAutoHideNavbar(forceVisible = false) {
       window.removeEventListener('scroll', onScroll)
       if (frame.current !== null) cancelFrame(frame.current)
     }
-  }, [forceVisible])
+  }, [])
 
-  return { isAtTop, isVisible: forceVisible || isVisible }
+  return { isAtTop, isVisible }
 }
