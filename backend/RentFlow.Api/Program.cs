@@ -94,6 +94,7 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, PasswordHasher<ApplicationUser>>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IRentalApplicationService, RentalApplicationService>();
+builder.Services.AddScoped<IRentalOfferService, RentalOfferService>();
 builder.Services.AddScoped<IApplicationDocumentService, ApplicationDocumentService>();
 builder.Services.AddScoped<IApplicationDocumentContentService, ApplicationDocumentContentService>();
 builder.Services.AddScoped<IApplicationDataValidationTool, ApplicationDataValidationTool>();
