@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../shared/theme/app_theme.dart';
+import '../../../shared/widgets/rentflow_brand.dart';
 
 /// Shared presentation for the real login and registration forms.
 class AuthShell extends StatelessWidget {
@@ -117,43 +118,9 @@ class AuthShell extends StatelessWidget {
                                   Semantics(
                                     key: const Key('auth-brand'),
                                     label: 'RentFlow AI',
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            11,
-                                          ),
-                                          child: Image.asset(
-                                            'assets/brand/auth-mark.png',
-                                            width: 38,
-                                            height: 38,
-                                            fit: BoxFit.cover,
-                                            excludeFromSemantics: true,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 7),
-                                        const Text(
-                                          'RentFlow',
-                                          style: TextStyle(
-                                            color: AppPalette.authCard,
-                                            fontSize: 13.5,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: -0.7,
-                                          ),
-                                        ),
-                                        Transform.translate(
-                                          offset: const Offset(2, -7),
-                                          child: const Text(
-                                            'AI',
-                                            style: TextStyle(
-                                              color: AppPalette.authCard,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                    child: const RentFlowBrand(
+                                      markSize: 38,
+                                      textSize: 15,
                                     ),
                                   ),
                                   if (showBackButton)

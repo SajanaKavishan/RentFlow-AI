@@ -11,6 +11,7 @@ import 'package:rentflow_mobile/features/auth/models/current_user.dart';
 import 'package:rentflow_mobile/features/auth/screens/login_screen.dart';
 import 'package:rentflow_mobile/features/auth/screens/register_screen.dart';
 import 'package:rentflow_mobile/features/auth/services/auth_service.dart';
+import 'package:rentflow_mobile/features/landing/screens/public_landing_screen.dart';
 import 'package:rentflow_mobile/main.dart';
 
 class MemoryTokenStorage implements TokenStorage {
@@ -102,6 +103,57 @@ void main() {
     expect(find.text('Find your perfect home, smarter.'), findsOneWidget);
   });
 
+  testWidgets('public landing connects the native welcome and auth flows', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+
+    final controller = buildController(MemoryTokenStorage());
+    await tester.pumpWidget(
+      MyApp(authController: controller, showPublicLanding: true),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PublicLandingScreen), findsOneWidget);
+    expect(find.byKey(const Key('public-hero-title')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('public-sign-in')));
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginScreen), findsOneWidget);
+
+    Navigator.of(tester.element(find.byType(LoginScreen))).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('public-get-started')));
+    await tester.pumpAndSettle();
+    expect(find.byType(RegisterScreen), findsOneWidget);
+  });
+
+  testWidgets('public landing hero fills the viewport and Explore scrolls', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+
+    final controller = buildController(MemoryTokenStorage());
+    await tester.pumpWidget(
+      MyApp(authController: controller, showPublicLanding: true),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.getSize(find.byKey(const Key('public-hero'))).height, 844);
+    await tester.tap(find.byKey(const Key('public-explore')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('public-platform')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('public-platform'))).dy,
+      lessThan(80),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   for (final width in [360.0, 390.0, 412.0, 430.0]) {
     testWidgets('auth cards fit a $width logical pixel mobile screen', (
       tester,
@@ -120,7 +172,7 @@ void main() {
       expect(find.text('Sign in to RentFlow'), findsOneWidget);
       expect(
         tester.getSize(find.byKey(const Key('auth-brand'))).width,
-        lessThan(170),
+        lessThan(230),
       );
       expect(
         tester.getSize(find.byKey(const Key('auth-card'))).width,

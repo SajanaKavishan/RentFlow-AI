@@ -5,6 +5,7 @@ import 'core/network/api_client.dart';
 import 'features/auth/controllers/auth_controller.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/services/auth_service.dart';
+import 'features/landing/screens/public_landing_screen.dart';
 import 'shared/shell/shared_app_shell.dart';
 import 'shared/theme/app_theme.dart';
 import 'shared/widgets/shared_widgets.dart';
@@ -12,12 +13,13 @@ import 'shared/widgets/shared_widgets.dart';
 // Integration TODO: the owned Viewing/Application workflows still use a
 // temporary property UUID. The shared shell does not introduce or use it.
 void main() {
-  runApp(const MyApp());
+  runApp(const MyApp(showPublicLanding: true));
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, this.authController});
+  const MyApp({super.key, this.authController, this.showPublicLanding = false});
   final AuthController? authController;
+  final bool showPublicLanding;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -72,7 +74,11 @@ class _MyAppState extends State<MyApp> {
   Widget _home() {
     if (_authController.isLoading) return const SessionRestorationScreen();
     final user = _authController.currentUser;
-    if (user == null) return const LoginScreen();
+    if (user == null) {
+      return widget.showPublicLanding
+          ? const PublicLandingScreen()
+          : const LoginScreen();
+    }
     return SharedAppShell(user: user);
   }
 }
