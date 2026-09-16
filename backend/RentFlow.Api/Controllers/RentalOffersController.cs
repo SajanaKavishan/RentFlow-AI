@@ -18,11 +18,6 @@ public class RentalOffersController(
     ICurrentUserService currentUser,
     ILogger<RentalOffersController> logger) : ControllerBase
 {
-    [HttpGet("{id:guid}")]
-    [Authorize(Roles = $"{nameof(UserRole.Tenant)},{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
-    [ProducesResponseType<RentalOfferResponseDto>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-
     [HttpPost]
     [Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<RentalOfferResponseDto>(StatusCodes.Status201Created)]
@@ -111,7 +106,11 @@ public class RentalOffersController(
                 cancellationToken),
             result => Ok(result));
     }
-    
+
+    [HttpGet("{id:guid}")]
+    [Authorize(Roles = $"{nameof(UserRole.Tenant)},{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
+    [ProducesResponseType<RentalOfferResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public Task<ActionResult<RentalOfferResponseDto>> GetById(
         Guid id,
         CancellationToken cancellationToken)
