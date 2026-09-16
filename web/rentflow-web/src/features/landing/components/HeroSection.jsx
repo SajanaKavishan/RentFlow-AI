@@ -1,8 +1,6 @@
 import { Link } from 'react-router-dom'
 import Icon from '../../../shared/ui/Icons.jsx'
 
-const benefits = ['Property discovery', 'Secure applications', 'AI-assisted review', 'Rental management']
-
 export default function HeroSection() {
   return <section id="top" className="landing-hero" aria-labelledby="landing-title">
     <div className="landing-hero__image" aria-hidden="true" />
@@ -15,9 +13,6 @@ export default function HeroSection() {
         <Link className="landing-button landing-button--sage" to="/register">Get Started <Icon name="arrow" size={18} /></Link>
         <a className="landing-hero__explore" href="#platform">Explore the platform <Icon name="arrow" size={17} /></a>
       </div>
-      <ul className="landing-hero__benefits" aria-label="Platform benefits">
-        {benefits.map((benefit) => <li key={benefit}><span aria-hidden="true">✓</span>{benefit}</li>)}
-      </ul>
     </div>
   </section>
 }

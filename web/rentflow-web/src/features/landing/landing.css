@@ -80,22 +80,20 @@
 .landing-button--sage { color: var(--olive-900); background: var(--olive-100); }
 .landing-button--sage:hover { background: #e9efd9; }
 
-.landing-hero { position: relative; display: flex; min-height: max(700px, 88svh); align-items: flex-end; isolation: isolate; color: white; }
+.landing-hero { position: relative; display: flex; min-height: max(680px, 86svh); align-items: flex-start; isolation: isolate; color: white; }
 .landing-hero__image { position: absolute; z-index: -3; inset: 0; background: url('../../assets/auth-residence.png') center 56% / cover no-repeat; }
 .landing-hero__overlay { position: absolute; z-index: -2; inset: 0; background: linear-gradient(90deg, rgb(26 34 16 / 91%) 0%, rgb(37 46 24 / 74%) 47%, rgb(37 46 24 / 37%) 100%), linear-gradient(0deg, rgb(30 38 19 / 42%), transparent 54%); }
-.landing-hero__content { padding-top: 146px; padding-bottom: clamp(66px, 8.5vh, 92px); }
+.landing-hero__content { padding-top: clamp(154px, 18vh, 178px); padding-bottom: 64px; }
 .landing-eyebrow { margin-bottom: 18px; color: var(--olive-700); font-size: .74rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
 .landing-eyebrow--light { color: #e9efd9; }
 .landing-eyebrow--sage { color: var(--olive-100); }
-.landing-hero h1 { max-width: 880px; margin-bottom: 20px; font-size: clamp(3rem, 5.4vw, 5.1rem); font-weight: 600; letter-spacing: -.06em; line-height: 1; text-wrap: balance; }
+.landing-hero .landing-eyebrow { margin-bottom: 22px; }
+.landing-hero h1 { max-width: 880px; margin-bottom: 26px; font-size: clamp(3rem, 5.4vw, 5.1rem); font-weight: 600; letter-spacing: -.06em; line-height: 1; text-wrap: balance; }
 .landing-hero__intro { max-width: 580px; margin-bottom: 34px; color: rgb(255 255 255 / 83%); font-size: clamp(1.03rem, 1.4vw, 1.2rem); line-height: 1.7; }
-.landing-hero__actions { display: flex; align-items: center; gap: 14px; }
+.landing-hero__actions { display: flex; align-items: center; gap: 18px; }
 .landing-hero__explore { display: inline-flex; align-items: center; gap: 7px; margin-left: 6px; padding: 12px 3px; color: white; font-size: .87rem; font-weight: 800; }
 .landing-hero__explore svg { transition: transform 180ms ease; }
 .landing-hero__explore:hover svg { transform: translateX(3px); }
-.landing-hero__benefits { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: clamp(34px, 5.5vh, 56px) 0 0; padding: 20px 0 0; border-top: 1px solid rgb(255 255 255 / 22%); list-style: none; }
-.landing-hero__benefits li { display: flex; align-items: center; gap: 9px; color: rgb(255 255 255 / 78%); font-size: .82rem; font-weight: 600; }
-.landing-hero__benefits li span { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; color: var(--olive-900); background: var(--olive-100); font-size: .7rem; font-weight: 900; }
 
 .landing-section { padding: clamp(80px, 10vw, 132px) 0; scroll-margin-top: 16px; }
 .landing-section__heading { max-width: 720px; margin-bottom: clamp(38px, 5vw, 60px); }
@@ -227,7 +225,6 @@
   .landing-hero__overlay { background: linear-gradient(90deg, rgb(26 34 16 / 88%), rgb(37 46 24 / 55%)), linear-gradient(0deg, rgb(27 34 18 / 62%), transparent 62%); }
   .landing-hero__content { padding-top: 124px; padding-bottom: 54px; }
   .landing-hero h1 { max-width: 620px; font-size: clamp(3rem, 10.5vw, 5rem); }
-  .landing-hero__benefits { margin-top: 42px; gap: 12px 20px; }
   .landing-card-grid--features { grid-template-columns: 1fr 1fr; }
   .landing-journey__steps { grid-template-columns: 1fr; gap: 0; max-width: 430px; margin: 0 auto; }
   .landing-journey__steps::before { top: 20px; bottom: 20px; left: 21px; width: 1px; height: auto; }
@@ -261,8 +258,6 @@
   .landing-hero__actions { align-items: stretch; flex-direction: column; }
   .landing-hero__actions .landing-button { width: 100%; }
   .landing-hero__explore { justify-content: center; margin: 1px 0 0; }
-  .landing-hero__benefits { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 28px; padding-top: 19px; }
-  .landing-hero__benefits li { font-size: .72rem; }
   .landing-section { padding: 72px 0; }
   .landing-section__heading { margin-bottom: 34px; }
   .landing-section__heading h2,
