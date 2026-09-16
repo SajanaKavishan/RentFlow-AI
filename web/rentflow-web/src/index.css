@@ -42,6 +42,7 @@
 }
 * { box-sizing: border-box; }
 html { min-width: 320px; min-height: 100%; background: var(--cream-100); }
+html { scroll-behavior: smooth; }
 body { min-width: 320px; min-height: 100vh; margin: 0; }
 button, textarea, input, select { font: inherit; }
 button { cursor: pointer; }

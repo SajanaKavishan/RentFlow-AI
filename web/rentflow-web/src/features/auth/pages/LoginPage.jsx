@@ -2,19 +2,21 @@ import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../../core/api/apiClient.js'
 import Icon from '../../../shared/ui/Icons.jsx'
+import { authenticatedHomePathForRole } from '../authModel.js'
 import { useAuth } from '../useAuth.js'
 import AuthVisual from './AuthVisual.jsx'
 import './auth.css'
 
 export default function LoginPage() {
-  const { isAuthenticated, login } = useAuth()
+  const { isAuthenticated, isLoading, login, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [passwordVisible, setPasswordVisible] = useState(false)
-  if (isAuthenticated) return <Navigate to="/" replace />
+  if (isLoading) return <div className="auth-restoring" role="status"><span className="shared-spinner" aria-hidden="true" />Restoring your session&hellip;</div>
+  if (isAuthenticated) return <Navigate to={authenticatedHomePathForRole(user.role)} replace />
 
   async function handleSubmit(event) {
     event.preventDefault(); setError('')
@@ -22,9 +24,9 @@ export default function LoginPage() {
     if (!form.password) { setError('Enter your password.'); return }
     setIsSubmitting(true)
     try {
-      await login({ email: form.email.trim(), password: form.password })
+      const currentUser = await login({ email: form.email.trim(), password: form.password })
       const target = location.state?.from?.pathname
-      navigate(target && target !== '/login' ? target : '/', { replace: true })
+      navigate(target && target !== '/login' ? target : authenticatedHomePathForRole(currentUser.role), { replace: true })
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Sign in could not be completed.')
     } finally { setIsSubmitting(false) }

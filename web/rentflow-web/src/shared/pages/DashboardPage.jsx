@@ -6,7 +6,7 @@ import Icon from '../ui/Icons.jsx'
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const items = navigationForRole(user.role).filter((item) => item.path !== '/' && item.path !== '/profile')
+  const items = navigationForRole(user.role).filter((item) => item.path !== '/dashboard' && item.path !== '/profile')
   const available = items.filter((item) => item.available)
   const pending = items.filter((item) => !item.available)
   const cards = (entries) => <div className="shared-dashboard-grid">{entries.map((item) => <Link key={`${item.label}-${item.path}`} className="shared-dashboard-link" to={item.path}><AppCard className="shared-module-card"><div className="shared-module-card__top"><span className="shared-module-card__icon"><Icon name={item.available ? 'arrow' : 'info'} size={20} /></span><StatusBadge tone={item.available ? 'success' : 'warning'}>{item.available ? 'Available' : 'Not available yet'}</StatusBadge></div><h3>{item.label}</h3><p>{item.note || (item.available ? 'Open this workspace' : 'Integration pending')}</p><span className="shared-module-card__arrow"><Icon name="arrow" size={18} /></span></AppCard></Link>)}</div>

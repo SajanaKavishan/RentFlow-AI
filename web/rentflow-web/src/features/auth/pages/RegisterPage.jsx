@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../../core/api/apiClient.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import { useAuth } from '../useAuth.js'
-import { PUBLIC_REGISTRATION_ROLES, USER_ROLES } from '../authModel.js'
+import { authenticatedHomePathForRole, PUBLIC_REGISTRATION_ROLES, USER_ROLES } from '../authModel.js'
 import AuthVisual from './AuthVisual.jsx'
 import './auth.css'
 
@@ -19,17 +19,18 @@ function validate(form) {
 }
 
 export default function RegisterPage() {
-  const { isAuthenticated, register } = useAuth(); const navigate = useNavigate()
+  const { isAuthenticated, isLoading, register, user } = useAuth(); const navigate = useNavigate()
   const [form, setForm] = useState(initialForm); const [error, setError] = useState(''); const [isSubmitting, setIsSubmitting] = useState(false)
   const [passwordVisible, setPasswordVisible] = useState(false)
-  if (isAuthenticated) return <Navigate to="/" replace />
+  if (isLoading) return <div className="auth-restoring" role="status"><span className="shared-spinner" aria-hidden="true" />Restoring your session&hellip;</div>
+  if (isAuthenticated) return <Navigate to={authenticatedHomePathForRole(user.role)} replace />
   const update = (field) => (event) => setForm((current) => ({ ...current, [field]: event.target.value }))
   async function handleSubmit(event) {
     event.preventDefault(); const validationError = validate(form); setError(validationError); if (validationError) return
     setIsSubmitting(true)
     try {
-      await register({ fullName: form.fullName.trim(), email: form.email.trim(), phoneNumber: form.phoneNumber.trim(), password: form.password, role: form.role })
-      navigate('/', { replace: true })
+      const currentUser = await register({ fullName: form.fullName.trim(), email: form.email.trim(), phoneNumber: form.phoneNumber.trim(), password: form.password, role: form.role })
+      navigate(authenticatedHomePathForRole(currentUser.role), { replace: true })
     } catch (caught) { setError(caught instanceof ApiError ? caught.message : 'Registration could not be completed.') }
     finally { setIsSubmitting(false) }
   }

@@ -10,7 +10,7 @@ vi.mock('../features/viewings/pages/ViewingRequestsPage.jsx', () => ({ default: 
 vi.mock('../features/rentalApplications/pages/RentalApplicationsPage.jsx', () => ({ default: () => <main><h1>Rental applications workflow</h1></main> }))
 
 const userFor = (role) => ({ id: 'user-id', fullName: 'Taylor Example', email: 'taylor@example.com', phoneNumber: '+94 77 123 4567', role })
-function renderApp(role, path = '/', authenticated = true) {
+function renderApp(role, path = '/dashboard', authenticated = true) {
   if (authenticated) tokenStorage.setToken('test-token')
   const api = { login: vi.fn(), register: vi.fn(), getCurrentUser: vi.fn().mockResolvedValue(userFor(role)) }
   return render(<MemoryRouter initialEntries={[path]}><AuthProvider api={api}><App /></AuthProvider></MemoryRouter>)
@@ -20,7 +20,7 @@ afterEach(() => { cleanup(); tokenStorage.clearToken() })
 
 describe('shared React shell', () => {
   it('keeps unauthenticated routes on login outside the shell', async () => {
-    renderApp('Tenant', '/', false)
+    renderApp('Tenant', '/dashboard', false)
     expect(await screen.findByRole('heading', { name: 'Sign in to RentFlow' })).toBeInTheDocument()
     const authBrand = screen.getByRole('complementary')
     expect(authBrand).toHaveTextContent('RentFlow AI')

@@ -45,13 +45,13 @@ export default function AppShell() {
   const current = items.find((item) => item.path === location.pathname)?.label
     || (location.pathname === '/unauthorized' ? 'Access restricted' : 'RentFlow AI')
   const closeMenu = () => { setMenu({ path: location.pathname, open: false }); if (menuOpen) menuRef.current?.focus() }
-  const navLink = (item) => <NavLink key={`${item.label}-${item.path}`} to={item.path} end={item.path === '/'} onClick={closeMenu} className={({ isActive }) => `shared-nav-link${isActive ? ' shared-nav-link--active' : ''}`}>
+  const navLink = (item) => <NavLink key={`${item.label}-${item.path}`} to={item.path} end={item.path === '/dashboard'} onClick={closeMenu} className={({ isActive }) => `shared-nav-link${isActive ? ' shared-nav-link--active' : ''}`}>
     <Icon name={iconForItem(item.label)} size={19} /><span className="shared-nav-link__label">{item.label}</span>{!item.available && <span className="shared-nav-link__soon">Soon</span>}
   </NavLink>
 
   return <div className="shared-shell">
     <aside ref={sidebarRef} id="shared-navigation" role={menuOpen ? 'dialog' : undefined} aria-modal={menuOpen ? 'true' : undefined} aria-label={menuOpen ? 'Navigation menu' : undefined} className={`shared-sidebar${menuOpen ? ' shared-sidebar--open' : ''}`}>
-      <Link className="shared-brand" to="/" aria-label="RentFlow dashboard" onClick={closeMenu}><BrandWordmark className="shared-brand__image" decorative /></Link>
+      <Link className="shared-brand" to="/dashboard" aria-label="RentFlow dashboard" onClick={closeMenu}><BrandWordmark className="shared-brand__image" decorative /></Link>
       <div className="shared-sidebar__workspace"><span className="shared-sidebar__workspace-dot" aria-hidden="true" /><span>{user.role} workspace</span></div>
       <nav aria-label="Primary navigation" className="shared-sidebar__nav">
         <div className="shared-sidebar__nav-main">{items.filter((item) => item.path !== '/profile').map(navLink)}</div>

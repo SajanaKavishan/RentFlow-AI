@@ -8,7 +8,7 @@ const A = USER_ROLES.ADMIN
 
 // Availability is explicit: only shipped routes are marked available.
 export const NAV_ITEMS = Object.freeze([
-  { label: 'Dashboard', path: '/', roles: ALL, available: true },
+  { label: 'Dashboard', path: '/dashboard', roles: ALL, available: true },
   { label: 'Properties', path: '/modules/properties', roles: [T, L], available: false },
   { label: 'Viewings', path: '/modules/viewings', roles: [T], available: false },
   { label: 'My Applications', path: '/modules/my-applications', roles: [T], available: false },
