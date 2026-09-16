@@ -11,6 +11,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
 
+    public DbSet<RentalOffer> RentalOffers => Set<RentalOffer>();
+
     public DbSet<ApplicationDocument> ApplicationDocuments => Set<ApplicationDocument>();
 
     public DbSet<ApplicationValidationWorkflow> ApplicationValidationWorkflows => Set<ApplicationValidationWorkflow>();
@@ -139,6 +141,60 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(application => application.TenantId);
             entity.HasIndex(application => application.PropertyId);
             entity.HasIndex(application => application.Status);
+        });
+
+        modelBuilder.Entity<RentalOffer>(entity =>
+        {
+            entity.HasKey(offer => offer.Id);
+
+            entity.Property(offer => offer.RentalApplicationId)
+                .IsRequired();
+
+            entity.Property(offer => offer.TenantId)
+                .IsRequired();
+
+            entity.Property(offer => offer.PropertyId)
+                .IsRequired();
+
+            entity.Property(offer => offer.MonthlyRent)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(offer => offer.SecurityDeposit)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(offer => offer.ProposedStartDate)
+                .IsRequired();
+
+            entity.Property(offer => offer.ProposedEndDate)
+                .IsRequired();
+
+            entity.Property(offer => offer.ExpiresAt)
+                .IsRequired();
+
+            entity.Property(offer => offer.Status)
+                .IsRequired();
+
+            entity.Property(offer => offer.LandlordNote)
+                .HasMaxLength(1000)
+                .IsRequired(false);
+
+            entity.Property(offer => offer.CreatedAt)
+                .IsRequired();
+
+            entity.Property(offer => offer.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(offer => offer.RentalApplication)
+                .WithMany()
+                .HasForeignKey(offer => offer.RentalApplicationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(offer => offer.RentalApplicationId);
+            entity.HasIndex(offer => offer.TenantId);
+            entity.HasIndex(offer => offer.PropertyId);
+            entity.HasIndex(offer => offer.Status);
         });
 
         modelBuilder.Entity<ApplicationDocument>(entity =>
