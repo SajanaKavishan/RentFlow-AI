@@ -9,10 +9,12 @@ class AuthShell extends StatelessWidget {
     super.key,
     required this.child,
     this.showBackButton = false,
+    this.compactFields = false,
   });
 
   final Widget child;
   final bool showBackButton;
+  final bool compactFields;
 
   @override
   Widget build(BuildContext context) {
@@ -34,11 +36,11 @@ class AuthShell extends StatelessWidget {
         fillColor: AppPalette.authInput,
         labelStyle: const TextStyle(color: AppPalette.authMuted),
         floatingLabelStyle: const TextStyle(color: AppPalette.authPrimary),
-        contentPadding: const EdgeInsets.symmetric(
+        contentPadding: EdgeInsets.symmetric(
           horizontal: 14,
-          vertical: 14,
+          vertical: compactFields ? 12 : 14,
         ),
-        constraints: const BoxConstraints(minHeight: 56),
+        constraints: BoxConstraints(minHeight: compactFields ? 50 : 56),
         border: border,
         enabledBorder: border,
         focusedBorder: focusedBorder,
@@ -107,6 +109,7 @@ class AuthShell extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             SizedBox(
+                              width: double.infinity,
                               height: 44,
                               child: Stack(
                                 alignment: Alignment.center,

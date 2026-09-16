@@ -205,6 +205,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('login-register-link')));
     await tester.pumpAndSettle();
+    expect(find.text('Create your account'), findsOneWidget);
+    expect(find.byTooltip('Back to sign in'), findsNothing);
     await tester.ensureVisible(find.byKey(const Key('register-submit')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -227,6 +229,33 @@ void main() {
       await tester.tap(find.text('Landlord').last);
       await tester.pumpAndSettle();
       expect(find.text('Landlord'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'registration password visibility controls both password fields',
+    (tester) async {
+      final controller = buildController(MemoryTokenStorage());
+      await tester.pumpWidget(MyApp(authController: controller));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('login-register-link')));
+      await tester.tap(find.byKey(const Key('login-register-link')));
+      await tester.pumpAndSettle();
+
+      TextField passwordInput(String key) => tester.widget<TextField>(
+        find.descendant(
+          of: find.byKey(Key(key)),
+          matching: find.byType(TextField),
+        ),
+      );
+
+      expect(passwordInput('register-password').obscureText, isTrue);
+      expect(passwordInput('register-confirm').obscureText, isTrue);
+      await tester.ensureVisible(find.byTooltip('Show passwords'));
+      await tester.tap(find.byTooltip('Show passwords'));
+      await tester.pump();
+      expect(passwordInput('register-password').obscureText, isFalse);
+      expect(passwordInput('register-confirm').obscureText, isFalse);
     },
   );
 

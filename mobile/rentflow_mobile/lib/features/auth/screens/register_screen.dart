@@ -23,6 +23,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _confirmPassword = TextEditingController();
   UserRole _role = UserRole.tenant;
   bool _isSubmitting = false;
+  bool _obscurePasswords = true;
   String? _error;
 
   @override
@@ -69,7 +70,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return AuthShell(
-      showBackButton: true,
+      compactFields: true,
       child: Form(
         key: _formKey,
         child: Column(
@@ -77,28 +78,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'A NEW CHAPTER STARTS HERE',
+              'GET STARTED',
               style: TextStyle(
                 color: AppPalette.authPrimary,
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
-                letterSpacing: 1.3,
+                letterSpacing: 1.5,
               ),
             ),
             const SizedBox(height: 6),
             const Text(
-              'Create your RentFlow account',
+              'Create your account',
               style: TextStyle(
                 color: AppPalette.authText,
-                fontSize: 26,
-                height: 1.16,
+                fontSize: 28,
+                height: 1.15,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.8,
               ),
             ),
             const SizedBox(height: 6),
             const Text(
-              'Tell us a little about yourself to get started.',
+              'Enter your details to begin your rental journey.',
               style: TextStyle(
                 color: AppPalette.authMuted,
                 fontSize: 13,
@@ -113,7 +114,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               controller: _fullName,
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.name],
-              decoration: const InputDecoration(),
+              decoration: const InputDecoration(hintText: 'Your full name'),
               validator: (value) => (value?.trim().length ?? 0) < 2
                   ? 'Enter your full name.'
                   : null,
@@ -127,7 +128,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.email],
-              decoration: const InputDecoration(),
+              decoration: const InputDecoration(hintText: 'you@example.com'),
               validator: (value) =>
                   value == null ||
                       !RegExp(r'^\S+@\S+\.\S+$').hasMatch(value.trim())
@@ -143,7 +144,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               keyboardType: TextInputType.phone,
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.telephoneNumber],
-              decoration: const InputDecoration(),
+              decoration: const InputDecoration(hintText: 'Your phone number'),
               validator: (value) =>
                   value == null ||
                       !RegExp(r'^[+\d][\d\s().-]{6,31}$').hasMatch(value.trim())
@@ -175,10 +176,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
             TextFormField(
               key: const Key('register-password'),
               controller: _password,
-              obscureText: true,
+              obscureText: _obscurePasswords,
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.newPassword],
-              decoration: const InputDecoration(),
+              decoration: InputDecoration(
+                hintText: 'At least 8 characters',
+                suffixIcon: IconButton(
+                  tooltip: _obscurePasswords
+                      ? 'Show passwords'
+                      : 'Hide passwords',
+                  onPressed: _isSubmitting
+                      ? null
+                      : () => setState(
+                          () => _obscurePasswords = !_obscurePasswords,
+                        ),
+                  icon: Icon(
+                    _obscurePasswords
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                ),
+              ),
               validator: (value) => (value?.length ?? 0) < 8
                   ? 'Password must be at least 8 characters.'
                   : null,
@@ -189,9 +207,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
             TextFormField(
               key: const Key('register-confirm'),
               controller: _confirmPassword,
-              obscureText: true,
+              obscureText: _obscurePasswords,
               autofillHints: const [AutofillHints.newPassword],
-              decoration: const InputDecoration(),
+              decoration: const InputDecoration(
+                hintText: 'Repeat your password',
+              ),
               validator: (value) =>
                   _required(value, 'Confirm your password.') ??
                   (value != _password.text ? 'Passwords do not match.' : null),
@@ -219,10 +239,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
             const SizedBox(height: 6),
             TextButton(
+              key: const Key('register-login-link'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                minimumSize: const Size(44, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               onPressed: _isSubmitting
                   ? null
                   : () => Navigator.of(context).pop(),
-              child: const Text('Already registered? Sign in'),
+              child: const Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'Already registered? ',
+                      style: TextStyle(color: AppPalette.authMuted),
+                    ),
+                    TextSpan(
+                      text: 'Sign in',
+                      style: TextStyle(
+                        color: AppPalette.authPrimary,
+                        fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ],
+                ),
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12),
+              ),
             ),
           ],
         ),
