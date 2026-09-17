@@ -12,7 +12,7 @@ function iconForItem(label) {
   if (label === 'Profile') return 'user'
   if (/Viewing|Viewings/.test(label)) return 'calendar'
   if (/Maintenance/.test(label)) return 'tools'
-  if (/Application|AI|Lease|Payment/.test(label)) return 'document'
+  if (/Application|AI|System|Lease|Payment/.test(label)) return 'document'
   return 'building'
 }
 

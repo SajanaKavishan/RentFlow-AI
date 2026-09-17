@@ -29,6 +29,7 @@
 .shared-state__icon--danger { color: var(--danger); background: var(--danger-bg); }
 .shared-state h1 { margin: 0; color: var(--ink); font-size: clamp(1.55rem, 3vw, 2.25rem); font-weight: 800; letter-spacing: -.045em; overflow-wrap: anywhere; }
 .shared-state p { max-width: 480px; margin: 0; color: var(--muted); line-height: 1.7; overflow-wrap: anywhere; }
+.shared-state .shared-state__owner { color: var(--olive-700); font-size: .78rem; font-weight: 700; }
 .shared-state .shared-button { margin-top: 8px; }
 .shared-spinner { width: 32px; height: 32px; border: 4px solid var(--olive-100); border-top-color: var(--olive-700); border-radius: 50%; animation: shared-spin 800ms linear infinite; }
 .shared-dashboard-section { margin-top: 44px; }

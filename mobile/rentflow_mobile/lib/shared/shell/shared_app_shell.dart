@@ -15,6 +15,7 @@ class SharedAppShell extends StatefulWidget {
     this.viewingsContent,
     this.applicationsContent,
   });
+
   final CurrentUser user;
   // Injectable content lets shell tests avoid feature API calls.
   final Widget? viewingsContent;
@@ -25,166 +26,84 @@ class SharedAppShell extends StatefulWidget {
 }
 
 class _SharedAppShellState extends State<SharedAppShell> {
-  int _tenantIndex = 0;
-  String? _otherDestination;
+  int _selectedIndex = 0;
 
-  bool get _isTenant => widget.user.role == UserRole.tenant;
-  bool get _featureTab => _isTenant && (_tenantIndex == 2 || _tenantIndex == 3);
+  List<RoleDestination> get _destinations =>
+      destinationsFor(widget.user.role);
 
-  void _openFutureModule(String label) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => Scaffold(
-          appBar: AppBar(title: Text(label)),
-          body: SafeArea(child: UnavailableState(module: label)),
-        ),
-      ),
-    );
-  }
+  RoleDestination get _selected => _destinations[_selectedIndex];
+
+  void _select(int index) => setState(() => _selectedIndex = index);
 
   @override
   Widget build(BuildContext context) {
-    final title = _isTenant
-        ? const [
-            'Home',
-            'Properties',
-            'Viewings',
-            'Applications',
-            'Profile',
-          ][_tenantIndex]
-        : _otherDestination ?? 'Dashboard';
+    final selected = _selected;
+    final ownsAppBar = selected.experience == DestinationExperience.feature;
     return Scaffold(
-      appBar: _featureTab
+      appBar: ownsAppBar
           ? null
           : AppBar(
-              title: title == 'Home' || title == 'Dashboard'
+              title: selected.id == RoleDestinationId.home
                   ? Image.asset(
                       'assets/brand/wordmark.png',
                       width: 155,
                       fit: BoxFit.contain,
                       semanticLabel: 'RentFlow AI',
                     )
-                  : Text(title),
-              actions: [
-                IconButton(
-                  tooltip: 'Profile',
-                  onPressed: () => setState(() {
-                    if (_isTenant) {
-                      _tenantIndex = 4;
-                    } else {
-                      _otherDestination = 'Profile';
-                    }
-                  }),
-                  icon: const Icon(Icons.account_circle_outlined),
-                ),
-              ],
+                  : Text(selected.label),
             ),
-      drawer: _isTenant
-          ? null
-          : Drawer(
-              child: SafeArea(
-                child: ListView(
-                  children: [
-                    DrawerHeader(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Image.asset(
-                            'assets/brand/wordmark.png',
-                            width: 210,
-                            fit: BoxFit.contain,
-                            semanticLabel: 'RentFlow AI',
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text('${widget.user.role.value} workspace'),
-                        ],
-                      ),
-                    ),
-                    ListTile(
-                      title: const Text('Dashboard'),
-                      leading: const Icon(Icons.dashboard_outlined),
-                      onTap: () {
-                        Navigator.pop(context);
-                        setState(() => _otherDestination = null);
-                      },
-                    ),
-                    ...destinationsFor(widget.user.role).map(
-                      (item) => ListTile(
-                        title: Text(item.label),
-                        subtitle: const Text('Not integrated yet'),
-                        leading: const Icon(Icons.construction_outlined),
-                        onTap: () {
-                          Navigator.pop(context);
-                          setState(() => _otherDestination = item.label);
-                        },
-                      ),
-                    ),
-                    ListTile(
-                      title: const Text('Profile'),
-                      leading: const Icon(Icons.person_outline),
-                      onTap: () {
-                        Navigator.pop(context);
-                        setState(() => _otherDestination = 'Profile');
-                      },
-                    ),
-                  ],
-                ),
+      body: _contentFor(selected),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: _select,
+        destinations: _destinations
+            .map(
+              (destination) => NavigationDestination(
+                icon: Icon(destination.icon),
+                label: destination.label,
               ),
-            ),
-      body: _body(),
-      bottomNavigationBar: _isTenant
-          ? NavigationBar(
-              selectedIndex: _tenantIndex,
-              onDestinationSelected: (index) =>
-                  setState(() => _tenantIndex = index),
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  label: 'Home',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.home_work_outlined),
-                  label: 'Properties',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.calendar_month_outlined),
-                  label: 'Viewings',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.description_outlined),
-                  label: 'Applications',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.person_outline),
-                  label: 'Profile',
-                ),
-              ],
             )
-          : null,
+            .toList(growable: false),
+      ),
     );
   }
 
-  Widget _body() {
-    if (_isTenant) {
-      return switch (_tenantIndex) {
-        0 => _dashboard(),
-        1 => const SafeArea(child: UnavailableState(module: 'Properties')),
-        2 => widget.viewingsContent ?? const MyViewingsScreen(),
-        3 => widget.applicationsContent ?? const MyRentalApplicationsScreen(),
-        _ => SafeArea(child: ProfileContent(user: widget.user)),
-      };
-    }
-    if (_otherDestination == 'Profile') {
-      return SafeArea(child: ProfileContent(user: widget.user));
-    }
-    if (_otherDestination != null) {
-      return SafeArea(child: UnavailableState(module: _otherDestination!));
-    }
-    return _dashboard();
+  Widget _contentFor(RoleDestination destination) {
+    return switch (destination.experience) {
+      DestinationExperience.dashboard => _dashboard(),
+      DestinationExperience.profile =>
+        SafeArea(child: ProfileContent(user: widget.user)),
+      DestinationExperience.feature => _featureFor(destination.id),
+      DestinationExperience.unavailable => SafeArea(
+        child: ModuleUnavailableState(
+          title: destination.label,
+          explanation: destination.explanation!,
+          owner: destination.owner,
+        ),
+      ),
+      DestinationExperience.webWorkspace => SafeArea(
+        child: WebWorkspaceState(
+          title: destination.label,
+          explanation: destination.explanation!,
+        ),
+      ),
+    };
   }
 
+  Widget _featureFor(RoleDestinationId id) => switch (id) {
+    RoleDestinationId.viewings =>
+      widget.viewingsContent ?? const MyViewingsScreen(),
+    RoleDestinationId.applications =>
+      widget.applicationsContent ?? const MyRentalApplicationsScreen(),
+    _ => const SizedBox.shrink(),
+  };
+
   Widget _dashboard() {
-    final destinations = destinationsFor(widget.user.role);
+    final quickLinks = _destinations
+        .asMap()
+        .entries
+        .where((entry) => entry.value.id != RoleDestinationId.home)
+        .toList(growable: false);
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.base),
@@ -197,54 +116,94 @@ class _SharedAppShellState extends State<SharedAppShell> {
                 PageHeader(
                   eyebrow: '${widget.user.role.value} workspace',
                   title: 'Welcome, ${widget.user.fullName}',
-                  subtitle: widget.user.role == UserRole.landlord
-                      ? 'Detailed viewing, application, and validation management is available in the RentFlow web dashboard.'
-                      : 'Choose a destination. Modules still being integrated are clearly marked.',
+                  subtitle: _dashboardSubtitle(widget.user.role),
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                ...destinations.map(
-                  (item) => Padding(
+                ...quickLinks.map(
+                  (entry) => Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                    child: AppCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.label,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                          StatusChip(
-                            label: item.available
-                                ? 'Available'
-                                : 'Not available yet',
-                            tone: item.available
-                                ? StatusTone.success
-                                : StatusTone.warning,
-                          ),
-                          if (item.note != null)
-                            Text(
-                              item.note!,
-                              style: const TextStyle(color: AppPalette.muted),
-                            ),
-                          if (_isTenant && !item.available)
-                            TextButton(
-                              onPressed: () => _openFutureModule(item.label),
-                              child: Text('About ${item.label}'),
-                            ),
-                        ],
-                      ),
+                    child: _QuickLinkCard(
+                      destination: entry.value,
+                      onTap: () => _select(entry.key),
                     ),
                   ),
                 ),
-                if (_isTenant)
+                if (widget.user.role == UserRole.tenant)
                   const AppCard(
                     child: Text(
-                      'To book a viewing or apply for rental, first select a real property. Property selection has not been integrated yet.',
+                      'To book a viewing or apply for a rental, first select a real property. Property selection has not been integrated yet.',
                     ),
                   ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _dashboardSubtitle(UserRole role) => switch (role) {
+    UserRole.tenant =>
+      'Your mobile home for viewings, applications, documents, and profile access.',
+    UserRole.landlord =>
+      'Review key activity here and use the RentFlow web workspace for full management tools.',
+    UserRole.maintenanceTechnician =>
+      'Your mobile workspace for assigned operational work.',
+    UserRole.admin =>
+      'A lightweight mobile overview with secure access to your profile.',
+  };
+}
+
+class _QuickLinkCard extends StatelessWidget {
+  const _QuickLinkCard({required this.destination, required this.onTap});
+
+  final RoleDestination destination;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final (status, tone) = switch (destination.experience) {
+      DestinationExperience.unavailable =>
+        ('Integration pending', StatusTone.warning),
+      DestinationExperience.webWorkspace =>
+        ('Web workspace', StatusTone.progress),
+      _ => ('Available', StatusTone.success),
+    };
+    return AppCard(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadii.small),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xs),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECEFDF),
+                  borderRadius: BorderRadius.circular(AppRadii.small),
+                ),
+                child: Icon(destination.icon, color: AppPalette.primary),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      destination.label,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    StatusChip(label: status, tone: tone),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppPalette.primary),
+            ],
           ),
         ),
       ),
@@ -302,6 +261,7 @@ class _ProfileField extends StatelessWidget {
   const _ProfileField(this.label, this.value);
   final String label;
   final String value;
+
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: AppSpacing.base),

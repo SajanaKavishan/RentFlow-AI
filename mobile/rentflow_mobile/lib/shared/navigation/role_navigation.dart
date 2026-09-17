@@ -1,44 +1,113 @@
+import 'package:flutter/material.dart';
+
 import '../../features/auth/models/current_user.dart';
 
-class RoleDestination {
-  const RoleDestination(this.label, {this.available = false, this.note});
-  final String label;
-  final bool available;
-  final String? note;
+enum RoleDestinationId {
+  home,
+  properties,
+  viewings,
+  applications,
+  viewingRequests,
+  assignedWork,
+  profile,
 }
+
+enum DestinationExperience { dashboard, feature, unavailable, webWorkspace, profile }
+
+class RoleDestination {
+  const RoleDestination({
+    required this.id,
+    required this.label,
+    required this.icon,
+    required this.experience,
+    this.explanation,
+    this.owner,
+  });
+
+  final RoleDestinationId id;
+  final String label;
+  final IconData icon;
+  final DestinationExperience experience;
+  final String? explanation;
+  final String? owner;
+
+  bool get isAvailable => experience == DestinationExperience.feature ||
+      experience == DestinationExperience.dashboard ||
+      experience == DestinationExperience.profile;
+}
+
+const _home = RoleDestination(
+  id: RoleDestinationId.home,
+  label: 'Home',
+  icon: Icons.home_outlined,
+  experience: DestinationExperience.dashboard,
+);
+
+const _profile = RoleDestination(
+  id: RoleDestinationId.profile,
+  label: 'Profile',
+  icon: Icons.person_outline,
+  experience: DestinationExperience.profile,
+);
 
 List<RoleDestination> destinationsFor(UserRole role) => switch (role) {
   UserRole.tenant => const [
-    RoleDestination('Properties'),
-    RoleDestination('Viewings', available: true),
-    RoleDestination('My Applications', available: true),
-    RoleDestination('Lease / Payments'),
-    RoleDestination('Maintenance Requests'),
+    _home,
+    RoleDestination(
+      id: RoleDestinationId.properties,
+      label: 'Properties',
+      icon: Icons.home_work_outlined,
+      experience: DestinationExperience.unavailable,
+      owner: 'Property management',
+      explanation:
+          'Property discovery will appear here after the property module is integrated.',
+    ),
+    RoleDestination(
+      id: RoleDestinationId.viewings,
+      label: 'Viewings',
+      icon: Icons.calendar_month_outlined,
+      experience: DestinationExperience.feature,
+    ),
+    RoleDestination(
+      id: RoleDestinationId.applications,
+      label: 'Applications',
+      icon: Icons.description_outlined,
+      experience: DestinationExperience.feature,
+    ),
+    _profile,
   ],
   UserRole.landlord => const [
-    RoleDestination('Properties'),
-    RoleDestination('Viewing Requests', note: 'Available in the web dashboard'),
+    _home,
     RoleDestination(
-      'Rental Applications',
-      note: 'Available in the web dashboard',
+      id: RoleDestinationId.viewingRequests,
+      label: 'Viewing Requests',
+      icon: Icons.calendar_month_outlined,
+      experience: DestinationExperience.webWorkspace,
+      explanation:
+          'Review and respond to viewing requests from the RentFlow web workspace.',
     ),
-    RoleDestination('Pricing / Lease'),
-    RoleDestination('Payments'),
-    RoleDestination('Maintenance'),
     RoleDestination(
-      'AI Review / Validation',
-      note: 'Inside web Rental Applications',
+      id: RoleDestinationId.applications,
+      label: 'Applications',
+      icon: Icons.description_outlined,
+      experience: DestinationExperience.webWorkspace,
+      explanation:
+          'Application documents and AI review are available in the RentFlow web workspace.',
     ),
+    _profile,
   ],
   UserRole.maintenanceTechnician => const [
-    RoleDestination('Assigned Maintenance'),
+    _home,
+    RoleDestination(
+      id: RoleDestinationId.assignedWork,
+      label: 'Assigned Work',
+      icon: Icons.handyman_outlined,
+      experience: DestinationExperience.unavailable,
+      owner: 'Maintenance',
+      explanation:
+          'Assigned maintenance work will appear here after the maintenance module is integrated.',
+    ),
+    _profile,
   ],
-  UserRole.admin => const [
-    RoleDestination('Users'),
-    RoleDestination('Properties Overview'),
-    RoleDestination('Applications Overview'),
-    RoleDestination('Payments Overview'),
-    RoleDestination('Maintenance Overview'),
-    RoleDestination('AI Workflow Monitoring'),
-  ],
+  UserRole.admin => const [_home, _profile],
 };

@@ -181,14 +181,119 @@ class UnauthorizedState extends StatelessWidget {
   );
 }
 
-class UnavailableState extends StatelessWidget {
-  const UnavailableState({super.key, required this.module});
-  final String module;
+class ModuleUnavailableState extends StatelessWidget {
+  const ModuleUnavailableState({
+    super.key,
+    required this.title,
+    required this.explanation,
+    this.owner,
+    this.status = 'Integration pending',
+  });
+
+  final String title;
+  final String explanation;
+  final String? owner;
+  final String status;
+
   @override
-  Widget build(BuildContext context) => SharedState(
-    title: '$module is not available yet',
-    message:
-        'This module has not been integrated into RentFlow yet. No workflow is available here.',
-    icon: Icons.construction_outlined,
+  Widget build(BuildContext context) => Center(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: AppCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.construction_outlined,
+                size: 46,
+                color: AppPalette.primary,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              StatusChip(label: status, tone: StatusTone.warning),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(explanation, textAlign: TextAlign.center),
+              if (owner != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  'Owning area: $owner',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: AppPalette.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ),
   );
+}
+
+class WebWorkspaceState extends StatelessWidget {
+  const WebWorkspaceState({
+    super.key,
+    required this.title,
+    required this.explanation,
+  });
+
+  final String title;
+  final String explanation;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: AppCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.devices_outlined,
+                size: 46,
+                color: AppPalette.primary,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(explanation, textAlign: TextAlign.center),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'Full management tools are available on the RentFlow web workspace.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppPalette.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class UnavailableState extends ModuleUnavailableState {
+  const UnavailableState({super.key, required String module})
+    : super(
+        title: module,
+        explanation:
+            'This module has not been integrated into RentFlow yet. No workflow is available here.',
+      );
 }

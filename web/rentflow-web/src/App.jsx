@@ -25,6 +25,7 @@ export default function App() {
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
           <Route path="/viewing-requests" element={<ViewingRequestsPage />} />
           <Route path="/rental-applications" element={<RentalApplicationsPage />} />
+          <Route path="/ai-review" element={<RentalApplicationsPage />} />
         </Route>
         <Route path="/modules/:module" element={<UnavailableState />} />
         <Route path="*" element={<NotFoundState />} />

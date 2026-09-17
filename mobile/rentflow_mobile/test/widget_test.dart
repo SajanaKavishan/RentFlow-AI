@@ -543,7 +543,7 @@ void main() {
     },
   );
 
-  testWidgets('role navigation shows tenant actions only to tenants', (
+  testWidgets('role navigation gives tenants and landlords mobile access', (
     tester,
   ) async {
     final tenantController = buildController(MemoryTokenStorage('token'));
@@ -563,8 +563,10 @@ void main() {
     );
     await tester.pumpWidget(MyApp(authController: landlordController));
     await tester.pumpAndSettle();
-    expect(find.byType(NavigationBar), findsNothing);
-    expect(find.textContaining('web dashboard'), findsWidgets);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('Viewing Requests'), findsWidgets);
+    expect(find.text('Applications'), findsWidgets);
+    expect(find.textContaining('web workspace'), findsWidgets);
   });
 
   testWidgets('profile logout returns to login from the authenticated shell', (

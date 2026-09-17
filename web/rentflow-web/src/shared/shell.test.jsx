@@ -41,22 +41,29 @@ describe('shared React shell', () => {
     expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
   })
 
-  it.each(['Tenant', 'Admin', 'MaintenanceTechnician'])('filters navigation for %s', async (role) => {
+  it.each([
+    ['Tenant', ['Dashboard', 'Properties', 'My Viewings', 'My Applications', 'Profile']],
+    ['Landlord', ['Dashboard', 'Properties', 'Viewing Requests', 'Rental Applications', 'AI Review', 'Pricing / Lease', 'Payments', 'Maintenance', 'Profile']],
+    ['MaintenanceTechnician', ['Dashboard', 'Assigned Work', 'Profile']],
+    ['Admin', ['Dashboard', 'Users', 'AI / System Overview', 'Profile']],
+  ])('renders the exact navigation map for %s', async (role, expectedLabels) => {
     renderApp(role)
     const nav = await screen.findByRole('navigation', { name: 'Primary navigation' })
-    expect(within(nav).queryByRole('link', { name: 'Viewing Requests' })).not.toBeInTheDocument()
-    expect(within(nav).queryByRole('link', { name: 'Rental Applications' })).not.toBeInTheDocument()
-    expect(within(nav).getByRole('link', { name: 'Profile' })).toBeInTheDocument()
-    if (role === 'Tenant') expect(within(nav).getByRole('link', { name: /My Applications/ })).toBeInTheDocument()
-    if (role === 'Admin') expect(within(nav).getByRole('link', { name: /AI Workflow Monitoring/ })).toBeInTheDocument()
-    if (role === 'MaintenanceTechnician') expect(within(nav).getByRole('link', { name: /Assigned Maintenance/ })).toBeInTheDocument()
+    const labels = within(nav).getAllByRole('link').map((link) => link.textContent.replace('Soon', ''))
+    expect(labels).toEqual(expectedLabels)
   })
 
   it('labels missing modules honestly', async () => {
     renderApp('Tenant', '/modules/properties')
     expect(await screen.findByRole('heading', { name: 'Properties' })).toBeInTheDocument()
-    expect(screen.getByText('Not available yet')).toBeInTheDocument()
-    expect(screen.getByText(/No workflow is available here/)).toBeInTheDocument()
+    expect(screen.getByText('Integration pending')).toBeInTheDocument()
+    expect(screen.getByText(/property module is integrated/)).toBeInTheDocument()
+    expect(screen.getByText('Owning area: Property management')).toBeInTheDocument()
+  })
+
+  it('keeps landlord AI review on the real rental application workflow', async () => {
+    renderApp('Landlord', '/ai-review')
+    expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
   })
 
   it('shows profile details and logs out', async () => {

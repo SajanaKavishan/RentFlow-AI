@@ -57,7 +57,7 @@ void main() {
       await tester.tap(find.text('Properties').last);
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('Properties is not available yet'),
+        find.textContaining('Property discovery will appear here'),
         findsOneWidget,
       );
       await tester.tap(find.text('Profile').last);
@@ -67,27 +67,61 @@ void main() {
     },
   );
 
-  testWidgets('landlord dashboard explains web ownership and offers profile', (
+  testWidgets('landlord has a mobile shell with web-focused workflow handoffs', (
     tester,
   ) async {
     await pumpShell(tester, UserRole.landlord);
-    expect(find.textContaining('web dashboard'), findsWidgets);
-    expect(find.byType(NavigationBar), findsNothing);
-    await tester.tap(find.byTooltip('Profile'));
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('Viewing Requests'), findsWidgets);
+    expect(find.text('Applications'), findsWidgets);
+    await tester.tap(find.text('Viewing Requests').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Full management tools are available on the RentFlow web workspace.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Profile').last);
     await tester.pumpAndSettle();
     expect(find.text('user@example.com'), findsOneWidget);
   });
 
-  testWidgets('maintenance and admin roles have safe module navigation', (
+  testWidgets('maintenance technician has Home, Assigned Work, and Profile', (
     tester,
   ) async {
     await pumpShell(tester, UserRole.maintenanceTechnician);
-    expect(find.text('Assigned Maintenance'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
+    expect(find.byType(NavigationBar), findsOneWidget);
+    final navigation = find.byType(NavigationBar);
+    expect(
+      find.descendant(of: navigation, matching: find.text('Home')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navigation, matching: find.text('Assigned Work')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navigation, matching: find.text('Profile')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('admin has minimal Home and Profile mobile access', (
+    tester,
+  ) async {
     await pumpShell(tester, UserRole.admin);
-    expect(find.text('AI Workflow Monitoring'), findsOneWidget);
-    expect(find.text('Users'), findsOneWidget);
-    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    final navigation = find.byType(NavigationBar);
+    expect(
+      find.descendant(of: navigation, matching: find.text('Home')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navigation, matching: find.text('Profile')),
+      findsOneWidget,
+    );
+    expect(find.text('Users'), findsNothing);
   });
 
   testWidgets('profile logout clears session', (tester) async {
@@ -125,7 +159,8 @@ void main() {
         home: Scaffold(body: UnavailableState(module: 'Properties')),
       ),
     );
-    expect(find.textContaining('not available yet'), findsOneWidget);
+    expect(find.text('Integration pending'), findsOneWidget);
+    expect(find.text('Properties'), findsOneWidget);
     await tester.pumpWidget(
       const MaterialApp(home: Scaffold(body: UnauthorizedState())),
     );
