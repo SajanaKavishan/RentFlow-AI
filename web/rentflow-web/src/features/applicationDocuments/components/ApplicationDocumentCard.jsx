@@ -37,23 +37,32 @@ function ApplicationDocumentCard({
   return (
     <article className="application-document-card">
       <div className="application-document-card__main">
-        <ApplicationDocumentTypeBadge
-          documentType={applicationDocument.documentType}
-        />
+        <div className="application-document-card__badges">
+          <ApplicationDocumentTypeBadge
+            documentType={applicationDocument.documentType}
+          />
+          <span className="application-document-card__state">Uploaded</span>
+        </div>
         <div className="application-document-card__details">
           <h4 title={applicationDocument.originalFileName}>
             {applicationDocument.originalFileName || 'Unnamed document'}
           </h4>
-          <p>
-            <span>{formatFileSize(applicationDocument.fileSizeBytes)}</span>
+          <dl>
+            <div>
+              <dt>File size</dt>
+              <dd>{formatFileSize(applicationDocument.fileSizeBytes)}</dd>
+            </div>
             {applicationDocument.contentType && (
-              <>
-                <span aria-hidden="true">&bull;</span>
-                <span>{applicationDocument.contentType}</span>
-              </>
+              <div>
+                <dt>File type</dt>
+                <dd>{applicationDocument.contentType}</dd>
+              </div>
             )}
-          </p>
-          <p>Uploaded {formatUploadDate(applicationDocument.uploadedAt)}</p>
+            <div>
+              <dt>Uploaded</dt>
+              <dd>{formatUploadDate(applicationDocument.uploadedAt)}</dd>
+            </div>
+          </dl>
         </div>
       </div>
       <button
@@ -62,7 +71,7 @@ function ApplicationDocumentCard({
         onClick={() => onDownload(applicationDocument)}
         disabled={isDownloading}
       >
-        {isDownloading ? 'Downloading...' : 'Download'}
+        {isDownloading ? 'Opening...' : 'Open document'}
       </button>
       {downloadError && (
         <p className="application-document-error" role="alert">

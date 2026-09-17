@@ -1,7 +1,7 @@
 import { RENTAL_APPLICATION_STATUS } from '../services/rentalApplicationApiService.js'
 
 const STATUS_DETAILS = {
-  [RENTAL_APPLICATION_STATUS.DRAFT]: { label: 'Draft', tone: 'neutral' },
+  [RENTAL_APPLICATION_STATUS.DRAFT]: { label: 'Draft', tone: 'draft' },
   [RENTAL_APPLICATION_STATUS.SUBMITTED]: {
     label: 'Submitted',
     tone: 'submitted',
@@ -24,7 +24,7 @@ const STATUS_DETAILS = {
   },
   [RENTAL_APPLICATION_STATUS.WITHDRAWN]: {
     label: 'Withdrawn',
-    tone: 'neutral',
+    tone: 'withdrawn',
   },
 }
 
@@ -35,7 +35,11 @@ function RentalApplicationStatusBadge({ status }) {
   }
 
   return (
-    <span className={`application-status application-status--${details.tone}`}>
+    <span
+      className={`application-status application-status--${details.tone}`}
+      aria-label={`Application status: ${details.label}`}
+    >
+      <span className="application-status__dot" aria-hidden="true" />
       {details.label}
     </span>
   )

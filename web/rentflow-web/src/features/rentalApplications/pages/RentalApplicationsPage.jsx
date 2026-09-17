@@ -18,6 +18,7 @@ const TEMPORARY_PROPERTY_ID = '22222222-2222-2222-2222-222222222222'
 const STATUS_PRIORITY = {
   [RENTAL_APPLICATION_STATUS.SUBMITTED]: 0,
   [RENTAL_APPLICATION_STATUS.UNDER_REVIEW]: 1,
+  [RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED]: 2,
 }
 
 function safeErrorMessage(error, fallback) {
@@ -167,6 +168,24 @@ function RentalApplicationsPage() {
     )
   }
 
+  const reviewCounts = pageState.applications.reduce(
+    (counts, application) => {
+      if (application.status === RENTAL_APPLICATION_STATUS.SUBMITTED) {
+        counts.submitted += 1
+      } else if (
+        application.status === RENTAL_APPLICATION_STATUS.UNDER_REVIEW
+      ) {
+        counts.underReview += 1
+      } else if (
+        application.status === RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED
+      ) {
+        counts.changesRequested += 1
+      }
+      return counts
+    },
+    { submitted: 0, underReview: 0, changesRequested: 0 },
+  )
+
   return (
     <main className="applications-page">
       <header className="applications-page__header">
@@ -174,7 +193,8 @@ function RentalApplicationsPage() {
           <p className="applications-page__eyebrow">Landlord workspace</p>
           <h1>Rental applications</h1>
           <p>
-            Review tenant details and respond to applications for your property.
+            Review tenant details, supporting documents, and validation findings
+            before making a landlord decision.
           </p>
         </div>
         <button
@@ -234,25 +254,52 @@ function RentalApplicationsPage() {
 
       {pageState.status === 'success' &&
         pageState.applications.length > 0 && (
-          <section
-            className="applications-list"
-            aria-label="Rental applications"
-          >
-            {pageState.applications.map((application) => (
-              <RentalApplicationCard
-                key={application.id}
-                application={application}
-                isUpdating={updatingId === application.id}
-                actionError={
-                  actionError.id === application.id ? actionError.message : ''
-                }
-                onReview={handleReview}
-                onApprove={handleApprove}
-                onReject={handleReject}
-                onRequestChanges={handleRequestChanges}
-              />
-            ))}
-          </section>
+          <>
+            <section
+              className="applications-summary"
+              aria-label="Application review summary"
+            >
+              <div className="applications-summary__intro">
+                <p className="applications-page__eyebrow">Review queue</p>
+                <h2>Applications needing attention</h2>
+                <p>Priority applications are listed first below.</p>
+              </div>
+              <dl className="applications-summary__counts">
+                <div className="applications-summary__count applications-summary__count--submitted">
+                  <dt>Submitted</dt>
+                  <dd>{reviewCounts.submitted}</dd>
+                </div>
+                <div className="applications-summary__count applications-summary__count--review">
+                  <dt>Under review</dt>
+                  <dd>{reviewCounts.underReview}</dd>
+                </div>
+                <div className="applications-summary__count applications-summary__count--changes">
+                  <dt>Changes requested</dt>
+                  <dd>{reviewCounts.changesRequested}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section
+              className="applications-list"
+              aria-label="Rental applications"
+            >
+              {pageState.applications.map((application) => (
+                <RentalApplicationCard
+                  key={application.id}
+                  application={application}
+                  isUpdating={updatingId === application.id}
+                  actionError={
+                    actionError.id === application.id ? actionError.message : ''
+                  }
+                  onReview={handleReview}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
+                  onRequestChanges={handleRequestChanges}
+                />
+              ))}
+            </section>
+          </>
         )}
     </main>
   )
