@@ -7,6 +7,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 {
     public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
 
+    public DbSet<Property> Properties => Set<Property>();
+
     public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
 
     public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
@@ -61,6 +63,54 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(user => user.NormalizedEmail)
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<Property>(entity =>
+        {
+            entity.HasKey(property => property.Id);
+
+            entity.Property(property => property.LandlordId)
+                .IsRequired();
+
+            entity.Property(property => property.Title)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(property => property.Description)
+                .HasMaxLength(2000)
+                .IsRequired();
+
+            entity.Property(property => property.Address)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(property => property.City)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(property => property.MonthlyRent)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(property => property.Bedrooms)
+                .IsRequired();
+
+            entity.Property(property => property.Bathrooms)
+                .IsRequired();
+
+            entity.Property(property => property.IsAvailable)
+                .IsRequired();
+
+            entity.Property(property => property.CreatedAt)
+                .IsRequired();
+
+            entity.Property(property => property.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasIndex(property => property.LandlordId);
+            entity.HasIndex(property => property.City);
+            entity.HasIndex(property => property.MonthlyRent);
+            entity.HasIndex(property => property.IsAvailable);
         });
 
         modelBuilder.Entity<ViewingRequest>(entity =>
