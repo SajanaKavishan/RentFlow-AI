@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../shared/theme/app_theme.dart';
 import '../models/viewing.dart';
 import '../services/viewing_api_service.dart';
 import '../widgets/viewing_status_chip.dart';
@@ -15,9 +16,6 @@ class MyViewingsScreen extends StatefulWidget {
 }
 
 class _MyViewingsScreenState extends State<MyViewingsScreen> {
-  static const _olive = Color(0xFF5D6842);
-  static const _warmBackground = Color(0xFFF7F5EF);
-
   ApiClient? _ownedApiClient;
   late final ViewingApiService _viewingApiService;
   late Future<List<Viewing>> _viewings;
@@ -157,7 +155,7 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: isError ? Colors.red.shade700 : _olive,
+          backgroundColor: isError ? AppPalette.danger : AppPalette.primary,
         ),
       );
   }
@@ -170,19 +168,23 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _warmBackground,
+      backgroundColor: AppPalette.background,
       appBar: AppBar(
-        backgroundColor: _olive,
+        backgroundColor: AppPalette.primary,
         foregroundColor: Colors.white,
-        title: const Text('My Viewings'),
+        title: const Text(
+          'My Viewings',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
       ),
       body: SafeArea(
         child: FutureBuilder<List<Viewing>>(
           future: _viewings,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(color: _olive),
+              return const _LoadingState(
+                title: 'Loading your viewings',
+                message: 'Getting your latest viewing schedule.',
               );
             }
 
@@ -193,6 +195,7 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
                 message: _safeErrorMessage(snapshot.error),
                 actionLabel: 'Try again',
                 onAction: _refresh,
+                isError: true,
               );
             }
 
@@ -201,27 +204,44 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
               return _MessageState(
                 icon: Icons.event_available_outlined,
                 title: 'No viewings yet',
-                message: 'Your requested property viewings will appear here.',
+                message:
+                    'When you request a property viewing, its date, time, and status will appear here.',
                 actionLabel: 'Refresh',
                 onAction: _refresh,
               );
             }
 
             return RefreshIndicator(
-              color: _olive,
+              color: AppPalette.primary,
               onRefresh: _refresh,
-              child: ListView.separated(
+              child: ListView.builder(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                itemCount: viewings.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 12),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.base,
+                  AppSpacing.lg,
+                  AppSpacing.base,
+                  AppSpacing.xl,
+                ),
+                itemCount: viewings.length + 1,
                 itemBuilder: (context, index) {
-                  final viewing = viewings[index];
-                  return _ViewingCard(
-                    viewing: viewing,
-                    canCancel: _canCancel(viewing),
-                    isCancelling: _cancellingIds.contains(viewing.id),
-                    onCancel: () => _confirmCancellation(viewing),
+                  if (index == 0) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                      child: _ListHeader(count: viewings.length),
+                    );
+                  }
+
+                  final viewing = viewings[index - 1];
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index == viewings.length ? 0 : AppSpacing.md,
+                    ),
+                    child: _ViewingCard(
+                      viewing: viewing,
+                      canCancel: _canCancel(viewing),
+                      isCancelling: _cancellingIds.contains(viewing.id),
+                      onCancel: () => _confirmCancellation(viewing),
+                    ),
                   );
                 },
               ),
@@ -229,6 +249,50 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
           },
         ),
       ),
+    );
+  }
+}
+
+class _ListHeader extends StatelessWidget {
+  const _ListHeader({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Viewing schedule',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: AppPalette.text,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Pull down to check for updates.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: AppPalette.muted),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Text(
+          '$count ${count == 1 ? 'viewing' : 'viewings'}',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: AppPalette.primary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -256,68 +320,105 @@ class _ViewingCard extends StatelessWidget {
     );
 
     return Card(
-      color: Colors.white,
-      elevation: 0,
+      key: ValueKey('viewing-card-${viewing.id}'),
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.base),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.calendar_month_outlined,
-                  color: _MyViewingsScreenState._olive,
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECEFDF),
+                    borderRadius: BorderRadius.circular(AppRadii.small),
+                  ),
+                  child: const Icon(
+                    Icons.calendar_month_outlined,
+                    color: AppPalette.primary,
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
+                        'VIEWING APPOINTMENT',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppPalette.muted,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
                         date,
                         style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                            ?.copyWith(
+                              color: AppPalette.text,
+                              fontWeight: FontWeight.w700,
+                            ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(time, style: Theme.of(context).textTheme.bodyLarge),
                     ],
                   ),
                 ),
+                const SizedBox(width: AppSpacing.sm),
                 ViewingStatusChip(status: viewing.status),
               ],
             ),
+            const SizedBox(height: AppSpacing.base),
+            _InformationRow(
+              icon: Icons.schedule_outlined,
+              label: 'Time',
+              value: time,
+              emphasized: true,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _InformationRow(
+              icon: Icons.home_work_outlined,
+              label: 'Property reference',
+              value: viewing.propertyId,
+            ),
             if (_hasText(viewing.tenantMessage)) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.base),
               _DetailBlock(
                 label: 'Your message',
                 value: viewing.tenantMessage!.trim(),
               ),
             ],
             if (_hasText(viewing.landlordResponse)) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _DetailBlock(
-                label: 'Owner response',
+                label: 'Landlord response',
                 value: viewing.landlordResponse!.trim(),
                 highlighted: true,
               ),
             ],
             if (canCancel) ...[
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerRight,
+              const SizedBox(height: AppSpacing.base),
+              const Divider(height: 1, color: AppPalette.border),
+              const SizedBox(height: AppSpacing.sm),
+              SizedBox(
+                width: double.infinity,
                 child: TextButton.icon(
                   onPressed: isCancelling ? null : onCancel,
                   icon: isCancelling
                       ? const SizedBox.square(
                           dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppPalette.danger,
+                          ),
                         )
-                      : const Icon(Icons.close),
+                      : const Icon(Icons.event_busy_outlined),
                   label: Text(isCancelling ? 'Cancelling…' : 'Cancel viewing'),
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.red.shade700,
+                    foregroundColor: AppPalette.danger,
                   ),
                 ),
               ),
@@ -329,6 +430,64 @@ class _ViewingCard extends StatelessWidget {
   }
 
   bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
+}
+
+class _InformationRow extends StatelessWidget {
+  const _InformationRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.emphasized = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppPalette.background,
+        borderRadius: BorderRadius.circular(AppRadii.small),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 19, color: AppPalette.primary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppPalette.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppPalette.text,
+                    fontWeight: emphasized ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _DetailBlock extends StatelessWidget {
@@ -349,7 +508,7 @@ class _DetailBlock extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: highlighted ? const Color(0xFFECEFDF) : const Color(0xFFF5F3ED),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadii.small),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -357,7 +516,7 @@ class _DetailBlock extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: _MyViewingsScreenState._olive,
+              color: AppPalette.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -376,6 +535,7 @@ class _MessageState extends StatelessWidget {
     required this.message,
     required this.actionLabel,
     required this.onAction,
+    this.isError = false,
   });
 
   final IconData icon;
@@ -383,34 +543,111 @@ class _MessageState extends StatelessWidget {
   final String message;
   final String actionLabel;
   final Future<void> Function() onAction;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Card(
+            key: ValueKey(isError ? 'viewings-error' : 'viewings-empty'),
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: isError
+                          ? const Color(0xFFF5DDDC)
+                          : const Color(0xFFECEFDF),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 32,
+                      color: isError ? AppPalette.danger : AppPalette.primary,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.base),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: AppPalette.text,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: AppPalette.muted,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  OutlinedButton.icon(
+                    onPressed: onAction,
+                    icon: const Icon(Icons.refresh_outlined),
+                    label: Text(actionLabel),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingState extends StatelessWidget {
+  const _LoadingState({required this.title, required this.message});
+
+  final String title;
+  final String message;
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
+          key: const ValueKey('viewings-loading'),
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 52, color: _MyViewingsScreenState._olive),
-            const SizedBox(height: 16),
+            const SizedBox.square(
+              dimension: 34,
+              child: CircularProgressIndicator(
+                color: AppPalette.primary,
+                strokeWidth: 3,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.base),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: AppPalette.text,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               message,
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
-              ).textTheme.bodyLarge?.copyWith(color: Colors.black54),
+              ).textTheme.bodyMedium?.copyWith(color: AppPalette.muted),
             ),
-            const SizedBox(height: 20),
-            OutlinedButton(onPressed: onAction, child: Text(actionLabel)),
           ],
         ),
       ),
