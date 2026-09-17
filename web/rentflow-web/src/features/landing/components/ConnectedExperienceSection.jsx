@@ -2,8 +2,8 @@ import Icon from '../../../shared/ui/Icons.jsx'
 
 const experiences = [
   { icon: 'home', title: 'Everything in one place', copy: 'Viewings, applications, documents, leases, payments and support stay connected.' },
-  { icon: 'user', title: 'Web and mobile', copy: "Continue your rental tasks across RentFlow's web and mobile experiences." },
-  { icon: 'arrow', title: 'Clear progress', copy: 'Statuses and workflow steps help you understand where things stand and what happens next.' },
+  { icon: 'devices', title: 'Web and mobile', copy: "Continue your rental tasks across RentFlow's web and mobile experiences." },
+  { icon: 'trend', title: 'Clear progress', copy: 'Statuses and workflow steps help you understand where things stand and what happens next.' },
 ]
 
 export default function ConnectedExperienceSection() {
