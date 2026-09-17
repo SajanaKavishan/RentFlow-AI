@@ -38,6 +38,39 @@ Future<fixtures.MemoryTokenStorage> pumpShell(
 }
 
 void main() {
+  testWidgets('tenant home exposes honest journey and owned quick actions', (
+    tester,
+  ) async {
+    await pumpShell(
+      tester,
+      UserRole.tenant,
+      viewingsContent: const Center(child: Text('Viewings content')),
+      applicationsContent: const Center(child: Text('Applications content')),
+    );
+
+    expect(find.text('Hello, Taylor'), findsOneWidget);
+    expect(find.text('Your rental journey'), findsOneWidget);
+    expect(find.text('Properties'), findsWidgets);
+    expect(find.text('My Viewings'), findsOneWidget);
+    expect(find.text('My Applications'), findsOneWidget);
+    expect(find.text('Documents'), findsOneWidget);
+    expect(
+      find.text('AI helps with the work. People stay in control.'),
+      findsOneWidget,
+    );
+    expect(find.text('Recent activity'), findsNothing);
+
+    await tester.ensureVisible(find.text('Documents'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Documents'));
+    await tester.pumpAndSettle();
+    expect(find.text('Applications content'), findsOneWidget);
+    expect(
+      find.text('Open an application to view or manage its documents.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets(
     'tenant shell reaches Viewings, Applications, Properties, and Profile without feature network calls',
     (tester) async {
@@ -64,28 +97,43 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('user@example.com'), findsOneWidget);
       expect(find.text('+94 77 123 4567'), findsOneWidget);
+      for (final section in [
+        'Account',
+        'Security',
+        'Preferences',
+        'Documents',
+        'Support',
+      ]) {
+        expect(find.text(section), findsOneWidget);
+      }
     },
   );
 
-  testWidgets('landlord has a mobile shell with web-focused workflow handoffs', (
-    tester,
-  ) async {
-    await pumpShell(tester, UserRole.landlord);
-    expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('Viewing Requests'), findsWidgets);
-    expect(find.text('Applications'), findsWidgets);
-    await tester.tap(find.text('Viewing Requests').last);
-    await tester.pumpAndSettle();
-    expect(
-      find.text(
-        'Full management tools are available on the RentFlow web workspace.',
-      ),
-      findsOneWidget,
-    );
-    await tester.tap(find.text('Profile').last);
-    await tester.pumpAndSettle();
-    expect(find.text('user@example.com'), findsOneWidget);
-  });
+  testWidgets(
+    'landlord home exposes honest mobile actions and workspace handoff',
+    (tester) async {
+      await pumpShell(tester, UserRole.landlord);
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.text('Hello, Larry'), findsOneWidget);
+      expect(find.text('Viewing Requests'), findsWidgets);
+      expect(find.text('Rental Applications'), findsOneWidget);
+      expect(find.byTooltip('Notifications'), findsOneWidget);
+      expect(find.byTooltip('Open profile'), findsOneWidget);
+      expect(find.text('Recent activity'), findsNothing);
+      expect(
+        find.text(
+          'Full management tools are available on the RentFlow web workspace.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Viewing Requests').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Viewing queue unavailable'), findsOneWidget);
+      await tester.tap(find.text('Profile').last);
+      await tester.pumpAndSettle();
+      expect(find.text('user@example.com'), findsOneWidget);
+    },
+  );
 
   testWidgets('maintenance technician has Home, Assigned Work, and Profile', (
     tester,

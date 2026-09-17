@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../shared/theme/app_theme.dart';
+import '../../../shared/widgets/shared_widgets.dart';
 import '../../application_documents/screens/application_documents_screen.dart';
 import '../../application_documents/services/application_document_api_service.dart';
 import '../models/rental_application.dart';
 import '../services/rental_application_api_service.dart';
 import '../widgets/rental_application_status_chip.dart';
+import 'rental_application_details_screen.dart';
 
 class MyRentalApplicationsScreen extends StatefulWidget {
   const MyRentalApplicationsScreen({
@@ -24,8 +26,6 @@ class MyRentalApplicationsScreen extends StatefulWidget {
 
 class _MyRentalApplicationsScreenState
     extends State<MyRentalApplicationsScreen> {
-  static const _olive = AppPalette.primary;
-
   ApiClient? _ownedApiClient;
   late final RentalApplicationApiService _apiService;
   late Future<List<RentalApplication>> _applications;
@@ -91,6 +91,18 @@ class _MyRentalApplicationsScreenState
         ),
       ),
     );
+  }
+
+  Future<void> _openDetails(RentalApplication application) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => RentalApplicationDetailsScreen(
+          application: application,
+          rentalApplicationApiService: _apiService,
+        ),
+      ),
+    );
+    if (mounted) await _refresh();
   }
 
   bool _canSubmit(RentalApplication application) {
@@ -265,15 +277,31 @@ class _MyRentalApplicationsScreenState
   }
 
   void _showMessage(String message, {bool isError = false}) {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: isError ? Colors.red.shade700 : _olive,
-        ),
-      );
+    AppSnackbars.show(
+      context,
+      message: message,
+      tone: isError ? SnackTone.error : SnackTone.success,
+    );
+  }
+
+  List<RentalApplication> _prioritized(List<RentalApplication> applications) {
+    final indexed = applications.asMap().entries.toList(growable: false);
+    int rank(RentalApplicationStatus status) => switch (status) {
+      RentalApplicationStatus.changesRequested => 0,
+      RentalApplicationStatus.draft => 1,
+      RentalApplicationStatus.submitted ||
+      RentalApplicationStatus.underReview => 2,
+      RentalApplicationStatus.approved ||
+      RentalApplicationStatus.rejected ||
+      RentalApplicationStatus.withdrawn => 3,
+    };
+    indexed.sort((left, right) {
+      final statusOrder = rank(
+        left.value.status,
+      ).compareTo(rank(right.value.status));
+      return statusOrder != 0 ? statusOrder : left.key.compareTo(right.key);
+    });
+    return indexed.map((entry) => entry.value).toList(growable: false);
   }
 
   String _safeErrorMessage(Object? error) {
@@ -286,11 +314,10 @@ class _MyRentalApplicationsScreenState
     return Scaffold(
       backgroundColor: AppPalette.background,
       appBar: AppBar(
-        backgroundColor: AppPalette.primary,
-        foregroundColor: Colors.white,
-        title: const Text(
-          'My Applications',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: const Text('My Applications'),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1),
         ),
       ),
       body: SafeArea(
@@ -315,7 +342,9 @@ class _MyRentalApplicationsScreenState
               );
             }
 
-            final applications = snapshot.data ?? const <RentalApplication>[];
+            final applications = _prioritized(
+              snapshot.data ?? const <RentalApplication>[],
+            );
             if (applications.isEmpty) {
               return _MessageState(
                 icon: Icons.description_outlined,
@@ -333,9 +362,9 @@ class _MyRentalApplicationsScreenState
               child: ListView.builder(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.base,
+                  20,
                   AppSpacing.lg,
-                  AppSpacing.base,
+                  20,
                   AppSpacing.xl,
                 ),
                 itemCount: applications.length + 1,
@@ -365,6 +394,7 @@ class _MyRentalApplicationsScreenState
                       onSubmit: () => _confirmSubmission(application),
                       onWithdraw: () => _confirmWithdrawal(application),
                       onDocuments: () => _openDocuments(application),
+                      onDetails: () => _openDetails(application),
                     ),
                   );
                 },
@@ -383,42 +413,14 @@ class _ApplicationsHeader extends StatelessWidget {
   final int count;
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Application journey',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppPalette.text,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Pull down to check for status updates.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: AppPalette.muted),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Text(
-          '$count ${count == 1 ? 'application' : 'applications'}',
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: AppPalette.primary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => SectionHeader(
+    title: 'Application journey',
+    subtitle: 'Applications needing attention appear first.',
+    trailing: StatusChip(
+      label: '$count ${count == 1 ? 'application' : 'applications'}',
+      tone: StatusTone.neutral,
+    ),
+  );
 }
 
 class _ApplicationCard extends StatelessWidget {
@@ -431,6 +433,7 @@ class _ApplicationCard extends StatelessWidget {
     required this.onSubmit,
     required this.onWithdraw,
     required this.onDocuments,
+    required this.onDetails,
   });
 
   final RentalApplication application;
@@ -441,6 +444,7 @@ class _ApplicationCard extends StatelessWidget {
   final VoidCallback onSubmit;
   final VoidCallback onWithdraw;
   final VoidCallback onDocuments;
+  final VoidCallback onDetails;
 
   @override
   Widget build(BuildContext context) {
@@ -450,15 +454,6 @@ class _ApplicationCard extends StatelessWidget {
     final isBusy = isSubmitting || isWithdrawing;
     final isResubmission =
         application.status == RentalApplicationStatus.changesRequested;
-    final (updateLabel, updateTimestamp) = switch (application) {
-      RentalApplication(updatedAt: final timestamp?) => ('Updated', timestamp),
-      RentalApplication(submittedAt: final timestamp?) => (
-        'Submitted',
-        timestamp,
-      ),
-      _ => ('Created', application.createdAt),
-    };
-
     return Card(
       key: ValueKey('application-card-${application.id}'),
       margin: EdgeInsets.zero,
@@ -474,56 +469,81 @@ class _ApplicationCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: isResubmission
-                        ? const Color(0xFFF2E4D2)
-                        : const Color(0xFFECEFDF),
-                    borderRadius: BorderRadius.circular(AppRadii.small),
-                  ),
-                  child: Icon(
-                    isResubmission
-                        ? Icons.priority_high_rounded
-                        : Icons.description_outlined,
-                    color: isResubmission
-                        ? const Color(0xFF755028)
-                        : AppPalette.primary,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final identity = Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isResubmission
+                            ? const Color(0xFFF2E4D2)
+                            : const Color(0xFFECEFDF),
+                        borderRadius: BorderRadius.circular(AppRadii.small),
+                      ),
+                      child: Icon(
+                        isResubmission
+                            ? Icons.priority_high_rounded
+                            : Icons.description_outlined,
+                        color: isResubmission
+                            ? const Color(0xFF755028)
+                            : AppPalette.primary,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isResubmission
+                                ? 'ACTION NEEDED'
+                                : 'RENTAL APPLICATION',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: isResubmission
+                                      ? const Color(0xFF755028)
+                                      : AppPalette.muted,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8,
+                                ),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            'Move in $date',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: AppPalette.text,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+                final status = RentalApplicationStatusChip(
+                  status: application.status,
+                );
+                if (constraints.maxWidth < 380) {
+                  return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        isResubmission ? 'ACTION NEEDED' : 'RENTAL APPLICATION',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: isResubmission
-                              ? const Color(0xFF755028)
-                              : AppPalette.muted,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'Move in $date',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: AppPalette.text,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
+                      identity,
+                      const SizedBox(height: AppSpacing.sm),
+                      status,
                     ],
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                RentalApplicationStatusChip(status: application.status),
-              ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: identity),
+                    const SizedBox(width: AppSpacing.sm),
+                    status,
+                  ],
+                );
+              },
             ),
             if (isResubmission) ...[
               const SizedBox(height: AppSpacing.base),
@@ -566,30 +586,63 @@ class _ApplicationCard extends StatelessWidget {
                 value: application.tenantNote!.trim(),
               ),
             ],
-            if (!isResubmission && _hasText(application.landlordResponse)) ...[
+            if (!isResubmission) ...[
               const SizedBox(height: AppSpacing.md),
               _DetailBlock(
                 label: 'Landlord response',
-                value: application.landlordResponse!.trim(),
-                highlighted: true,
+                value: _hasText(application.landlordResponse)
+                    ? application.landlordResponse!.trim()
+                    : 'No response yet.',
+                highlighted: _hasText(application.landlordResponse),
               ),
             ],
             const SizedBox(height: AppSpacing.md),
             _ApplicationTimestamp(
-              label: updateLabel,
-              timestamp: updateTimestamp,
+              label: 'Created',
+              timestamp: application.createdAt,
             ),
+            if (application.submittedAt case final timestamp?) ...[
+              const SizedBox(height: AppSpacing.xs),
+              _ApplicationTimestamp(label: 'Submitted', timestamp: timestamp),
+            ],
+            if (application.updatedAt case final timestamp?) ...[
+              const SizedBox(height: AppSpacing.xs),
+              _ApplicationTimestamp(label: 'Updated', timestamp: timestamp),
+            ],
             const SizedBox(height: AppSpacing.base),
             const Divider(height: 1, color: AppPalette.border),
             const SizedBox(height: AppSpacing.base),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                key: ValueKey('application-documents-${application.id}'),
-                onPressed: isBusy ? null : onDocuments,
-                icon: const Icon(Icons.folder_open_outlined),
-                label: const Text('Documents'),
-              ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final detailsButton = OutlinedButton.icon(
+                  onPressed: isBusy ? null : onDetails,
+                  icon: const Icon(Icons.visibility_outlined),
+                  label: const Text('Details'),
+                );
+                final documentsButton = OutlinedButton.icon(
+                  key: ValueKey('application-documents-${application.id}'),
+                  onPressed: isBusy ? null : onDocuments,
+                  icon: const Icon(Icons.folder_open_outlined),
+                  label: const Text('Documents'),
+                );
+                if (constraints.maxWidth < 330) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      detailsButton,
+                      const SizedBox(height: AppSpacing.sm),
+                      documentsButton,
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: detailsButton),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: documentsButton),
+                  ],
+                );
+              },
             ),
             if (canSubmit) ...[
               const SizedBox(height: AppSpacing.sm),

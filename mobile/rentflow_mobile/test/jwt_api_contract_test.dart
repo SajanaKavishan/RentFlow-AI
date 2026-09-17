@@ -201,6 +201,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Cancel viewing'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Cancel viewing'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Cancel viewing'));
@@ -242,6 +244,8 @@ void main() {
         home: MyViewingsScreen(viewingApiService: ViewingApiService(apiClient)),
       ),
     );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Cancel viewing'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cancel viewing'));
     await tester.pumpAndSettle();

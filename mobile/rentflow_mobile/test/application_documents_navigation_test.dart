@@ -82,7 +82,7 @@ void main() {
         final documentsButton = find.byKey(
           ValueKey('application-documents-$selectedId'),
         );
-        await tester.ensureVisible(documentsButton);
+        await tester.scrollUntilVisible(documentsButton, 500);
         await tester.pumpAndSettle();
         await tester.tap(documentsButton);
         await tester.pumpAndSettle();

@@ -30,6 +30,7 @@ Map<String, dynamic> _viewingJson({
   required int status,
   String? tenantMessage,
   String? landlordResponse,
+  String? updatedAt,
 }) => {
   'id': id,
   'tenantId': '11111111-1111-1111-1111-111111111111',
@@ -39,7 +40,7 @@ Map<String, dynamic> _viewingJson({
   'tenantMessage': tenantMessage,
   'landlordResponse': landlordResponse,
   'createdAt': '2026-09-14T10:00:00Z',
-  'updatedAt': null,
+  'updatedAt': updatedAt,
 };
 
 Future<void> _pumpScreen(
@@ -76,14 +77,14 @@ void main() {
       (_) async => http.Response(
         jsonEncode([
           _viewingJson(
-            id: 'pending-viewing',
-            propertyId: pendingProperty,
-            status: 0,
-          ),
-          _viewingJson(
             id: 'completed-viewing',
             propertyId: completedProperty,
             status: 4,
+          ),
+          _viewingJson(
+            id: 'pending-viewing',
+            propertyId: pendingProperty,
+            status: 0,
           ),
         ]),
         200,
@@ -93,14 +94,29 @@ void main() {
 
     expect(find.text('Viewing schedule'), findsOneWidget);
     expect(find.text('2 viewings'), findsOneWidget);
-    expect(find.text('VIEWING APPOINTMENT'), findsNWidgets(2));
-    expect(find.text('Time'), findsNWidgets(2));
-    expect(find.text('Property reference'), findsNWidgets(2));
+    expect(find.text('PROPERTY VIEWING'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('viewing-card-pending-viewing')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('viewing-card-completed-viewing')),
+      findsNothing,
+    );
+    expect(find.text('Date'), findsOneWidget);
+    expect(find.text('Time'), findsOneWidget);
+    expect(find.text('Property reference'), findsOneWidget);
     expect(find.text(pendingProperty), findsOneWidget);
-    expect(find.text(completedProperty), findsOneWidget);
     expect(find.text('Pending'), findsOneWidget);
-    expect(find.text('Completed'), findsOneWidget);
+    expect(find.text('No message provided.'), findsOneWidget);
+    expect(find.text('No response yet.'), findsOneWidget);
+    expect(find.textContaining('Requested:'), findsOneWidget);
     expect(find.text('Cancel viewing'), findsOneWidget);
+
+    await tester.scrollUntilVisible(find.text(completedProperty), 500);
+    await tester.pumpAndSettle();
+    expect(find.text(completedProperty), findsOneWidget);
+    expect(find.text('Completed'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -118,6 +134,70 @@ void main() {
     expect(find.byKey(const ValueKey('viewings-empty')), findsOneWidget);
     expect(find.text('No viewings yet'), findsOneWidget);
     expect(find.text('Refresh'), findsOneWidget);
+  });
+
+  testWidgets('status badges and cancellation rules use real viewing data', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 3000);
+    addTearDown(tester.view.reset);
+
+    await _pumpScreen(
+      tester,
+      (_) async => http.Response(
+        jsonEncode([
+          _viewingJson(
+            id: 'approved-viewing',
+            propertyId: 'approved-property',
+            status: 1,
+            tenantMessage: 'Afternoon works best.',
+            landlordResponse: 'Please arrive at 2 PM.',
+            updatedAt: '2026-09-16T12:30:00Z',
+          ),
+          _viewingJson(
+            id: 'rejected-viewing',
+            propertyId: 'rejected-property',
+            status: 2,
+          ),
+          _viewingJson(
+            id: 'cancelled-viewing',
+            propertyId: 'cancelled-property',
+            status: 3,
+          ),
+          _viewingJson(
+            id: 'pending-viewing',
+            propertyId: 'pending-property',
+            status: 0,
+          ),
+        ]),
+        200,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final status in ['Pending', 'Approved', 'Rejected', 'Cancelled']) {
+      expect(find.text(status), findsOneWidget);
+    }
+    expect(find.text('Cancel viewing'), findsNWidgets(2));
+    expect(find.text('Afternoon works best.'), findsOneWidget);
+    expect(find.text('Please arrive at 2 PM.'), findsOneWidget);
+    expect(find.textContaining('Last updated:'), findsOneWidget);
+    expect(
+      tester
+          .getTopLeft(
+            find.byKey(const ValueKey('viewing-card-pending-viewing')),
+          )
+          .dy,
+      lessThan(
+        tester
+            .getTopLeft(
+              find.byKey(const ValueKey('viewing-card-approved-viewing')),
+            )
+            .dy,
+      ),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('error state retries through the existing API flow', (

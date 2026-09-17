@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
+import '../../../shared/widgets/shared_widgets.dart';
 import '../models/application_document.dart';
 import 'document_requirement_badge.dart';
 
@@ -69,13 +70,24 @@ class ApplicationDocumentCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Wrap(
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.xs,
+                        children: [
+                          DocumentRequirementBadge(
+                            documentType: document.documentType,
+                            compact: true,
+                          ),
+                          const StatusChip(
+                            label: 'Uploaded',
+                            tone: StatusTone.success,
+                            icon: Icons.check_circle_outline,
+                          ),
+                        ],
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                DocumentRequirementBadge(
-                  documentType: document.documentType,
-                  compact: true,
                 ),
               ],
             ),
@@ -87,14 +99,14 @@ class ApplicationDocumentCard extends StatelessWidget {
                 color: AppPalette.background,
                 borderRadius: BorderRadius.circular(AppRadii.small),
               ),
-              child: Wrap(
-                spacing: AppSpacing.base,
-                runSpacing: AppSpacing.sm,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _DocumentMeta(
                     icon: Icons.data_usage_outlined,
                     label: formatFileSize(document.fileSizeBytes),
                   ),
+                  const SizedBox(height: AppSpacing.sm),
                   _DocumentMeta(
                     icon: Icons.cloud_done_outlined,
                     label: 'Uploaded $uploadedDate at $uploadedTime',
@@ -116,7 +128,7 @@ class ApplicationDocumentCard extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.open_in_new),
-                  label: Text(isOpening ? 'Opening...' : 'View document'),
+                  label: Text(isOpening ? 'Opening...' : 'View Document'),
                 ),
                 if (onDelete != null) ...[
                   TextButton.icon(
@@ -159,15 +171,16 @@ class _DocumentMeta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 16, color: AppPalette.primary),
         const SizedBox(width: AppSpacing.xs),
-        Text(
-          label,
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: AppPalette.muted),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppPalette.muted),
+          ),
         ),
       ],
     );

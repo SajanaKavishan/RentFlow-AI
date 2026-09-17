@@ -59,6 +59,8 @@ Future<void> _pumpApplicationsScreen(
 }
 
 Future<void> _confirmSubmit(WidgetTester tester, String label) async {
+  await tester.ensureVisible(find.text(label));
+  await tester.pumpAndSettle();
   await tester.tap(find.text(label));
   await tester.pumpAndSettle();
   final confirmationButton = find.descendant(

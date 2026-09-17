@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -79,6 +80,8 @@ Future<void> _pumpDocumentsScreen(
     ),
   );
   await tester.pumpAndSettle();
+  await tester.ensureVisible(find.text('Choose file'));
+  await tester.pumpAndSettle();
   await tester.tap(find.text('Choose file'));
   await tester.pumpAndSettle();
   expect(find.text('identity.pdf'), findsOneWidget);
@@ -97,6 +100,37 @@ void _expectAuthenticatedMultipart(http.Request request) {
 }
 
 void main() {
+  testWidgets('uploading stays visible until the API responds', (tester) async {
+    final uploadResponse = Completer<http.Response>();
+    var uploaded = false;
+    final client = MockClient((request) async {
+      if (request.method == 'POST') {
+        _expectAuthenticatedMultipart(request);
+        return uploadResponse.future;
+      }
+      if (request.url.path == '/api/rental-applications/$_applicationId') {
+        return http.Response(jsonEncode(_applicationJson), 200);
+      }
+      return http.Response(jsonEncode(uploaded ? [_documentJson] : []), 200);
+    });
+    await _pumpDocumentsScreen(tester, client);
+
+    await tester.tap(find.text('Upload document'));
+    await tester.pump();
+
+    expect(find.text('Uploading'), findsOneWidget);
+    expect(find.text('Uploading...'), findsOneWidget);
+
+    uploaded = true;
+    uploadResponse.complete(http.Response(jsonEncode(_documentJson), 201));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('identity.pdf'), 200);
+
+    expect(find.text('identity.pdf'), findsOneWidget);
+    expect(find.text('Uploading'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('empty-body upload is rejected instead of showing fake success', (
     tester,
   ) async {
@@ -122,6 +156,8 @@ void main() {
       find.text('The document service returned an invalid response.'),
       findsOneWidget,
     );
+    expect(find.text('Failed'), findsOneWidget);
+    expect(find.text('Upload failed'), findsOneWidget);
     expect(find.text('Document uploaded.'), findsNothing);
     expect(documentListCalls, 1);
     expect(tester.takeException(), isNull);
@@ -184,6 +220,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Documents cannot be changed right now.'), findsOneWidget);
+    expect(find.text('Failed'), findsOneWidget);
     expect(find.text('identity.pdf'), findsOneWidget);
     expect(documentListCalls, 1);
     expect(tester.takeException(), isNull);

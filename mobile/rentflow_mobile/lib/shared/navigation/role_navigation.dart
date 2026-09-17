@@ -12,7 +12,13 @@ enum RoleDestinationId {
   profile,
 }
 
-enum DestinationExperience { dashboard, feature, unavailable, webWorkspace, profile }
+enum DestinationExperience {
+  dashboard,
+  feature,
+  unavailable,
+  webWorkspace,
+  profile,
+}
 
 class RoleDestination {
   const RoleDestination({
@@ -31,7 +37,8 @@ class RoleDestination {
   final String? explanation;
   final String? owner;
 
-  bool get isAvailable => experience == DestinationExperience.feature ||
+  bool get isAvailable =>
+      experience == DestinationExperience.feature ||
       experience == DestinationExperience.dashboard ||
       experience == DestinationExperience.profile;
 }
@@ -82,9 +89,7 @@ List<RoleDestination> destinationsFor(UserRole role) => switch (role) {
       id: RoleDestinationId.viewingRequests,
       label: 'Viewing Requests',
       icon: Icons.calendar_month_outlined,
-      experience: DestinationExperience.webWorkspace,
-      explanation:
-          'Review and respond to viewing requests from the RentFlow web workspace.',
+      experience: DestinationExperience.feature,
     ),
     RoleDestination(
       id: RoleDestinationId.applications,

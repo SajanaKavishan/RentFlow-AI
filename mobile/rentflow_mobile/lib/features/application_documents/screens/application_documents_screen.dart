@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../shared/theme/app_theme.dart';
+import '../../../shared/widgets/shared_widgets.dart';
 import '../../rental_applications/models/rental_application.dart';
 import '../../rental_applications/services/rental_application_api_service.dart';
 import '../models/application_document.dart';
@@ -34,7 +35,6 @@ class ApplicationDocumentsScreen extends StatefulWidget {
 
 class _ApplicationDocumentsScreenState
     extends State<ApplicationDocumentsScreen> {
-  static const _olive = AppPalette.primary;
   static const _maximumFileSizeBytes = 5 * 1024 * 1024;
 
   ApiClient? _ownedApiClient;
@@ -47,6 +47,7 @@ class _ApplicationDocumentsScreenState
   SelectedDocumentFile? _selectedFile;
   bool _isPicking = false;
   bool _isUploading = false;
+  String? _uploadError;
   final Set<String> _deletingIds = {};
   final Set<String> _openingIds = {};
 
@@ -118,20 +119,21 @@ class _ApplicationDocumentsScreenState
           : await widget.documentPicker!();
       if (!mounted || selectedFile == null) return;
       if (selectedFile.size <= 0) {
-        _showMessage('The selected file could not be read.', isError: true);
+        _showUploadError('The selected file could not be read.');
         return;
       }
       if (selectedFile.size > _maximumFileSizeBytes) {
-        _showMessage('Choose a file that is 5 MB or smaller.', isError: true);
+        _showUploadError('Choose a file that is 5 MB or smaller.');
         return;
       }
       if (!mounted) return;
       setState(() {
         _selectedFile = selectedFile;
+        _uploadError = null;
       });
     } on Exception {
       if (mounted) {
-        _showMessage('Unable to select a file right now.', isError: true);
+        _showUploadError('Unable to select a file right now.');
       }
     } finally {
       if (mounted) {
@@ -162,21 +164,19 @@ class _ApplicationDocumentsScreenState
     final file = _selectedFile;
     if (_isUploading || file == null) return;
     if (file.size > _maximumFileSizeBytes) {
-      _showMessage('Choose a file that is 5 MB or smaller.', isError: true);
+      _showUploadError('Choose a file that is 5 MB or smaller.');
       return;
     }
 
     final contentType = _contentTypeFor(file.extension);
     if (contentType == null) {
-      _showMessage(
-        'Only PDF, JPEG, and PNG files are supported.',
-        isError: true,
-      );
+      _showUploadError('Only PDF, JPEG, and PNG files are supported.');
       return;
     }
 
     setState(() {
       _isUploading = true;
+      _uploadError = null;
     });
     late final ApplicationDocument uploadedDocument;
     try {
@@ -188,13 +188,12 @@ class _ApplicationDocumentsScreenState
         bytes: file.bytes,
       );
     } on ApplicationDocumentApiException catch (error) {
-      if (mounted) _showMessage(error.message, isError: true);
+      if (mounted) _showUploadError(error.message);
       return;
     } catch (_) {
       if (mounted) {
-        _showMessage(
+        _showUploadError(
           'Unable to upload the document right now. Please try again.',
-          isError: true,
         );
       }
       return;
@@ -210,6 +209,7 @@ class _ApplicationDocumentsScreenState
     final previousData = _data;
     setState(() {
       _selectedFile = null;
+      _uploadError = null;
       _data = _dataWithUploadedDocument(previousData, uploadedDocument);
     });
     _showMessage('Document uploaded.');
@@ -354,15 +354,16 @@ class _ApplicationDocumentsScreenState
   }
 
   void _showMessage(String message, {bool isError = false}) {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: isError ? Colors.red.shade700 : _olive,
-        ),
-      );
+    AppSnackbars.show(
+      context,
+      message: message,
+      tone: isError ? SnackTone.error : SnackTone.success,
+    );
+  }
+
+  void _showUploadError(String message) {
+    setState(() => _uploadError = message);
+    _showMessage('Upload failed. Check the message below.', isError: true);
   }
 
   String _safeErrorMessage(Object? error) {
@@ -376,11 +377,10 @@ class _ApplicationDocumentsScreenState
     return Scaffold(
       backgroundColor: AppPalette.background,
       appBar: AppBar(
-        backgroundColor: AppPalette.primary,
-        foregroundColor: Colors.white,
-        title: const Text(
-          'Application Documents',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: const Text('Application Documents'),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1),
         ),
       ),
       body: SafeArea(
@@ -421,35 +421,18 @@ class _ApplicationDocumentsScreenState
                     canChangeDocuments: data.canChangeDocuments,
                   ),
                   const SizedBox(height: AppSpacing.base),
+                  _RequiredDocumentsCallout(documents: data.documents),
+                  const SizedBox(height: AppSpacing.base),
                   _buildUploadPanel(data.canChangeDocuments),
                   const SizedBox(height: AppSpacing.lg),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Uploaded documents',
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(
-                                color: AppPalette.text,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ),
-                      Text(
-                        '${data.documents.length} ${data.documents.length == 1 ? 'file' : 'files'}',
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: AppPalette.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    'Files supplied with this rental application.',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: AppPalette.muted),
+                  SectionHeader(
+                    title: 'Uploaded documents',
+                    subtitle: 'Files supplied with this rental application.',
+                    trailing: StatusChip(
+                      label:
+                          '${data.documents.length} ${data.documents.length == 1 ? 'file' : 'files'}',
+                      tone: StatusTone.neutral,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   if (data.documents.isEmpty)
@@ -481,6 +464,25 @@ class _ApplicationDocumentsScreenState
   }
 
   Widget _buildUploadPanel(bool canChangeDocuments) {
+    final uploadState = !canChangeDocuments
+        ? const StatusChip(
+            label: 'Read Only',
+            tone: StatusTone.neutral,
+            icon: Icons.lock_outline,
+          )
+        : _isUploading
+        ? const StatusChip(
+            label: 'Uploading',
+            tone: StatusTone.progress,
+            icon: Icons.cloud_upload_outlined,
+          )
+        : _uploadError != null
+        ? const StatusChip(
+            label: 'Failed',
+            tone: StatusTone.danger,
+            icon: Icons.error_outline,
+          )
+        : null;
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -533,6 +535,10 @@ class _ApplicationDocumentsScreenState
                     ],
                   ),
                 ),
+                if (uploadState != null) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  uploadState,
+                ],
               ],
             ),
             const SizedBox(height: AppSpacing.base),
@@ -545,6 +551,7 @@ class _ApplicationDocumentsScreenState
                 if (value != null) {
                   setState(() {
                     _selectedType = value;
+                    _uploadError = null;
                   });
                 }
               },
@@ -602,6 +609,7 @@ class _ApplicationDocumentsScreenState
                           : () {
                               setState(() {
                                 _selectedFile = null;
+                                _uploadError = null;
                               });
                             },
                       icon: const Icon(Icons.close),
@@ -609,6 +617,10 @@ class _ApplicationDocumentsScreenState
                   ],
                 ),
               ),
+            ],
+            if (_uploadError case final error?) ...[
+              const SizedBox(height: AppSpacing.md),
+              _UploadFailure(message: error),
             ],
             const SizedBox(height: AppSpacing.base),
             FilledButton.icon(
@@ -682,23 +694,14 @@ class _DocumentsHeader extends StatelessWidget {
                 ),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-              decoration: BoxDecoration(
-                color: canChangeDocuments
-                    ? const Color(0xFFECEFDF)
-                    : const Color(0xFFE9E7E2),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                canChangeDocuments ? 'Editable' : 'Read only',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: canChangeDocuments
-                      ? AppPalette.success
-                      : AppPalette.neutral,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+            StatusChip(
+              label: canChangeDocuments ? 'Editable' : 'Read Only',
+              tone: canChangeDocuments
+                  ? StatusTone.success
+                  : StatusTone.neutral,
+              icon: canChangeDocuments
+                  ? Icons.edit_outlined
+                  : Icons.lock_outline,
             ),
           ],
         ),
@@ -744,6 +747,136 @@ class _DocumentsHeader extends StatelessWidget {
   }
 }
 
+class _RequiredDocumentsCallout extends StatelessWidget {
+  const _RequiredDocumentsCallout({required this.documents});
+
+  static const _requiredTypes = [
+    ApplicationDocumentType.identityDocument,
+    ApplicationDocumentType.incomeProof,
+  ];
+
+  final List<ApplicationDocument> documents;
+
+  @override
+  Widget build(BuildContext context) {
+    final uploadedTypes = documents
+        .map((document) => document.documentType)
+        .toSet();
+    final missingCount = _requiredTypes
+        .where((type) => !uploadedTypes.contains(type))
+        .length;
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      color: missingCount == 0 ? AppPalette.sage : AppPalette.softCream,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                missingCount == 0
+                    ? Icons.task_alt_outlined
+                    : Icons.rule_folder_outlined,
+                color: missingCount == 0
+                    ? AppPalette.success
+                    : AppPalette.darkOlive,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Required documents',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              StatusChip(
+                label: missingCount == 0 ? 'Uploaded' : '$missingCount Missing',
+                tone: missingCount == 0
+                    ? StatusTone.success
+                    : StatusTone.danger,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          for (var index = 0; index < _requiredTypes.length; index++) ...[
+            if (index > 0) const Divider(height: AppSpacing.md),
+            _RequiredDocumentRow(
+              type: _requiredTypes[index],
+              isUploaded: uploadedTypes.contains(_requiredTypes[index]),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RequiredDocumentRow extends StatelessWidget {
+  const _RequiredDocumentRow({required this.type, required this.isUploaded});
+
+  final ApplicationDocumentType type;
+  final bool isUploaded;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(
+          type.label,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: AppPalette.text,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      const SizedBox(width: AppSpacing.sm),
+      StatusChip(
+        label: isUploaded ? 'Uploaded' : 'Missing',
+        tone: isUploaded ? StatusTone.success : StatusTone.danger,
+        icon: isUploaded ? Icons.check_circle_outline : Icons.error_outline,
+      ),
+    ],
+  );
+}
+
+class _UploadFailure extends StatelessWidget {
+  const _UploadFailure({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('documents-upload-failed'),
+    padding: const EdgeInsets.all(AppSpacing.md),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF5DDDC),
+      borderRadius: BorderRadius.circular(AppRadii.small),
+      border: Border.all(color: AppPalette.danger.withValues(alpha: 0.25)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.error_outline, color: AppPalette.danger),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Upload failed',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: AppPalette.danger),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(message, style: Theme.of(context).textTheme.bodyMedium),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class _DocumentRequirementGuide extends StatelessWidget {
   const _DocumentRequirementGuide();
 
@@ -766,17 +899,18 @@ class _DocumentRequirementGuide extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          const Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
+          const Column(
             children: [
               _RequirementGuideItem(
                 type: ApplicationDocumentType.identityDocument,
               ),
+              SizedBox(height: AppSpacing.sm),
               _RequirementGuideItem(type: ApplicationDocumentType.incomeProof),
+              SizedBox(height: AppSpacing.sm),
               _RequirementGuideItem(
                 type: ApplicationDocumentType.employmentLetter,
               ),
+              SizedBox(height: AppSpacing.sm),
               _RequirementGuideItem(type: ApplicationDocumentType.other),
             ],
           ),
@@ -794,6 +928,7 @@ class _RequirementGuideItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
       decoration: BoxDecoration(
         color: AppPalette.surface,
@@ -801,9 +936,8 @@ class _RequirementGuideItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadii.small),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(type.label),
+          Expanded(child: Text(type.label)),
           const SizedBox(width: AppSpacing.sm),
           DocumentRequirementBadge(documentType: type, compact: true),
         ],
