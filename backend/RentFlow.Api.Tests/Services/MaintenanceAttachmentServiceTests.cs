@@ -119,6 +119,7 @@ public class MaintenanceAttachmentServiceTests
         public Exception? UploadException { get; init; }
         public Task UploadAsync(Stream content, string storageKey, string contentType, CancellationToken cancellationToken = default) { UploadCalls.Add(storageKey); return UploadException is null ? Task.CompletedTask : Task.FromException(UploadException); }
         public Task DeleteAsync(string storageKey, CancellationToken cancellationToken = default) { DeleteCalls.Add(storageKey); return Task.CompletedTask; }
+        public Task<byte[]> DownloadBytesAsync(string storageKey, long maximumBytes, CancellationToken cancellationToken = default) => Task.FromResult(Array.Empty<byte>());
         public Task<string> GenerateDownloadUrlAsync(string storageKey, string originalFileName, string contentType, TimeSpan lifetime) => Task.FromResult("https://downloads.invalid/attachment");
     }
 }

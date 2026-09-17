@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RentFlow.Api.DTOs.Maintenance;
+using RentFlow.Api.Models;
 using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
 
@@ -9,36 +11,59 @@ namespace RentFlow.Api.Controllers;
 /// Handles HTTP requests for maintenance requests.
 /// </summary>
 [ApiController]
+[Authorize]
 [Route("api/maintenance-requests")]
 public class MaintenanceRequestsController(
     IMaintenanceRequestService maintenanceRequestService,
     IMaintenanceAttachmentService maintenanceAttachmentService,
     IMaintenanceCoordinationService maintenanceCoordinationService,
+    ICurrentUserService currentUserService,
     ILogger<MaintenanceRequestsController> logger) : ControllerBase
 {
     [HttpPost]
     [ProducesResponseType<MaintenanceRequestResponseDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    public Task<ActionResult<MaintenanceRequestResponseDto>> Create(
-        [FromQuery] Guid tenantId,
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceRequestResponseDto>> Create(
+        [FromQuery] Guid? tenantId,
         [FromBody] CreateMaintenanceRequestDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim.
-        return ExecuteAsync(
-            () => maintenanceRequestService.CreateAsync(tenantId, request, cancellationToken),
+        if (!TryGetAuthorizedUserId([UserRole.Tenant], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        if (!RouteActorMatchesCurrentUser(tenantId, currentUserId))
+        {
+            return Forbid();
+        }
+
+        return await ExecuteAsync(
+            () => maintenanceRequestService.CreateAsync(currentUserId, request, cancellationToken),
             result => CreatedAtAction(nameof(GetById), new { id = result.Id }, result));
     }
 
     [HttpGet("{id:guid}")]
     [ProducesResponseType<MaintenanceRequestResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public Task<ActionResult<MaintenanceRequestResponseDto>> GetById(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceRequestResponseDto>> GetById(
         Guid id,
         CancellationToken cancellationToken)
     {
-        return ExecuteAsync(
-            () => GetRequiredRequestAsync(id, cancellationToken),
+        if (!TryGetAuthorizedUserId(
+                [UserRole.Tenant, UserRole.MaintenanceTechnician, UserRole.Landlord, UserRole.Admin],
+                out var currentUserId,
+                out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            () => GetAuthorizedRequestAsync(id, currentUserId, cancellationToken),
             result => Ok(result));
     }
 
@@ -46,37 +71,65 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<MaintenanceCoordinationResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
-    public Task<ActionResult<MaintenanceCoordinationResult>> CoordinationAnalysis(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceCoordinationResult>> CoordinationAnalysis(
         Guid id,
         CancellationToken cancellationToken)
     {
-        return ExecuteAsync(
-            () => maintenanceCoordinationService.AnalyzeAsync(id, cancellationToken),
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                return await maintenanceCoordinationService.AnalyzeAsync(id, cancellationToken);
+            },
             result => Ok(result));
     }
 
     [HttpGet("tenant/{tenantId:guid}")]
     [ProducesResponseType<IReadOnlyList<MaintenanceRequestSummaryDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    public Task<ActionResult<IReadOnlyList<MaintenanceRequestSummaryDto>>> GetByTenant(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<MaintenanceRequestSummaryDto>>> GetByTenant(
         Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize tenantId against the authenticated user's tenant claim.
-        return ExecuteAsync(
-            () => maintenanceRequestService.GetByTenantAsync(tenantId, cancellationToken),
+        if (!TryGetAuthorizedUserId([UserRole.Tenant], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        if (tenantId != currentUserId)
+        {
+            return Forbid();
+        }
+
+        return await ExecuteAsync(
+            () => maintenanceRequestService.GetByTenantAsync(currentUserId, cancellationToken),
             result => Ok(result));
     }
 
     [HttpGet("property/{propertyId:guid}")]
     [ProducesResponseType<IReadOnlyList<MaintenanceRequestSummaryDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    public Task<ActionResult<IReadOnlyList<MaintenanceRequestSummaryDto>>> GetByProperty(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<MaintenanceRequestSummaryDto>>> GetByProperty(
         Guid propertyId,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize property access using authenticated landlord claims.
-        return ExecuteAsync(
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out _, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
             () => maintenanceRequestService.GetByPropertyAsync(propertyId, cancellationToken),
             result => Ok(result));
     }
@@ -84,12 +137,26 @@ public class MaintenanceRequestsController(
     [HttpGet("{id:guid}/history")]
     [ProducesResponseType<IReadOnlyList<MaintenanceStatusHistoryResponseDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public Task<ActionResult<IReadOnlyList<MaintenanceStatusHistoryResponseDto>>> GetHistory(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<MaintenanceStatusHistoryResponseDto>>> GetHistory(
         Guid id,
         CancellationToken cancellationToken)
     {
-        return ExecuteAsync(
-            () => maintenanceRequestService.GetHistoryAsync(id, cancellationToken),
+        if (!TryGetAuthorizedUserId(
+                [UserRole.Tenant, UserRole.MaintenanceTechnician, UserRole.Landlord, UserRole.Admin],
+                out var currentUserId,
+                out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                return await maintenanceRequestService.GetHistoryAsync(id, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -98,17 +165,28 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public Task<ActionResult<MaintenanceRequestResponseDto>> Update(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceRequestResponseDto>> Update(
         Guid id,
-        [FromQuery] Guid tenantId,
+        [FromQuery] Guid? tenantId,
         [FromBody] UpdateMaintenanceRequestDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim.
-        return ExecuteAsync(
+        if (!TryGetAuthorizedUserId([UserRole.Tenant], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        if (!RouteActorMatchesCurrentUser(tenantId, currentUserId))
+        {
+            return Forbid();
+        }
+
+        return await ExecuteAsync(
             () => maintenanceRequestService.UpdateTenantRequestAsync(
                 id,
-                tenantId,
+                currentUserId,
                 request,
                 cancellationToken),
             result => Ok(result));
@@ -119,13 +197,19 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public Task<ActionResult<MaintenanceRequestResponseDto>> Triage(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceRequestResponseDto>> Triage(
         Guid id,
         [FromBody] TriageMaintenanceRequestDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize this operation using authenticated landlord claims.
-        return ExecuteAsync(
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out _, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
             () => maintenanceRequestService.TriageAsync(id, request, cancellationToken),
             result => Ok(result));
     }
@@ -135,13 +219,19 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public Task<ActionResult<MaintenanceRequestResponseDto>> AssignTechnician(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceRequestResponseDto>> AssignTechnician(
         Guid id,
         [FromBody] AssignTechnicianDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize this operation using authenticated landlord claims.
-        return ExecuteAsync(
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out _, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
             () => maintenanceRequestService.AssignTechnicianAsync(id, request, cancellationToken),
             result => Ok(result));
     }
@@ -150,12 +240,18 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<MaintenanceRequestResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public Task<ActionResult<MaintenanceRequestResponseDto>> MarkEstimatePending(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceRequestResponseDto>> MarkEstimatePending(
         Guid id,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize this operation using authenticated landlord claims.
-        return ExecuteAsync(
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out _, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
             () => maintenanceRequestService.MarkEstimatePendingAsync(id, cancellationToken),
             result => Ok(result));
     }
@@ -165,17 +261,28 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public Task<ActionResult<RepairEstimateResponseDto>> SubmitEstimate(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<RepairEstimateResponseDto>> SubmitEstimate(
         Guid id,
-        [FromQuery] Guid technicianId,
+        [FromQuery] Guid? technicianId,
         [FromBody] SubmitRepairEstimateDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace technicianId with the authenticated user's technician claim.
-        return ExecuteAsync(
+        if (!TryGetAuthorizedUserId([UserRole.MaintenanceTechnician], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        if (!RouteActorMatchesCurrentUser(technicianId, currentUserId))
+        {
+            return Forbid();
+        }
+
+        return await ExecuteAsync(
             () => maintenanceRequestService.SubmitEstimateAsync(
                 id,
-                technicianId,
+                currentUserId,
                 request,
                 cancellationToken),
             result => CreatedAtAction(nameof(GetLatestEstimate), new { id }, result));
@@ -185,17 +292,33 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<MaintenanceRequestResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public Task<ActionResult<MaintenanceRequestResponseDto>> SubmitEstimateForReview(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceRequestResponseDto>> SubmitEstimateForReview(
         Guid id,
         Guid estimateId,
         CancellationToken cancellationToken)
     {
-        // TODO: Authorize this operation using authenticated maintenance workflow claims.
-        return ExecuteAsync(
-            () => maintenanceRequestService.SubmitEstimateForReviewAsync(
-                id,
-                estimateId,
-                cancellationToken),
+        if (!TryGetAuthorizedUserId([UserRole.MaintenanceTechnician], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            async () =>
+            {
+                var maintenanceRequest = await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                if (maintenanceRequest.TechnicianId != currentUserId)
+                {
+                    throw MaintenanceRequestServiceException.NotFound(
+                        $"Maintenance request '{id}' was not found.");
+                }
+
+                return await maintenanceRequestService.SubmitEstimateForReviewAsync(
+                    id,
+                    estimateId,
+                    cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -204,19 +327,30 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public Task<ActionResult<RepairEstimateResponseDto>> ApproveEstimate(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<RepairEstimateResponseDto>> ApproveEstimate(
         Guid id,
         Guid estimateId,
-        [FromQuery] Guid landlordId,
+        [FromQuery] Guid? landlordId,
         [FromBody] ReviewRepairEstimateDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace landlordId with the authenticated landlord or property-manager claim.
-        return ExecuteAsync(
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        if (!RouteActorMatchesCurrentUser(landlordId, currentUserId))
+        {
+            return Forbid();
+        }
+
+        return await ExecuteAsync(
             () => maintenanceRequestService.ApproveEstimateAsync(
                 id,
                 estimateId,
-                landlordId,
+                currentUserId,
                 request,
                 cancellationToken),
             result => Ok(result));
@@ -227,19 +361,30 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public Task<ActionResult<RepairEstimateResponseDto>> RejectEstimate(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<RepairEstimateResponseDto>> RejectEstimate(
         Guid id,
         Guid estimateId,
-        [FromQuery] Guid landlordId,
+        [FromQuery] Guid? landlordId,
         [FromBody] ReviewRepairEstimateDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace landlordId with the authenticated landlord or property-manager claim.
-        return ExecuteAsync(
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        if (!RouteActorMatchesCurrentUser(landlordId, currentUserId))
+        {
+            return Forbid();
+        }
+
+        return await ExecuteAsync(
             () => maintenanceRequestService.RejectEstimateAsync(
                 id,
                 estimateId,
-                landlordId,
+                currentUserId,
                 request,
                 cancellationToken),
             result => Ok(result));
@@ -250,19 +395,30 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public Task<ActionResult<RepairEstimateResponseDto>> RequestEstimateRevision(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<RepairEstimateResponseDto>> RequestEstimateRevision(
         Guid id,
         Guid estimateId,
-        [FromQuery] Guid landlordId,
+        [FromQuery] Guid? landlordId,
         [FromBody] ReviewRepairEstimateDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace landlordId with the authenticated landlord or property-manager claim.
-        return ExecuteAsync(
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        if (!RouteActorMatchesCurrentUser(landlordId, currentUserId))
+        {
+            return Forbid();
+        }
+
+        return await ExecuteAsync(
             () => maintenanceRequestService.RequestEstimateRevisionAsync(
                 id,
                 estimateId,
-                landlordId,
+                currentUserId,
                 request,
                 cancellationToken),
             result => Ok(result));
@@ -271,12 +427,26 @@ public class MaintenanceRequestsController(
     [HttpGet("{id:guid}/estimates")]
     [ProducesResponseType<IReadOnlyList<RepairEstimateResponseDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public Task<ActionResult<IReadOnlyList<RepairEstimateResponseDto>>> GetEstimates(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<RepairEstimateResponseDto>>> GetEstimates(
         Guid id,
         CancellationToken cancellationToken)
     {
-        return ExecuteAsync(
-            () => maintenanceRequestService.GetEstimatesAsync(id, cancellationToken),
+        if (!TryGetAuthorizedUserId(
+                [UserRole.Tenant, UserRole.MaintenanceTechnician, UserRole.Landlord, UserRole.Admin],
+                out var currentUserId,
+                out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                return await maintenanceRequestService.GetEstimatesAsync(id, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -284,12 +454,26 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<RepairEstimateResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public Task<ActionResult<RepairEstimateResponseDto?>> GetLatestEstimate(
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<RepairEstimateResponseDto?>> GetLatestEstimate(
         Guid id,
         CancellationToken cancellationToken)
     {
-        return ExecuteAsync(
-            () => maintenanceRequestService.GetLatestEstimateAsync(id, cancellationToken),
+        if (!TryGetAuthorizedUserId(
+                [UserRole.Tenant, UserRole.MaintenanceTechnician, UserRole.Landlord, UserRole.Admin],
+                out var currentUserId,
+                out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                return await maintenanceRequestService.GetLatestEstimateAsync(id, cancellationToken);
+            },
             result => result is null ? NoContent() : Ok(result));
     }
 
@@ -298,43 +482,157 @@ public class MaintenanceRequestsController(
     [ProducesResponseType<MaintenanceAttachmentResponseDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<MaintenanceAttachmentResponseDto>> UploadAttachment(
         Guid id,
-        [FromQuery] Guid tenantId,
+        [FromQuery] Guid? tenantId,
         [FromForm] UploadMaintenanceAttachmentDto request,
         CancellationToken cancellationToken)
     {
-        // TODO: Replace tenantId with the authenticated user's tenant claim.
+        if (!TryGetAuthorizedUserId([UserRole.Tenant], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        if (!RouteActorMatchesCurrentUser(tenantId, currentUserId))
+        {
+            return Forbid();
+        }
+
         await using var content = request.File.OpenReadStream();
         return await ExecuteAsync(
-            () => maintenanceAttachmentService.UploadAsync(id, tenantId, content, request.File.FileName,
+            () => maintenanceAttachmentService.UploadAsync(id, currentUserId, content, request.File.FileName,
                 request.File.ContentType, request.File.Length, request.AttachmentType, cancellationToken),
-            result => CreatedAtAction(nameof(DownloadAttachment), new { id, attachmentId = result.Id, tenantId }, result));
+            result => CreatedAtAction(nameof(DownloadAttachment), new { id, attachmentId = result.Id, tenantId = currentUserId }, result));
     }
 
     [HttpGet("{id:guid}/attachments")]
     [ProducesResponseType<IReadOnlyList<MaintenanceAttachmentResponseDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public Task<ActionResult<IReadOnlyList<MaintenanceAttachmentResponseDto>>> GetAttachments(
-        Guid id, [FromQuery] Guid tenantId, CancellationToken cancellationToken) =>
-        ExecuteAsync(() => maintenanceAttachmentService.GetByRequestAsync(id, tenantId, cancellationToken), result => Ok(result));
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<MaintenanceAttachmentResponseDto>>> GetAttachments(
+        Guid id, [FromQuery] Guid? tenantId, CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.Tenant], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        if (!RouteActorMatchesCurrentUser(tenantId, currentUserId))
+        {
+            return Forbid();
+        }
+
+        return await ExecuteAsync(
+            () => maintenanceAttachmentService.GetByRequestAsync(id, currentUserId, cancellationToken),
+            result => Ok(result));
+    }
 
     [HttpGet("{id:guid}/attachments/{attachmentId:guid}")]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public Task<IActionResult> DownloadAttachment(
-        Guid id, Guid attachmentId, [FromQuery] Guid tenantId, CancellationToken cancellationToken) =>
-        ExecuteAttachmentAsync(async () => Redirect(await maintenanceAttachmentService.GenerateDownloadUrlAsync(id, attachmentId, tenantId, cancellationToken)));
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DownloadAttachment(
+        Guid id, Guid attachmentId, [FromQuery] Guid? tenantId, CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.Tenant], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        if (!RouteActorMatchesCurrentUser(tenantId, currentUserId))
+        {
+            return Forbid();
+        }
+
+        return await ExecuteAttachmentAsync(async () =>
+            Redirect(await maintenanceAttachmentService.GenerateDownloadUrlAsync(
+                id,
+                attachmentId,
+                currentUserId,
+                cancellationToken)));
+    }
 
     [HttpDelete("{id:guid}/attachments/{attachmentId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public Task<IActionResult> DeleteAttachment(
-        Guid id, Guid attachmentId, [FromQuery] Guid tenantId, CancellationToken cancellationToken) =>
-        ExecuteAttachmentAsync(async () => { await maintenanceAttachmentService.DeleteAsync(id, attachmentId, tenantId, cancellationToken); return NoContent(); });
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DeleteAttachment(
+        Guid id, Guid attachmentId, [FromQuery] Guid? tenantId, CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.Tenant], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        if (!RouteActorMatchesCurrentUser(tenantId, currentUserId))
+        {
+            return Forbid();
+        }
+
+        return await ExecuteAttachmentAsync(async () =>
+        {
+            await maintenanceAttachmentService.DeleteAsync(id, attachmentId, currentUserId, cancellationToken);
+            return NoContent();
+        });
+    }
+
+    private bool TryGetAuthorizedUserId(
+        IReadOnlyCollection<UserRole> allowedRoles,
+        out Guid userId,
+        out ActionResult authResult)
+    {
+        userId = currentUserService.UserId ?? Guid.Empty;
+
+        if (userId == Guid.Empty)
+        {
+            authResult = Unauthorized();
+            return false;
+        }
+
+        if (currentUserService.Role is not { } role || !allowedRoles.Contains(role))
+        {
+            authResult = Forbid();
+            return false;
+        }
+
+        authResult = Ok();
+        return true;
+    }
+
+    private static bool RouteActorMatchesCurrentUser(Guid? routeActorId, Guid currentUserId) =>
+        routeActorId is null || routeActorId == Guid.Empty || routeActorId == currentUserId;
+
+    private async Task<MaintenanceRequestResponseDto> GetAuthorizedRequestAsync(
+        Guid id,
+        Guid currentUserId,
+        CancellationToken cancellationToken)
+    {
+        var maintenanceRequest = await GetRequiredRequestAsync(id, cancellationToken);
+
+        if (currentUserService.Role == UserRole.Tenant
+            && maintenanceRequest.TenantId != currentUserId)
+        {
+            throw MaintenanceRequestServiceException.NotFound(
+                $"Maintenance request '{id}' was not found.");
+        }
+
+        if (currentUserService.Role == UserRole.MaintenanceTechnician
+            && maintenanceRequest.TechnicianId != currentUserId)
+        {
+            throw MaintenanceRequestServiceException.NotFound(
+                $"Maintenance request '{id}' was not found.");
+        }
+
+        return maintenanceRequest;
+    }
 
     private async Task<MaintenanceRequestResponseDto> GetRequiredRequestAsync(
         Guid id,
