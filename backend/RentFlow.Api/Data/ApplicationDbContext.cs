@@ -24,46 +24,43 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.Entity<ApplicationUser>(entity =>
-        {
-            entity.HasKey(user => user.Id);
+   {
+       entity.HasKey(user => user.Id);
 
-            entity.Property(user => user.FullName)
-                .HasMaxLength(200)
-                .IsRequired();
+       entity.Property(user => user.FullName)
+           .HasMaxLength(200)
+           .IsRequired();
 
-            entity.Property(user => user.Email)
-                .HasMaxLength(320)
-                .IsRequired();
+       entity.Property(user => user.Email)
+           .HasMaxLength(320)
+           .IsRequired();
 
-            entity.Property(user => user.NormalizedEmail)
-                .HasMaxLength(320)
-                .IsRequired();
+       entity.Property(user => user.NormalizedEmail)
+           .HasMaxLength(320)
+           .IsRequired();
 
-            entity.Property(user => user.PhoneNumber)
-                .HasMaxLength(32)
-                .IsRequired();
+       entity.Property(user => user.PhoneNumber)
+           .HasMaxLength(32)
+           .IsRequired();
 
-            entity.Property(user => user.PasswordHash)
-                .HasMaxLength(512)
-                .IsRequired();
+       entity.Property(user => user.PasswordHash)
+           .HasMaxLength(512)
+           .IsRequired();
 
-            entity.Property(user => user.Role)
-                .HasConversion<string>()
-                .HasMaxLength(32)
-                .IsRequired();
+       entity.Property(user => user.Role)
+           .HasConversion<string>()
+           .HasMaxLength(32)
+           .IsRequired();
 
-            entity.Property(user => user.IsActive)
-                .IsRequired();
+       entity.Property(user => user.IsActive)
+           .IsRequired();
 
-            entity.Property(user => user.CreatedAt)
-                .IsRequired();
+       entity.Property(user => user.CreatedAt)
+           .IsRequired();
 
-            entity.Property(user => user.UpdatedAt)
-                .IsRequired();
-
-            entity.HasIndex(user => user.NormalizedEmail)
-                .IsUnique();
-        });
+       entity.HasIndex(user => user.NormalizedEmail)
+           .IsUnique();
+   });
 
         modelBuilder.Entity<Property>(entity =>
         {
@@ -107,11 +104,17 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(property => property.UpdatedAt)
                 .IsRequired(false);
 
+            entity.HasOne(property => property.Landlord)
+                .WithMany()
+                .HasForeignKey(property => property.LandlordId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasIndex(property => property.LandlordId);
             entity.HasIndex(property => property.City);
             entity.HasIndex(property => property.MonthlyRent);
             entity.HasIndex(property => property.IsAvailable);
         });
+
 
         modelBuilder.Entity<ViewingRequest>(entity =>
         {
