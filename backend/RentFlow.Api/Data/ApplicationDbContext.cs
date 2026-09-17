@@ -13,6 +13,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<RentalOffer> RentalOffers => Set<RentalOffer>();
 
+    public DbSet<LeaseAgreement> LeaseAgreements => Set<LeaseAgreement>();
+
     public DbSet<ApplicationDocument> ApplicationDocuments => Set<ApplicationDocument>();
 
     public DbSet<ApplicationValidationWorkflow> ApplicationValidationWorkflows => Set<ApplicationValidationWorkflow>();
@@ -195,6 +197,57 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(offer => offer.TenantId);
             entity.HasIndex(offer => offer.PropertyId);
             entity.HasIndex(offer => offer.Status);
+        });
+
+        modelBuilder.Entity<LeaseAgreement>(entity =>
+        {
+            entity.HasKey(lease => lease.Id);
+
+            entity.Property(lease => lease.RentalOfferId)
+                .IsRequired();
+
+            entity.Property(lease => lease.TenantId)
+                .IsRequired();
+
+            entity.Property(lease => lease.PropertyId)
+                .IsRequired();
+
+            entity.Property(lease => lease.MonthlyRent)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(lease => lease.SecurityDeposit)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(lease => lease.StartDate)
+                .IsRequired();
+
+            entity.Property(lease => lease.EndDate)
+                .IsRequired();
+
+            entity.Property(lease => lease.Status)
+                .IsRequired();
+
+            entity.Property(lease => lease.CreatedAt)
+                .IsRequired();
+
+            entity.Property(lease => lease.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(lease => lease.RentalOffer)
+                .WithMany()
+                .HasForeignKey(lease => lease.RentalOfferId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(lease => lease.RentalOfferId)
+                .IsUnique();
+
+            entity.HasIndex(lease => lease.TenantId);
+
+            entity.HasIndex(lease => lease.PropertyId);
+
+            entity.HasIndex(lease => lease.Status);
         });
 
         modelBuilder.Entity<ApplicationDocument>(entity =>
