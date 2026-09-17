@@ -82,6 +82,8 @@ Future<void> _pumpDocumentsScreen(
   await tester.tap(find.text('Choose file'));
   await tester.pumpAndSettle();
   expect(find.text('identity.pdf'), findsOneWidget);
+  await tester.ensureVisible(find.text('Upload document'));
+  await tester.pumpAndSettle();
 }
 
 void _expectAuthenticatedMultipart(http.Request request) {
@@ -117,6 +119,7 @@ void main() {
 
       await tester.tap(find.text('Upload document'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('identity.pdf'), 200);
 
       expect(find.text('identity.pdf'), findsOneWidget);
       expect(find.textContaining('Unable to upload'), findsNothing);
@@ -146,6 +149,7 @@ void main() {
 
       await tester.tap(find.text('Upload document'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('identity.pdf'), 200);
 
       expect(find.text('identity.pdf'), findsOneWidget);
       expect(

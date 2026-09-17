@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/application_document.dart';
+import 'document_requirement_badge.dart';
 
 class DocumentTypeSelector extends StatelessWidget {
   const DocumentTypeSelector({
@@ -18,13 +19,27 @@ class DocumentTypeSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return DropdownButtonFormField<ApplicationDocumentType>(
       initialValue: value,
-      decoration: const InputDecoration(
+      isExpanded: true,
+      decoration: InputDecoration(
         labelText: 'Document type',
-        prefixIcon: Icon(Icons.category_outlined),
-        border: OutlineInputBorder(),
+        prefixIcon: const Icon(Icons.category_outlined),
+        helperText: '${value.requirementLabel} document',
       ),
       items: ApplicationDocumentType.values
-          .map((type) => DropdownMenuItem(value: type, child: Text(type.label)))
+          .map(
+            (type) => DropdownMenuItem(
+              value: type,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(type.label, overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: 8),
+                  DocumentRequirementBadge(documentType: type, compact: true),
+                ],
+              ),
+            ),
+          )
           .toList(growable: false),
       onChanged: enabled ? onChanged : null,
     );

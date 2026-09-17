@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../shared/theme/app_theme.dart';
 import '../../application_documents/screens/application_documents_screen.dart';
 import '../../application_documents/services/application_document_api_service.dart';
 import '../models/rental_application.dart';
@@ -23,8 +24,7 @@ class MyRentalApplicationsScreen extends StatefulWidget {
 
 class _MyRentalApplicationsScreenState
     extends State<MyRentalApplicationsScreen> {
-  static const _olive = Color(0xFF5D6842);
-  static const _warmBackground = Color(0xFFF7F5EF);
+  static const _olive = AppPalette.primary;
 
   ApiClient? _ownedApiClient;
   late final RentalApplicationApiService _apiService;
@@ -290,19 +290,23 @@ class _MyRentalApplicationsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _warmBackground,
+      backgroundColor: AppPalette.background,
       appBar: AppBar(
-        backgroundColor: _olive,
+        backgroundColor: AppPalette.primary,
         foregroundColor: Colors.white,
-        title: const Text('My Rental Applications'),
+        title: const Text(
+          'My Applications',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
       ),
       body: SafeArea(
         child: FutureBuilder<List<RentalApplication>>(
           future: _applications,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(color: _olive),
+              return const _LoadingState(
+                title: 'Loading your applications',
+                message: 'Getting the latest application updates.',
               );
             }
 
@@ -313,6 +317,7 @@ class _MyRentalApplicationsScreenState
                 message: _safeErrorMessage(snapshot.error),
                 actionLabel: 'Try again',
                 onAction: _refresh,
+                isError: true,
               );
             }
 
@@ -321,35 +326,52 @@ class _MyRentalApplicationsScreenState
               return _MessageState(
                 icon: Icons.description_outlined,
                 title: 'No applications yet',
-                message: 'Your rental applications will appear here.',
+                message:
+                    'Applications you create for a property will appear here.',
                 actionLabel: 'Refresh',
                 onAction: _refresh,
               );
             }
 
             return RefreshIndicator(
-              color: _olive,
+              color: AppPalette.primary,
               onRefresh: _refresh,
-              child: ListView.separated(
+              child: ListView.builder(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                itemCount: applications.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 12),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.base,
+                  AppSpacing.lg,
+                  AppSpacing.base,
+                  AppSpacing.xl,
+                ),
+                itemCount: applications.length + 1,
                 itemBuilder: (context, index) {
-                  final application = applications[index];
+                  if (index == 0) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                      child: _ApplicationsHeader(count: applications.length),
+                    );
+                  }
+
+                  final application = applications[index - 1];
                   final isSubmitting = _submittingIds.contains(application.id);
                   final isWithdrawing = _withdrawingIds.contains(
                     application.id,
                   );
-                  return _ApplicationCard(
-                    application: application,
-                    canSubmit: _canSubmit(application),
-                    canWithdraw: _canWithdraw(application),
-                    isSubmitting: isSubmitting,
-                    isWithdrawing: isWithdrawing,
-                    onSubmit: () => _confirmSubmission(application),
-                    onWithdraw: () => _confirmWithdrawal(application),
-                    onDocuments: () => _openDocuments(application),
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index == applications.length ? 0 : AppSpacing.md,
+                    ),
+                    child: _ApplicationCard(
+                      application: application,
+                      canSubmit: _canSubmit(application),
+                      canWithdraw: _canWithdraw(application),
+                      isSubmitting: isSubmitting,
+                      isWithdrawing: isWithdrawing,
+                      onSubmit: () => _confirmSubmission(application),
+                      onWithdraw: () => _confirmWithdrawal(application),
+                      onDocuments: () => _openDocuments(application),
+                    ),
                   );
                 },
               ),
@@ -357,6 +379,50 @@ class _MyRentalApplicationsScreenState
           },
         ),
       ),
+    );
+  }
+}
+
+class _ApplicationsHeader extends StatelessWidget {
+  const _ApplicationsHeader({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Application journey',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: AppPalette.text,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Pull down to check for status updates.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: AppPalette.muted),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Text(
+          '$count ${count == 1 ? 'application' : 'applications'}',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: AppPalette.primary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -387,54 +453,104 @@ class _ApplicationCard extends StatelessWidget {
     final date = MaterialLocalizations.of(
       context,
     ).formatMediumDate(application.moveInDate);
-    final submittedAt = application.submittedAt;
     final isBusy = isSubmitting || isWithdrawing;
     final isResubmission =
         application.status == RentalApplicationStatus.changesRequested;
+    final (updateLabel, updateTimestamp) = switch (application) {
+      RentalApplication(updatedAt: final timestamp?) => ('Updated', timestamp),
+      RentalApplication(submittedAt: final timestamp?) => (
+        'Submitted',
+        timestamp,
+      ),
+      _ => ('Created', application.createdAt),
+    };
 
     return Card(
-      color: Colors.white,
-      elevation: 0,
+      key: ValueKey('application-card-${application.id}'),
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: isResubmission
+          ? RoundedRectangleBorder(
+              side: const BorderSide(color: Color(0xFFB88635), width: 1.5),
+              borderRadius: BorderRadius.circular(AppRadii.card),
+            )
+          : null,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.base),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.home_work_outlined,
-                  color: _MyRentalApplicationsScreenState._olive,
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isResubmission
+                        ? const Color(0xFFF2E4D2)
+                        : const Color(0xFFECEFDF),
+                    borderRadius: BorderRadius.circular(AppRadii.small),
+                  ),
+                  child: Icon(
+                    isResubmission
+                        ? Icons.priority_high_rounded
+                        : Icons.description_outlined,
+                    color: isResubmission
+                        ? const Color(0xFF755028)
+                        : AppPalette.primary,
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
+                        isResubmission ? 'ACTION NEEDED' : 'RENTAL APPLICATION',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: isResubmission
+                              ? const Color(0xFF755028)
+                              : AppPalette.muted,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
                         'Move in $date',
                         style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                            ?.copyWith(
+                              color: AppPalette.text,
+                              fontWeight: FontWeight.w700,
+                            ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(application.occupation),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 RentalApplicationStatusChip(status: application.status),
               ],
             ),
-            const SizedBox(height: 16),
+            if (isResubmission) ...[
+              const SizedBox(height: AppSpacing.base),
+              _ChangesRequestedCallout(
+                landlordResponse: application.landlordResponse,
+              ),
+            ],
+            const SizedBox(height: AppSpacing.base),
+            _ApplicationInfoRow(
+              icon: Icons.home_work_outlined,
+              label: 'Property reference',
+              value: application.propertyId,
+            ),
+            const SizedBox(height: AppSpacing.sm),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
               children: [
                 _SummaryItem(
-                  icon: Icons.payments_outlined,
-                  label:
-                      'Income ${application.monthlyIncome.toStringAsFixed(2)}',
+                  icon: Icons.badge_outlined,
+                  label: application.occupation,
                 ),
                 _SummaryItem(
                   icon: Icons.people_outline,
@@ -442,36 +558,47 @@ class _ApplicationCard extends StatelessWidget {
                       '${application.numberOfOccupants} '
                       '${application.numberOfOccupants == 1 ? 'occupant' : 'occupants'}',
                 ),
+                _SummaryItem(
+                  icon: Icons.payments_outlined,
+                  label:
+                      'Income ${application.monthlyIncome.toStringAsFixed(2)}',
+                ),
               ],
             ),
             if (_hasText(application.tenantNote)) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.base),
               _DetailBlock(
                 label: 'Your note',
                 value: application.tenantNote!.trim(),
               ),
             ],
-            if (_hasText(application.landlordResponse)) ...[
-              const SizedBox(height: 12),
+            if (!isResubmission && _hasText(application.landlordResponse)) ...[
+              const SizedBox(height: AppSpacing.md),
               _DetailBlock(
                 label: 'Landlord response',
                 value: application.landlordResponse!.trim(),
                 highlighted: true,
               ),
             ],
-            if (submittedAt != null) ...[
-              const SizedBox(height: 12),
-              _SubmittedAt(timestamp: submittedAt),
-            ],
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              key: ValueKey('application-documents-${application.id}'),
-              onPressed: isBusy ? null : onDocuments,
-              icon: const Icon(Icons.folder_open_outlined),
-              label: const Text('Documents'),
+            const SizedBox(height: AppSpacing.md),
+            _ApplicationTimestamp(
+              label: updateLabel,
+              timestamp: updateTimestamp,
+            ),
+            const SizedBox(height: AppSpacing.base),
+            const Divider(height: 1, color: AppPalette.border),
+            const SizedBox(height: AppSpacing.base),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: ValueKey('application-documents-${application.id}'),
+                onPressed: isBusy ? null : onDocuments,
+                icon: const Icon(Icons.folder_open_outlined),
+                label: const Text('Documents'),
+              ),
             ),
             if (canSubmit) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.sm),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
@@ -493,7 +620,7 @@ class _ApplicationCard extends StatelessWidget {
                               : 'Submit application'),
                   ),
                   style: FilledButton.styleFrom(
-                    backgroundColor: _MyRentalApplicationsScreenState._olive,
+                    backgroundColor: AppPalette.primary,
                     foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(48),
                   ),
@@ -501,9 +628,9 @@ class _ApplicationCard extends StatelessWidget {
               ),
             ],
             if (canWithdraw) ...[
-              SizedBox(height: canSubmit ? 4 : 16),
-              Align(
-                alignment: Alignment.centerRight,
+              const SizedBox(height: AppSpacing.xs),
+              SizedBox(
+                width: double.infinity,
                 child: TextButton.icon(
                   onPressed: isBusy ? null : onWithdraw,
                   icon: isWithdrawing
@@ -516,7 +643,7 @@ class _ApplicationCard extends StatelessWidget {
                     isWithdrawing ? 'Withdrawing...' : 'Withdraw application',
                   ),
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.red.shade700,
+                    foregroundColor: AppPalette.danger,
                   ),
                 ),
               ),
@@ -530,8 +657,121 @@ class _ApplicationCard extends StatelessWidget {
   bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
 }
 
-class _SubmittedAt extends StatelessWidget {
-  const _SubmittedAt({required this.timestamp});
+class _ChangesRequestedCallout extends StatelessWidget {
+  const _ChangesRequestedCallout({required this.landlordResponse});
+
+  final String? landlordResponse;
+
+  @override
+  Widget build(BuildContext context) {
+    final response = landlordResponse?.trim();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E2),
+        border: Border.all(color: const Color(0xFFE2BF86)),
+        borderRadius: BorderRadius.circular(AppRadii.small),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.edit_notifications_outlined,
+                size: 20,
+                color: Color(0xFF755028),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Changes requested by the landlord',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: const Color(0xFF755028),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (response != null && response.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(response, style: const TextStyle(height: 1.4)),
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Review the request, update available details or documents, then resubmit.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppPalette.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ApplicationInfoRow extends StatelessWidget {
+  const _ApplicationInfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppPalette.background,
+        borderRadius: BorderRadius.circular(AppRadii.small),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 19, color: AppPalette.primary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppPalette.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppPalette.text,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ApplicationTimestamp extends StatelessWidget {
+  const _ApplicationTimestamp({required this.label, required this.timestamp});
+
+  final String label;
 
   final DateTime timestamp;
 
@@ -549,10 +789,17 @@ class _SubmittedAt extends StatelessWidget {
         const Icon(
           Icons.schedule_outlined,
           size: 18,
-          color: _MyRentalApplicationsScreenState._olive,
+          color: AppPalette.primary,
         ),
         const SizedBox(width: 6),
-        Expanded(child: Text('Submitted $date at $time')),
+        Expanded(
+          child: Text(
+            '$label $date at $time',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppPalette.muted),
+          ),
+        ),
       ],
     );
   }
@@ -569,13 +816,13 @@ class _SummaryItem extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F3ED),
-        borderRadius: BorderRadius.circular(10),
+        color: AppPalette.background,
+        borderRadius: BorderRadius.circular(AppRadii.small),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 17, color: _MyRentalApplicationsScreenState._olive),
+          Icon(icon, size: 17, color: AppPalette.primary),
           const SizedBox(width: 6),
           Text(label),
         ],
@@ -602,7 +849,7 @@ class _DetailBlock extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: highlighted ? const Color(0xFFECEFDF) : const Color(0xFFF5F3ED),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadii.small),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -610,7 +857,7 @@ class _DetailBlock extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: _MyRentalApplicationsScreenState._olive,
+              color: AppPalette.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -629,6 +876,7 @@ class _MessageState extends StatelessWidget {
     required this.message,
     required this.actionLabel,
     required this.onAction,
+    this.isError = false,
   });
 
   final IconData icon;
@@ -636,38 +884,113 @@ class _MessageState extends StatelessWidget {
   final String message;
   final String actionLabel;
   final Future<void> Function() onAction;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Card(
+            key: ValueKey(
+              isError ? 'applications-error' : 'applications-empty',
+            ),
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: isError
+                          ? const Color(0xFFF5DDDC)
+                          : const Color(0xFFECEFDF),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 32,
+                      color: isError ? AppPalette.danger : AppPalette.primary,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.base),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: AppPalette.text,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: AppPalette.muted,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  OutlinedButton.icon(
+                    onPressed: onAction,
+                    icon: const Icon(Icons.refresh_outlined),
+                    label: Text(actionLabel),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingState extends StatelessWidget {
+  const _LoadingState({required this.title, required this.message});
+
+  final String title;
+  final String message;
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
+          key: const ValueKey('applications-loading'),
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 52,
-              color: _MyRentalApplicationsScreenState._olive,
+            const SizedBox.square(
+              dimension: 34,
+              child: CircularProgressIndicator(
+                color: AppPalette.primary,
+                strokeWidth: 3,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.base),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: AppPalette.text,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               message,
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
-              ).textTheme.bodyLarge?.copyWith(color: Colors.black54),
+              ).textTheme.bodyMedium?.copyWith(color: AppPalette.muted),
             ),
-            const SizedBox(height: 20),
-            OutlinedButton(onPressed: onAction, child: Text(actionLabel)),
           ],
         ),
       ),

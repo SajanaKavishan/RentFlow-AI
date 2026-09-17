@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../shared/theme/app_theme.dart';
 import '../../rental_applications/models/rental_application.dart';
 import '../../rental_applications/services/rental_application_api_service.dart';
 import '../models/application_document.dart';
 import '../services/application_document_api_service.dart';
 import '../widgets/application_document_card.dart';
+import '../widgets/document_requirement_badge.dart';
 import '../widgets/document_type_selector.dart';
 
 class ApplicationDocumentsScreen extends StatefulWidget {
@@ -32,8 +34,7 @@ class ApplicationDocumentsScreen extends StatefulWidget {
 
 class _ApplicationDocumentsScreenState
     extends State<ApplicationDocumentsScreen> {
-  static const _olive = Color(0xFF5D6842);
-  static const _warmBackground = Color(0xFFF7F5EF);
+  static const _olive = AppPalette.primary;
   static const _maximumFileSizeBytes = 5 * 1024 * 1024;
 
   ApiClient? _ownedApiClient;
@@ -375,19 +376,23 @@ class _ApplicationDocumentsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _warmBackground,
+      backgroundColor: AppPalette.background,
       appBar: AppBar(
-        backgroundColor: _olive,
+        backgroundColor: AppPalette.primary,
         foregroundColor: Colors.white,
-        title: const Text('Application Documents'),
+        title: const Text(
+          'Application Documents',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
       ),
       body: SafeArea(
         child: FutureBuilder<_DocumentsData>(
           future: _data,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(color: _olive),
+              return const _DocumentsLoadingState(
+                title: 'Loading documents',
+                message: 'Checking this application and its uploaded files.',
               );
             }
             if (snapshot.hasError) {
@@ -401,23 +406,58 @@ class _ApplicationDocumentsScreenState
 
             final data = snapshot.requireData;
             return RefreshIndicator(
-              color: _olive,
+              color: AppPalette.primary,
               onRefresh: _refresh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.base,
+                  AppSpacing.lg,
+                  AppSpacing.base,
+                  AppSpacing.xl,
+                ),
                 children: [
-                  _buildUploadPanel(data.canChangeDocuments),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Uploaded documents',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  _DocumentsHeader(
+                    applicationId: widget.applicationId,
+                    count: data.documents.length,
+                    canChangeDocuments: data.canChangeDocuments,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.base),
+                  _buildUploadPanel(data.canChangeDocuments),
+                  const SizedBox(height: AppSpacing.lg),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Uploaded documents',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                color: AppPalette.text,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                      Text(
+                        '${data.documents.length} ${data.documents.length == 1 ? 'file' : 'files'}',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: AppPalette.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Files supplied with this rental application.',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: AppPalette.muted),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
                   if (data.documents.isEmpty)
-                    const _EmptyDocumentsState()
+                    _EmptyDocumentsState(
+                      canChangeDocuments: data.canChangeDocuments,
+                    )
                   else
                     ...data.documents.map(
                       (document) => Padding(
@@ -444,29 +484,62 @@ class _ApplicationDocumentsScreenState
 
   Widget _buildUploadPanel(bool canChangeDocuments) {
     return Card(
-      color: Colors.white,
-      elevation: 0,
+      margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(AppSpacing.base),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Add a document',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: canChangeDocuments
+                        ? const Color(0xFFECEFDF)
+                        : const Color(0xFFE9E7E2),
+                    borderRadius: BorderRadius.circular(AppRadii.small),
+                  ),
+                  child: Icon(
+                    canChangeDocuments
+                        ? Icons.upload_file_outlined
+                        : Icons.lock_outline,
+                    color: canChangeDocuments
+                        ? AppPalette.primary
+                        : AppPalette.neutral,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Add a document',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: AppPalette.text,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        canChangeDocuments
+                            ? 'Choose a document type and file to upload.'
+                            : 'Uploads and deletions are locked for this application status.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppPalette.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              canChangeDocuments
-                  ? 'PDF, JPEG, or PNG • Maximum 5 MB'
-                  : 'Documents can only be changed while the application is a draft or changes are requested.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-            ),
-            const SizedBox(height: 18),
+            const SizedBox(height: AppSpacing.base),
+            const _DocumentRequirementGuide(),
+            const SizedBox(height: AppSpacing.base),
             DocumentTypeSelector(
               value: _selectedType,
               enabled: canChangeDocuments && !_isUploading,
@@ -478,7 +551,7 @@ class _ApplicationDocumentsScreenState
                 }
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             OutlinedButton.icon(
               onPressed: canChangeDocuments && !_isPicking && !_isUploading
                   ? _pickFile
@@ -492,16 +565,20 @@ class _ApplicationDocumentsScreenState
               label: Text(_isPicking ? 'Opening files...' : 'Choose file'),
             ),
             if (_selectedFile case final file?) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF5F3ED),
-                  borderRadius: BorderRadius.circular(10),
+                  color: AppPalette.background,
+                  borderRadius: BorderRadius.circular(AppRadii.small),
+                  border: Border.all(color: AppPalette.border),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.insert_drive_file_outlined, color: _olive),
+                    const Icon(
+                      Icons.insert_drive_file_outlined,
+                      color: AppPalette.primary,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -514,7 +591,7 @@ class _ApplicationDocumentsScreenState
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           Text(
-                            formatFileSize(file.size),
+                            '${_selectedType.label} · ${formatFileSize(file.size)}',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
@@ -535,7 +612,7 @@ class _ApplicationDocumentsScreenState
                 ),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.base),
             FilledButton.icon(
               onPressed:
                   canChangeDocuments && _selectedFile != null && !_isUploading
@@ -552,8 +629,186 @@ class _ApplicationDocumentsScreenState
                   : const Icon(Icons.cloud_upload_outlined),
               label: Text(_isUploading ? 'Uploading...' : 'Upload document'),
             ),
+            if (_isUploading) ...[
+              const SizedBox(height: AppSpacing.md),
+              const LinearProgressIndicator(color: AppPalette.primary),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Uploading ${_selectedFile?.name ?? 'selected file'}...',
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppPalette.muted),
+              ),
+            ] else ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Accepted formats: PDF, JPEG, PNG · Maximum 5 MB',
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppPalette.muted),
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DocumentsHeader extends StatelessWidget {
+  const _DocumentsHeader({
+    required this.applicationId,
+    required this.count,
+    required this.canChangeDocuments,
+  });
+
+  final String applicationId;
+  final int count;
+  final bool canChangeDocuments;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Supporting documents',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: AppPalette.text,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: canChangeDocuments
+                    ? const Color(0xFFECEFDF)
+                    : const Color(0xFFE9E7E2),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                canChangeDocuments ? 'Editable' : 'Read only',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: canChangeDocuments
+                      ? AppPalette.success
+                      : AppPalette.neutral,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          '$count ${count == 1 ? 'document' : 'documents'} uploaded',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: AppPalette.muted),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppPalette.surface,
+            border: Border.all(color: AppPalette.border),
+            borderRadius: BorderRadius.circular(AppRadii.small),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Application reference',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppPalette.muted,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                applicationId,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppPalette.text,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DocumentRequirementGuide extends StatelessWidget {
+  const _DocumentRequirementGuide();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppPalette.background,
+        borderRadius: BorderRadius.circular(AppRadii.small),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Document guide',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: AppPalette.text,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          const Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              _RequirementGuideItem(
+                type: ApplicationDocumentType.identityDocument,
+              ),
+              _RequirementGuideItem(type: ApplicationDocumentType.incomeProof),
+              _RequirementGuideItem(
+                type: ApplicationDocumentType.employmentLetter,
+              ),
+              _RequirementGuideItem(type: ApplicationDocumentType.other),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RequirementGuideItem extends StatelessWidget {
+  const _RequirementGuideItem({required this.type});
+
+  final ApplicationDocumentType type;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppPalette.surface,
+        border: Border.all(color: AppPalette.border),
+        borderRadius: BorderRadius.circular(AppRadii.small),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(type.label),
+          const SizedBox(width: AppSpacing.sm),
+          DocumentRequirementBadge(documentType: type, compact: true),
+        ],
       ),
     );
   }
@@ -584,28 +839,42 @@ class SelectedDocumentFile {
 }
 
 class _EmptyDocumentsState extends StatelessWidget {
-  const _EmptyDocumentsState();
+  const _EmptyDocumentsState({required this.canChangeDocuments});
+
+  final bool canChangeDocuments;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+      key: const ValueKey('documents-empty'),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.xl,
       ),
-      child: const Column(
+      decoration: BoxDecoration(
+        color: AppPalette.surface,
+        border: Border.all(color: AppPalette.border),
+        borderRadius: BorderRadius.circular(AppRadii.card),
+      ),
+      child: Column(
         children: [
-          Icon(Icons.folder_open_outlined, size: 46, color: Color(0xFF5D6842)),
-          SizedBox(height: 12),
-          Text(
+          const Icon(
+            Icons.folder_open_outlined,
+            size: 46,
+            color: AppPalette.primary,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const Text(
             'No documents uploaded',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
-          SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.sm),
           Text(
-            'Supporting documents for this application will appear here.',
+            canChangeDocuments
+                ? 'Start with the required Identity Document and Income Proof.'
+                : 'No supporting documents were uploaded before document changes were locked.',
             textAlign: TextAlign.center,
+            style: const TextStyle(color: AppPalette.muted, height: 1.4),
           ),
         ],
       ),
@@ -629,24 +898,100 @@ class _MessageState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Card(
+            key: const ValueKey('documents-error'),
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF5DDDC),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, size: 32, color: AppPalette.danger),
+                  ),
+                  const SizedBox(height: AppSpacing.base),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: AppPalette.text,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: AppPalette.muted,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  OutlinedButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_outlined),
+                    label: const Text('Try again'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DocumentsLoadingState extends StatelessWidget {
+  const _DocumentsLoadingState({required this.title, required this.message});
+
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
+          key: const ValueKey('documents-loading'),
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 52, color: const Color(0xFF5D6842)),
-            const SizedBox(height: 16),
+            const SizedBox.square(
+              dimension: 34,
+              child: CircularProgressIndicator(
+                color: AppPalette.primary,
+                strokeWidth: 3,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.base),
             Text(
               title,
               textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: AppPalette.text,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              message,
+              textAlign: TextAlign.center,
               style: Theme.of(
                 context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ).textTheme.bodyMedium?.copyWith(color: AppPalette.muted),
             ),
-            const SizedBox(height: 8),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
           ],
         ),
       ),

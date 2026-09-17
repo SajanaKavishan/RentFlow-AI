@@ -82,7 +82,8 @@ void main() {
         final documentsButton = find.byKey(
           ValueKey('application-documents-$selectedId'),
         );
-        await tester.scrollUntilVisible(documentsButton, 200);
+        await tester.ensureVisible(documentsButton);
+        await tester.pumpAndSettle();
         await tester.tap(documentsButton);
         await tester.pumpAndSettle();
 
@@ -111,6 +112,10 @@ void main() {
         expect(
           find.text('The requested resource is unavailable.'),
           findsNothing,
+        );
+        await tester.scrollUntilVisible(
+          find.text('No documents uploaded'),
+          200,
         );
         expect(find.text('No documents uploaded'), findsOneWidget);
         expect(tester.takeException(), isNull);
