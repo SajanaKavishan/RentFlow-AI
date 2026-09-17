@@ -49,6 +49,10 @@ function ApplicationDocumentCard({
           </h4>
           <dl>
             <div>
+              <dt>Document reference</dt>
+              <dd>{applicationDocument.id}</dd>
+            </div>
+            <div>
               <dt>File size</dt>
               <dd>{formatFileSize(applicationDocument.fileSizeBytes)}</dd>
             </div>

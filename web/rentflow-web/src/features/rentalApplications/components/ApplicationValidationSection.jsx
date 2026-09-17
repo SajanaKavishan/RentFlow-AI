@@ -80,7 +80,10 @@ function FindingList({ title, items, emptyMessage, tone = '' }) {
 
   return (
     <div className={`validation-findings__group${tone ? ` validation-findings__group--${tone}` : ''}`}>
-      <h5>{title}</h5>
+      <div className="validation-findings__heading">
+        <h5>{title}</h5>
+        <span>{findings.length}</span>
+      </div>
       {findings.length ? (
         <ul>
           {findings.map((item, index) => (
@@ -143,6 +146,7 @@ function SupportingDocumentCard({ document }) {
       </div>
 
       <dl className="supporting-document-card__metadata">
+        <div><dt>Document reference</dt><dd>{document.documentId}</dd></div>
         <div><dt>Readable</dt><dd>{document.readable ? 'Yes' : 'No'}</dd></div>
         <div><dt>Detected category</dt><dd>{document.detectedDocumentCategory || 'Unknown'}</dd></div>
         <div><dt>Confidence</dt><dd>{document.confidenceLabel || 'Unknown'}</dd></div>
@@ -353,8 +357,11 @@ function WorkflowResult({ workflow }) {
           <p>
             {isAwaitingHumanReview
               ? 'Automated checks are ready. A landlord must review the evidence and make the final decision.'
-              : `Last updated ${formatDateTime(workflow.updatedAt || workflow.createdAt)}`}
+              : 'Review the workflow output and supporting evidence below.'}
           </p>
+          <span className="validation-workflow__updated">
+            Last updated {formatDateTime(workflow.updatedAt || workflow.createdAt)}
+          </span>
         </div>
       </div>
 
@@ -575,8 +582,9 @@ function ApplicationValidationSection({ applicationId, canRun }) {
       </div>
 
       <p className="application-validation__boundary">
-        Advisory only: automated validation can flag evidence and missing items,
-        but it does not approve or reject an application. A landlord must make the
+        <strong>Human decision required.</strong> Automated validation can flag
+        evidence, missing items, and warnings, but it does not approve or reject
+        an application. A landlord must review the source documents and make the
         final decision.
       </p>
 

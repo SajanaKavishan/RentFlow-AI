@@ -25,6 +25,25 @@
   font-size: 0.88rem;
 }
 
+.application-documents__eyebrow {
+  margin-bottom: 3px !important;
+  color: var(--olive-700) !important;
+  font-size: 0.66rem !important;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.application-documents__count {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: var(--olive-900);
+  background: var(--olive-100);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
 .application-documents__list {
   display: grid;
   gap: 10px;
@@ -87,6 +106,31 @@
   gap: 12px;
 }
 
+.application-document-card__badges {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.application-document-card__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--success);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.application-document-card__state::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
 .application-document-card__details {
   min-width: 0;
 }
@@ -100,13 +144,29 @@
   white-space: nowrap;
 }
 
-.application-document-card__details p {
+.application-document-card__details dl {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 2px 0 0;
+  gap: 7px 18px;
+  margin: 8px 0 0;
+}
+
+.application-document-card__details dl div {
+  min-width: 0;
+}
+
+.application-document-card__details dt {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.application-document-card__details dd {
+  margin: 2px 0 0;
+  color: #53584f;
+  font-size: 0.76rem;
   overflow-wrap: anywhere;
 }
 
@@ -175,6 +235,11 @@
 
   .application-document-card__main {
     display: flex;
+  }
+
+  .application-document-card__badges {
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 
   .application-document-card__details h4 {

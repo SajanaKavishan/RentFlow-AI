@@ -65,13 +65,6 @@ function RentalApplicationCard({
   const isChangesRequested =
     application.status === RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED
   const canAct = isSubmitted || isUnderReview
-  const activityDate =
-    application.updatedAt || application.submittedAt || application.createdAt
-  const activityLabel = application.updatedAt
-    ? 'Updated'
-    : application.submittedAt
-      ? 'Submitted'
-      : 'Created'
 
   async function loadDocuments() {
     setDocumentsState((current) => ({
@@ -184,12 +177,24 @@ function RentalApplicationCard({
 
       {isChangesRequested && (
         <div className="application-card__attention" role="status">
-          <strong>Changes requested</strong>
-          <span>The tenant must update and resubmit before another decision.</span>
+          <div className="application-card__attention-icon" aria-hidden="true">
+            !
+          </div>
+          <div>
+            <strong>Tenant update required</strong>
+            <span>
+              This application is waiting for the tenant to update and
+              resubmit it before another landlord decision.
+            </span>
+          </div>
         </div>
       )}
 
       <dl className="application-card__references">
+        <div>
+          <dt>Application reference</dt>
+          <dd>{application.id}</dd>
+        </div>
         <div>
           <dt>Tenant reference</dt>
           <dd>{application.tenantId}</dd>
@@ -214,10 +219,27 @@ function RentalApplicationCard({
           <dd>{application.numberOfOccupants}</dd>
         </div>
         <div>
-          <dt>{activityLabel}</dt>
-          <dd>{formatDateTime(activityDate)}</dd>
+          <dt>Created</dt>
+          <dd>{formatDateTime(application.createdAt)}</dd>
         </div>
       </dl>
+
+      {(application.submittedAt || application.updatedAt) && (
+        <dl className="application-card__timeline" aria-label="Application activity">
+          {application.submittedAt && (
+            <div>
+              <dt>Submitted</dt>
+              <dd>{formatDateTime(application.submittedAt)}</dd>
+            </div>
+          )}
+          {application.updatedAt && (
+            <div>
+              <dt>Last updated</dt>
+              <dd>{formatDateTime(application.updatedAt)}</dd>
+            </div>
+          )}
+        </dl>
+      )}
 
       <div className="application-card__notes">
         <div>
@@ -243,8 +265,9 @@ function RentalApplicationCard({
           onClick={toggleDocuments}
           aria-expanded={documentsExpanded}
           aria-controls={`application-documents-${application.id}`}
+          aria-label={`${documentsExpanded ? 'Hide' : 'Review'} documents for application ${application.id}`}
         >
-          {documentsExpanded ? 'Hide documents' : 'View documents'}
+          {documentsExpanded ? 'Hide documents' : 'Review documents'}
         </button>
       </div>
 

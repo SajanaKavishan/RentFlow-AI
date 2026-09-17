@@ -27,8 +27,8 @@ function safeErrorMessage(error, fallback) {
 
 function sortApplications(applications) {
   return [...applications].sort((left, right) => {
-    const leftPriority = STATUS_PRIORITY[left.status] ?? 2
-    const rightPriority = STATUS_PRIORITY[right.status] ?? 2
+    const leftPriority = STATUS_PRIORITY[left.status] ?? 3
+    const rightPriority = STATUS_PRIORITY[right.status] ?? 3
     if (leftPriority !== rightPriority) return leftPriority - rightPriority
 
     const leftDate = Date.parse(left.submittedAt || left.createdAt || '') || 0
@@ -185,9 +185,16 @@ function RentalApplicationsPage() {
     },
     { submitted: 0, underReview: 0, changesRequested: 0 },
   )
+  const attentionCount =
+    reviewCounts.submitted +
+    reviewCounts.underReview +
+    reviewCounts.changesRequested
 
   return (
-    <main className="applications-page">
+    <main
+      className="applications-page"
+      aria-busy={pageState.status === 'loading'}
+    >
       <header className="applications-page__header">
         <div>
           <p className="applications-page__eyebrow">Landlord workspace</p>
@@ -262,7 +269,11 @@ function RentalApplicationsPage() {
               <div className="applications-summary__intro">
                 <p className="applications-page__eyebrow">Review queue</p>
                 <h2>Applications needing attention</h2>
-                <p>Priority applications are listed first below.</p>
+                <p>
+                  {attentionCount === 0
+                    ? 'No applications currently need action.'
+                    : `${attentionCount} ${attentionCount === 1 ? 'application needs' : 'applications need'} attention. Priority items are listed first.`}
+                </p>
               </div>
               <dl className="applications-summary__counts">
                 <div className="applications-summary__count applications-summary__count--submitted">
