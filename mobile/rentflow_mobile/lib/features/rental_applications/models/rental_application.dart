@@ -62,6 +62,28 @@ class RentalApplication {
   final DateTime? submittedAt;
   final DateTime? updatedAt;
 
+  RentalApplication copyWith({
+    RentalApplicationStatus? status,
+    DateTime? submittedAt,
+    DateTime? updatedAt,
+  }) {
+    return RentalApplication(
+      id: id,
+      tenantId: tenantId,
+      propertyId: propertyId,
+      moveInDate: moveInDate,
+      monthlyIncome: monthlyIncome,
+      occupation: occupation,
+      numberOfOccupants: numberOfOccupants,
+      tenantNote: tenantNote,
+      status: status ?? this.status,
+      landlordResponse: landlordResponse,
+      createdAt: createdAt,
+      submittedAt: submittedAt ?? this.submittedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
   factory RentalApplication.fromJson(Map<String, dynamic> json) {
     return RentalApplication(
       id: _requiredString(json, 'id'),

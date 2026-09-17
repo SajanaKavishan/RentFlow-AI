@@ -15,19 +15,16 @@ class ApplicationDocumentApiService {
 
   Future<List<ApplicationDocument>> getDocumentsForApplication({
     required String applicationId,
-    required String tenantId,
   }) async {
     final uri = apiClient.buildUri(
       '${ApiConstants.rentalApplicationsPath}/$applicationId/documents',
-      queryParameters: {'tenantId': tenantId},
     );
     final response = await _send(() => apiClient.get(uri));
     return _parseDocumentList(response.body);
   }
 
-  Future<ApplicationDocument> uploadDocument({
+  Future<ApplicationDocument?> uploadDocument({
     required String applicationId,
-    required String tenantId,
     required ApplicationDocumentType documentType,
     required String fileName,
     required String contentType,
@@ -35,7 +32,6 @@ class ApplicationDocumentApiService {
   }) async {
     final uri = apiClient.buildUri(
       '${ApiConstants.rentalApplicationsPath}/$applicationId/documents',
-      queryParameters: {'tenantId': tenantId},
     );
     final request = http.MultipartRequest('POST', uri)
       ..headers['Accept'] = 'application/json'
@@ -49,32 +45,23 @@ class ApplicationDocumentApiService {
         ),
       );
 
-    final response = await _sendStreamed(
-      () => apiClient.httpClient.send(request),
-    );
+    final response = await _sendStreamed(() => apiClient.send(request));
+    if (response.body.trim().isEmpty) return null;
     return _parseDocument(response.body);
   }
 
-  Future<void> deleteDocument({
-    required String documentId,
-    required String tenantId,
-  }) async {
+  Future<void> deleteDocument({required String documentId}) async {
     final uri = apiClient.buildUri(
       '${ApiConstants.applicationDocumentsPath}/$documentId',
-      queryParameters: {'tenantId': tenantId},
     );
     await _send(() => apiClient.delete(uri));
   }
 
   /// Requests the private backend download endpoint and returns its temporary
   /// redirect URL. The caller must use it immediately and must not persist it.
-  Future<Uri> requestDownloadUrl({
-    required String documentId,
-    required String tenantId,
-  }) async {
+  Future<Uri> requestDownloadUrl({required String documentId}) async {
     final endpoint = apiClient.buildUri(
       '${ApiConstants.applicationDocumentsPath}/$documentId/download',
-      queryParameters: {'tenantId': tenantId},
     );
     final request = http.Request('GET', endpoint)
       ..followRedirects = false
@@ -82,7 +69,7 @@ class ApplicationDocumentApiService {
 
     late final http.StreamedResponse streamedResponse;
     try {
-      streamedResponse = await apiClient.httpClient.send(request);
+      streamedResponse = await apiClient.send(request);
     } on http.ClientException {
       throw const ApplicationDocumentApiException(
         'Unable to connect to the document service.',
@@ -140,10 +127,21 @@ class ApplicationDocumentApiService {
   void _throwForError(http.Response response) {
     if (response.statusCode >= 200 && response.statusCode < 300) return;
     throw ApplicationDocumentApiException(
-      _readErrorMessage(response.body) ??
+      _safeErrorMessage(response) ??
           'The document request failed. Please try again.',
       statusCode: response.statusCode,
     );
+  }
+
+  String? _safeErrorMessage(http.Response response) {
+    if (response.statusCode == 403) {
+      return 'You do not have permission to access this resource.';
+    }
+    if (response.statusCode == 404) {
+      return 'The requested resource is unavailable.';
+    }
+    if (response.statusCode >= 500) return null;
+    return _readErrorMessage(response.body);
   }
 
   ApplicationDocument _parseDocument(String body) {

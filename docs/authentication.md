@@ -71,13 +71,45 @@ Require any authenticated user with `[Authorize]`. Apply a role boundary with th
 [Authorize(Roles = nameof(UserRole.Landlord))]
 ```
 
-For multiple roles, use a policy registered through `AddAuthorization` rather than relying on UI checks. Services that need the caller's identity should inject `ICurrentUserService`, which exposes `IsAuthenticated`, `UserId`, and `Role`; avoid parsing `HttpContext` throughout business services.
+For multiple roles, use an authorization policy or a comma-separated `Roles` restriction rather than relying on UI checks. Controllers that need the caller's identity inject `ICurrentUserService`, which exposes `IsAuthenticated`, `UserId`, and `Role`; raw `HttpContext` claim parsing is not repeated across controllers.
 
-Existing Rental Application, Viewing, and Document endpoints intentionally keep their current `tenantId` parameters during Phase 1 so team workflows are not broken. Their future migration is:
+Phase 3A migrated Viewing, Rental Application, Application Document, and Application Validation endpoints from caller-supplied tenant identity to JWT identity:
 
 ```text
-Current: ?tenantId=<guid>
-Future:  authenticated user ID from the JWT sub claim
+Before: client -> ?tenantId=<guid>
+After:  client -> Authorization: Bearer <JWT>
+        ASP.NET Core -> ICurrentUserService.UserId -> TenantId
 ```
 
-Phase 2 should protect each component endpoint, replace caller-supplied tenant identity with `ICurrentUserService.UserId`, verify resource ownership and landlord relationships, and then remove obsolete parameters. Applicant name and phone context should come through the authenticated user relationship rather than being duplicated into `RentalApplication` without a domain reason.
+Unknown query parameters are ignored, so a legacy or malicious `tenantId` query value cannot change the authenticated tenant. Missing, empty, or malformed JWT `sub` or `role` claims fail token validation. Tenant resource lookups include `TenantId` in the database predicate and return 404 for another tenant's private resource.
+
+## Phase 3A role matrix
+
+| Capability | Tenant | Landlord | Admin | MaintenanceTechnician |
+| --- | --- | --- | --- | --- |
+| Create/list/get/cancel viewing | Own resources only | Review reads | Review reads | Denied |
+| Approve/reject viewing | Denied | Allowed* | Allowed | Denied |
+| Create/list/get/update/submit/withdraw application | Own resources only | Review reads | Review reads | Denied |
+| Review/approve/reject/request changes | Denied | Allowed* | Allowed | Denied |
+| Upload/delete application documents | Own eligible application only | Denied | Denied | Denied |
+| List/get/download application documents | Own application only | Review workflow* | Review workflow | Denied |
+| Run/view validation workflows | Denied | Allowed* | Allowed | Denied |
+
+`*` Landlord-to-specific-property ownership is not available in this component. Phase 3A enforces the Landlord/Admin role boundary and preserves existing property/application relationships. Cross-component integration must add property ownership/management authorization before production release; it must not be inferred or duplicated here.
+
+## Phase 3A tenant API contract
+
+Every endpoint below requires a bearer token. The following obsolete tenant identity parameters were removed:
+
+- `POST /api/viewings?tenantId=...` is now `POST /api/viewings`.
+- `GET /api/viewings/tenant/{tenantId}` is now `GET /api/viewings`.
+- `PATCH /api/viewings/{id}/cancel?tenantId=...` is now `PATCH /api/viewings/{id}/cancel`.
+- `POST /api/rental-applications?tenantId=...` is now `POST /api/rental-applications`.
+- `GET /api/rental-applications/tenant/{tenantId}` is now `GET /api/rental-applications`.
+- `PUT /api/rental-applications/{id}?tenantId=...` is now `PUT /api/rental-applications/{id}`.
+- Application `submit` and `withdraw` routes no longer accept `tenantId`.
+- Document upload/list/get/download/delete routes no longer accept `tenantId`.
+
+Real resource identifiers such as `id`, `applicationId`, `documentId`, and `propertyId` remain unchanged. DTO response shapes are unchanged, and `ApplicationDocumentResponseDto` does not expose `StorageKey` or bucket details.
+
+The existing `TenantId` columns remain without a new foreign key migration. Adding referential integrity to `Users.Id` is a future schema-hardening task and should be coordinated against existing data.

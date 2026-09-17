@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RentFlow.Api.DTOs.ApplicationValidation;
+using RentFlow.Api.Models;
 using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
 
@@ -10,6 +12,7 @@ namespace RentFlow.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api")]
+[Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
 public class ApplicationValidationWorkflowsController(
     IApplicationValidationOrchestrator orchestrator,
     IApplicationValidationQueryService queryService,
@@ -24,7 +27,7 @@ public class ApplicationValidationWorkflowsController(
         Guid applicationId,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Authorize the application's property using authenticated landlord claims.
+        // TODO(cross-component-auth): Restrict landlords to the application's property.
         return ExecuteAsync(
             () => orchestrator.StartValidationAsync(applicationId, cancellationToken),
             workflow => CreatedAtAction(
@@ -40,7 +43,7 @@ public class ApplicationValidationWorkflowsController(
         Guid applicationId,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Authorize the application's property using authenticated landlord claims.
+        // TODO(cross-component-auth): Restrict landlords to the application's property.
         return ExecuteAsync(
             () => queryService.GetByApplicationAsync(applicationId, cancellationToken),
             workflows => Ok(workflows));
@@ -53,7 +56,7 @@ public class ApplicationValidationWorkflowsController(
         Guid workflowId,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Authorize the workflow's property using authenticated landlord claims.
+        // TODO(cross-component-auth): Restrict landlords to the workflow application's property.
         return ExecuteAsync(
             async () => await queryService.GetByIdAsync(workflowId, cancellationToken)
                 ?? throw new ApplicationValidationException(

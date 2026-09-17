@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RentFlow.Api.DTOs.ApplicationDocuments;
+using RentFlow.Api.Models;
 using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
 
@@ -10,11 +12,14 @@ namespace RentFlow.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api")]
+[Authorize]
 public class ApplicationDocumentsController(
     IApplicationDocumentService applicationDocumentService,
+    ICurrentUserService currentUser,
     ILogger<ApplicationDocumentsController> logger) : ControllerBase
 {
     [HttpPost("rental-applications/{applicationId:guid}/documents")]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
     [Consumes("multipart/form-data")]
     [ProducesResponseType<ApplicationDocumentResponseDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -22,17 +27,15 @@ public class ApplicationDocumentsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ApplicationDocumentResponseDto>> Upload(
         Guid applicationId,
-        [FromQuery] Guid tenantId,
         [FromForm] UploadApplicationDocumentDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         await using var content = request.File.OpenReadStream();
 
         return await ExecuteAsync(
             () => applicationDocumentService.UploadAsync(
                 applicationId,
-                tenantId,
+                GetRequiredUserId(),
                 request.DocumentType!.Value,
                 content,
                 request.File.FileName,
@@ -41,88 +44,100 @@ public class ApplicationDocumentsController(
                 cancellationToken),
             result => CreatedAtAction(
                 nameof(GetById),
-                new { documentId = result.Id, tenantId },
+                new { documentId = result.Id },
                 result));
     }
 
     [HttpGet("rental-applications/{applicationId:guid}/documents")]
+    [Authorize(Roles = $"{nameof(UserRole.Tenant)},{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<IReadOnlyList<ApplicationDocumentResponseDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public Task<ActionResult<IReadOnlyList<ApplicationDocumentResponseDto>>> GetByApplication(
         Guid applicationId,
-        [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Replace tenantId with the authenticated user's ID or authorized landlord identity.
         return ExecuteAsync(
-            () => applicationDocumentService.GetByApplicationAsync(
-                applicationId,
-                tenantId,
-                cancellationToken),
+            () => currentUser.Role == UserRole.Tenant
+                ? applicationDocumentService.GetByApplicationAsync(
+                    applicationId, GetRequiredUserId(), cancellationToken)
+                : applicationDocumentService.GetByApplicationForReviewAsync(
+                    applicationId, cancellationToken),
             result => Ok(result));
     }
 
     [HttpGet("application-documents/{documentId:guid}")]
+    [Authorize(Roles = $"{nameof(UserRole.Tenant)},{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<ApplicationDocumentResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public Task<ActionResult<ApplicationDocumentResponseDto>> GetById(
         Guid documentId,
-        [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Replace tenantId with the authenticated user's ID or authorized landlord identity.
         return ExecuteAsync(
-            async () => await applicationDocumentService.GetByIdAsync(
-                documentId,
-                tenantId,
-                cancellationToken)
+            async () => await GetAuthorizedDocumentAsync(documentId, cancellationToken)
                 ?? throw ApplicationDocumentServiceException.NotFound(
                     "The application document was not found."),
             result => Ok(result));
     }
 
     [HttpGet("application-documents/{documentId:guid}/download")]
+    [Authorize(Roles = $"{nameof(UserRole.Tenant)},{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public Task<IActionResult> Download(
         Guid documentId,
-        [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Replace tenantId with the authenticated user's ID or authorized landlord identity.
         return ExecuteAsync(async () =>
         {
-            var signedUrl = await applicationDocumentService.GenerateDownloadUrlAsync(
-                documentId,
-                tenantId,
-                cancellationToken);
+            var signedUrl = currentUser.Role == UserRole.Tenant
+                ? await applicationDocumentService.GenerateDownloadUrlAsync(
+                    documentId, GetRequiredUserId(), cancellationToken)
+                : await applicationDocumentService.GenerateDownloadUrlForReviewAsync(
+                    documentId, cancellationToken);
             return Redirect(signedUrl);
         });
     }
 
     [HttpDelete("application-documents/{documentId:guid}")]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public Task<IActionResult> Delete(
         Guid documentId,
-        [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(async () =>
         {
             await applicationDocumentService.DeleteAsync(
                 documentId,
-                tenantId,
+                GetRequiredUserId(),
                 cancellationToken);
             return NoContent();
         });
     }
+
+    private Task<ApplicationDocumentResponseDto?> GetAuthorizedDocumentAsync(
+        Guid documentId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.Role == UserRole.Tenant)
+        {
+            return applicationDocumentService.GetByIdAsync(
+                documentId, GetRequiredUserId(), cancellationToken);
+        }
+
+        // TODO(cross-component-auth): Restrict landlord document review to their properties.
+        return applicationDocumentService.GetByIdForReviewAsync(documentId, cancellationToken);
+    }
+
+    private Guid GetRequiredUserId() => currentUser.UserId
+        ?? throw new InvalidOperationException("The authenticated JWT has no valid user ID.");
 
     private async Task<ActionResult<T>> ExecuteAsync<T>(
         Func<Task<T>> operation,

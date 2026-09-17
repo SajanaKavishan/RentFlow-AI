@@ -7,12 +7,19 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using RentFlow.Api.Data;
+using RentFlow.Api.DTOs.ApplicationValidation;
+using RentFlow.Api.Models;
+using RentFlow.Api.Services.Interfaces;
 
 namespace RentFlow.Api.Tests.Authentication;
 
 internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"AuthApiTests-{Guid.NewGuid()}";
+
+    public RecordingFileStorageService FileStorage { get; } = new();
+
+    public RecordingValidationOrchestrator ValidationOrchestrator { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -48,11 +55,59 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName));
             services.AddDataProtection().UseEphemeralDataProtectionProvider();
+            services.RemoveAll<IFileStorageService>();
+            services.AddSingleton<IFileStorageService>(FileStorage);
+            services.RemoveAll<IApplicationValidationOrchestrator>();
+            services.AddSingleton<IApplicationValidationOrchestrator>(ValidationOrchestrator);
         });
     }
 
-    public HttpClient CreateHttpsClient() => CreateClient(new WebApplicationFactoryClientOptions
+    public HttpClient CreateHttpsClient(bool allowAutoRedirect = true) =>
+        CreateClient(new WebApplicationFactoryClientOptions
     {
-        BaseAddress = new Uri("https://localhost")
+        BaseAddress = new Uri("https://localhost"),
+        AllowAutoRedirect = allowAutoRedirect
     });
+}
+
+internal sealed class RecordingFileStorageService : IFileStorageService
+{
+    public int DownloadUrlCalls { get; private set; }
+
+    public Task UploadAsync(Stream content, string storageKey, string contentType,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task DeleteAsync(string storageKey,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task<byte[]> DownloadBytesAsync(string storageKey, long maximumBytes,
+        CancellationToken cancellationToken = default) => Task.FromResult(Array.Empty<byte>());
+
+    public Task<string> GenerateDownloadUrlAsync(string storageKey, string originalFileName,
+        string contentType, TimeSpan lifetime)
+    {
+        DownloadUrlCalls++;
+        return Task.FromResult("https://signed.example.test/document");
+    }
+}
+
+internal sealed class RecordingValidationOrchestrator : IApplicationValidationOrchestrator
+{
+    public int Calls { get; private set; }
+
+    public Task<ApplicationValidationWorkflowResponseDto> StartValidationAsync(
+        Guid applicationId,
+        CancellationToken cancellationToken = default)
+    {
+        Calls++;
+        return Task.FromResult(new ApplicationValidationWorkflowResponseDto
+        {
+            Id = Guid.NewGuid(),
+            ApplicationId = applicationId,
+            Objective = "Validate application for landlord review.",
+            Status = ApplicationValidationWorkflowStatus.AwaitingHumanReview,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+    }
 }
