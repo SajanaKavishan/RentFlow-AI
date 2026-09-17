@@ -7,9 +7,15 @@ import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/rentflow_brand.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../auth/screens/register_screen.dart';
+import '../services/feedback_service.dart';
 
 class PublicLandingScreen extends StatefulWidget {
-  const PublicLandingScreen({super.key});
+  const PublicLandingScreen({
+    super.key,
+    this.feedbackService = const UnavailableFeedbackService(),
+  });
+
+  final FeedbackService feedbackService;
 
   @override
   State<PublicLandingScreen> createState() => _PublicLandingScreenState();
@@ -118,6 +124,12 @@ class _PublicLandingScreenState extends State<PublicLandingScreen>
               child: _RevealOnScroll(
                 controller: _scrollController,
                 child: _highlights(),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: _RevealOnScroll(
+                controller: _scrollController,
+                child: _FeedbackSection(service: widget.feedbackService),
               ),
             ),
             const SliverToBoxAdapter(child: _LandingFooter()),
@@ -451,24 +463,13 @@ class _PublicLandingScreenState extends State<PublicLandingScreen>
     ),
   );
 
-  Widget _highlights() => const _LandingSection(
+  Widget _highlights() => _LandingSection(
+    key: const Key('renting-simplified'),
     centered: true,
     eyebrow: 'RENTING, SIMPLIFIED',
     title: 'Built around a simpler rental experience.',
     subtitle: 'Clearer steps, connected tools and smarter assistance.',
-    child: Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        _ValueChip('Easy property discovery'),
-        _ValueChip('Clear viewing requests'),
-        _ValueChip('Simple applications'),
-        _ValueChip('Secure documents'),
-        _ValueChip('Human-controlled decisions'),
-        _ValueChip('Faster maintenance support'),
-      ],
-    ),
+    child: _ProductHighlightsRail(pageController: _scrollController),
   );
 }
 
@@ -785,33 +786,200 @@ class _ConnectedCard extends StatelessWidget {
   );
 }
 
-class _ValueChip extends StatelessWidget {
-  const _ValueChip(this.label);
+class _ProductHighlightsRail extends StatefulWidget {
+  const _ProductHighlightsRail({required this.pageController});
+
+  final ScrollController pageController;
+
+  @override
+  State<_ProductHighlightsRail> createState() => _ProductHighlightsRailState();
+}
+
+class _ProductHighlightsRailState extends State<_ProductHighlightsRail>
+    with SingleTickerProviderStateMixin {
+  static const _cardWidth = 220.0;
+  static const _cardGap = 10.0;
+  static const _highlights = [
+    'Easy property discovery',
+    'Clear viewing requests',
+    'Simple rental applications',
+    'Secure document handling',
+    'Smarter property matching',
+    'Clear application progress',
+    'Helpful pricing insights',
+    'Human-controlled decisions',
+    'Connected web and mobile experience',
+    'Organized lease and payment workflows',
+    'Faster maintenance coordination',
+    'Clear status updates',
+  ];
+
+  final _railController = ScrollController();
+  late final AnimationController _motionController;
+  bool _reduceMotion = false;
+  bool _userInteracted = false;
+
+  double get _cycleExtent => _highlights.length * (_cardWidth + _cardGap);
+
+  @override
+  void initState() {
+    super.initState();
+    _motionController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 42),
+    )..addListener(_advanceRail);
+    widget.pageController.addListener(_updateMotion);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateMotion());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (_reduceMotion == reduceMotion) return;
+    _reduceMotion = reduceMotion;
+    if (_reduceMotion) {
+      _motionController.stop();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _updateMotion());
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProductHighlightsRail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.pageController == widget.pageController) return;
+    oldWidget.pageController.removeListener(_updateMotion);
+    widget.pageController.addListener(_updateMotion);
+  }
+
+  @override
+  void dispose() {
+    widget.pageController.removeListener(_updateMotion);
+    _motionController.dispose();
+    _railController.dispose();
+    super.dispose();
+  }
+
+  void _advanceRail() {
+    if (!_railController.hasClients || _userInteracted || _reduceMotion) return;
+    final target = _cycleExtent * (1 - _motionController.value);
+    _railController.jumpTo(
+      target.clamp(0, _railController.position.maxScrollExtent).toDouble(),
+    );
+  }
+
+  void _updateMotion() {
+    if (!mounted || _userInteracted || _reduceMotion) return;
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return;
+    final top = renderObject.localToGlobal(Offset.zero).dy;
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+    final visible =
+        top < viewportHeight * 1.2 &&
+        top + renderObject.size.height > -viewportHeight * .2;
+    if (visible && !_motionController.isAnimating) {
+      if (_railController.hasClients) {
+        _motionController.value = 0;
+        _railController.jumpTo(
+          _cycleExtent
+              .clamp(0, _railController.position.maxScrollExtent)
+              .toDouble(),
+        );
+        _motionController.repeat();
+      }
+    } else if (!visible && _motionController.isAnimating) {
+      _motionController.stop();
+    }
+  }
+
+  void _pauseForInteraction(PointerDownEvent event) {
+    _userInteracted = true;
+    _motionController.stop();
+  }
+
+  Widget _sequence({required bool duplicate}) => ExcludeSemantics(
+    excluding: duplicate,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final highlight in _highlights)
+          Padding(
+            padding: const EdgeInsets.only(right: _cardGap),
+            child: _HighlightCard(label: highlight),
+          ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Product experience highlights',
+    child: Listener(
+      onPointerDown: _pauseForInteraction,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        key: const Key('product-highlights-rail'),
+        height: 76,
+        child: SingleChildScrollView(
+          controller: _railController,
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          child: Row(
+            children: [_sequence(duplicate: false), _sequence(duplicate: true)],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _HighlightCard extends StatelessWidget {
+  const _HighlightCard({required this.label});
+
   final String label;
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+    width: _ProductHighlightsRailState._cardWidth,
+    height: 76,
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(100),
-      border: Border.all(color: AppPalette.authBorder),
+      color: const Color(0xFFFFFCF4),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: const Color(0xFFDAD7C7)),
     ),
     child: Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(
-          Icons.check_circle_rounded,
-          size: 18,
-          color: _LandingColors.olive700,
+        Container(
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: _LandingColors.sage,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.check_rounded,
+            size: 17,
+            color: _LandingColors.olive700,
+          ),
         ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            color: _LandingColors.olive900,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+        const SizedBox(width: 11),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _LandingColors.olive900,
+              fontSize: 12.5,
+              height: 1.25,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
@@ -886,13 +1054,237 @@ class _CardCopy extends StatelessWidget {
   );
 }
 
+class _FeedbackSection extends StatefulWidget {
+  const _FeedbackSection({required this.service});
+
+  final FeedbackService service;
+
+  @override
+  State<_FeedbackSection> createState() => _FeedbackSectionState();
+}
+
+class _FeedbackSectionState extends State<_FeedbackSection> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _messageController = TextEditingController();
+  bool _submitting = false;
+  bool _sent = false;
+  String? _status;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  InputDecoration _decoration(String label, String hint) => InputDecoration(
+    labelText: label,
+    hintText: hint,
+    alignLabelWithHint: true,
+    filled: true,
+    fillColor: const Color(0xFFFFFEFA),
+    counterText: '',
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+    labelStyle: const TextStyle(color: _LandingColors.olive700),
+    hintStyle: TextStyle(color: _LandingColors.muted.withValues(alpha: .72)),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: AppPalette.authBorder),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _LandingColors.olive700, width: 1.4),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: Color(0xFF9A463E)),
+    ),
+    focusedErrorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: Color(0xFF9A463E), width: 1.4),
+    ),
+  );
+
+  String? _required(String? value, String label) {
+    if (value == null || value.trim().isEmpty) return '$label is required.';
+    return null;
+  }
+
+  String? _emailValidator(String? value) {
+    final requiredError = _required(value, 'Email');
+    if (requiredError != null) return requiredError;
+    final email = value!.trim();
+    final valid = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email);
+    return valid ? null : 'Enter a valid email address.';
+  }
+
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _status = null;
+      _sent = false;
+    });
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    setState(() => _submitting = true);
+    try {
+      await widget.service.send(
+        FeedbackMessage(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          message: _messageController.text.trim(),
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _sent = true;
+        _status = 'Message sent.';
+      });
+    } on FeedbackTransportUnavailable {
+      if (!mounted) return;
+      setState(() {
+        _status =
+            'Message delivery is not connected yet. Your details have not been sent.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _status = 'Message delivery is unavailable. Please try again later.';
+      });
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _LandingSection(
+    key: const Key('feedback-section'),
+    eyebrow: "LET'S TALK",
+    title: 'Have a question\nor feedback?',
+    subtitle: "We'd love to hear about your RentFlow experience.",
+    surface: const Color(0xFFF5F1E7),
+    child: Form(
+      key: _formKey,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .84),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppPalette.authBorder),
+        ),
+        child: Column(
+          children: [
+            TextFormField(
+              key: const Key('feedback-name'),
+              controller: _nameController,
+              textInputAction: TextInputAction.next,
+              textCapitalization: TextCapitalization.words,
+              maxLength: 80,
+              inputFormatters: [LengthLimitingTextInputFormatter(80)],
+              decoration: _decoration('Name', 'Your name'),
+              validator: (value) => _required(value, 'Name'),
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              key: const Key('feedback-email'),
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autocorrect: false,
+              maxLength: 160,
+              inputFormatters: [LengthLimitingTextInputFormatter(160)],
+              decoration: _decoration('Email', 'you@example.com'),
+              validator: _emailValidator,
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              key: const Key('feedback-message'),
+              controller: _messageController,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              textCapitalization: TextCapitalization.sentences,
+              minLines: 4,
+              maxLines: 7,
+              maxLength: 1500,
+              inputFormatters: [LengthLimitingTextInputFormatter(1500)],
+              decoration: _decoration('Message', 'How can we help?'),
+              validator: (value) => _required(value, 'Message'),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton.icon(
+                key: const Key('feedback-submit'),
+                onPressed: _submitting ? null : _submit,
+                style: FilledButton.styleFrom(
+                  backgroundColor: _LandingColors.olive900,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: _LandingColors.olive900.withValues(
+                    alpha: .6,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                icon: _submitting
+                    ? const SizedBox.square(
+                        dimension: 17,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.arrow_forward_rounded, size: 18),
+                label: Text(_submitting ? 'Sending…' : 'Send message'),
+              ),
+            ),
+            if (_status != null) ...[
+              const SizedBox(height: 14),
+              Container(
+                key: const Key('feedback-status'),
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _sent
+                      ? _LandingColors.sage.withValues(alpha: .65)
+                      : const Color(0xFFFFF7DF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _status!,
+                  style: const TextStyle(
+                    color: _LandingColors.olive900,
+                    fontSize: 12,
+                    height: 1.4,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _LandingFooter extends StatelessWidget {
   const _LandingFooter();
 
   @override
-  Widget build(BuildContext context) => const ColoredBox(
+  Widget build(BuildContext context) => ColoredBox(
+    key: const Key('public-footer'),
     color: AppPalette.authCard,
-    child: SafeArea(
+    child: const SafeArea(
       top: false,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),

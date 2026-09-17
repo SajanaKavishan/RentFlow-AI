@@ -154,6 +154,148 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'public landing lower sections include the product rail and footer',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+
+      final controller = buildController(MemoryTokenStorage());
+      await tester.pumpWidget(
+        MyApp(authController: controller, showPublicLanding: true),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('product-highlights-rail')),
+        650,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('RENTING, SIMPLIFIED'), findsOneWidget);
+      expect(find.byKey(const Key('product-highlights-rail')), findsOneWidget);
+      expect(find.text('Easy property discovery'), findsWidgets);
+      expect(find.text('Clear status updates'), findsWidgets);
+      expect(find.textContaining('testimonial'), findsNothing);
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('public-footer')),
+        650,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byKey(const Key('public-footer-brand')), findsNothing);
+      expect(
+        find.text('© 2026 RentFlow AI. All rights reserved.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('feedback validates and never fakes an unavailable delivery', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+
+    final controller = buildController(MemoryTokenStorage());
+    await tester.pumpWidget(
+      MyApp(authController: controller, showPublicLanding: true),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('feedback-section')),
+      700,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.byKey(const Key('feedback-submit')));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('feedback-submit')));
+    await tester.pump();
+    expect(find.text('Name is required.'), findsOneWidget);
+    expect(find.text('Email is required.'), findsOneWidget);
+    expect(find.text('Message is required.'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('feedback-name')), 'Alex Rent');
+    await tester.enterText(
+      find.byKey(const Key('feedback-email')),
+      'not-an-email',
+    );
+    await tester.enterText(
+      find.byKey(const Key('feedback-message')),
+      'I have a question about my rental journey.',
+    );
+    await tester.tap(find.byKey(const Key('feedback-submit')));
+    await tester.pump();
+    expect(find.text('Enter a valid email address.'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('feedback-email')),
+      'alex@example.com',
+    );
+    await tester.ensureVisible(find.byKey(const Key('feedback-submit')));
+    await tester.tap(find.byKey(const Key('feedback-submit')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Message delivery is not connected yet. Your details have not been sent.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Message sent.'), findsNothing);
+    expect(find.text('Alex Rent'), findsOneWidget);
+    expect(find.text('alex@example.com'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final width in [360.0, 390.0, 412.0, 430.0]) {
+    testWidgets('public landing lower sections fit a $width mobile screen', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 800);
+      addTearDown(tester.view.reset);
+
+      final controller = buildController(MemoryTokenStorage());
+      await tester.pumpWidget(
+        MyApp(authController: controller, showPublicLanding: true),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('product-highlights-rail')),
+        700,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        tester.getSize(find.byKey(const Key('product-highlights-rail'))).width,
+        lessThanOrEqualTo(width - 40),
+      );
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('feedback-section')),
+        700,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        tester.getSize(find.byKey(const Key('feedback-section'))).width,
+        width,
+      );
+      expect(find.byKey(const Key('feedback-submit')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final width in [360.0, 390.0, 412.0, 430.0]) {
     testWidgets('auth cards fit a $width logical pixel mobile screen', (
       tester,
