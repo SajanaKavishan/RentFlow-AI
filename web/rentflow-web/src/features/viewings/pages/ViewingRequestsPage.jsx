@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
+import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import ViewingCard from '../components/ViewingCard.jsx'
 import {
   approveViewing,
@@ -8,10 +10,6 @@ import {
   VIEWING_STATUS,
 } from '../services/viewingApiService.js'
 import '../viewings.css'
-
-// TODO(dev-only): Replace with the property selected through authenticated
-// landlord/property navigation when those flows are implemented.
-const TEMPORARY_PROPERTY_ID = '22222222-2222-2222-2222-222222222222'
 
 function safeErrorMessage(error, fallback) {
   return error instanceof ViewingApiError ? error.message : fallback
@@ -29,8 +27,10 @@ function prioritizePending(viewings) {
 }
 
 function ViewingRequestsPage() {
+  const { propertyId } = usePropertyContext()
   const [pageState, setPageState] = useState({
     status: 'loading',
+    propertyId: null,
     viewings: [],
     error: '',
   })
@@ -41,18 +41,28 @@ function ViewingRequestsPage() {
     (viewing) => viewing.status === VIEWING_STATUS.PENDING,
   ).length
   const orderedViewings = prioritizePending(pageState.viewings)
+  const pageStatus = !propertyId
+    ? 'property-required'
+    : pageState.propertyId === propertyId
+      ? pageState.status
+      : 'loading'
 
   useEffect(() => {
+    if (!propertyId) return undefined
+
     let isActive = true
 
-    getViewingsByProperty(TEMPORARY_PROPERTY_ID)
+    getViewingsByProperty(propertyId)
       .then((viewings) => {
-        if (isActive) setPageState({ status: 'success', viewings, error: '' })
+        if (isActive) {
+          setPageState({ status: 'success', propertyId, viewings, error: '' })
+        }
       })
       .catch((error) => {
         if (!isActive) return
         setPageState({
           status: 'error',
+          propertyId,
           viewings: [],
           error: safeErrorMessage(
             error,
@@ -64,18 +74,26 @@ function ViewingRequestsPage() {
     return () => {
       isActive = false
     }
-  }, [])
+  }, [propertyId])
 
   async function loadViewings() {
-    setPageState((current) => ({ ...current, status: 'loading', error: '' }))
+    if (!propertyId) return
+
+    setPageState((current) => ({
+      ...current,
+      status: 'loading',
+      propertyId,
+      error: '',
+    }))
     setNotice('')
 
     try {
-      const viewings = await getViewingsByProperty(TEMPORARY_PROPERTY_ID)
-      setPageState({ status: 'success', viewings, error: '' })
+      const viewings = await getViewingsByProperty(propertyId)
+      setPageState({ status: 'success', propertyId, viewings, error: '' })
     } catch (error) {
       setPageState({
         status: 'error',
+        propertyId,
         viewings: [],
         error: safeErrorMessage(
           error,
@@ -135,7 +153,7 @@ function ViewingRequestsPage() {
   return (
     <main
       className="viewings-page"
-      aria-busy={pageState.status === 'loading'}
+      aria-busy={pageStatus === 'loading'}
     >
       <header className="viewings-page__header">
         <div>
@@ -150,21 +168,25 @@ function ViewingRequestsPage() {
           type="button"
           className="button button--quiet viewings-page__refresh"
           onClick={loadViewings}
-          disabled={pageState.status === 'loading'}
+          disabled={!propertyId || pageStatus === 'loading'}
         >
           <span aria-hidden="true">↻</span>
-          {pageState.status === 'loading' ? 'Refreshing...' : 'Refresh'}
+          {pageStatus === 'loading' ? 'Refreshing...' : 'Refresh'}
         </button>
       </header>
 
-      {notice && (
+      {pageStatus === 'property-required' && (
+        <PropertySelectionState className="page-state" />
+      )}
+
+      {pageStatus === 'success' && notice && (
         <div className="page-notice page-notice--success" role="status">
           <span className="page-notice__icon" aria-hidden="true">✓</span>
           <span>{notice}</span>
         </div>
       )}
 
-      {pageState.status === 'loading' && (
+      {pageStatus === 'loading' && (
         <section className="page-state" aria-live="polite">
           <span className="loading-spinner" aria-hidden="true" />
           <h2>Loading viewing requests</h2>
@@ -172,7 +194,7 @@ function ViewingRequestsPage() {
         </section>
       )}
 
-      {pageState.status === 'error' && (
+      {pageStatus === 'error' && (
         <section className="page-state page-state--error" role="alert">
           <div className="page-state__icon" aria-hidden="true">
             !
@@ -185,7 +207,7 @@ function ViewingRequestsPage() {
         </section>
       )}
 
-      {pageState.status === 'success' && pageState.viewings.length === 0 && (
+      {pageStatus === 'success' && pageState.viewings.length === 0 && (
         <section className="page-state">
           <div className="page-state__icon" aria-hidden="true">
             ✓
@@ -198,7 +220,7 @@ function ViewingRequestsPage() {
         </section>
       )}
 
-      {pageState.status === 'success' && pageState.viewings.length > 0 && (
+      {pageStatus === 'success' && pageState.viewings.length > 0 && (
         <>
           <section className="viewings-summary" aria-label="Request summary">
             <div

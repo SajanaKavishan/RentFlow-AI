@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
+import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import RentalApplicationCard from '../components/RentalApplicationCard.jsx'
 import {
   approveApplication,
@@ -10,10 +12,6 @@ import {
   requestChanges,
 } from '../services/rentalApplicationApiService.js'
 import '../rentalApplications.css'
-
-// TODO(dev-only): Replace this temporary property ID with the property selected
-// from authenticated landlord/property navigation.
-const TEMPORARY_PROPERTY_ID = '22222222-2222-2222-2222-222222222222'
 
 const STATUS_PRIORITY = {
   [RENTAL_APPLICATION_STATUS.SUBMITTED]: 0,
@@ -38,23 +36,33 @@ function sortApplications(applications) {
 }
 
 function RentalApplicationsPage() {
+  const { propertyId } = usePropertyContext()
   const [pageState, setPageState] = useState({
     status: 'loading',
+    propertyId: null,
     applications: [],
     error: '',
   })
   const [updatingId, setUpdatingId] = useState(null)
   const [actionError, setActionError] = useState({ id: null, message: '' })
   const [notice, setNotice] = useState('')
+  const pageStatus = !propertyId
+    ? 'property-required'
+    : pageState.propertyId === propertyId
+      ? pageState.status
+      : 'loading'
 
   useEffect(() => {
+    if (!propertyId) return undefined
+
     let isActive = true
 
-    getApplicationsByProperty(TEMPORARY_PROPERTY_ID)
+    getApplicationsByProperty(propertyId)
       .then((applications) => {
         if (isActive) {
           setPageState({
             status: 'success',
+            propertyId,
             applications: sortApplications(applications),
             error: '',
           })
@@ -64,6 +72,7 @@ function RentalApplicationsPage() {
         if (!isActive) return
         setPageState({
           status: 'error',
+          propertyId,
           applications: [],
           error: safeErrorMessage(
             error,
@@ -75,25 +84,32 @@ function RentalApplicationsPage() {
     return () => {
       isActive = false
     }
-  }, [])
+  }, [propertyId])
 
   async function loadApplications() {
-    setPageState((current) => ({ ...current, status: 'loading', error: '' }))
+    if (!propertyId) return
+
+    setPageState((current) => ({
+      ...current,
+      status: 'loading',
+      propertyId,
+      error: '',
+    }))
     setActionError({ id: null, message: '' })
     setNotice('')
 
     try {
-      const applications = await getApplicationsByProperty(
-        TEMPORARY_PROPERTY_ID,
-      )
+      const applications = await getApplicationsByProperty(propertyId)
       setPageState({
         status: 'success',
+        propertyId,
         applications: sortApplications(applications),
         error: '',
       })
     } catch (error) {
       setPageState({
         status: 'error',
+        propertyId,
         applications: [],
         error: safeErrorMessage(
           error,
@@ -193,7 +209,7 @@ function RentalApplicationsPage() {
   return (
     <main
       className="applications-page"
-      aria-busy={pageState.status === 'loading'}
+      aria-busy={pageStatus === 'loading'}
     >
       <header className="applications-page__header">
         <div>
@@ -208,19 +224,23 @@ function RentalApplicationsPage() {
           type="button"
           className="application-button application-button--quiet"
           onClick={loadApplications}
-          disabled={pageState.status === 'loading'}
+          disabled={!propertyId || pageStatus === 'loading'}
         >
           Refresh
         </button>
       </header>
 
-      {notice && (
+      {pageStatus === 'property-required' && (
+        <PropertySelectionState className="applications-state" />
+      )}
+
+      {pageStatus === 'success' && notice && (
         <div className="applications-notice" role="status">
           {notice}
         </div>
       )}
 
-      {pageState.status === 'loading' && (
+      {pageStatus === 'loading' && (
         <section className="applications-state" aria-live="polite">
           <span className="applications-spinner" aria-hidden="true" />
           <h2>Loading rental applications</h2>
@@ -228,7 +248,7 @@ function RentalApplicationsPage() {
         </section>
       )}
 
-      {pageState.status === 'error' && (
+      {pageStatus === 'error' && (
         <section
           className="applications-state applications-state--error"
           role="alert"
@@ -248,7 +268,7 @@ function RentalApplicationsPage() {
         </section>
       )}
 
-      {pageState.status === 'success' &&
+      {pageStatus === 'success' &&
         pageState.applications.length === 0 && (
           <section className="applications-state">
             <div className="applications-state__icon" aria-hidden="true">
@@ -259,7 +279,7 @@ function RentalApplicationsPage() {
           </section>
         )}
 
-      {pageState.status === 'success' &&
+      {pageStatus === 'success' &&
         pageState.applications.length > 0 && (
           <>
             <section

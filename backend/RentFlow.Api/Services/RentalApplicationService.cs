@@ -300,9 +300,21 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             RentalApplicationStatus.Submitted,
             RentalApplicationStatus.UnderReview);
 
+        var decisionAt = DateTimeOffset.UtcNow;
         application.Status = targetStatus;
         application.LandlordResponse = NormalizeOptionalText(landlordResponse);
-        application.UpdatedAt = DateTimeOffset.UtcNow;
+        application.UpdatedAt = decisionAt;
+
+        var awaitingHumanReviewWorkflows = await dbContext.ApplicationValidationWorkflows
+            .Where(workflow => workflow.ApplicationId == applicationId
+                && workflow.Status == ApplicationValidationWorkflowStatus.AwaitingHumanReview)
+            .ToListAsync(cancellationToken);
+
+        foreach (var workflow in awaitingHumanReviewWorkflows)
+        {
+            workflow.Status = ApplicationValidationWorkflowStatus.Completed;
+            workflow.UpdatedAt = decisionAt;
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
 

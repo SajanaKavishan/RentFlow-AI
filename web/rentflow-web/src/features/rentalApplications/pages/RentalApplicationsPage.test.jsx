@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import RentalApplicationsPage from './RentalApplicationsPage.jsx'
 
@@ -50,6 +51,18 @@ function mockApplicationApi(applications, options = {}) {
   return fetchMock
 }
 
+function renderPage(selectedPropertyId = propertyId) {
+  const entry = selectedPropertyId
+    ? `/rental-applications?propertyId=${selectedPropertyId}`
+    : '/rental-applications'
+
+  return render(
+    <MemoryRouter initialEntries={[entry]}>
+      <RentalApplicationsPage />
+    </MemoryRouter>,
+  )
+}
+
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -66,11 +79,17 @@ describe('Landlord rental applications', () => {
       application({ id: 'draft', status: 0 }),
       application({ id: 'submitted', status: 1 }),
     ]
-    mockApplicationApi(applications)
+    const fetchMock = mockApplicationApi(applications)
 
-    render(<RentalApplicationsPage />)
+    renderPage()
 
     const cards = await screen.findAllByRole('article')
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        `/api/rental-applications/property/${propertyId}`,
+      ),
+      expect.any(Object),
+    )
     expect(cards).toHaveLength(7)
     expect(within(cards[0]).getByLabelText('Application status: Submitted')).toBeInTheDocument()
     expect(within(cards[1]).getByLabelText('Application status: Under review')).toBeInTheDocument()
@@ -102,7 +121,7 @@ describe('Landlord rental applications', () => {
     }
     mockApplicationApi([currentApplication], { documents: [document] })
 
-    render(<RentalApplicationsPage />)
+    renderPage()
     await userEvent.click(
       await screen.findByRole('button', {
         name: `Review documents for application ${currentApplication.id}`,
@@ -177,7 +196,7 @@ describe('Landlord rental applications', () => {
     }
     mockApplicationApi([application()], { validationRuns: [workflow] })
 
-    render(<RentalApplicationsPage />)
+    renderPage()
 
     const aiReview = await screen.findByRole('region', {
       name: 'Application validation',
@@ -209,7 +228,7 @@ describe('Landlord rental applications', () => {
       .mockResolvedValueOnce(jsonResponse([]))
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<RentalApplicationsPage />)
+    renderPage()
     expect(screen.getByText('Loading rental applications')).toBeInTheDocument()
     expect(
       await screen.findByRole('heading', { name: 'We could not load the applications' }),
@@ -228,7 +247,7 @@ describe('Landlord rental applications', () => {
     const approved = application({ status: 4, landlordResponse: 'Application approved after review.' })
     const fetchMock = mockApplicationApi([submitted], { actionResponse: approved })
 
-    render(<RentalApplicationsPage />)
+    renderPage()
     await userEvent.click(await screen.findByRole('button', { name: 'Approve' }))
     await userEvent.type(
       screen.getByLabelText('Response (optional)'),
@@ -244,5 +263,18 @@ describe('Landlord rental applications', () => {
     expect(JSON.parse(patchCall[1].body)).toEqual({
       landlordResponse: 'Application approved after review.',
     })
+  })
+
+  it('requires a property selection without calling the API with a fallback ID', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage(null)
+
+    expect(
+      screen.getByRole('heading', { name: 'Select a property' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Property integration pending/)).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

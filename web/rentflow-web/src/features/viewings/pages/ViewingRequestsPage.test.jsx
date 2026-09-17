@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ViewingRequestsPage from './ViewingRequestsPage.jsx'
 
@@ -34,6 +35,24 @@ function jsonResponse(body, status = 200) {
   })
 }
 
+function renderPage(selectedPropertyId = propertyId) {
+  const entry = selectedPropertyId
+    ? `/properties/${selectedPropertyId}/viewing-requests`
+    : '/viewing-requests'
+
+  return render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes>
+        <Route path="/viewing-requests" element={<ViewingRequestsPage />} />
+        <Route
+          path="/properties/:propertyId/viewing-requests"
+          element={<ViewingRequestsPage />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -46,9 +65,13 @@ describe('Landlord viewing requests', () => {
       vi.fn().mockResolvedValue(jsonResponse([approvedViewing, pendingViewing])),
     )
 
-    render(<ViewingRequestsPage />)
+    renderPage()
 
     const cards = await screen.findAllByRole('article')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining(`/api/viewings/property/${propertyId}`),
+      expect.any(Object),
+    )
     expect(cards).toHaveLength(2)
     expect(within(cards[0]).getByText('Pending')).toBeInTheDocument()
     expect(within(cards[0]).getByText(tenantId)).toBeInTheDocument()
@@ -84,7 +107,7 @@ describe('Landlord viewing requests', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<ViewingRequestsPage />)
+    renderPage()
     await userEvent.click(
       await screen.findByRole('button', { name: 'Approve request' }),
     )
@@ -125,7 +148,7 @@ describe('Landlord viewing requests', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<ViewingRequestsPage />)
+    renderPage()
     await userEvent.click(
       await screen.findByRole('button', { name: 'Reject request' }),
     )
@@ -160,7 +183,7 @@ describe('Landlord viewing requests', () => {
       .mockResolvedValueOnce(jsonResponse([]))
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<ViewingRequestsPage />)
+    renderPage()
     expect(screen.getByText('Loading viewing requests')).toBeInTheDocument()
 
     expect(
@@ -178,5 +201,18 @@ describe('Landlord viewing requests', () => {
       await screen.findByRole('heading', { name: 'No viewing requests yet' }),
     ).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('requires a property selection without calling the API with a fallback ID', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage(null)
+
+    expect(
+      screen.getByRole('heading', { name: 'Select a property' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Property integration pending/)).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
