@@ -109,7 +109,7 @@ void main() {
     expectJwtOwnedRequest(requests[2], '/api/viewings/$_viewingId/cancel');
   });
 
-  test('viewing cancellation accepts 204 without decoding a body', () async {
+  test('viewing cancellation requires the API-confirmed resource', () async {
     final apiClient = ApiClient(
       baseUrl: 'http://test',
       httpClient: MockClient((request) async {
@@ -121,7 +121,13 @@ void main() {
 
     await expectLater(
       ViewingApiService(apiClient).cancelViewing(id: _viewingId),
-      completes,
+      throwsA(
+        isA<ViewingApiException>().having(
+          (error) => error.message,
+          'message',
+          'The viewing service returned an invalid response.',
+        ),
+      ),
     );
   });
 
@@ -159,7 +165,17 @@ void main() {
       final apiClient = ApiClient(
         baseUrl: 'http://test',
         httpClient: MockClient((request) async {
-          if (request.method == 'PATCH') return http.Response('', 204);
+          if (request.method == 'PATCH') {
+            return http.Response(
+              jsonEncode({
+                ..._viewingJson,
+                'status': 3,
+                'updatedAt': '2026-09-14T10:05:00Z',
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
           listCalls++;
           if (listCalls > 1) {
             return http.Response(

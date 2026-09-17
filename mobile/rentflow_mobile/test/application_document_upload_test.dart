@@ -97,37 +97,35 @@ void _expectAuthenticatedMultipart(http.Request request) {
 }
 
 void main() {
-  testWidgets(
-    'successful empty-body upload and successful refresh show no error',
-    (tester) async {
-      var documentListCalls = 0;
-      final client = MockClient((request) async {
-        if (request.method == 'POST') {
-          _expectAuthenticatedMultipart(request);
-          return http.Response('', 201);
-        }
-        if (request.url.path == '/api/rental-applications/$_applicationId') {
-          return http.Response(jsonEncode(_applicationJson), 200);
-        }
-        documentListCalls++;
-        return http.Response(
-          jsonEncode(documentListCalls == 1 ? [] : [_documentJson]),
-          200,
-        );
-      });
-      await _pumpDocumentsScreen(tester, client);
+  testWidgets('empty-body upload is rejected instead of showing fake success', (
+    tester,
+  ) async {
+    var documentListCalls = 0;
+    final client = MockClient((request) async {
+      if (request.method == 'POST') {
+        _expectAuthenticatedMultipart(request);
+        return http.Response('', 201);
+      }
+      if (request.url.path == '/api/rental-applications/$_applicationId') {
+        return http.Response(jsonEncode(_applicationJson), 200);
+      }
+      documentListCalls++;
+      return http.Response('[]', 200);
+    });
+    await _pumpDocumentsScreen(tester, client);
 
-      await tester.tap(find.text('Upload document'));
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('identity.pdf'), 200);
+    await tester.tap(find.text('Upload document'));
+    await tester.pumpAndSettle();
 
-      expect(find.text('identity.pdf'), findsOneWidget);
-      expect(find.textContaining('Unable to upload'), findsNothing);
-      expect(find.textContaining('could not be refreshed'), findsNothing);
-      expect(documentListCalls, 2);
-      expect(tester.takeException(), isNull);
-    },
-  );
+    expect(find.text('identity.pdf'), findsOneWidget);
+    expect(
+      find.text('The document service returned an invalid response.'),
+      findsOneWidget,
+    );
+    expect(find.text('Document uploaded.'), findsNothing);
+    expect(documentListCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'successful upload and failed list refresh keep document without upload error',

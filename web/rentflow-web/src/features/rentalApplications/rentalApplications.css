@@ -633,6 +633,18 @@
   font-size: 0.72rem;
 }
 
+.validation-workflow__stale {
+  margin: 0 0 12px;
+  padding: 11px 13px;
+  border: 1px solid #e1bf83;
+  border-radius: 10px;
+  color: #654315;
+  background: #fff7e9;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .validation-workflow__status--awaiting-human-review {
   border-color: #d8ae5f;
   background: #fff8e9;

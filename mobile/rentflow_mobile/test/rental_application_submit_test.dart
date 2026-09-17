@@ -79,7 +79,7 @@ void _expectSubmitRequest(http.Request request) {
 
 void main() {
   testWidgets(
-    'successful empty-body submit and successful refresh show no error',
+    'empty-body submit is rejected instead of creating local success',
     (tester) async {
       var listCalls = 0;
       final client = MockClient((request) async {
@@ -88,19 +88,21 @@ void main() {
           return http.Response('', 200);
         }
         listCalls++;
-        return http.Response(
-          jsonEncode([_applicationJson(listCalls == 1 ? 0 : 1)]),
-          200,
-        );
+        return http.Response(jsonEncode([_applicationJson(0)]), 200);
       });
       await _pumpApplicationsScreen(tester, client);
 
       await _confirmSubmit(tester, 'Submit application');
 
-      expect(find.text('Submitted'), findsOneWidget);
-      expect(find.textContaining('Unable to submit'), findsNothing);
-      expect(find.textContaining('could not be refreshed'), findsNothing);
-      expect(listCalls, 2);
+      expect(find.text('Draft'), findsOneWidget);
+      expect(find.text('Submitted'), findsNothing);
+      expect(
+        find.text(
+          'The rental application service returned an invalid response.',
+        ),
+        findsOneWidget,
+      );
+      expect(listCalls, 1);
       expect(tester.takeException(), isNull);
     },
   );
@@ -170,7 +172,7 @@ void main() {
     final client = MockClient((request) async {
       if (request.method == 'PATCH') {
         _expectSubmitRequest(request);
-        return http.Response('', 204);
+        return http.Response(jsonEncode(_applicationJson(1)), 200);
       }
       listCalls++;
       return http.Response(

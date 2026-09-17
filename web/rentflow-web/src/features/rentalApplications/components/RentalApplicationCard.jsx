@@ -347,6 +347,11 @@ function RentalApplicationCard({
 
       <ApplicationValidationSection
         applicationId={application.id}
+        applicationUpdatedAt={
+          application.updatedAt ||
+          application.submittedAt ||
+          application.createdAt
+        }
         canRun={canAct}
       />
 

@@ -76,12 +76,11 @@ class RentalApplicationApiService {
     return _parseApplication(response.body);
   }
 
-  Future<RentalApplication?> submitApplication({required String id}) async {
+  Future<RentalApplication> submitApplication({required String id}) async {
     final uri = apiClient.buildUri(
       '${ApiConstants.rentalApplicationsPath}/$id/submit',
     );
     final response = await _send(() => apiClient.patch(uri));
-    if (response.body.trim().isEmpty) return null;
     return _parseApplication(response.body);
   }
 

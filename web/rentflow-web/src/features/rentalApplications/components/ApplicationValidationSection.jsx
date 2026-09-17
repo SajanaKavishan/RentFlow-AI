@@ -206,6 +206,16 @@ function SupportingDocumentVerification({ documents }) {
   )
 }
 
+function isWorkflowStale(workflow, applicationUpdatedAt) {
+  const workflowTime = Date.parse(workflow.updatedAt || workflow.createdAt || '')
+  const applicationTime = Date.parse(applicationUpdatedAt || '')
+  return (
+    Number.isFinite(workflowTime) &&
+    Number.isFinite(applicationTime) &&
+    applicationTime > workflowTime
+  )
+}
+
 function AgenticReviewOverview({ review }) {
   if (!review) return null
 
@@ -325,7 +335,7 @@ function ValidationStep({ step }) {
   )
 }
 
-function WorkflowResult({ workflow }) {
+function WorkflowResult({ workflow, applicationUpdatedAt, canRun }) {
   const summary = workflow.summary
   const warnings = summary
     ? [
@@ -341,6 +351,7 @@ function WorkflowResult({ workflow }) {
   const workflowStatus = enumLabel(workflow.status, WORKFLOW_STATUS)
   const workflowStatusKey = enumKey(workflow.status, WORKFLOW_STATUS)
   const isAwaitingHumanReview = workflowStatusKey === 'awaiting-human-review'
+  const isStale = canRun && isWorkflowStale(workflow, applicationUpdatedAt)
 
   return (
     <div className="validation-workflow">
@@ -364,6 +375,13 @@ function WorkflowResult({ workflow }) {
           </span>
         </div>
       </div>
+
+      {isStale && (
+        <p className="validation-workflow__stale" role="status">
+          This application changed after this validation run. Run validation
+          again before relying on these findings.
+        </p>
+      )}
 
       <div className="validation-workflow__summary">
         <div>
@@ -484,7 +502,11 @@ function WorkflowResult({ workflow }) {
   )
 }
 
-function ApplicationValidationSection({ applicationId, canRun }) {
+function ApplicationValidationSection({
+  applicationId,
+  applicationUpdatedAt,
+  canRun,
+}) {
   const [state, setState] = useState({
     status: 'loading',
     runs: [],
@@ -663,7 +685,11 @@ function ApplicationValidationSection({ applicationId, canRun }) {
               </select>
             </div>
           )}
-          <WorkflowResult workflow={selectedRun} />
+          <WorkflowResult
+            workflow={selectedRun}
+            applicationUpdatedAt={applicationUpdatedAt}
+            canRun={canRun}
+          />
         </>
       )}
     </section>

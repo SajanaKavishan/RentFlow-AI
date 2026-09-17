@@ -138,7 +138,7 @@ class _MyRentalApplicationsScreenState
     setState(() {
       _submittingIds.add(application.id);
     });
-    RentalApplication? submitted;
+    late final RentalApplication submitted;
     try {
       submitted = await _apiService.submitApplication(id: application.id);
     } on RentalApplicationApiException catch (error) {
@@ -161,17 +161,11 @@ class _MyRentalApplicationsScreenState
     }
 
     if (!mounted) return;
-    final now = DateTime.now().toUtc();
-    final submittedApplication = (submitted ?? application).copyWith(
-      status: RentalApplicationStatus.submitted,
-      submittedAt: submitted?.submittedAt ?? now,
-      updatedAt: submitted?.updatedAt ?? now,
-    );
     final previousApplications = _applications;
     setState(() {
       _applications = _applicationsWithSubmission(
         previousApplications,
-        submittedApplication,
+        submitted,
       );
     });
     _showMessage(

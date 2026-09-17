@@ -106,6 +106,7 @@ internal sealed class RecordingValidationOrchestrator : IApplicationValidationOr
             ApplicationId = applicationId,
             Objective = "Validate application for landlord review.",
             Status = ApplicationValidationWorkflowStatus.AwaitingHumanReview,
+            RequiresHumanApproval = true,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });

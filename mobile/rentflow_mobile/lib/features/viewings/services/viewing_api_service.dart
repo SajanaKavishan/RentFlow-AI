@@ -47,9 +47,10 @@ class ViewingApiService {
     return _parseViewingList(response.body);
   }
 
-  Future<void> cancelViewing({required String id}) async {
+  Future<Viewing> cancelViewing({required String id}) async {
     final uri = apiClient.buildUri('${ApiConstants.viewingsPath}/$id/cancel');
-    await _send(() => apiClient.patch(uri));
+    final response = await _send(() => apiClient.patch(uri));
+    return _parseViewing(response.body);
   }
 
   Future<http.Response> _send(Future<http.Response> Function() request) async {

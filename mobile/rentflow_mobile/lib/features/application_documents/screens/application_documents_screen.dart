@@ -178,7 +178,7 @@ class _ApplicationDocumentsScreenState
     setState(() {
       _isUploading = true;
     });
-    ApplicationDocument? uploadedDocument;
+    late final ApplicationDocument uploadedDocument;
     try {
       uploadedDocument = await _documentApiService.uploadDocument(
         applicationId: widget.applicationId,
@@ -210,9 +210,7 @@ class _ApplicationDocumentsScreenState
     final previousData = _data;
     setState(() {
       _selectedFile = null;
-      if (uploadedDocument != null) {
-        _data = _dataWithUploadedDocument(previousData, uploadedDocument);
-      }
+      _data = _dataWithUploadedDocument(previousData, uploadedDocument);
     });
     _showMessage('Document uploaded.');
 

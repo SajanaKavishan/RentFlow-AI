@@ -191,6 +191,11 @@ describe('Landlord rental applications', () => {
     expect(within(aiReview).getByText('Identity document is required.')).toBeInTheDocument()
     expect(within(aiReview).getByText('Employer name could not be confirmed.')).toBeInTheDocument()
     expect(within(aiReview).getByText('Manual review: Required')).toBeInTheDocument()
+    expect(
+      within(aiReview).getByText(
+        'This application changed after this validation run. Run validation again before relying on these findings.',
+      ),
+    ).toBeInTheDocument()
 
     const decision = screen.getByRole('region', { name: 'Landlord decision' })
     expect(within(decision).getByRole('button', { name: 'Approve' })).toBeInTheDocument()

@@ -175,13 +175,8 @@ class _RentalApplicationFormScreenState
         id: application!.id,
       );
       if (!mounted) return;
-      final now = DateTime.now().toUtc();
       setState(() {
-        _application = (submitted ?? application).copyWith(
-          status: RentalApplicationStatus.submitted,
-          submittedAt: submitted?.submittedAt ?? now,
-          updatedAt: submitted?.updatedAt ?? now,
-        );
+        _application = submitted;
       });
       _showMessage('Application submitted successfully.');
     } on RentalApplicationApiException catch (error) {

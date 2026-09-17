@@ -83,8 +83,9 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _cancellingIds.add(viewing.id));
+    late final Viewing cancelledViewing;
     try {
-      await _viewingApiService.cancelViewing(id: viewing.id);
+      cancelledViewing = await _viewingApiService.cancelViewing(id: viewing.id);
     } on ViewingApiException catch (error) {
       if (mounted) _showMessage(error.message, isError: true);
       return;
@@ -101,20 +102,20 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
     }
 
     if (!mounted) return;
-    final optimisticViewings = _viewings.then(
+    final confirmedViewings = _viewings.then(
       (viewings) => viewings
-          .map((item) => item.id == viewing.id ? _asCancelled(item) : item)
+          .map((item) => item.id == viewing.id ? cancelledViewing : item)
           .toList(growable: false),
     );
     setState(() {
-      _viewings = optimisticViewings;
+      _viewings = confirmedViewings;
     });
     _showMessage('Viewing cancelled.');
-    await _refreshAfterCancellation(optimisticViewings);
+    await _refreshAfterCancellation(confirmedViewings);
   }
 
   Future<void> _refreshAfterCancellation(
-    Future<List<Viewing>> optimisticViewings,
+    Future<List<Viewing>> confirmedViewings,
   ) async {
     try {
       final refreshed = await _viewingApiService.getMyViewings();
@@ -124,28 +125,14 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
         });
       }
     } catch (_) {
-      // Cancellation already succeeded. Keep the optimistic cancelled state
-      // instead of reporting the refresh failure as a cancellation failure.
+      // Cancellation already succeeded. Keep the API-confirmed response instead
+      // of reporting the refresh failure as a cancellation failure.
       if (mounted) {
         setState(() {
-          _viewings = optimisticViewings;
+          _viewings = confirmedViewings;
         });
       }
     }
-  }
-
-  Viewing _asCancelled(Viewing viewing) {
-    return Viewing(
-      id: viewing.id,
-      tenantId: viewing.tenantId,
-      propertyId: viewing.propertyId,
-      requestedDateTime: viewing.requestedDateTime,
-      status: ViewingStatus.cancelled,
-      tenantMessage: viewing.tenantMessage,
-      landlordResponse: viewing.landlordResponse,
-      createdAt: viewing.createdAt,
-      updatedAt: viewing.updatedAt,
-    );
   }
 
   void _showMessage(String message, {bool isError = false}) {
