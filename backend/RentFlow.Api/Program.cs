@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -65,6 +66,23 @@ builder.Services
             ClockSkew = TimeSpan.FromMinutes(1),
             NameClaimType = "sub",
             RoleClaimType = "role"
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = context =>
+            {
+                var subject = context.Principal?.FindFirstValue("sub");
+                var roleValue = context.Principal?.FindFirstValue("role");
+                if (!Guid.TryParse(subject, out var userId)
+                    || userId == Guid.Empty
+                    || !Enum.TryParse<UserRole>(roleValue, ignoreCase: false, out var role)
+                    || !Enum.IsDefined(role))
+                {
+                    context.Fail("The token identity claims are invalid.");
+                }
+
+                return Task.CompletedTask;
+            }
         };
     });
 builder.Services.AddAuthorization();

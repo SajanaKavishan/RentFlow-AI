@@ -7,12 +7,10 @@ class BookViewingScreen extends StatefulWidget {
   const BookViewingScreen({
     super.key,
     required this.propertyId,
-    required this.tenantId,
     this.viewingApiService,
   });
 
   final String propertyId;
-  final String tenantId;
   final ViewingApiService? viewingApiService;
 
   @override
@@ -122,7 +120,6 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
     try {
       final message = _messageController.text.trim();
       await _viewingApiService.createViewing(
-        tenantId: widget.tenantId,
         propertyId: widget.propertyId,
         requestedDateTime: requestedDateTime,
         tenantMessage: message.isEmpty ? null : message,

@@ -1,5 +1,16 @@
 # React + Vite
 
+## Authentication
+
+Phase 2 stores only the JWT access token behind `tokenStorage` using browser
+`sessionStorage`. The shared API client adds the bearer header and centrally
+clears invalid sessions on 401 responses. The user profile is always restored
+from `/api/auth/me`; decoded JWT data is not treated as profile truth.
+
+This university-project strategy intentionally has no refresh token. A
+production deployment may later adopt hardened HTTP-only cookie or token
+handling appropriate to its threat model.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

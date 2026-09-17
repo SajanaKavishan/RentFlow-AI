@@ -58,6 +58,14 @@
   text-underline-offset: 4px;
 }
 
+.app-user { max-width: 220px; overflow: hidden; color: var(--cream-200); font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
+.app-nav__button { padding: 8px 12px; border: 1px solid rgb(255 255 255 / 38%); border-radius: 8px; color: #fff; background: transparent; font-weight: 700; }
+.role-landing, .auth-restoring { min-height: calc(100vh - 68px); padding: clamp(44px, 8vw, 96px) 20px; display: grid; align-content: center; justify-items: center; text-align: center; }
+.role-landing h1 { margin-bottom: 4px; color: var(--olive-900); }
+.role-landing p { max-width: 580px; color: var(--muted); }
+.role-landing a { color: var(--olive-800); font-weight: 700; }
+.auth-restoring { min-height: 100vh; }
+
 .app-section {
   scroll-margin-top: 12px;
 }
@@ -99,4 +107,8 @@
   .dev-label {
     display: none;
   }
+
+  .app-user { display: none; }
+
+  .role-landing { min-height: calc(100vh - 60px); }
 }

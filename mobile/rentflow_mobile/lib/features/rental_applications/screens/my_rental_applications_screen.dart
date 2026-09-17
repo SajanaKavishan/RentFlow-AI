@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../application_documents/screens/application_documents_screen.dart';
+import '../../application_documents/services/application_document_api_service.dart';
 import '../models/rental_application.dart';
 import '../services/rental_application_api_service.dart';
 import '../widgets/rental_application_status_chip.dart';
@@ -8,11 +11,9 @@ import '../widgets/rental_application_status_chip.dart';
 class MyRentalApplicationsScreen extends StatefulWidget {
   const MyRentalApplicationsScreen({
     super.key,
-    required this.tenantId,
     this.rentalApplicationApiService,
   });
 
-  final String tenantId;
   final RentalApplicationApiService? rentalApplicationApiService;
 
   @override
@@ -40,7 +41,7 @@ class _MyRentalApplicationsScreenState
       _ownedApiClient = ApiClient();
       _apiService = RentalApplicationApiService(_ownedApiClient!);
     }
-    _applications = _apiService.getApplicationsByTenant(widget.tenantId);
+    _applications = _apiService.getMyApplications();
   }
 
   @override
@@ -50,8 +51,10 @@ class _MyRentalApplicationsScreenState
   }
 
   Future<void> _refresh() async {
-    final request = _apiService.getApplicationsByTenant(widget.tenantId);
-    setState(() => _applications = request);
+    final request = _apiService.getMyApplications();
+    setState(() {
+      _applications = request;
+    });
     try {
       await request;
     } catch (_) {
@@ -69,6 +72,25 @@ class _MyRentalApplicationsScreenState
       RentalApplicationStatus.rejected ||
       RentalApplicationStatus.withdrawn => false,
     };
+  }
+
+  void _openDocuments(RentalApplication application) {
+    if (kDebugMode) {
+      debugPrint(
+        '[MyApplications] Open Documents selectedApplicationId=${application.id}',
+      );
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ApplicationDocumentsScreen(
+          applicationId: application.id,
+          rentalApplicationApiService: _apiService,
+          applicationDocumentApiService: ApplicationDocumentApiService(
+            _apiService.apiClient,
+          ),
+        ),
+      ),
+    );
   }
 
   bool _canSubmit(RentalApplication application) {
@@ -113,25 +135,15 @@ class _MyRentalApplicationsScreenState
     );
 
     if (confirmed != true || !mounted) return;
-    setState(() => _submittingIds.add(application.id));
+    setState(() {
+      _submittingIds.add(application.id);
+    });
+    RentalApplication? submitted;
     try {
-      final submitted = await _apiService.submitApplication(
-        id: application.id,
-        tenantId: widget.tenantId,
-      );
-      final currentApplications = await _applications;
-      if (!mounted) return;
-      final updatedApplications = currentApplications
-          .map((item) => item.id == submitted.id ? submitted : item)
-          .toList(growable: false);
-      setState(() => _applications = Future.value(updatedApplications));
-      _showMessage(
-        isResubmission
-            ? 'Application resubmitted successfully.'
-            : 'Application submitted successfully.',
-      );
+      submitted = await _apiService.submitApplication(id: application.id);
     } on RentalApplicationApiException catch (error) {
       if (mounted) _showMessage(error.message, isError: true);
+      return;
     } catch (_) {
       if (mounted) {
         _showMessage(
@@ -139,8 +151,68 @@ class _MyRentalApplicationsScreenState
           isError: true,
         );
       }
+      return;
     } finally {
-      if (mounted) setState(() => _submittingIds.remove(application.id));
+      if (mounted) {
+        setState(() {
+          _submittingIds.remove(application.id);
+        });
+      }
+    }
+
+    if (!mounted) return;
+    final now = DateTime.now().toUtc();
+    final submittedApplication = (submitted ?? application).copyWith(
+      status: RentalApplicationStatus.submitted,
+      submittedAt: submitted?.submittedAt ?? now,
+      updatedAt: submitted?.updatedAt ?? now,
+    );
+    final previousApplications = _applications;
+    setState(() {
+      _applications = _applicationsWithSubmission(
+        previousApplications,
+        submittedApplication,
+      );
+    });
+    _showMessage(
+      isResubmission
+          ? 'Application resubmitted successfully.'
+          : 'Application submitted successfully.',
+    );
+
+    try {
+      final refreshedApplications = await _apiService.getMyApplications();
+      if (!mounted) return;
+      setState(() {
+        _applications = Future.value(refreshedApplications);
+      });
+    } catch (_) {
+      if (mounted) {
+        _showMessage(
+          isResubmission
+              ? 'Application resubmitted, but your applications could not be refreshed.'
+              : 'Application submitted, but your applications could not be refreshed.',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<List<RentalApplication>> _applicationsWithSubmission(
+    Future<List<RentalApplication>> previousApplications,
+    RentalApplication submittedApplication,
+  ) async {
+    try {
+      final currentApplications = await previousApplications;
+      return currentApplications
+          .map(
+            (item) => item.id == submittedApplication.id
+                ? submittedApplication
+                : item,
+          )
+          .toList(growable: false);
+    } catch (_) {
+      return [submittedApplication];
     }
   }
 
@@ -172,12 +244,11 @@ class _MyRentalApplicationsScreenState
     );
 
     if (confirmed != true || !mounted) return;
-    setState(() => _withdrawingIds.add(application.id));
+    setState(() {
+      _withdrawingIds.add(application.id);
+    });
     try {
-      await _apiService.withdrawApplication(
-        id: application.id,
-        tenantId: widget.tenantId,
-      );
+      await _apiService.withdrawApplication(id: application.id);
       if (!mounted) return;
       _showMessage('Application withdrawn.');
       await _refresh();
@@ -191,7 +262,11 @@ class _MyRentalApplicationsScreenState
         );
       }
     } finally {
-      if (mounted) setState(() => _withdrawingIds.remove(application.id));
+      if (mounted) {
+        setState(() {
+          _withdrawingIds.remove(application.id);
+        });
+      }
     }
   }
 
@@ -274,6 +349,7 @@ class _MyRentalApplicationsScreenState
                     isWithdrawing: isWithdrawing,
                     onSubmit: () => _confirmSubmission(application),
                     onWithdraw: () => _confirmWithdrawal(application),
+                    onDocuments: () => _openDocuments(application),
                   );
                 },
               ),
@@ -294,6 +370,7 @@ class _ApplicationCard extends StatelessWidget {
     required this.isWithdrawing,
     required this.onSubmit,
     required this.onWithdraw,
+    required this.onDocuments,
   });
 
   final RentalApplication application;
@@ -303,6 +380,7 @@ class _ApplicationCard extends StatelessWidget {
   final bool isWithdrawing;
   final VoidCallback onSubmit;
   final VoidCallback onWithdraw;
+  final VoidCallback onDocuments;
 
   @override
   Widget build(BuildContext context) {
@@ -385,6 +463,13 @@ class _ApplicationCard extends StatelessWidget {
               const SizedBox(height: 12),
               _SubmittedAt(timestamp: submittedAt),
             ],
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              key: ValueKey('application-documents-${application.id}'),
+              onPressed: isBusy ? null : onDocuments,
+              icon: const Icon(Icons.folder_open_outlined),
+              label: const Text('Documents'),
+            ),
             if (canSubmit) ...[
               const SizedBox(height: 16),
               SizedBox(
@@ -402,9 +487,7 @@ class _ApplicationCard extends StatelessWidget {
                       : const Icon(Icons.send_outlined),
                   label: Text(
                     isSubmitting
-                        ? (isResubmission
-                              ? 'Resubmitting...'
-                              : 'Submitting...')
+                        ? (isResubmission ? 'Resubmitting...' : 'Submitting...')
                         : (isResubmission
                               ? 'Resubmit application'
                               : 'Submit application'),

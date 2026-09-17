@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RentFlow.Api.DTOs.RentalApplications;
+using RentFlow.Api.Models;
 using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
 
@@ -10,26 +12,28 @@ namespace RentFlow.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/rental-applications")]
+[Authorize]
 public class RentalApplicationsController(
     IRentalApplicationService rentalApplicationService,
+    ICurrentUserService currentUser,
     ILogger<RentalApplicationsController> logger) : ControllerBase
 {
     [HttpPost]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType<RentalApplicationResponseDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public Task<ActionResult<RentalApplicationResponseDto>> Create(
-        [FromQuery] Guid tenantId,
         [FromBody] CreateRentalApplicationDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
-            () => rentalApplicationService.CreateAsync(tenantId, request, cancellationToken),
+            () => rentalApplicationService.CreateAsync(GetRequiredUserId(), request, cancellationToken),
             result => CreatedAtAction(nameof(GetById), new { id = result.Id }, result));
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = $"{nameof(UserRole.Tenant)},{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<RentalApplicationResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public Task<ActionResult<RentalApplicationResponseDto>> GetById(
@@ -37,70 +41,69 @@ public class RentalApplicationsController(
         CancellationToken cancellationToken)
     {
         return ExecuteAsync(
-            () => GetRequiredApplicationAsync(id, cancellationToken),
+            () => GetAuthorizedApplicationAsync(id, cancellationToken),
             result => Ok(result));
     }
 
-    [HttpGet("tenant/{tenantId:guid}")]
+    [HttpGet]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType<IReadOnlyList<RentalApplicationResponseDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    public Task<ActionResult<IReadOnlyList<RentalApplicationResponseDto>>> GetByTenant(
-        Guid tenantId,
+    public Task<ActionResult<IReadOnlyList<RentalApplicationResponseDto>>> GetMine(
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Authorize tenantId against the authenticated user's ID claim.
         return ExecuteAsync(
-            () => rentalApplicationService.GetByTenantAsync(tenantId, cancellationToken),
+            () => rentalApplicationService.GetByTenantAsync(GetRequiredUserId(), cancellationToken),
             result => Ok(result));
     }
 
     [HttpGet("property/{propertyId:guid}")]
+    [Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<IReadOnlyList<RentalApplicationResponseDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public Task<ActionResult<IReadOnlyList<RentalApplicationResponseDto>>> GetByProperty(
         Guid propertyId,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Authorize property access using the authenticated landlord.
+        // TODO(cross-component-auth): Restrict landlords to properties they own/manage.
         return ExecuteAsync(
             () => rentalApplicationService.GetByPropertyAsync(propertyId, cancellationToken),
             result => Ok(result));
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType<RentalApplicationResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public Task<ActionResult<RentalApplicationResponseDto>> Update(
         Guid id,
-        [FromQuery] Guid tenantId,
         [FromBody] UpdateRentalApplicationDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
-            () => rentalApplicationService.UpdateAsync(id, tenantId, request, cancellationToken),
+            () => rentalApplicationService.UpdateAsync(id, GetRequiredUserId(), request, cancellationToken),
             result => Ok(result));
     }
 
     [HttpPatch("{id:guid}/submit")]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType<RentalApplicationResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public Task<ActionResult<RentalApplicationResponseDto>> Submit(
         Guid id,
-        [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
-            () => rentalApplicationService.SubmitAsync(id, tenantId, cancellationToken),
+            () => rentalApplicationService.SubmitAsync(id, GetRequiredUserId(), cancellationToken),
             result => Ok(result));
     }
 
     [HttpPatch("{id:guid}/review")]
+    [Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<RentalApplicationResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -108,13 +111,14 @@ public class RentalApplicationsController(
         Guid id,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Authorize this operation using the authenticated landlord.
+        // TODO(cross-component-auth): Restrict landlords to the application's property.
         return ExecuteAsync(
             () => rentalApplicationService.MarkUnderReviewAsync(id, cancellationToken),
             result => Ok(result));
     }
 
     [HttpPatch("{id:guid}/approve")]
+    [Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<RentalApplicationResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -123,7 +127,7 @@ public class RentalApplicationsController(
         [FromBody] LandlordApplicationDecisionDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Authorize this operation using the authenticated landlord.
+        // TODO(cross-component-auth): Restrict landlords to the application's property.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
             () => rentalApplicationService.ApproveAsync(
@@ -134,6 +138,7 @@ public class RentalApplicationsController(
     }
 
     [HttpPatch("{id:guid}/reject")]
+    [Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<RentalApplicationResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -143,7 +148,7 @@ public class RentalApplicationsController(
         [FromBody] LandlordApplicationDecisionDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Authorize this operation using the authenticated landlord.
+        // TODO(cross-component-auth): Restrict landlords to the application's property.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
             () => rentalApplicationService.RejectAsync(
@@ -154,6 +159,7 @@ public class RentalApplicationsController(
     }
 
     [HttpPatch("{id:guid}/request-changes")]
+    [Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<RentalApplicationResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -163,7 +169,7 @@ public class RentalApplicationsController(
         [FromBody] LandlordApplicationDecisionDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Authorize this operation using the authenticated landlord.
+        // TODO(cross-component-auth): Restrict landlords to the application's property.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
             () => rentalApplicationService.RequestChangesAsync(
@@ -174,29 +180,39 @@ public class RentalApplicationsController(
     }
 
     [HttpPatch("{id:guid}/withdraw")]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType<RentalApplicationResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public Task<ActionResult<RentalApplicationResponseDto>> Withdraw(
         Guid id,
-        [FromQuery] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TODO(auth): Replace tenantId with the authenticated user's ID claim.
         return ExecuteAsync(
-            () => rentalApplicationService.WithdrawAsync(id, tenantId, cancellationToken),
+            () => rentalApplicationService.WithdrawAsync(id, GetRequiredUserId(), cancellationToken),
             result => Ok(result));
     }
 
-    private async Task<RentalApplicationResponseDto> GetRequiredApplicationAsync(
+    private async Task<RentalApplicationResponseDto> GetAuthorizedApplicationAsync(
         Guid id,
         CancellationToken cancellationToken)
     {
-        return await rentalApplicationService.GetByIdAsync(id, cancellationToken)
+        var application = currentUser.Role == UserRole.Tenant
+            ? await rentalApplicationService.GetByIdForTenantAsync(
+                id,
+                GetRequiredUserId(),
+                cancellationToken)
+            : await rentalApplicationService.GetByIdAsync(id, cancellationToken);
+
+        // TODO(cross-component-auth): Restrict landlord reads to the application's property.
+        return application
             ?? throw RentalApplicationServiceException.NotFound(
                 $"Rental application '{id}' was not found.");
     }
+
+    private Guid GetRequiredUserId() => currentUser.UserId
+        ?? throw new InvalidOperationException("The authenticated JWT has no valid user ID.");
 
     private async Task<ActionResult<T>> ExecuteAsync<T>(
         Func<Task<T>> operation,

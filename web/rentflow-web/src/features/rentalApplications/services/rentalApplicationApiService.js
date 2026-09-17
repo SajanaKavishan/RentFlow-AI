@@ -1,6 +1,4 @@
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5277'
-).replace(/\/+$/, '')
+import { ApiError, apiRequest } from '../../../core/api/apiClient.js'
 
 export const RENTAL_APPLICATION_STATUS = Object.freeze({
   DRAFT: 0,
@@ -12,7 +10,7 @@ export const RENTAL_APPLICATION_STATUS = Object.freeze({
   WITHDRAWN: 6,
 })
 
-export class RentalApplicationApiError extends Error {
+export class RentalApplicationApiError extends ApiError {
   constructor(message, statusCode = null) {
     super(message)
     this.name = 'RentalApplicationApiError'
@@ -21,63 +19,16 @@ export class RentalApplicationApiError extends Error {
 }
 
 async function request(path, options = {}) {
-  let response
-
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    return await apiRequest(path, {
       ...options,
-      headers: {
-        Accept: 'application/json',
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-        ...options.headers,
-      },
+      errorMessage: 'The rental application request failed. Please try again.',
+      networkErrorMessage: 'Unable to connect to the rental application service. Please try again.',
     })
-  } catch {
-    throw new RentalApplicationApiError(
-      'Unable to connect to the rental application service. Please try again.',
-    )
+  } catch (error) {
+    if (error instanceof ApiError) throw new RentalApplicationApiError(error.message, error.statusCode)
+    throw error
   }
-
-  if (!response.ok) {
-    throw new RentalApplicationApiError(
-      await readSafeErrorMessage(response),
-      response.status,
-    )
-  }
-
-  try {
-    return await response.json()
-  } catch {
-    throw new RentalApplicationApiError(
-      'The rental application service returned an invalid response.',
-      response.status,
-    )
-  }
-}
-
-async function readSafeErrorMessage(response) {
-  const fallback = 'The rental application request failed. Please try again.'
-
-  try {
-    const body = await response.json()
-    const directMessage = [body.detail, body.title, body.message].find(
-      (value) => typeof value === 'string' && value.trim(),
-    )
-
-    if (directMessage) return directMessage.trim()
-
-    if (body.errors && typeof body.errors === 'object') {
-      const validationMessage = Object.values(body.errors)
-        .flatMap((value) => (Array.isArray(value) ? value : [value]))
-        .find((value) => typeof value === 'string' && value.trim())
-
-      if (validationMessage) return validationMessage.trim()
-    }
-  } catch {
-    // Never expose non-JSON bodies, stack traces, or proxy details.
-  }
-
-  return fallback
 }
 
 function applicationPath(id, action = '') {

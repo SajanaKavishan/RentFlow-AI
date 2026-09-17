@@ -1,6 +1,4 @@
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5277'
-).replace(/\/+$/, '')
+import { ApiError, apiRequest } from '../../../core/api/apiClient.js'
 
 export const VIEWING_STATUS = Object.freeze({
   PENDING: 0,
@@ -10,7 +8,7 @@ export const VIEWING_STATUS = Object.freeze({
   COMPLETED: 4,
 })
 
-export class ViewingApiError extends Error {
+export class ViewingApiError extends ApiError {
   constructor(message, statusCode = null) {
     super(message)
     this.name = 'ViewingApiError'
@@ -19,63 +17,16 @@ export class ViewingApiError extends Error {
 }
 
 async function request(path, options = {}) {
-  let response
-
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    return await apiRequest(path, {
       ...options,
-      headers: {
-        Accept: 'application/json',
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-        ...options.headers,
-      },
+      errorMessage: 'The viewing request failed. Please try again.',
+      networkErrorMessage: 'Unable to connect to the viewing service. Please try again.',
     })
-  } catch {
-    throw new ViewingApiError(
-      'Unable to connect to the viewing service. Please try again.',
-    )
+  } catch (error) {
+    if (error instanceof ApiError) throw new ViewingApiError(error.message, error.statusCode)
+    throw error
   }
-
-  if (!response.ok) {
-    throw new ViewingApiError(
-      await readSafeErrorMessage(response),
-      response.status,
-    )
-  }
-
-  try {
-    return await response.json()
-  } catch {
-    throw new ViewingApiError(
-      'The viewing service returned an invalid response.',
-      response.status,
-    )
-  }
-}
-
-async function readSafeErrorMessage(response) {
-  const fallback = 'The viewing request failed. Please try again.'
-
-  try {
-    const body = await response.json()
-    const directMessage = [body.detail, body.title, body.message].find(
-      (value) => typeof value === 'string' && value.trim(),
-    )
-
-    if (directMessage) return directMessage.trim()
-
-    if (body.errors && typeof body.errors === 'object') {
-      const validationMessage = Object.values(body.errors)
-        .flatMap((value) => (Array.isArray(value) ? value : [value]))
-        .find((value) => typeof value === 'string' && value.trim())
-
-      if (validationMessage) return validationMessage.trim()
-    }
-  } catch {
-    // Do not expose non-JSON response bodies, server traces, or proxy details.
-  }
-
-  return fallback
 }
 
 export function getViewingsByProperty(propertyId) {

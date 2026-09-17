@@ -99,6 +99,17 @@ public class ApplicationDocumentService(
         return document is null ? null : MapToResponse(document);
     }
 
+    public async Task<ApplicationDocumentResponseDto?> GetByIdForReviewAsync(
+        Guid documentId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateDocumentId(documentId);
+        var document = await dbContext.ApplicationDocuments
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == documentId, cancellationToken);
+        return document is null ? null : MapToResponse(document);
+    }
+
     public async Task<IReadOnlyList<ApplicationDocumentResponseDto>> GetByApplicationAsync(
         Guid applicationId,
         Guid tenantId,
@@ -116,6 +127,33 @@ public class ApplicationDocumentService(
         return documents.Select(MapToResponse).ToList();
     }
 
+    public async Task<IReadOnlyList<ApplicationDocumentResponseDto>> GetByApplicationForReviewAsync(
+        Guid applicationId,
+        CancellationToken cancellationToken = default)
+    {
+        if (applicationId == Guid.Empty)
+        {
+            throw ApplicationDocumentServiceException.Validation(
+                "A rental application ID is required.");
+        }
+
+        var applicationExists = await dbContext.RentalApplications
+            .AsNoTracking()
+            .AnyAsync(item => item.Id == applicationId, cancellationToken);
+        if (!applicationExists)
+        {
+            throw ApplicationDocumentServiceException.NotFound(
+                "The rental application was not found.");
+        }
+
+        var documents = await dbContext.ApplicationDocuments
+            .AsNoTracking()
+            .Where(document => document.ApplicationId == applicationId)
+            .OrderByDescending(document => document.UploadedAt)
+            .ToListAsync(cancellationToken);
+        return documents.Select(MapToResponse).ToList();
+    }
+
     public async Task<string> GenerateDownloadUrlAsync(
         Guid documentId,
         Guid tenantId,
@@ -130,6 +168,24 @@ public class ApplicationDocumentService(
             cancellationToken)
             ?? throw DocumentNotFound();
 
+        return await fileStorageService.GenerateDownloadUrlAsync(
+            document.StorageKey,
+            document.OriginalFileName,
+            document.ContentType,
+            SignedUrlLifetime);
+    }
+
+    public async Task<string> GenerateDownloadUrlForReviewAsync(
+        Guid documentId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateDocumentId(documentId);
+        var document = await dbContext.ApplicationDocuments
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == documentId, cancellationToken)
+            ?? throw DocumentNotFound();
+
+        // Authorization is completed by the role-gated ASP.NET controller before signing.
         return await fileStorageService.GenerateDownloadUrlAsync(
             document.StorageKey,
             document.OriginalFileName,
@@ -158,7 +214,9 @@ public class ApplicationDocumentService(
 
         EnsureDocumentsCanBeChanged(application.Status, "deleted");
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
 
         dbContext.ApplicationDocuments.Remove(document);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -169,13 +227,19 @@ public class ApplicationDocumentService(
         }
         catch
         {
-            await transaction.RollbackAsync(CancellationToken.None);
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+            }
             throw;
         }
 
         try
         {
-            await transaction.CommitAsync(CancellationToken.None);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(CancellationToken.None);
+            }
         }
         catch (Exception exception)
         {
@@ -302,6 +366,15 @@ public class ApplicationDocumentService(
         {
             throw ApplicationDocumentServiceException.Validation(
                 "A tenant ID is required.");
+        }
+    }
+
+    private static void ValidateDocumentId(Guid documentId)
+    {
+        if (documentId == Guid.Empty)
+        {
+            throw ApplicationDocumentServiceException.Validation(
+                "A document ID is required.");
         }
     }
 

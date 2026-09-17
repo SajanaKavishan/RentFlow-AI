@@ -1,8 +1,6 @@
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5277'
-).replace(/\/+$/, '')
+import { ApiError, apiRequest } from '../../../core/api/apiClient.js'
 
-export class ApplicationValidationApiError extends Error {
+export class ApplicationValidationApiError extends ApiError {
   constructor(message, statusCode = null) {
     super(message)
     this.name = 'ApplicationValidationApiError'
@@ -10,51 +8,16 @@ export class ApplicationValidationApiError extends Error {
   }
 }
 
-async function readSafeErrorMessage(response) {
-  const fallback = 'The validation request failed. Please try again.'
-
-  try {
-    const body = await response.json()
-    const message = [body.detail, body.title, body.message].find(
-      (value) => typeof value === 'string' && value.trim(),
-    )
-    return message?.trim() || fallback
-  } catch {
-    return fallback
-  }
-}
-
 async function request(path, options = {}) {
-  let response
-
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    return await apiRequest(path, {
       ...options,
-      headers: {
-        Accept: 'application/json',
-        ...options.headers,
-      },
+      errorMessage: 'The validation request failed. Please try again.',
+      networkErrorMessage: 'Unable to connect to the validation service. Please try again.',
     })
-  } catch {
-    throw new ApplicationValidationApiError(
-      'Unable to connect to the validation service. Please try again.',
-    )
-  }
-
-  if (!response.ok) {
-    throw new ApplicationValidationApiError(
-      await readSafeErrorMessage(response),
-      response.status,
-    )
-  }
-
-  try {
-    return await response.json()
-  } catch {
-    throw new ApplicationValidationApiError(
-      'The validation service returned an invalid response.',
-      response.status,
-    )
+  } catch (error) {
+    if (error instanceof ApiError) throw new ApplicationValidationApiError(error.message, error.statusCode)
+    throw error
   }
 }
 

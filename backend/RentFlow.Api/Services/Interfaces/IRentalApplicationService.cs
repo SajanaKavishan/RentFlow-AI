@@ -16,6 +16,11 @@ public interface IRentalApplicationService
         Guid applicationId,
         CancellationToken cancellationToken = default);
 
+    Task<RentalApplicationResponseDto?> GetByIdForTenantAsync(
+        Guid applicationId,
+        Guid tenantId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<RentalApplicationResponseDto>> GetByTenantAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default);
