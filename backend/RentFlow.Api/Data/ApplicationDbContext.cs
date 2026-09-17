@@ -15,6 +15,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<LeaseAgreement> LeaseAgreements => Set<LeaseAgreement>();
 
+    public DbSet<RentScheduleItem> RentScheduleItems => Set<RentScheduleItem>();
+
     public DbSet<ApplicationDocument> ApplicationDocuments => Set<ApplicationDocument>();
 
     public DbSet<ApplicationValidationWorkflow> ApplicationValidationWorkflows => Set<ApplicationValidationWorkflow>();
@@ -248,6 +250,48 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(lease => lease.PropertyId);
 
             entity.HasIndex(lease => lease.Status);
+        });
+
+        modelBuilder.Entity<RentScheduleItem>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.LeaseAgreementId)
+                .IsRequired();
+
+            entity.Property(item => item.DueDate)
+                .IsRequired();
+
+            entity.Property(item => item.Amount)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(item => item.Status)
+                .IsRequired();
+
+            entity.Property(item => item.CreatedAt)
+                .IsRequired();
+
+            entity.Property(item => item.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(item => item.LeaseAgreement)
+                .WithMany()
+                .HasForeignKey(item => item.LeaseAgreementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(item => item.LeaseAgreementId);
+
+            entity.HasIndex(item => item.DueDate);
+
+            entity.HasIndex(item => item.Status);
+
+            entity.HasIndex(item => new
+            {
+                item.LeaseAgreementId,
+                item.DueDate
+            })
+            .IsUnique();
         });
 
         modelBuilder.Entity<ApplicationDocument>(entity =>
