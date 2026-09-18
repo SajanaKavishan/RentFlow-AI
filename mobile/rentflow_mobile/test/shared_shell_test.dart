@@ -1,7 +1,14 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:rentflow_mobile/core/network/api_client.dart';
 import 'package:rentflow_mobile/features/auth/controllers/auth_controller.dart';
 import 'package:rentflow_mobile/features/auth/models/current_user.dart';
+import 'package:rentflow_mobile/features/rental_applications/services/rental_application_api_service.dart';
+import 'package:rentflow_mobile/features/viewings/services/viewing_api_service.dart';
 import 'package:rentflow_mobile/shared/home/tenant_home.dart';
 import 'package:rentflow_mobile/shared/navigation/role_navigation.dart';
 import 'package:rentflow_mobile/shared/shell/shared_app_shell.dart';
@@ -28,6 +35,7 @@ Future<fixtures.MemoryTokenStorage> pumpShell(
   UserRole role, {
   Widget? viewingsContent,
   Widget? applicationsContent,
+  ApiClient? apiClient,
 }) async {
   final storage = fixtures.MemoryTokenStorage('token');
   final controller = fixtures.buildController(storage, role: role);
@@ -41,6 +49,12 @@ Future<fixtures.MemoryTokenStorage> pumpShell(
           user: userFor(role),
           viewingsContent: viewingsContent,
           applicationsContent: applicationsContent,
+          viewingApiService: apiClient == null
+              ? null
+              : ViewingApiService(apiClient),
+          rentalApplicationApiService: apiClient == null
+              ? null
+              : RentalApplicationApiService(apiClient),
         ),
       ),
     ),
@@ -50,6 +64,180 @@ Future<fixtures.MemoryTokenStorage> pumpShell(
 }
 
 void main() {
+  testWidgets(
+    'populated tenant home stays compact and accessible at mobile widths',
+    (tester) async {
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final apiClient = ApiClient(
+        baseUrl: 'http://test',
+        tokenStorage: fixtures.MemoryTokenStorage('token'),
+        httpClient: MockClient(
+          (request) async => http.Response(
+            jsonEncode(
+              request.url.path.endsWith('/viewings')
+                  ? []
+                  : [
+                      {
+                        'id': 'application-test',
+                        'tenantId': 'tenant-test',
+                        'propertyId': '22222222-2222-4222-8222-222222222222',
+                        'moveInDate': '2026-10-01',
+                        'monthlyIncome': 2500,
+                        'occupation': 'Engineer',
+                        'numberOfOccupants': 2,
+                        'status': 2,
+                        'createdAt': '2026-09-14T10:00:00Z',
+                        'updatedAt': '2026-09-15T11:30:00Z',
+                      },
+                    ],
+            ),
+            200,
+          ),
+        ),
+      );
+      addTearDown(apiClient.close);
+      final semantics = tester.ensureSemantics();
+
+      for (final width in [360.0, 390.0, 412.0, 430.0]) {
+        await tester.binding.setSurfaceSize(Size(width, 800));
+        await pumpShell(tester, UserRole.tenant, apiClient: apiClient);
+        expect(find.text('Your application is being reviewed'), findsOneWidget);
+        expect(find.text('UNDER REVIEW'), findsOneWidget);
+        expect(find.text('Move-in requested for Oct 1, 2026'), findsOneWidget);
+        expect(find.text('Recent activity'), findsOneWidget);
+        expect(find.text('Application updated'), findsOneWidget);
+        expect(find.text('Sep 15, 2026'), findsOneWidget);
+        expect(find.text('See all'), findsNothing);
+
+        final journey = find.byKey(const Key('tenant-journey-card'));
+        expect(tester.getSize(journey).height, lessThan(200));
+        final decoration =
+            tester.widget<Container>(journey).decoration! as BoxDecoration;
+        expect(decoration.color, AppPalette.darkOlive);
+
+        final cards = ['My Viewings', 'My Lease', 'Pay Rent', 'Documents']
+            .map(
+              (label) => find.ancestor(
+                of: find.text(label),
+                matching: find.byType(AppCard),
+              ),
+            )
+            .toList();
+        expect(tester.getTopLeft(cards[0]).dy, tester.getTopLeft(cards[1]).dy);
+        expect(tester.getTopLeft(cards[2]).dy, tester.getTopLeft(cards[3]).dy);
+        expect(tester.getTopLeft(cards[0]).dx, tester.getTopLeft(cards[2]).dx);
+        expect(tester.getSize(cards[0]).height, lessThan(110));
+        for (final card in cards) {
+          expect(tester.getSize(card), tester.getSize(cards[0]));
+        }
+        expect(
+          tester.getSemantics(find.bySemanticsLabel('Documents')),
+          matchesSemantics(
+            label: 'Documents',
+            isButton: true,
+            hasTapAction: true,
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      }
+      semantics.dispose();
+    },
+  );
+
+  testWidgets('recent activity shows three separate cards and opens all', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final apiClient = ApiClient(
+      baseUrl: 'http://test',
+      tokenStorage: fixtures.MemoryTokenStorage('token'),
+      httpClient: MockClient(
+        (request) async => http.Response(
+          jsonEncode(
+            request.url.path.endsWith('/viewings')
+                ? []
+                : [
+                    for (var index = 0; index < 5; index++)
+                      {
+                        'id': 'application-$index',
+                        'tenantId': 'tenant-test',
+                        'propertyId': 'property-$index',
+                        'moveInDate': '2026-10-01',
+                        'monthlyIncome': 2500,
+                        'occupation': 'Engineer',
+                        'numberOfOccupants': 2,
+                        'status': 1,
+                        'createdAt': '2026-09-14T10:00:00Z',
+                        'updatedAt': '2026-09-${15 - index}T11:30:00Z',
+                      },
+                  ],
+          ),
+          200,
+        ),
+      ),
+    );
+    addTearDown(apiClient.close);
+
+    await pumpShell(tester, UserRole.tenant, apiClient: apiClient);
+    final homeList = find.byKey(const Key('tenant-home-activity-list'));
+    expect(
+      find.descendant(of: homeList, matching: find.text('Application updated')),
+      findsNWidgets(3),
+    );
+    expect(
+      find.descendant(of: homeList, matching: find.byType(AppCard)),
+      findsNWidgets(3),
+    );
+    expect(find.text('See all'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('See all'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('See all'));
+    await tester.pumpAndSettle();
+    final allActivity = find.byKey(const Key('tenant-all-activity-sheet'));
+    expect(find.text('All recent activity'), findsOneWidget);
+    expect(
+      find.descendant(of: allActivity, matching: find.byType(AppCard)),
+      findsNWidgets(5),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'tenant home supports enlarged text and real empty/error states',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      var unavailable = true;
+      final apiClient = ApiClient(
+        baseUrl: 'http://test',
+        tokenStorage: fixtures.MemoryTokenStorage('token'),
+        httpClient: MockClient(
+          (_) async => http.Response('[]', unavailable ? 500 : 200),
+        ),
+      );
+      addTearDown(apiClient.close);
+      await pumpShell(tester, UserRole.tenant, apiClient: apiClient);
+      expect(find.text('Journey unavailable'), findsOneWidget);
+      expect(find.text('Recent activity'), findsNothing);
+      expect(tester.takeException(), isNull);
+      unavailable = false;
+      await tester.ensureVisible(find.text('Try again'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(find.text('No rental journey yet'), findsOneWidget);
+      expect(find.text('Recent activity'), findsNothing);
+      await tester.ensureVisible(find.text('Documents'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('tenant home exposes the four requested quick actions', (
     tester,
   ) async {
@@ -65,12 +253,12 @@ void main() {
         (widget) =>
             widget is Text &&
             RegExp(
-              r'^Good (morning|afternoon|evening|night),\nTaylor$',
+              r'^Good (morning|afternoon|evening|night), Taylor$',
             ).hasMatch(widget.data ?? ''),
       ),
       findsOneWidget,
     );
-    expect(find.text('Your rental journey'), findsOneWidget);
+    expect(find.text('What would you like to do?'), findsOneWidget);
     expect(find.text('My Viewings'), findsOneWidget);
     expect(find.text('My Lease'), findsOneWidget);
     expect(find.text('Pay Rent'), findsOneWidget);
@@ -155,7 +343,7 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('$expected,\nTaylor'), findsOneWidget);
+      expect(find.text('$expected, Taylor'), findsOneWidget);
       expect(find.text('FRIDAY, 18 SEPTEMBER'), findsOneWidget);
     }
 

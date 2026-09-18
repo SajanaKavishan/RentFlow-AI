@@ -91,7 +91,7 @@ class _TenantHomeState extends State<TenantHome> {
     return SafeArea(
       bottom: false,
       child: AuthenticatedPage(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -101,13 +101,11 @@ class _TenantHomeState extends State<TenantHome> {
               firstName: _firstName(widget.user.fullName),
               onOpenNotifications: widget.onOpenNotifications,
             ),
-            const SizedBox(height: AppSpacing.xl),
-            const SectionHeader(title: 'Your rental journey'),
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: 18),
             _buildJourney(),
-            const SizedBox(height: AppSpacing.xl),
-            const SectionHeader(title: 'Quick actions'),
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: 22),
+            const _TenantSectionHeader(title: 'What would you like to do?'),
+            const SizedBox(height: 10),
             _QuickActionGrid(
               onOpenViewings: widget.onOpenViewings,
               onOpenLease: widget.onOpenLease,
@@ -122,7 +120,7 @@ class _TenantHomeState extends State<TenantHome> {
   }
 
   Widget _journeyCard({required Widget child, VoidCallback? onTap}) =>
-      AppCard(padding: const EdgeInsets.all(18), onTap: onTap, child: child);
+      _DarkJourneyCard(onTap: onTap, child: child);
 
   VoidCallback? _journeyAction(_TenantHomeSnapshot snapshot) {
     if (snapshot.currentApplication != null) {
@@ -137,11 +135,11 @@ class _TenantHomeState extends State<TenantHome> {
   Widget _buildJourney() {
     if (!_hasActivityIntegration) {
       return _journeyCard(
-        child: const IntegrationPendingState(
+        child: const _JourneyMessage(
+          status: 'Integration pending',
           title: 'Journey summary unavailable',
           message:
-              'Property selection has not been integrated yet. Your authenticated session is active, but Home activity is not connected in this app context.',
-          compact: true,
+              'Property selection has not been integrated yet. Home activity is not connected.',
         ),
       );
     }
@@ -151,20 +149,21 @@ class _TenantHomeState extends State<TenantHome> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return _journeyCard(
-            child: const LoadingState(
+            child: const _JourneyMessage(
+              status: 'Checking activity',
               title: 'Loading your journey',
               message: 'Checking your real viewing and application activity.',
-              compact: true,
+              isLoading: true,
             ),
           );
         }
         if (snapshot.hasError) {
           return _journeyCard(
-            child: ErrorState(
-              message:
-                  'We could not load your journey. Nothing has been changed.',
+            child: _JourneyMessage(
+              status: 'Unable to load',
+              title: 'Journey unavailable',
+              message: 'Nothing has been changed. Please try again.',
               onRetry: _retry,
-              compact: true,
             ),
           );
         }
@@ -185,28 +184,49 @@ class _TenantHomeState extends State<TenantHome> {
         if (!snapshot.hasData || snapshot.data!.activity.isEmpty) {
           return const SizedBox.shrink();
         }
+        final activities = snapshot.data!.activity;
+        final visibleActivities = activities.take(3).toList(growable: false);
         return Padding(
-          padding: const EdgeInsets.only(top: AppSpacing.lg),
+          padding: const EdgeInsets.only(top: 22),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SectionHeader(title: 'Recent activity'),
-              const SizedBox(height: AppSpacing.md),
-              AppCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: [
-                    for (
-                      var index = 0;
-                      index < snapshot.data!.activity.length;
-                      index++
-                    ) ...[
-                      _ActivityTile(activity: snapshot.data!.activity[index]),
-                      if (index < snapshot.data!.activity.length - 1)
-                        const Divider(height: 1),
-                    ],
-                  ],
-                ),
+              _TenantSectionHeader(
+                title: 'Recent activity',
+                trailing: activities.length > 3
+                    ? TextButton(
+                        onPressed: () => _showAllActivities(activities),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(44, 44),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          foregroundColor: AppPalette.olive,
+                          textStyle: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        child: const Text('See all'),
+                      )
+                    : null,
+              ),
+              const SizedBox(height: 10),
+              Column(
+                key: const Key('tenant-home-activity-list'),
+                children: [
+                  for (var index = 0; index < visibleActivities.length; index++)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        bottom: index < visibleActivities.length - 1 ? 8 : 0,
+                      ),
+                      child: AppCard(
+                        key: ValueKey('tenant-home-activity-$index'),
+                        padding: EdgeInsets.zero,
+                        child: _ActivityTile(
+                          activity: visibleActivities[index],
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
@@ -214,6 +234,175 @@ class _TenantHomeState extends State<TenantHome> {
       },
     );
   }
+
+  void _showAllActivities(List<_TenantActivity> activities) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppPalette.warmCream,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: FractionallySizedBox(
+          heightFactor: 0.72,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: Column(
+              key: const Key('tenant-all-activity-sheet'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _TenantSectionHeader(title: 'All recent activity'),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: activities.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (_, index) => AppCard(
+                      key: ValueKey('tenant-all-activity-$index'),
+                      padding: EdgeInsets.zero,
+                      child: _ActivityTile(activity: activities[index]),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DarkJourneyCard extends StatelessWidget {
+  const _DarkJourneyCard({required this.child, this.onTap});
+
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Padding(padding: const EdgeInsets.all(16), child: child);
+    return Container(
+      key: const Key('tenant-journey-card'),
+      decoration: BoxDecoration(
+        color: AppPalette.darkOlive,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppPalette.darkOlive.withValues(alpha: 0.12),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: Colors.transparent,
+        child: onTap == null ? content : InkWell(onTap: onTap, child: content),
+      ),
+    );
+  }
+}
+
+class _JourneyMessage extends StatelessWidget {
+  const _JourneyMessage({
+    required this.status,
+    required this.title,
+    required this.message,
+    this.isLoading = false,
+    this.onRetry,
+  });
+
+  final String status;
+  final String title;
+  final String message;
+  final bool isLoading;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _JourneyStatusPill(
+                label: status,
+                tone: StatusTone.neutral,
+              ),
+            ),
+          ),
+          if (isLoading)
+            const SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppPalette.sage,
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: 14),
+      Text(
+        title,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: AppPalette.white,
+          fontSize: 16,
+          height: 1.18,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        message,
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: AppPalette.sage, height: 1.35),
+      ),
+      if (onRetry != null) ...[
+        const SizedBox(height: 10),
+        TextButton.icon(
+          onPressed: onRetry,
+          style: TextButton.styleFrom(
+            foregroundColor: AppPalette.sage,
+            minimumSize: const Size(44, 44),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+          ),
+          icon: const Icon(Icons.refresh_rounded, size: 16),
+          label: const Text('Try again'),
+        ),
+      ],
+    ],
+  );
+}
+
+class _TenantSectionHeader extends StatelessWidget {
+  const _TenantSectionHeader({required this.title, this.trailing});
+
+  final String title;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: AppPalette.primaryText,
+            fontSize: 16,
+            height: 1.2,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      if (trailing != null) ...[
+        const SizedBox(width: AppSpacing.sm),
+        trailing!,
+      ],
+    ],
+  );
 }
 
 class _TenantHomeHeader extends StatelessWidget {
@@ -242,18 +431,18 @@ class _TenantHomeHeader extends StatelessWidget {
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: AppPalette.olive,
                 fontWeight: FontWeight.w800,
-                letterSpacing: 1.35,
+                letterSpacing: 1.2,
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: AppSpacing.xs),
             Text(
-              '$greeting,\n$firstName',
+              '$greeting, $firstName',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 color: AppPalette.darkOlive,
-                fontSize: 32,
-                height: 1.08,
+                fontSize: 26,
+                height: 1.04,
                 fontWeight: FontWeight.w700,
-                letterSpacing: -0.7,
+                letterSpacing: -0.5,
               ),
             ),
           ],
@@ -290,11 +479,19 @@ class _JourneySummary extends StatelessWidget {
       return _ActiveJourney(
         statusLabel: status.$1,
         tone: status.$2,
-        title: 'Rental application',
+        title: switch (application.status) {
+          RentalApplicationStatus.draft => 'Your application is in draft',
+          RentalApplicationStatus.submitted => 'Your application is submitted',
+          RentalApplicationStatus.underReview =>
+            'Your application is being reviewed',
+          RentalApplicationStatus.changesRequested =>
+            'Your application needs changes',
+          RentalApplicationStatus.approved => 'Your application is approved',
+          _ => 'Rental application',
+        },
         reference: 'Property reference: ${application.propertyId}',
         progress:
             'Move-in requested for ${_formatDate(application.moveInDate)}',
-        progressIcon: Icons.event_available_outlined,
       );
     }
 
@@ -304,18 +501,19 @@ class _JourneySummary extends StatelessWidget {
       return _ActiveJourney(
         statusLabel: status.$1,
         tone: status.$2,
-        title: 'Property viewing',
+        title: viewing.status == ViewingStatus.approved
+            ? 'Your viewing is approved'
+            : 'Your viewing is awaiting approval',
         reference: 'Property reference: ${viewing.propertyId}',
         progress: 'Requested for ${_formatDateTime(viewing.requestedDateTime)}',
-        progressIcon: Icons.schedule_outlined,
       );
     }
 
-    return const EmptyState(
+    return const _JourneyMessage(
+      status: 'No activity yet',
       title: 'No rental journey yet',
       message:
           'Real viewing or application progress will appear here once available.',
-      compact: true,
     );
   }
 }
@@ -327,7 +525,6 @@ class _ActiveJourney extends StatelessWidget {
     required this.title,
     required this.reference,
     required this.progress,
-    required this.progressIcon,
   });
 
   final String statusLabel;
@@ -335,48 +532,66 @@ class _ActiveJourney extends StatelessWidget {
   final String title;
   final String reference;
   final String progress;
-  final IconData progressIcon;
 
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _JourneyStatusPill(label: statusLabel, tone: tone),
-            const SizedBox(height: AppSpacing.md),
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              reference,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(fontSize: 13),
+      Row(
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _JourneyStatusPill(label: statusLabel, tone: tone),
             ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Icon(progressIcon, size: 16, color: AppPalette.olive),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    progress,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppPalette.primaryText,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 20,
+            color: AppPalette.sage.withValues(alpha: 0.72),
+          ),
+        ],
+      ),
+      const SizedBox(height: 14),
+      Text(
+        title,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: AppPalette.white,
+          fontSize: 16,
+          height: 1.18,
+          fontWeight: FontWeight.w600,
         ),
       ),
-      const SizedBox(width: AppSpacing.sm),
-      const Icon(Icons.chevron_right_rounded, color: AppPalette.olive),
+      const SizedBox(height: 6),
+      Text(
+        reference,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: AppPalette.sage, height: 1.3),
+      ),
+      const SizedBox(height: 14),
+      // A status accent, not a percentage: the API does not report progress.
+      ExcludeSemantics(
+        child: Container(
+          height: 3,
+          decoration: BoxDecoration(
+            color: AppPalette.sage.withValues(alpha: 0.65),
+            borderRadius: BorderRadius.circular(AppRadii.pill),
+          ),
+        ),
+      ),
+      const SizedBox(height: 9),
+      Text(
+        progress,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: AppPalette.sage,
+          fontSize: 11,
+          height: 1.3,
+        ),
+      ),
     ],
   );
 }
@@ -389,13 +604,9 @@ class _JourneyStatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (foreground, background) = switch (tone) {
-      StatusTone.neutral => (AppPalette.neutral, AppPalette.softCream),
-      StatusTone.pending ||
-      StatusTone.warning => (AppPalette.warning, AppPalette.pending),
-      StatusTone.progress => (const Color(0xFF43556A), AppPalette.progress),
-      StatusTone.success => (AppPalette.success, AppPalette.sage),
-      StatusTone.danger => (AppPalette.danger, const Color(0xFFF5DDDC)),
+    final background = switch (tone) {
+      StatusTone.progress || StatusTone.success => AppPalette.sage,
+      _ => AppPalette.softCream,
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
@@ -406,8 +617,9 @@ class _JourneyStatusPill extends StatelessWidget {
       child: Text(
         label.toUpperCase(),
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: foreground,
-          fontSize: 10,
+          color: AppPalette.darkOlive,
+          fontSize: 9,
+          height: 1.2,
           fontWeight: FontWeight.w800,
           letterSpacing: 0.7,
         ),
@@ -466,24 +678,60 @@ class _QuickActionGrid extends StatelessWidget {
               Semantics(
                 button: true,
                 label: action.label,
+                onTap: action.onTap,
                 child: ExcludeSemantics(
                   child: SizedBox(
                     width: width,
                     child: AppCard(
+                      padding: const EdgeInsets.all(13),
                       onTap: action.onTap,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 92),
+                      child: SizedBox(
+                        height:
+                            44 +
+                            (MediaQuery.textScalerOf(context).scale(13) * 1.25)
+                                    .ceilToDouble() *
+                                2,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Icon(action.icon, color: AppPalette.olive),
-                            const SizedBox(height: AppSpacing.md),
-                            Text(
-                              action.label,
-                              maxLines: 2,
-                              style: Theme.of(context).textTheme.labelLarge
-                                  ?.copyWith(color: AppPalette.primaryText),
+                            Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: AppPalette.softCream,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                action.icon,
+                                size: 19,
+                                color: AppPalette.olive,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    action.label,
+                                    maxLines: 2,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
+                                        ?.copyWith(
+                                          color: AppPalette.primaryText,
+                                          fontSize: 13,
+                                          height: 1.25,
+                                        ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 16,
+                                  color: AppPalette.secondaryText,
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -518,17 +766,17 @@ class _ActivityTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(AppSpacing.base),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
     child: Row(
       children: [
         Container(
-          width: 38,
-          height: 38,
+          width: 32,
+          height: 32,
           decoration: const BoxDecoration(
-            color: AppPalette.softCream,
+            color: AppPalette.sage,
             shape: BoxShape.circle,
           ),
-          child: Icon(activity.icon, size: 20, color: AppPalette.olive),
+          child: Icon(activity.icon, size: 17, color: AppPalette.olive),
         ),
         const SizedBox(width: AppSpacing.md),
         Expanded(
@@ -537,18 +785,37 @@ class _ActivityTile extends StatelessWidget {
             children: [
               Text(
                 activity.title,
-                style: Theme.of(context).textTheme.titleMedium,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: AppPalette.primaryText,
+                  fontSize: 12,
+                  height: 1.25,
+                ),
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                _formatDate(activity.occurredAt),
-                style: Theme.of(context).textTheme.bodyMedium,
+                activity.statusLabel,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppPalette.secondaryText,
+                  fontSize: 11,
+                  height: 1.25,
+                ),
               ),
             ],
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
-        StatusChip(label: activity.statusLabel, tone: activity.tone),
+        Flexible(
+          fit: FlexFit.tight,
+          child: Text(
+            _formatDate(activity.occurredAt),
+            textAlign: TextAlign.right,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppPalette.secondaryText,
+              fontSize: 10,
+              height: 1.3,
+            ),
+          ),
+        ),
       ],
     ),
   );
@@ -605,7 +872,7 @@ class _TenantHomeSnapshot {
         );
       }),
     ]..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
-    return items.take(3).toList(growable: false);
+    return items;
   }
 
   RentalApplication? _latestApplication(Iterable<RentalApplication> values) {
