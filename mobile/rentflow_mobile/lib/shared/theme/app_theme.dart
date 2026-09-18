@@ -134,16 +134,18 @@ abstract final class AppTheme {
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        height: 72,
+        height: 64,
         elevation: 0,
         backgroundColor: AppPalette.white,
         surfaceTintColor: Colors.transparent,
         indicatorColor: AppPalette.sage,
+        indicatorShape: const StadiumBorder(),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected)
                 ? AppPalette.darkOlive
                 : AppPalette.secondaryText,
+            size: 25,
           ),
         ),
         labelTextStyle: WidgetStateProperty.resolveWith(

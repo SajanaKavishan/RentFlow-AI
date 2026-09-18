@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rentflow_mobile/features/auth/controllers/auth_controller.dart';
 import 'package:rentflow_mobile/features/auth/models/current_user.dart';
+import 'package:rentflow_mobile/shared/home/tenant_home.dart';
+import 'package:rentflow_mobile/shared/navigation/role_navigation.dart';
 import 'package:rentflow_mobile/shared/shell/shared_app_shell.dart';
 import 'package:rentflow_mobile/shared/theme/app_theme.dart';
 import 'package:rentflow_mobile/shared/widgets/shared_widgets.dart';
@@ -10,6 +12,16 @@ import 'widget_test.dart' as fixtures;
 
 CurrentUser userFor(UserRole role) =>
     CurrentUser.fromJson(fixtures.userJson(role));
+
+Finder navigationIcon(IconData icon) => find.descendant(
+  of: find.byType(NavigationBar),
+  matching: find.byIcon(icon),
+);
+
+Finder navigationSemantics(String label) => find.descendant(
+  of: find.byType(NavigationBar),
+  matching: find.bySemanticsLabel(RegExp('^$label(?:\\n.*)?\$')),
+);
 
 Future<fixtures.MemoryTokenStorage> pumpShell(
   WidgetTester tester,
@@ -48,15 +60,27 @@ void main() {
       applicationsContent: const Center(child: Text('Applications content')),
     );
 
-    expect(find.text('Hello, Taylor'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Text &&
+            RegExp(
+              r'^Good (morning|afternoon|evening|night),\nTaylor$',
+            ).hasMatch(widget.data ?? ''),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Your rental journey'), findsOneWidget);
-    expect(find.text('Properties'), findsWidgets);
-    expect(find.text('My Viewings'), findsOneWidget);
-    expect(find.text('My Applications'), findsOneWidget);
+    expect(find.text('Find properties'), findsOneWidget);
+    expect(find.text('My viewings'), findsOneWidget);
+    expect(find.text('My applications'), findsOneWidget);
     expect(find.text('Documents'), findsOneWidget);
+    expect(find.byTooltip('Notifications'), findsOneWidget);
+    expect(find.byTooltip('Open profile'), findsNothing);
+    expect(find.text('RentFlow AI'), findsNothing);
     expect(
       find.text('AI helps with the work. People stay in control.'),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text('Recent activity'), findsNothing);
 
@@ -71,6 +95,78 @@ void main() {
     );
   });
 
+  testWidgets('tenant greeting follows Sri Lanka time boundaries', (
+    tester,
+  ) async {
+    Future<void> pumpAt(DateTime instant, String expected) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(
+            body: TenantHome(
+              user: userFor(UserRole.tenant),
+              onDestinationSelected: (RoleDestinationId _) {},
+              onOpenDocuments: () {},
+              onOpenNotifications: () {},
+              now: () => instant,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('$expected,\nTaylor'), findsOneWidget);
+      expect(find.text('FRIDAY, 18 SEPTEMBER'), findsOneWidget);
+    }
+
+    await pumpAt(DateTime.utc(2026, 9, 17, 23, 29), 'Good night');
+    await pumpAt(DateTime.utc(2026, 9, 17, 23, 30), 'Good morning');
+    await pumpAt(DateTime.utc(2026, 9, 18, 6, 29), 'Good morning');
+    await pumpAt(DateTime.utc(2026, 9, 18, 6, 30), 'Good afternoon');
+    await pumpAt(DateTime.utc(2026, 9, 18, 11, 29), 'Good afternoon');
+    await pumpAt(DateTime.utc(2026, 9, 18, 11, 30), 'Good evening');
+    await pumpAt(DateTime.utc(2026, 9, 18, 15, 29), 'Good evening');
+    await pumpAt(DateTime.utc(2026, 9, 18, 15, 30), 'Good night');
+  });
+
+  testWidgets('authenticated navigation is icon-only and remains accessible', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 720));
+    await pumpShell(tester, UserRole.tenant);
+
+    final navigation = find.byType(NavigationBar);
+    final bar = tester.widget<NavigationBar>(navigation);
+    expect(bar.labelBehavior, NavigationDestinationLabelBehavior.alwaysHide);
+    expect(tester.getSize(navigation).height, 64);
+
+    final semantics = tester.ensureSemantics();
+    for (final label in [
+      'Home',
+      'Properties',
+      'Viewings',
+      'Applications',
+      'Profile',
+    ]) {
+      final destination = navigationSemantics(label);
+      expect(destination, findsOneWidget);
+      final target = tester.getSemantics(destination).rect.size;
+      expect(target.width, greaterThanOrEqualTo(44));
+      expect(target.height, greaterThanOrEqualTo(44));
+    }
+
+    final theme = NavigationBarTheme.of(tester.element(navigation));
+    expect(theme.indicatorColor, AppPalette.sage);
+    expect(theme.indicatorShape, isA<StadiumBorder>());
+    expect(
+      theme.iconTheme?.resolve({WidgetState.selected})?.color,
+      AppPalette.darkOlive,
+    );
+    expect(theme.iconTheme?.resolve({})?.color, AppPalette.secondaryText);
+
+    semantics.dispose();
+    await tester.binding.setSurfaceSize(null);
+  });
+
   testWidgets(
     'tenant shell reaches Viewings, Applications, Properties, and Profile without feature network calls',
     (tester) async {
@@ -81,19 +177,19 @@ void main() {
         applicationsContent: const Center(child: Text('Applications content')),
       );
       expect(find.byType(NavigationBar), findsOneWidget);
-      await tester.tap(find.text('Viewings').last);
+      await tester.tap(navigationIcon(Icons.calendar_month_outlined));
       await tester.pumpAndSettle();
       expect(find.text('Viewings content'), findsOneWidget);
-      await tester.tap(find.text('Applications').last);
+      await tester.tap(navigationIcon(Icons.description_outlined));
       await tester.pumpAndSettle();
       expect(find.text('Applications content'), findsOneWidget);
-      await tester.tap(find.text('Properties').last);
+      await tester.tap(navigationIcon(Icons.home_work_outlined));
       await tester.pumpAndSettle();
       expect(
         find.textContaining('Property discovery will appear here'),
         findsOneWidget,
       );
-      await tester.tap(find.text('Profile').last);
+      await tester.tap(navigationIcon(Icons.person_outline));
       await tester.pumpAndSettle();
       expect(find.text('user@example.com'), findsOneWidget);
       expect(find.text('+94 77 123 4567'), findsOneWidget);
@@ -126,10 +222,10 @@ void main() {
         ),
         findsOneWidget,
       );
-      await tester.tap(find.text('Viewing Requests').last);
+      await tester.tap(navigationIcon(Icons.calendar_month_outlined));
       await tester.pumpAndSettle();
       expect(find.text('Viewing queue unavailable'), findsOneWidget);
-      await tester.tap(find.text('Profile').last);
+      await tester.tap(navigationIcon(Icons.person_outline));
       await tester.pumpAndSettle();
       expect(find.text('user@example.com'), findsOneWidget);
     },
@@ -140,19 +236,11 @@ void main() {
   ) async {
     await pumpShell(tester, UserRole.maintenanceTechnician);
     expect(find.byType(NavigationBar), findsOneWidget);
-    final navigation = find.byType(NavigationBar);
-    expect(
-      find.descendant(of: navigation, matching: find.text('Home')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: navigation, matching: find.text('Assigned Work')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: navigation, matching: find.text('Profile')),
-      findsOneWidget,
-    );
+    final semantics = tester.ensureSemantics();
+    expect(navigationSemantics('Home'), findsOneWidget);
+    expect(navigationSemantics('Assigned Work'), findsOneWidget);
+    expect(navigationSemantics('Profile'), findsOneWidget);
+    semantics.dispose();
   });
 
   testWidgets('admin has minimal Home and Profile mobile access', (
@@ -160,21 +248,16 @@ void main() {
   ) async {
     await pumpShell(tester, UserRole.admin);
     expect(find.byType(NavigationBar), findsOneWidget);
-    final navigation = find.byType(NavigationBar);
-    expect(
-      find.descendant(of: navigation, matching: find.text('Home')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: navigation, matching: find.text('Profile')),
-      findsOneWidget,
-    );
+    final semantics = tester.ensureSemantics();
+    expect(navigationSemantics('Home'), findsOneWidget);
+    expect(navigationSemantics('Profile'), findsOneWidget);
+    semantics.dispose();
     expect(find.text('Users'), findsNothing);
   });
 
   testWidgets('profile logout clears session', (tester) async {
     final storage = await pumpShell(tester, UserRole.tenant);
-    await tester.tap(find.text('Profile').last);
+    await tester.tap(navigationIcon(Icons.person_outline));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Logout'));
     await tester.pumpAndSettle();
@@ -192,7 +275,7 @@ void main() {
           viewingsContent: const Text('Viewings content'),
           applicationsContent: const Text('Applications content'),
         );
-        await tester.tap(find.text('Profile').last);
+        await tester.tap(navigationIcon(Icons.person_outline));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());

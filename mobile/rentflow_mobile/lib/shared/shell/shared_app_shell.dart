@@ -67,9 +67,12 @@ class _SharedAppShellState extends State<SharedAppShell> {
   @override
   Widget build(BuildContext context) {
     final selected = _selected;
-    final ownsAppBar = selected.experience == DestinationExperience.feature;
+    final contentOwnsAppBar =
+        selected.experience == DestinationExperience.feature ||
+        (selected.id == RoleDestinationId.home &&
+            widget.user.role == UserRole.tenant);
     return Scaffold(
-      appBar: ownsAppBar ? null : _appBar(selected),
+      appBar: contentOwnsAppBar ? null : _appBar(selected),
       body: _contentFor(selected),
       bottomNavigationBar: SafeArea(
         top: false,
@@ -80,6 +83,7 @@ class _SharedAppShellState extends State<SharedAppShell> {
           child: NavigationBar(
             selectedIndex: _selectedIndex,
             onDestinationSelected: _select,
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
             destinations: _destinations
                 .map(
                   (destination) => NavigationDestination(
@@ -108,21 +112,18 @@ class _SharedAppShellState extends State<SharedAppShell> {
         : Text(selected.label),
     actions: switch (selected.id) {
       RoleDestinationId.home => [
-        if (widget.user.role == UserRole.tenant ||
-            widget.user.role == UserRole.landlord)
+        if (widget.user.role == UserRole.landlord)
           IconButton(
             tooltip: 'Notifications',
-            onPressed: () => AppSnackbars.show(
-              context,
-              message: 'Notifications are not connected yet.',
-            ),
+            onPressed: _showNotificationsPending,
             icon: const Icon(Icons.notifications_none_outlined),
           ),
-        IconButton(
-          tooltip: 'Open profile',
-          onPressed: () => _selectDestination(RoleDestinationId.profile),
-          icon: const Icon(Icons.account_circle_outlined),
-        ),
+        if (widget.user.role != UserRole.tenant)
+          IconButton(
+            tooltip: 'Open profile',
+            onPressed: () => _selectDestination(RoleDestinationId.profile),
+            icon: const Icon(Icons.account_circle_outlined),
+          ),
         const SizedBox(width: AppSpacing.sm),
       ],
       RoleDestinationId.profile => [
@@ -163,6 +164,11 @@ class _SharedAppShellState extends State<SharedAppShell> {
     };
   }
 
+  void _showNotificationsPending() => AppSnackbars.show(
+    context,
+    message: 'Notifications are not connected yet.',
+  );
+
   Widget _featureFor(RoleDestinationId id) => switch (id) {
     RoleDestinationId.viewings =>
       widget.viewingsContent ?? const MyViewingsScreen(),
@@ -195,6 +201,7 @@ class _SharedAppShellState extends State<SharedAppShell> {
         rentalApplicationApiService: widget.rentalApplicationApiService,
         onDestinationSelected: _selectDestination,
         onOpenDocuments: _openDocuments,
+        onOpenNotifications: _showNotificationsPending,
       );
     }
     if (widget.user.role == UserRole.landlord) {

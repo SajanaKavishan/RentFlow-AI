@@ -576,7 +576,12 @@ void main() {
     final controller = buildController(storage);
     await tester.pumpWidget(MyApp(authController: controller));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Profile').last);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.byIcon(Icons.person_outline),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Logout'));
     await tester.pumpAndSettle();

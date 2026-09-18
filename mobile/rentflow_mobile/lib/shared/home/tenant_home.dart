@@ -15,15 +15,19 @@ class TenantHome extends StatefulWidget {
     required this.user,
     required this.onDestinationSelected,
     required this.onOpenDocuments,
+    required this.onOpenNotifications,
     this.viewingApiService,
     this.rentalApplicationApiService,
+    this.now,
   });
 
   final CurrentUser user;
   final ValueChanged<RoleDestinationId> onDestinationSelected;
   final VoidCallback onOpenDocuments;
+  final VoidCallback onOpenNotifications;
   final ViewingApiService? viewingApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
+  final DateTime Function()? now;
 
   @override
   State<TenantHome> createState() => _TenantHomeState();
@@ -74,41 +78,58 @@ class _TenantHomeState extends State<TenantHome> {
   void _retry() => setState(_load);
 
   @override
-  Widget build(BuildContext context) => AuthenticatedPage(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        PageHeader(
-          eyebrow: 'Tenant home',
-          title: 'Hello, ${_firstName(widget.user.fullName)}',
-          subtitle: 'Your viewings, applications, and documents in one place.',
+  Widget build(BuildContext context) {
+    final now = (widget.now?.call() ?? DateTime.now()).toUtc().add(
+      const Duration(hours: 5, minutes: 30),
+    );
+    return SafeArea(
+      bottom: false,
+      child: AuthenticatedPage(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _TenantHomeHeader(
+              date: _formatHeaderDate(now),
+              greeting: _greetingForHour(now.hour),
+              firstName: _firstName(widget.user.fullName),
+              onOpenNotifications: widget.onOpenNotifications,
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            const SectionHeader(title: 'Your rental journey'),
+            const SizedBox(height: AppSpacing.md),
+            _buildJourney(),
+            const SizedBox(height: AppSpacing.xl),
+            const SectionHeader(title: 'Quick actions'),
+            const SizedBox(height: AppSpacing.md),
+            _QuickActionGrid(
+              onSelected: widget.onDestinationSelected,
+              onOpenDocuments: widget.onOpenDocuments,
+            ),
+            _buildRecentActivity(),
+          ],
         ),
-        const SizedBox(height: AppSpacing.lg),
-        const SectionHeader(
-          title: 'Your rental journey',
-          subtitle: 'Live progress from your RentFlow activity.',
-        ),
-        const SizedBox(height: AppSpacing.md),
-        _buildJourney(),
-        const SizedBox(height: AppSpacing.lg),
-        const SectionHeader(title: 'Quick actions'),
-        const SizedBox(height: AppSpacing.md),
-        _QuickActionGrid(
-          onSelected: widget.onDestinationSelected,
-          onOpenDocuments: widget.onOpenDocuments,
-        ),
-        _buildRecentActivity(),
-        const SizedBox(height: AppSpacing.lg),
-        const _AiAssistanceCard(),
-      ],
-    ),
-  );
+      ),
+    );
+  }
+
+  Widget _journeyCard({required Widget child, VoidCallback? onTap}) =>
+      AppCard(padding: const EdgeInsets.all(18), onTap: onTap, child: child);
+
+  VoidCallback? _journeyAction(_TenantHomeSnapshot snapshot) {
+    if (snapshot.currentApplication != null) {
+      return () => widget.onDestinationSelected(RoleDestinationId.applications);
+    }
+    if (snapshot.currentViewing != null) {
+      return () => widget.onDestinationSelected(RoleDestinationId.viewings);
+    }
+    return null;
+  }
 
   Widget _buildJourney() {
     if (!_hasActivityIntegration) {
-      return const AppCard(
-        padding: EdgeInsets.all(AppSpacing.lg),
-        child: IntegrationPendingState(
+      return _journeyCard(
+        child: const IntegrationPendingState(
           title: 'Journey summary unavailable',
           message:
               'Property selection has not been integrated yet. Your authenticated session is active, but Home activity is not connected in this app context.',
@@ -117,30 +138,34 @@ class _TenantHomeState extends State<TenantHome> {
       );
     }
 
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: FutureBuilder<_TenantHomeSnapshot>(
-        future: _snapshot,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const LoadingState(
+    return FutureBuilder<_TenantHomeSnapshot>(
+      future: _snapshot,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _journeyCard(
+            child: const LoadingState(
               title: 'Loading your journey',
               message: 'Checking your real viewing and application activity.',
               compact: true,
-            );
-          }
-          if (snapshot.hasError) {
-            return ErrorState(
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return _journeyCard(
+            child: ErrorState(
               message:
                   'We could not load your journey. Nothing has been changed.',
               onRetry: _retry,
               compact: true,
-            );
-          }
-          final data = snapshot.data!;
-          return _JourneySummary(snapshot: data);
-        },
-      ),
+            ),
+          );
+        }
+        final data = snapshot.data!;
+        return _journeyCard(
+          onTap: _journeyAction(data),
+          child: _JourneySummary(snapshot: data),
+        );
+      },
     );
   }
 
@@ -183,6 +208,67 @@ class _TenantHomeState extends State<TenantHome> {
   }
 }
 
+class _TenantHomeHeader extends StatelessWidget {
+  const _TenantHomeHeader({
+    required this.date,
+    required this.greeting,
+    required this.firstName,
+    required this.onOpenNotifications,
+  });
+
+  final String date;
+  final String greeting;
+  final String firstName;
+  final VoidCallback onOpenNotifications;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              date.toUpperCase(),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AppPalette.olive,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.35,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              '$greeting,\n$firstName',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: AppPalette.darkOlive,
+                fontSize: 32,
+                height: 1.08,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.7,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(width: AppSpacing.md),
+      Material(
+        color: AppPalette.white,
+        shape: const CircleBorder(side: BorderSide(color: AppPalette.outline)),
+        clipBehavior: Clip.antiAlias,
+        child: IconButton(
+          tooltip: 'Notifications',
+          onPressed: onOpenNotifications,
+          icon: const Icon(
+            Icons.notifications_none_rounded,
+            color: AppPalette.darkOlive,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
 class _JourneySummary extends StatelessWidget {
   const _JourneySummary({required this.snapshot});
 
@@ -193,65 +279,27 @@ class _JourneySummary extends StatelessWidget {
     final application = snapshot.currentApplication;
     if (application != null) {
       final status = _applicationStatus(application.status);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _JourneyIcon(icon: Icons.description_outlined),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Rental application',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    StatusChip(label: status.$1, tone: status.$2),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.base),
-          Text(
-            'Requested move-in: ${_formatDate(application.moveInDate)}',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ],
+      return _ActiveJourney(
+        statusLabel: status.$1,
+        tone: status.$2,
+        title: 'Rental application',
+        reference: 'Property reference: ${application.propertyId}',
+        progress:
+            'Move-in requested for ${_formatDate(application.moveInDate)}',
+        progressIcon: Icons.event_available_outlined,
       );
     }
 
     final viewing = snapshot.currentViewing;
     if (viewing != null) {
       final status = _viewingStatus(viewing.status);
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _JourneyIcon(icon: Icons.calendar_month_outlined),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Property viewing',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                StatusChip(label: status.$1, tone: status.$2),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  _formatDateTime(viewing.requestedDateTime),
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          ),
-        ],
+      return _ActiveJourney(
+        statusLabel: status.$1,
+        tone: status.$2,
+        title: 'Property viewing',
+        reference: 'Property reference: ${viewing.propertyId}',
+        progress: 'Requested for ${_formatDateTime(viewing.requestedDateTime)}',
+        progressIcon: Icons.schedule_outlined,
       );
     }
 
@@ -264,21 +312,100 @@ class _JourneySummary extends StatelessWidget {
   }
 }
 
-class _JourneyIcon extends StatelessWidget {
-  const _JourneyIcon({required this.icon});
+class _ActiveJourney extends StatelessWidget {
+  const _ActiveJourney({
+    required this.statusLabel,
+    required this.tone,
+    required this.title,
+    required this.reference,
+    required this.progress,
+    required this.progressIcon,
+  });
 
-  final IconData icon;
+  final String statusLabel;
+  final StatusTone tone;
+  final String title;
+  final String reference;
+  final String progress;
+  final IconData progressIcon;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 46,
-    height: 46,
-    decoration: BoxDecoration(
-      color: AppPalette.sage,
-      borderRadius: BorderRadius.circular(AppRadii.medium),
-    ),
-    child: Icon(icon, color: AppPalette.darkOlive),
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _JourneyStatusPill(label: statusLabel, tone: tone),
+            const SizedBox(height: AppSpacing.md),
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              reference,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontSize: 13),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Icon(progressIcon, size: 16, color: AppPalette.olive),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    progress,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppPalette.primaryText,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(width: AppSpacing.sm),
+      const Icon(Icons.chevron_right_rounded, color: AppPalette.olive),
+    ],
   );
+}
+
+class _JourneyStatusPill extends StatelessWidget {
+  const _JourneyStatusPill({required this.label, required this.tone});
+
+  final String label;
+  final StatusTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final (foreground, background) = switch (tone) {
+      StatusTone.neutral => (AppPalette.neutral, AppPalette.softCream),
+      StatusTone.pending ||
+      StatusTone.warning => (AppPalette.warning, AppPalette.pending),
+      StatusTone.progress => (const Color(0xFF43556A), AppPalette.progress),
+      StatusTone.success => (AppPalette.success, AppPalette.sage),
+      StatusTone.danger => (AppPalette.danger, const Color(0xFFF5DDDC)),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: foreground,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.7,
+        ),
+      ),
+    );
+  }
 }
 
 class _QuickActionGrid extends StatelessWidget {
@@ -294,17 +421,17 @@ class _QuickActionGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final actions = [
       _QuickAction(
-        label: 'Properties',
+        label: 'Find properties',
         icon: Icons.home_work_outlined,
         onTap: () => onSelected(RoleDestinationId.properties),
       ),
       _QuickAction(
-        label: 'My Viewings',
+        label: 'My viewings',
         icon: Icons.calendar_month_outlined,
         onTap: () => onSelected(RoleDestinationId.viewings),
       ),
       _QuickAction(
-        label: 'My Applications',
+        label: 'My applications',
         icon: Icons.description_outlined,
         onTap: () => onSelected(RoleDestinationId.applications),
       ),
@@ -404,57 +531,6 @@ class _ActivityTile extends StatelessWidget {
         ),
         const SizedBox(width: AppSpacing.sm),
         StatusChip(label: activity.statusLabel, tone: activity.tone),
-      ],
-    ),
-  );
-}
-
-class _AiAssistanceCard extends StatelessWidget {
-  const _AiAssistanceCard();
-
-  @override
-  Widget build(BuildContext context) => AppCard(
-    color: AppPalette.darkOlive,
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 42,
-          height: 42,
-          decoration: const BoxDecoration(
-            color: AppPalette.sage,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(
-            Icons.auto_awesome_outlined,
-            color: AppPalette.darkOlive,
-          ),
-        ),
-        const SizedBox(width: AppSpacing.md),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'RentFlow AI',
-                style: TextStyle(
-                  color: AppPalette.sage,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              SizedBox(height: AppSpacing.xs),
-              Text(
-                'AI helps with the work. People stay in control.',
-                style: TextStyle(
-                  color: AppPalette.white,
-                  fontSize: 15,
-                  height: 1.4,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
       ],
     ),
   );
@@ -586,6 +662,40 @@ String _firstName(String fullName) {
   final trimmed = fullName.trim();
   if (trimmed.isEmpty) return 'there';
   return trimmed.split(RegExp(r'\s+')).first;
+}
+
+String _greetingForHour(int hour) {
+  if (hour >= 5 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  if (hour >= 17 && hour < 21) return 'Good evening';
+  return 'Good night';
+}
+
+String _formatHeaderDate(DateTime value) {
+  const weekdays = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  return '${weekdays[value.weekday - 1]}, ${value.day} ${months[value.month - 1]}';
 }
 
 String _formatDate(DateTime value) {
