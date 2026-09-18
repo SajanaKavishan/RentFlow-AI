@@ -11,6 +11,7 @@ import 'package:rentflow_mobile/features/rental_applications/services/rental_app
 import 'package:rentflow_mobile/features/viewings/services/viewing_api_service.dart';
 import 'package:rentflow_mobile/shared/home/tenant_home.dart';
 import 'package:rentflow_mobile/shared/navigation/role_navigation.dart';
+import 'package:rentflow_mobile/shared/navigation/tenant_navigation_icon.dart';
 import 'package:rentflow_mobile/shared/shell/shared_app_shell.dart';
 import 'package:rentflow_mobile/shared/theme/app_theme.dart';
 import 'package:rentflow_mobile/shared/widgets/shared_widgets.dart';
@@ -28,6 +29,10 @@ Finder navigationIcon(IconData icon) => find.descendant(
 Finder navigationSemantics(String label) => find.descendant(
   of: find.byType(NavigationBar),
   matching: find.bySemanticsLabel(RegExp('^$label(?:\\n.*)?\$')),
+);
+
+Finder navigationDestination(String label) => find.byWidgetPredicate(
+  (widget) => widget is NavigationDestination && widget.label == label,
 );
 
 Future<fixtures.MemoryTokenStorage> pumpShell(
@@ -392,14 +397,9 @@ void main() {
 
     expect(bar.indicatorColor, Colors.transparent);
     expect(bar.backgroundColor, AppPalette.white);
-    expect(
-      tester.widget<Icon>(navigationIcon(Icons.home)).color,
-      AppPalette.darkOlive,
-    );
-    expect(
-      tester.widget<Icon>(navigationIcon(Icons.home_work_outlined)).color,
-      AppPalette.secondaryText,
-    );
+    final home = bar.destinations.first as NavigationDestination;
+    expect((home.selectedIcon! as TenantNavigationIcon).selected, isTrue);
+    expect((home.icon as TenantNavigationIcon).selected, isFalse);
 
     semantics.dispose();
     await tester.binding.setSurfaceSize(null);
@@ -415,23 +415,23 @@ void main() {
         applicationsContent: const Center(child: Text('Applications content')),
       );
       expect(find.byType(NavigationBar), findsOneWidget);
-      await tester.tap(navigationIcon(Icons.description_outlined));
+      await tester.tap(navigationDestination('Applications'));
       await tester.pumpAndSettle();
       expect(find.text('Applications content'), findsOneWidget);
-      await tester.tap(navigationIcon(Icons.build_outlined));
+      await tester.tap(navigationDestination('Maintenance'));
       await tester.pumpAndSettle();
       expect(find.text('Integration pending'), findsOneWidget);
       expect(
         find.textContaining('maintenance requests will appear here'),
         findsOneWidget,
       );
-      await tester.tap(navigationIcon(Icons.home_work_outlined));
+      await tester.tap(navigationDestination('Properties'));
       await tester.pumpAndSettle();
       expect(
         find.textContaining('Property discovery will appear here'),
         findsOneWidget,
       );
-      await tester.tap(navigationIcon(Icons.person_outline));
+      await tester.tap(navigationDestination('Profile'));
       await tester.pumpAndSettle();
       expect(find.text('user@example.com'), findsOneWidget);
       expect(find.text('+94 77 123 4567'), findsOneWidget);
@@ -467,7 +467,7 @@ void main() {
       await tester.tap(navigationIcon(Icons.calendar_month_outlined));
       await tester.pumpAndSettle();
       expect(find.text('Viewing queue unavailable'), findsOneWidget);
-      await tester.tap(navigationIcon(Icons.person_outline));
+      await tester.tap(navigationDestination('Profile'));
       await tester.pumpAndSettle();
       expect(find.text('user@example.com'), findsOneWidget);
     },
@@ -499,7 +499,7 @@ void main() {
 
   testWidgets('profile logout clears session', (tester) async {
     final storage = await pumpShell(tester, UserRole.tenant);
-    await tester.tap(navigationIcon(Icons.person_outline));
+    await tester.tap(navigationDestination('Profile'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Logout'));
     await tester.pumpAndSettle();
@@ -517,7 +517,7 @@ void main() {
           viewingsContent: const Text('Viewings content'),
           applicationsContent: const Text('Applications content'),
         );
-        await tester.tap(navigationIcon(Icons.person_outline));
+        await tester.tap(navigationDestination('Profile'));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());

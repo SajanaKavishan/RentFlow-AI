@@ -579,7 +579,10 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(NavigationBar),
-        matching: find.byIcon(Icons.person_outline),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is NavigationDestination && widget.label == 'Profile',
+        ),
       ),
     );
     await tester.pumpAndSettle();

@@ -11,6 +11,7 @@ import '../../features/viewings/services/viewing_api_service.dart';
 import '../home/landlord_home.dart';
 import '../home/tenant_home.dart';
 import '../navigation/role_navigation.dart';
+import '../navigation/tenant_navigation_icon.dart';
 import '../profile/shared_profile_content.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
@@ -148,15 +149,10 @@ class _SharedAppShellState extends State<SharedAppShell> {
         destinations: _destinations
             .map(
               (destination) => NavigationDestination(
-                icon: Icon(
-                  destination.icon,
-                  color: AppPalette.secondaryText,
-                  size: 24,
-                ),
-                selectedIcon: Icon(
-                  _selectedIcon(destination.id),
-                  color: AppPalette.darkOlive,
-                  size: 25,
+                icon: TenantNavigationIcon(destination: destination.id),
+                selectedIcon: TenantNavigationIcon(
+                  destination: destination.id,
+                  selected: true,
                 ),
                 label: destination.label,
                 tooltip: destination.label,
