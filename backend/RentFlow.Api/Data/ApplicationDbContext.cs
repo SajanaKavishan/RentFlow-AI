@@ -5,11 +5,9 @@ namespace RentFlow.Api.Data;
 
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
 {
-    public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
-
-    public DbSet<Property> Properties => Set<Property>();
-
-    public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
+ public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
+public DbSet<Property> Properties => Set<Property>();
+public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
 
     public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
 
@@ -114,6 +112,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(property => property.MonthlyRent);
             entity.HasIndex(property => property.IsAvailable);
         });
+        
 
 
         modelBuilder.Entity<ViewingRequest>(entity =>

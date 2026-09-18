@@ -12,7 +12,7 @@ using RentFlow.Api.Data;
 namespace RentFlow.Api.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260917165623_AddPropertyManagement")]
+    [Migration("20260918171405_AddPropertyManagement")]
     partial class AddPropertyManagement
     {
         /// <inheritdoc />
