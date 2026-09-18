@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../features/auth/controllers/auth_controller.dart';
 import '../../features/auth/models/current_user.dart';
 import '../../features/rental_applications/screens/my_rental_applications_screen.dart';
+import '../../features/rental_applications/screens/landlord_rental_applications_screen.dart';
 import '../../features/rental_applications/services/rental_application_api_service.dart';
 import '../../features/viewings/screens/landlord_viewing_requests_screen.dart';
 import '../../features/viewings/screens/my_viewings_screen.dart';
@@ -172,7 +173,17 @@ class _SharedAppShellState extends State<SharedAppShell> {
             viewingApiService: widget.viewingApiService,
           ),
     RoleDestinationId.applications =>
-      widget.applicationsContent ?? const MyRentalApplicationsScreen(),
+      widget.applicationsContent ??
+          (widget.user.role == UserRole.landlord
+              ? LandlordRentalApplicationsScreen(
+                  propertyId: widget.landlordPropertyId,
+                  rentalApplicationApiService:
+                      widget.rentalApplicationApiService,
+                )
+              : MyRentalApplicationsScreen(
+                  rentalApplicationApiService:
+                      widget.rentalApplicationApiService,
+                )),
     _ => const SizedBox.shrink(),
   };
 

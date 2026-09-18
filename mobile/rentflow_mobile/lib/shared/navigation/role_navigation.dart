@@ -95,9 +95,7 @@ List<RoleDestination> destinationsFor(UserRole role) => switch (role) {
       id: RoleDestinationId.applications,
       label: 'Applications',
       icon: Icons.description_outlined,
-      experience: DestinationExperience.webWorkspace,
-      explanation:
-          'Application documents and AI review are available in the RentFlow web workspace.',
+      experience: DestinationExperience.feature,
     ),
     _profile,
   ],
