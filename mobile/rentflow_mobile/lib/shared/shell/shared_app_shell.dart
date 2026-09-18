@@ -64,6 +64,55 @@ class _SharedAppShellState extends State<SharedAppShell> {
     _selectDestination(RoleDestinationId.applications);
   }
 
+  void _openViewings() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            widget.viewingsContent ??
+            MyViewingsScreen(viewingApiService: widget.viewingApiService),
+      ),
+    );
+  }
+
+  void _openLease() => _openPendingTenantModule(
+    title: 'My Lease',
+    explanation:
+        'Lease details will appear here after the lease module is integrated.',
+    owner: 'Lease management',
+  );
+
+  void _openPayRent() => _openPendingTenantModule(
+    title: 'Pay Rent',
+    explanation:
+        'Rent payments will appear here after the payment module is integrated.',
+    owner: 'Payments',
+  );
+
+  void _openPendingTenantModule({
+    required String title,
+    required String explanation,
+    required String owner,
+  }) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(
+            title: Text(title),
+            bottom: const PreferredSize(
+              preferredSize: Size.fromHeight(1),
+              child: Divider(height: 1),
+            ),
+          ),
+          body: ModuleUnavailableState(
+            title: title,
+            explanation: explanation,
+            owner: owner,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final selected = _selected;
@@ -242,6 +291,9 @@ class _SharedAppShellState extends State<SharedAppShell> {
         viewingApiService: widget.viewingApiService,
         rentalApplicationApiService: widget.rentalApplicationApiService,
         onDestinationSelected: _selectDestination,
+        onOpenViewings: _openViewings,
+        onOpenLease: _openLease,
+        onPayRent: _openPayRent,
         onOpenDocuments: _openDocuments,
         onOpenNotifications: _showNotificationsPending,
       );

@@ -50,7 +50,7 @@ Future<fixtures.MemoryTokenStorage> pumpShell(
 }
 
 void main() {
-  testWidgets('tenant home exposes honest journey and owned quick actions', (
+  testWidgets('tenant home exposes the four requested quick actions', (
     tester,
   ) async {
     await pumpShell(
@@ -71,10 +71,16 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Your rental journey'), findsOneWidget);
-    expect(find.text('Find properties'), findsOneWidget);
-    expect(find.text('My viewings'), findsOneWidget);
-    expect(find.text('My applications'), findsOneWidget);
+    expect(find.text('My Viewings'), findsOneWidget);
+    expect(find.text('My Lease'), findsOneWidget);
+    expect(find.text('Pay Rent'), findsOneWidget);
     expect(find.text('Documents'), findsOneWidget);
+    expect(find.text('Find properties'), findsNothing);
+    expect(find.text('My applications'), findsNothing);
+    expect(find.byIcon(Icons.calendar_month_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.article_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.credit_card_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
     expect(find.byTooltip('Notifications'), findsOneWidget);
     expect(find.byTooltip('Open profile'), findsNothing);
     expect(find.text('RentFlow AI'), findsNothing);
@@ -83,6 +89,38 @@ void main() {
       findsNothing,
     );
     expect(find.text('Recent activity'), findsNothing);
+
+    final semantics = tester.ensureSemantics();
+    for (final label in ['My Viewings', 'My Lease', 'Pay Rent', 'Documents']) {
+      expect(find.bySemanticsLabel(label), findsOneWidget);
+    }
+    semantics.dispose();
+
+    await tester.ensureVisible(find.text('My Viewings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('My Viewings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Viewings content'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('My Lease'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('My Lease'));
+    await tester.pumpAndSettle();
+    expect(find.text('Integration pending'), findsOneWidget);
+    expect(find.textContaining('lease module is integrated'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Pay Rent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pay Rent'));
+    await tester.pumpAndSettle();
+    expect(find.text('Integration pending'), findsOneWidget);
+    expect(find.textContaining('payment module is integrated'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('Documents'));
     await tester.pumpAndSettle();
@@ -106,6 +144,9 @@ void main() {
             body: TenantHome(
               user: userFor(UserRole.tenant),
               onDestinationSelected: (RoleDestinationId _) {},
+              onOpenViewings: () {},
+              onOpenLease: () {},
+              onPayRent: () {},
               onOpenDocuments: () {},
               onOpenNotifications: () {},
               now: () => instant,

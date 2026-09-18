@@ -14,6 +14,9 @@ class TenantHome extends StatefulWidget {
     super.key,
     required this.user,
     required this.onDestinationSelected,
+    required this.onOpenViewings,
+    required this.onOpenLease,
+    required this.onPayRent,
     required this.onOpenDocuments,
     required this.onOpenNotifications,
     this.viewingApiService,
@@ -23,6 +26,9 @@ class TenantHome extends StatefulWidget {
 
   final CurrentUser user;
   final ValueChanged<RoleDestinationId> onDestinationSelected;
+  final VoidCallback onOpenViewings;
+  final VoidCallback onOpenLease;
+  final VoidCallback onPayRent;
   final VoidCallback onOpenDocuments;
   final VoidCallback onOpenNotifications;
   final ViewingApiService? viewingApiService;
@@ -103,7 +109,9 @@ class _TenantHomeState extends State<TenantHome> {
             const SectionHeader(title: 'Quick actions'),
             const SizedBox(height: AppSpacing.md),
             _QuickActionGrid(
-              onSelected: widget.onDestinationSelected,
+              onOpenViewings: widget.onOpenViewings,
+              onOpenLease: widget.onOpenLease,
+              onPayRent: widget.onPayRent,
               onOpenDocuments: widget.onOpenDocuments,
             ),
             _buildRecentActivity(),
@@ -410,30 +418,34 @@ class _JourneyStatusPill extends StatelessWidget {
 
 class _QuickActionGrid extends StatelessWidget {
   const _QuickActionGrid({
-    required this.onSelected,
+    required this.onOpenViewings,
+    required this.onOpenLease,
+    required this.onPayRent,
     required this.onOpenDocuments,
   });
 
-  final ValueChanged<RoleDestinationId> onSelected;
+  final VoidCallback onOpenViewings;
+  final VoidCallback onOpenLease;
+  final VoidCallback onPayRent;
   final VoidCallback onOpenDocuments;
 
   @override
   Widget build(BuildContext context) {
     final actions = [
       _QuickAction(
-        label: 'Find properties',
-        icon: Icons.home_work_outlined,
-        onTap: () => onSelected(RoleDestinationId.properties),
-      ),
-      _QuickAction(
-        label: 'My viewings',
+        label: 'My Viewings',
         icon: Icons.calendar_month_outlined,
-        onTap: () => onSelected(RoleDestinationId.viewings),
+        onTap: onOpenViewings,
       ),
       _QuickAction(
-        label: 'My applications',
-        icon: Icons.description_outlined,
-        onTap: () => onSelected(RoleDestinationId.applications),
+        label: 'My Lease',
+        icon: Icons.article_outlined,
+        onTap: onOpenLease,
+      ),
+      _QuickAction(
+        label: 'Pay Rent',
+        icon: Icons.credit_card_outlined,
+        onTap: onPayRent,
       ),
       _QuickAction(
         label: 'Documents',
@@ -451,25 +463,31 @@ class _QuickActionGrid extends StatelessWidget {
           runSpacing: gap,
           children: [
             for (final action in actions)
-              SizedBox(
-                width: width,
-                child: AppCard(
-                  onTap: action.onTap,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 92),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Icon(action.icon, color: AppPalette.olive),
-                        const SizedBox(height: AppSpacing.md),
-                        Text(
-                          action.label,
-                          maxLines: 2,
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(color: AppPalette.primaryText),
+              Semantics(
+                button: true,
+                label: action.label,
+                child: ExcludeSemantics(
+                  child: SizedBox(
+                    width: width,
+                    child: AppCard(
+                      onTap: action.onTap,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 92),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Icon(action.icon, color: AppPalette.olive),
+                            const SizedBox(height: AppSpacing.md),
+                            Text(
+                              action.label,
+                              maxLines: 2,
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(color: AppPalette.primaryText),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
