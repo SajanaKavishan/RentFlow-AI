@@ -7,6 +7,7 @@ enum RoleDestinationId {
   properties,
   viewings,
   applications,
+  maintenance,
   viewingRequests,
   assignedWork,
   profile,
@@ -70,16 +71,19 @@ List<RoleDestination> destinationsFor(UserRole role) => switch (role) {
           'Property discovery will appear here after the property module is integrated.',
     ),
     RoleDestination(
-      id: RoleDestinationId.viewings,
-      label: 'Viewings',
-      icon: Icons.calendar_month_outlined,
-      experience: DestinationExperience.feature,
-    ),
-    RoleDestination(
       id: RoleDestinationId.applications,
       label: 'Applications',
       icon: Icons.description_outlined,
       experience: DestinationExperience.feature,
+    ),
+    RoleDestination(
+      id: RoleDestinationId.maintenance,
+      label: 'Maintenance',
+      icon: Icons.build_outlined,
+      experience: DestinationExperience.unavailable,
+      owner: 'Maintenance',
+      explanation:
+          'Tenant maintenance requests will appear here after the maintenance module is integrated.',
     ),
     _profile,
   ],

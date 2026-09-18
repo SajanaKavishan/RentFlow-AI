@@ -138,13 +138,20 @@ void main() {
     final bar = tester.widget<NavigationBar>(navigation);
     expect(bar.labelBehavior, NavigationDestinationLabelBehavior.alwaysHide);
     expect(tester.getSize(navigation).height, 64);
+    expect(
+      bar.destinations.whereType<NavigationDestination>().map(
+        (destination) => destination.label,
+      ),
+      ['Home', 'Properties', 'Applications', 'Maintenance', 'Profile'],
+    );
 
     final semantics = tester.ensureSemantics();
+    expect(navigationSemantics('Viewings'), findsNothing);
     for (final label in [
       'Home',
       'Properties',
-      'Viewings',
       'Applications',
+      'Maintenance',
       'Profile',
     ]) {
       final destination = navigationSemantics(label);
@@ -154,21 +161,23 @@ void main() {
       expect(target.height, greaterThanOrEqualTo(44));
     }
 
-    final theme = NavigationBarTheme.of(tester.element(navigation));
-    expect(theme.indicatorColor, AppPalette.sage);
-    expect(theme.indicatorShape, isA<StadiumBorder>());
+    expect(bar.indicatorColor, Colors.transparent);
+    expect(bar.backgroundColor, AppPalette.white);
     expect(
-      theme.iconTheme?.resolve({WidgetState.selected})?.color,
+      tester.widget<Icon>(navigationIcon(Icons.home)).color,
       AppPalette.darkOlive,
     );
-    expect(theme.iconTheme?.resolve({})?.color, AppPalette.secondaryText);
+    expect(
+      tester.widget<Icon>(navigationIcon(Icons.home_work_outlined)).color,
+      AppPalette.secondaryText,
+    );
 
     semantics.dispose();
     await tester.binding.setSurfaceSize(null);
   });
 
   testWidgets(
-    'tenant shell reaches Viewings, Applications, Properties, and Profile without feature network calls',
+    'tenant shell reaches Applications, Maintenance, Properties, and Profile without feature network calls',
     (tester) async {
       await pumpShell(
         tester,
@@ -177,12 +186,16 @@ void main() {
         applicationsContent: const Center(child: Text('Applications content')),
       );
       expect(find.byType(NavigationBar), findsOneWidget);
-      await tester.tap(navigationIcon(Icons.calendar_month_outlined));
-      await tester.pumpAndSettle();
-      expect(find.text('Viewings content'), findsOneWidget);
       await tester.tap(navigationIcon(Icons.description_outlined));
       await tester.pumpAndSettle();
       expect(find.text('Applications content'), findsOneWidget);
+      await tester.tap(navigationIcon(Icons.build_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text('Integration pending'), findsOneWidget);
+      expect(
+        find.textContaining('maintenance requests will appear here'),
+        findsOneWidget,
+      );
       await tester.tap(navigationIcon(Icons.home_work_outlined));
       await tester.pumpAndSettle();
       expect(

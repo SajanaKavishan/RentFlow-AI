@@ -74,30 +74,72 @@ class _SharedAppShellState extends State<SharedAppShell> {
     return Scaffold(
       appBar: contentOwnsAppBar ? null : _appBar(selected),
       body: _contentFor(selected),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: AppPalette.outline)),
-          ),
-          child: NavigationBar(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: _select,
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
-            destinations: _destinations
-                .map(
-                  (destination) => NavigationDestination(
-                    icon: Icon(destination.icon),
-                    selectedIcon: Icon(_selectedIcon(destination.id)),
-                    label: destination.label,
-                  ),
-                )
-                .toList(growable: false),
-          ),
-        ),
-      ),
+      bottomNavigationBar: widget.user.role == UserRole.tenant
+          ? _tenantBottomNavigation()
+          : _sharedBottomNavigation(),
     );
   }
+
+  Widget _tenantBottomNavigation() => DecoratedBox(
+    decoration: const BoxDecoration(
+      color: AppPalette.white,
+      border: Border(top: BorderSide(color: AppPalette.outline)),
+    ),
+    child: SafeArea(
+      top: false,
+      child: NavigationBar(
+        height: 64,
+        elevation: 0,
+        backgroundColor: AppPalette.white,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: Colors.transparent,
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: _select,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
+        destinations: _destinations
+            .map(
+              (destination) => NavigationDestination(
+                icon: Icon(
+                  destination.icon,
+                  color: AppPalette.secondaryText,
+                  size: 24,
+                ),
+                selectedIcon: Icon(
+                  _selectedIcon(destination.id),
+                  color: AppPalette.darkOlive,
+                  size: 25,
+                ),
+                label: destination.label,
+                tooltip: destination.label,
+              ),
+            )
+            .toList(growable: false),
+      ),
+    ),
+  );
+
+  Widget _sharedBottomNavigation() => SafeArea(
+    top: false,
+    child: DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppPalette.outline)),
+      ),
+      child: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: _select,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
+        destinations: _destinations
+            .map(
+              (destination) => NavigationDestination(
+                icon: Icon(destination.icon),
+                selectedIcon: Icon(_selectedIcon(destination.id)),
+                label: destination.label,
+              ),
+            )
+            .toList(growable: false),
+      ),
+    ),
+  );
 
   PreferredSizeWidget _appBar(RoleDestination selected) => AppBar(
     titleSpacing: AppSpacing.base,
@@ -332,6 +374,7 @@ IconData _selectedIcon(RoleDestinationId id) => switch (id) {
   RoleDestinationId.viewings ||
   RoleDestinationId.viewingRequests => Icons.calendar_month,
   RoleDestinationId.applications => Icons.description,
+  RoleDestinationId.maintenance => Icons.build,
   RoleDestinationId.assignedWork => Icons.handyman,
   RoleDestinationId.profile => Icons.person,
 };
