@@ -17,6 +17,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<RentScheduleItem> RentScheduleItems => Set<RentScheduleItem>();
 
+    public DbSet<Payment> Payments => Set<Payment>();
+
     public DbSet<ApplicationDocument> ApplicationDocuments => Set<ApplicationDocument>();
 
     public DbSet<ApplicationValidationWorkflow> ApplicationValidationWorkflows => Set<ApplicationValidationWorkflow>();
@@ -415,6 +417,54 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(step => new { step.WorkflowId, step.StepOrder })
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<Payment>(entity =>
+        {
+            entity.HasKey(payment => payment.Id);
+
+            entity.Property(payment => payment.RentScheduleItemId)
+                .IsRequired();
+
+            entity.Property(payment => payment.TenantId)
+                .IsRequired();
+
+            entity.Property(payment => payment.Amount)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(payment => payment.PaymentMethod)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(payment => payment.TransactionReference)
+                .HasMaxLength(200)
+                .IsRequired(false);
+
+            entity.Property(payment => payment.Status)
+                .IsRequired();
+
+            entity.Property(payment => payment.PaidAt)
+                .IsRequired(false);
+
+            entity.Property(payment => payment.CreatedAt)
+                .IsRequired();
+
+            entity.Property(payment => payment.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(payment => payment.RentScheduleItem)
+                .WithMany()
+                .HasForeignKey(payment => payment.RentScheduleItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(payment => payment.RentScheduleItemId);
+
+            entity.HasIndex(payment => payment.TenantId);
+
+            entity.HasIndex(payment => payment.Status);
+
+            entity.HasIndex(payment => payment.TransactionReference);
         });
     }
 }
