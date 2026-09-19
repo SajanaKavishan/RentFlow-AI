@@ -25,4 +25,6 @@ public class PropertyResponseDto
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset? UpdatedAt { get; set; }
+
+    public List<string> Amenities { get; set; } = new();
 }

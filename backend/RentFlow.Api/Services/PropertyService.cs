@@ -18,48 +18,26 @@ public class PropertyService : IPropertyService
     // Get all properties
     public async Task<IEnumerable<PropertyResponseDto>> GetAllAsync()
     {
-        return await _dbContext.Properties
+        var properties = await _dbContext.Properties
             .AsNoTracking()
-            .Select(property => new PropertyResponseDto
-            {
-                Id = property.Id,
-                LandlordId = property.LandlordId,
-                Title = property.Title,
-                Description = property.Description,
-                Address = property.Address,
-                City = property.City,
-                MonthlyRent = property.MonthlyRent,
-                Bedrooms = property.Bedrooms,
-                Bathrooms = property.Bathrooms,
-                IsAvailable = property.IsAvailable,
-                CreatedAt = property.CreatedAt,
-                UpdatedAt = property.UpdatedAt
-            })
+            .Include(property => property.Amenities)
+            .OrderByDescending(property => property.CreatedAt)
             .ToListAsync();
+
+        return properties.Select(MapToResponseDto);
     }
 
     // Get one property by ID
     public async Task<PropertyResponseDto?> GetByIdAsync(Guid id)
     {
-        return await _dbContext.Properties
+        var property = await _dbContext.Properties
             .AsNoTracking()
-            .Where(property => property.Id == id)
-            .Select(property => new PropertyResponseDto
-            {
-                Id = property.Id,
-                LandlordId = property.LandlordId,
-                Title = property.Title,
-                Description = property.Description,
-                Address = property.Address,
-                City = property.City,
-                MonthlyRent = property.MonthlyRent,
-                Bedrooms = property.Bedrooms,
-                Bathrooms = property.Bathrooms,
-                IsAvailable = property.IsAvailable,
-                CreatedAt = property.CreatedAt,
-                UpdatedAt = property.UpdatedAt
-            })
-            .FirstOrDefaultAsync();
+            .Include(property => property.Amenities)
+            .FirstOrDefaultAsync(property => property.Id == id);
+
+        return property is null
+            ? null
+            : MapToResponseDto(property);
     }
 
     // Create a new property
@@ -71,10 +49,10 @@ public class PropertyService : IPropertyService
         {
             Id = Guid.NewGuid(),
             LandlordId = landlordId,
-            Title = dto.Title,
-            Description = dto.Description,
-            Address = dto.Address,
-            City = dto.City,
+            Title = dto.Title.Trim(),
+            Description = dto.Description.Trim(),
+            Address = dto.Address.Trim(),
+            City = dto.City.Trim(),
             MonthlyRent = dto.MonthlyRent,
             Bedrooms = dto.Bedrooms,
             Bathrooms = dto.Bathrooms,
@@ -82,7 +60,18 @@ public class PropertyService : IPropertyService
             CreatedAt = DateTimeOffset.UtcNow
         };
 
+        foreach (var amenityName in CleanAmenities(dto.Amenities))
+        {
+            property.Amenities.Add(new PropertyAmenity
+            {
+                Id = Guid.NewGuid(),
+                PropertyId = property.Id,
+                Name = amenityName
+            });
+        }
+
         _dbContext.Properties.Add(property);
+
         await _dbContext.SaveChangesAsync();
 
         return MapToResponseDto(property);
@@ -95,6 +84,7 @@ public class PropertyService : IPropertyService
         UpdatePropertyDto dto)
     {
         var property = await _dbContext.Properties
+            .Include(property => property.Amenities)
             .FirstOrDefaultAsync(property =>
                 property.Id == id &&
                 property.LandlordId == landlordId);
@@ -104,15 +94,38 @@ public class PropertyService : IPropertyService
             return null;
         }
 
-        property.Title = dto.Title;
-        property.Description = dto.Description;
-        property.Address = dto.Address;
-        property.City = dto.City;
+        // Update property information
+        property.Title = dto.Title.Trim();
+        property.Description = dto.Description.Trim();
+        property.Address = dto.Address.Trim();
+        property.City = dto.City.Trim();
         property.MonthlyRent = dto.MonthlyRent;
         property.Bedrooms = dto.Bedrooms;
         property.Bathrooms = dto.Bathrooms;
         property.IsAvailable = dto.IsAvailable;
         property.UpdatedAt = DateTimeOffset.UtcNow;
+
+        // Copy the currently tracked amenities before removing them.
+        var existingAmenities = property.Amenities.ToList();
+
+        if (existingAmenities.Count > 0)
+        {
+            _dbContext.PropertyAmenities.RemoveRange(existingAmenities);
+        }
+
+        // Clear the navigation collection.
+        property.Amenities.Clear();
+
+        // Add the replacement amenities.
+        foreach (var amenityName in CleanAmenities(dto.Amenities))
+        {
+            property.Amenities.Add(new PropertyAmenity
+            {
+                Id = Guid.NewGuid(),
+                PropertyId = property.Id,
+                Name = amenityName
+            });
+        }
 
         await _dbContext.SaveChangesAsync();
 
@@ -135,12 +148,23 @@ public class PropertyService : IPropertyService
         }
 
         _dbContext.Properties.Remove(property);
+
         await _dbContext.SaveChangesAsync();
 
         return true;
     }
 
-    // Convert Property entity to PropertyResponseDto
+    // Clean up amenities before storing them.
+    private static IEnumerable<string> CleanAmenities(
+        IEnumerable<string>? amenities)
+    {
+        return (amenities ?? Enumerable.Empty<string>())
+            .Where(amenity => !string.IsNullOrWhiteSpace(amenity))
+            .Select(amenity => amenity.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
+    // Convert Property entity to PropertyResponseDto.
     private static PropertyResponseDto MapToResponseDto(Property property)
     {
         return new PropertyResponseDto
@@ -156,7 +180,11 @@ public class PropertyService : IPropertyService
             Bathrooms = property.Bathrooms,
             IsAvailable = property.IsAvailable,
             CreatedAt = property.CreatedAt,
-            UpdatedAt = property.UpdatedAt
+            UpdatedAt = property.UpdatedAt,
+
+            Amenities = property.Amenities
+                .Select(amenity => amenity.Name)
+                .ToList()
         };
     }
 }

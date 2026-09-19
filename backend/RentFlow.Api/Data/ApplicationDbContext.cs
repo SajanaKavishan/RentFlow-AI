@@ -3,63 +3,78 @@ using RentFlow.Api.Models;
 
 namespace RentFlow.Api.Data;
 
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    : DbContext(options)
 {
- public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
-public DbSet<Property> Properties => Set<Property>();
-public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
+    public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
+
+    public DbSet<Property> Properties => Set<Property>();
+
+    public DbSet<PropertyAmenity> PropertyAmenities => Set<PropertyAmenity>();
+
+    public DbSet<PropertyImage> PropertyImages => Set<PropertyImage>();
+
+    public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
 
     public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
 
     public DbSet<ApplicationDocument> ApplicationDocuments => Set<ApplicationDocument>();
 
-    public DbSet<ApplicationValidationWorkflow> ApplicationValidationWorkflows => Set<ApplicationValidationWorkflow>();
+    public DbSet<ApplicationValidationWorkflow> ApplicationValidationWorkflows =>
+        Set<ApplicationValidationWorkflow>();
 
-    public DbSet<ApplicationValidationStep> ApplicationValidationSteps => Set<ApplicationValidationStep>();
+    public DbSet<ApplicationValidationStep> ApplicationValidationSteps =>
+        Set<ApplicationValidationStep>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
+        // =========================================================
+        // USERS
+        // =========================================================
         modelBuilder.Entity<ApplicationUser>(entity =>
-   {
-       entity.HasKey(user => user.Id);
+        {
+            entity.HasKey(user => user.Id);
 
-       entity.Property(user => user.FullName)
-           .HasMaxLength(200)
-           .IsRequired();
+            entity.Property(user => user.FullName)
+                .HasMaxLength(200)
+                .IsRequired();
 
-       entity.Property(user => user.Email)
-           .HasMaxLength(320)
-           .IsRequired();
+            entity.Property(user => user.Email)
+                .HasMaxLength(320)
+                .IsRequired();
 
-       entity.Property(user => user.NormalizedEmail)
-           .HasMaxLength(320)
-           .IsRequired();
+            entity.Property(user => user.NormalizedEmail)
+                .HasMaxLength(320)
+                .IsRequired();
 
-       entity.Property(user => user.PhoneNumber)
-           .HasMaxLength(32)
-           .IsRequired();
+            entity.Property(user => user.PhoneNumber)
+                .HasMaxLength(32)
+                .IsRequired();
 
-       entity.Property(user => user.PasswordHash)
-           .HasMaxLength(512)
-           .IsRequired();
+            entity.Property(user => user.PasswordHash)
+                .HasMaxLength(512)
+                .IsRequired();
 
-       entity.Property(user => user.Role)
-           .HasConversion<string>()
-           .HasMaxLength(32)
-           .IsRequired();
+            entity.Property(user => user.Role)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired();
 
-       entity.Property(user => user.IsActive)
-           .IsRequired();
+            entity.Property(user => user.IsActive)
+                .IsRequired();
 
-       entity.Property(user => user.CreatedAt)
-           .IsRequired();
+            entity.Property(user => user.CreatedAt)
+                .IsRequired();
 
-       entity.HasIndex(user => user.NormalizedEmail)
-           .IsUnique();
-   });
+            entity.HasIndex(user => user.NormalizedEmail)
+                .IsUnique();
+        });
 
+        // =========================================================
+        // PROPERTIES
+        // =========================================================
         modelBuilder.Entity<Property>(entity =>
         {
             entity.HasKey(property => property.Id);
@@ -112,9 +127,68 @@ public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
             entity.HasIndex(property => property.MonthlyRent);
             entity.HasIndex(property => property.IsAvailable);
         });
-        
 
+        // =========================================================
+        // PROPERTY AMENITIES
+        // =========================================================
+        modelBuilder.Entity<PropertyAmenity>(entity =>
+        {
+            entity.HasKey(amenity => amenity.Id);
 
+            entity.Property(amenity => amenity.PropertyId)
+                .IsRequired();
+
+            entity.Property(amenity => amenity.Name)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.HasOne(amenity => amenity.Property)
+                .WithMany(property => property.Amenities)
+                .HasForeignKey(amenity => amenity.PropertyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(amenity => amenity.PropertyId);
+        });
+
+        // =========================================================
+        // PROPERTY IMAGES
+        // =========================================================
+        modelBuilder.Entity<PropertyImage>(entity =>
+        {
+            entity.HasKey(image => image.Id);
+
+            entity.Property(image => image.PropertyId)
+                .IsRequired();
+
+            entity.Property(image => image.OriginalFileName)
+                .HasMaxLength(255)
+                .IsRequired();
+
+            entity.Property(image => image.StorageKey)
+                .HasMaxLength(512)
+                .IsRequired();
+
+            entity.Property(image => image.ContentType)
+                .HasMaxLength(255)
+                .IsRequired();
+
+            entity.Property(image => image.FileSizeBytes)
+                .IsRequired();
+
+            entity.Property(image => image.UploadedAt)
+                .IsRequired();
+
+            entity.HasOne(image => image.Property)
+                .WithMany(property => property.Images)
+                .HasForeignKey(image => image.PropertyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(image => image.PropertyId);
+        });
+
+        // =========================================================
+        // VIEWING REQUESTS
+        // =========================================================
         modelBuilder.Entity<ViewingRequest>(entity =>
         {
             entity.HasKey(viewing => viewing.Id);
@@ -144,6 +218,9 @@ public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
                 .IsRequired(false);
         });
 
+        // =========================================================
+        // RENTAL APPLICATIONS
+        // =========================================================
         modelBuilder.Entity<RentalApplication>(entity =>
         {
             entity.HasKey(application => application.Id);
@@ -193,6 +270,9 @@ public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
             entity.HasIndex(application => application.Status);
         });
 
+        // =========================================================
+        // APPLICATION DOCUMENTS
+        // =========================================================
         modelBuilder.Entity<ApplicationDocument>(entity =>
         {
             entity.HasKey(document => document.Id);
@@ -230,6 +310,9 @@ public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
             entity.HasIndex(document => document.DocumentType);
         });
 
+        // =========================================================
+        // APPLICATION VALIDATION WORKFLOWS
+        // =========================================================
         modelBuilder.Entity<ApplicationValidationWorkflow>(entity =>
         {
             entity.HasKey(workflow => workflow.Id);
@@ -272,6 +355,9 @@ public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
             entity.HasIndex(workflow => workflow.ApplicationId);
         });
 
+        // =========================================================
+        // APPLICATION VALIDATION STEPS
+        // =========================================================
         modelBuilder.Entity<ApplicationValidationStep>(entity =>
         {
             entity.HasKey(step => step.Id);
@@ -312,8 +398,12 @@ public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
                 .HasForeignKey(step => step.WorkflowId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(step => new { step.WorkflowId, step.StepOrder })
-                .IsUnique();
+            entity.HasIndex(step => new
+            {
+                step.WorkflowId,
+                step.StepOrder
+            })
+            .IsUnique();
         });
     }
 }
