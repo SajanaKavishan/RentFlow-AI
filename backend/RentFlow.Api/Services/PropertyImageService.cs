@@ -184,9 +184,51 @@ public class PropertyImageService : IPropertyImageService
             cancellationToken);
 
         _dbContext.PropertyImages.Remove(image);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return true;
+    }
+
+    // Delete all images belonging to a property.
+    public async Task DeleteAllForPropertyAsync(
+        Guid propertyId,
+        Guid landlordId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateIdentifiers(propertyId, landlordId);
+
+        var propertyExists = await _dbContext.Properties
+            .AsNoTracking()
+            .AnyAsync(
+                property =>
+                    property.Id == propertyId &&
+                    property.LandlordId == landlordId,
+                cancellationToken);
+
+        if (!propertyExists)
+        {
+            throw new InvalidOperationException(
+                "The property was not found or does not belong to this landlord.");
+        }
+
+        var images = await _dbContext.PropertyImages
+            .Where(image => image.PropertyId == propertyId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var image in images)
+        {
+            await _fileStorageService.DeleteAsync(
+                image.StorageKey,
+                cancellationToken);
+        }
+
+        if (images.Count > 0)
+        {
+            _dbContext.PropertyImages.RemoveRange(images);
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static void ValidateIdentifiers(

@@ -9,10 +9,14 @@ namespace RentFlow.Api.Services;
 public class PropertyService : IPropertyService
 {
     private readonly ApplicationDbContext _dbContext;
+    private readonly IPropertyImageService _propertyImageService;
 
-    public PropertyService(ApplicationDbContext dbContext)
+    public PropertyService(
+        ApplicationDbContext dbContext,
+        IPropertyImageService propertyImageService)
     {
         _dbContext = dbContext;
+        _propertyImageService = propertyImageService;
     }
 
     // Get all properties
@@ -62,12 +66,13 @@ public class PropertyService : IPropertyService
 
         foreach (var amenityName in CleanAmenities(dto.Amenities))
         {
-            property.Amenities.Add(new PropertyAmenity
-            {
-                Id = Guid.NewGuid(),
-                PropertyId = property.Id,
-                Name = amenityName
-            });
+            property.Amenities.Add(
+                new PropertyAmenity
+                {
+                    Id = Guid.NewGuid(),
+                    PropertyId = property.Id,
+                    Name = amenityName
+                });
         }
 
         _dbContext.Properties.Add(property);
@@ -105,29 +110,28 @@ public class PropertyService : IPropertyService
         property.IsAvailable = dto.IsAvailable;
         property.UpdatedAt = DateTimeOffset.UtcNow;
 
-        // Copy the currently tracked amenities before removing them.
-        var existingAmenities = property.Amenities.ToList();
+        // Remove the existing amenities.
+        _dbContext.PropertyAmenities.RemoveRange(
+            property.Amenities);
 
-        if (existingAmenities.Count > 0)
-        {
-            _dbContext.PropertyAmenities.RemoveRange(existingAmenities);
-        }
-
-        // Clear the navigation collection.
-        property.Amenities.Clear();
-
-        // Add the replacement amenities.
+        // Add the replacement amenities directly to the DbSet.
         foreach (var amenityName in CleanAmenities(dto.Amenities))
         {
-            property.Amenities.Add(new PropertyAmenity
-            {
-                Id = Guid.NewGuid(),
-                PropertyId = property.Id,
-                Name = amenityName
-            });
+            _dbContext.PropertyAmenities.Add(
+                new PropertyAmenity
+                {
+                    Id = Guid.NewGuid(),
+                    PropertyId = property.Id,
+                    Name = amenityName
+                });
         }
 
         await _dbContext.SaveChangesAsync();
+
+        // Reload amenities so the response contains the new values.
+        await _dbContext.Entry(property)
+            .Collection(item => item.Amenities)
+            .LoadAsync();
 
         return MapToResponseDto(property);
     }
@@ -147,6 +151,12 @@ public class PropertyService : IPropertyService
             return false;
         }
 
+        // Delete all property images from R2 and remove
+        // their database metadata before deleting the property.
+        await _propertyImageService.DeleteAllForPropertyAsync(
+            id,
+            landlordId);
+
         _dbContext.Properties.Remove(property);
 
         await _dbContext.SaveChangesAsync();
@@ -165,7 +175,8 @@ public class PropertyService : IPropertyService
     }
 
     // Convert Property entity to PropertyResponseDto.
-    private static PropertyResponseDto MapToResponseDto(Property property)
+    private static PropertyResponseDto MapToResponseDto(
+        Property property)
     {
         return new PropertyResponseDto
         {

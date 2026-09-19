@@ -25,4 +25,9 @@ public interface IPropertyImageService
         Guid imageId,
         Guid landlordId,
         CancellationToken cancellationToken = default);
+
+    Task DeleteAllForPropertyAsync(
+        Guid propertyId,
+        Guid landlordId,
+        CancellationToken cancellationToken = default);
 }

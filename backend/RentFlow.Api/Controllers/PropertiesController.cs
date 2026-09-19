@@ -35,6 +35,7 @@ public class PropertiesController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<IEnumerable<PropertyResponseDto>>>
         GetProperties(
+            [FromQuery] string? search,
             [FromQuery] string? city,
             [FromQuery] decimal? minRent,
             [FromQuery] decimal? maxRent,
@@ -48,6 +49,20 @@ public class PropertiesController : ControllerBase
             .Include(property => property.Amenities)
             .AsQueryable();
 
+        // General text/location search.
+        // Searches title, description, address and city.
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.Trim().ToLower();
+
+            query = query.Where(property =>
+                property.Title.ToLower().Contains(searchTerm) ||
+                property.Description.ToLower().Contains(searchTerm) ||
+                property.Address.ToLower().Contains(searchTerm) ||
+                property.City.ToLower().Contains(searchTerm));
+        }
+
+        // Exact city filter.
         if (!string.IsNullOrWhiteSpace(city))
         {
             var cityFilter = city.Trim().ToLower();
@@ -56,40 +71,45 @@ public class PropertiesController : ControllerBase
                 property.City.ToLower() == cityFilter);
         }
 
+        // Minimum monthly rent.
         if (minRent.HasValue)
         {
             query = query.Where(property =>
                 property.MonthlyRent >= minRent.Value);
         }
 
+        // Maximum monthly rent.
         if (maxRent.HasValue)
         {
             query = query.Where(property =>
                 property.MonthlyRent <= maxRent.Value);
         }
 
+        // Exact bedroom count.
         if (bedrooms.HasValue)
         {
             query = query.Where(property =>
                 property.Bedrooms == bedrooms.Value);
         }
 
+        // Exact bathroom count.
         if (bathrooms.HasValue)
         {
             query = query.Where(property =>
                 property.Bathrooms == bathrooms.Value);
         }
 
+        // Availability filter.
         if (isAvailable.HasValue)
         {
             query = query.Where(property =>
                 property.IsAvailable == isAvailable.Value);
         }
 
+        // Amenity filter.
         if (!string.IsNullOrWhiteSpace(amenity))
         {
-            var amenityFilter =
-                amenity.Trim().ToLower();
+            var amenityFilter = amenity.Trim().ToLower();
 
             query = query.Where(property =>
                 property.Amenities.Any(item =>
@@ -109,6 +129,7 @@ public class PropertiesController : ControllerBase
 
     // =========================================================
     // GET /api/properties/{id}
+    // Public property details
     // =========================================================
 
     [HttpGet("{id:guid}")]
