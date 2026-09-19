@@ -3,9 +3,16 @@ using RentFlow.Api.Models;
 
 namespace RentFlow.Api.Data;
 
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    : DbContext(options)
 {
     public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
+
+    public DbSet<Property> Properties => Set<Property>();
+
+    public DbSet<PropertyAmenity> PropertyAmenities => Set<PropertyAmenity>();
+
+    public DbSet<PropertyImage> PropertyImages => Set<PropertyImage>();
 
     public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
 
@@ -21,14 +28,19 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<ApplicationDocument> ApplicationDocuments => Set<ApplicationDocument>();
 
-    public DbSet<ApplicationValidationWorkflow> ApplicationValidationWorkflows => Set<ApplicationValidationWorkflow>();
+    public DbSet<ApplicationValidationWorkflow> ApplicationValidationWorkflows =>
+        Set<ApplicationValidationWorkflow>();
 
-    public DbSet<ApplicationValidationStep> ApplicationValidationSteps => Set<ApplicationValidationStep>();
+    public DbSet<ApplicationValidationStep> ApplicationValidationSteps =>
+        Set<ApplicationValidationStep>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
+        // =========================================================
+        // USERS
+        // =========================================================
         modelBuilder.Entity<ApplicationUser>(entity =>
         {
             entity.HasKey(user => user.Id);
@@ -64,13 +76,127 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(user => user.CreatedAt)
                 .IsRequired();
 
-            entity.Property(user => user.UpdatedAt)
-                .IsRequired();
-
             entity.HasIndex(user => user.NormalizedEmail)
                 .IsUnique();
         });
 
+        // =========================================================
+        // PROPERTIES
+        // =========================================================
+        modelBuilder.Entity<Property>(entity =>
+        {
+            entity.HasKey(property => property.Id);
+
+            entity.Property(property => property.LandlordId)
+                .IsRequired();
+
+            entity.Property(property => property.Title)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(property => property.Description)
+                .HasMaxLength(2000)
+                .IsRequired();
+
+            entity.Property(property => property.Address)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(property => property.City)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(property => property.MonthlyRent)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(property => property.Bedrooms)
+                .IsRequired();
+
+            entity.Property(property => property.Bathrooms)
+                .IsRequired();
+
+            entity.Property(property => property.IsAvailable)
+                .IsRequired();
+
+            entity.Property(property => property.CreatedAt)
+                .IsRequired();
+
+            entity.Property(property => property.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(property => property.Landlord)
+                .WithMany()
+                .HasForeignKey(property => property.LandlordId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(property => property.LandlordId);
+            entity.HasIndex(property => property.City);
+            entity.HasIndex(property => property.MonthlyRent);
+            entity.HasIndex(property => property.IsAvailable);
+        });
+
+        // =========================================================
+        // PROPERTY AMENITIES
+        // =========================================================
+        modelBuilder.Entity<PropertyAmenity>(entity =>
+        {
+            entity.HasKey(amenity => amenity.Id);
+
+            entity.Property(amenity => amenity.PropertyId)
+                .IsRequired();
+
+            entity.Property(amenity => amenity.Name)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.HasOne(amenity => amenity.Property)
+                .WithMany(property => property.Amenities)
+                .HasForeignKey(amenity => amenity.PropertyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(amenity => amenity.PropertyId);
+        });
+
+        // =========================================================
+        // PROPERTY IMAGES
+        // =========================================================
+        modelBuilder.Entity<PropertyImage>(entity =>
+        {
+            entity.HasKey(image => image.Id);
+
+            entity.Property(image => image.PropertyId)
+                .IsRequired();
+
+            entity.Property(image => image.OriginalFileName)
+                .HasMaxLength(255)
+                .IsRequired();
+
+            entity.Property(image => image.StorageKey)
+                .HasMaxLength(512)
+                .IsRequired();
+
+            entity.Property(image => image.ContentType)
+                .HasMaxLength(255)
+                .IsRequired();
+
+            entity.Property(image => image.FileSizeBytes)
+                .IsRequired();
+
+            entity.Property(image => image.UploadedAt)
+                .IsRequired();
+
+            entity.HasOne(image => image.Property)
+                .WithMany(property => property.Images)
+                .HasForeignKey(image => image.PropertyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(image => image.PropertyId);
+        });
+
+        // =========================================================
+        // VIEWING REQUESTS
+        // =========================================================
         modelBuilder.Entity<ViewingRequest>(entity =>
         {
             entity.HasKey(viewing => viewing.Id);
@@ -100,6 +226,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .IsRequired(false);
         });
 
+        // =========================================================
+        // RENTAL APPLICATIONS
+        // =========================================================
         modelBuilder.Entity<RentalApplication>(entity =>
         {
             entity.HasKey(application => application.Id);
@@ -149,6 +278,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(application => application.Status);
         });
 
+        // =========================================================
+        // RENTAL OFFERS
+        // =========================================================
         modelBuilder.Entity<RentalOffer>(entity =>
         {
             entity.HasKey(offer => offer.Id);
@@ -203,6 +335,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(offer => offer.Status);
         });
 
+        // =========================================================
+        // LEASE AGREEMENTS
+        // =========================================================
         modelBuilder.Entity<LeaseAgreement>(entity =>
         {
             entity.HasKey(lease => lease.Id);
@@ -248,12 +383,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .IsUnique();
 
             entity.HasIndex(lease => lease.TenantId);
-
             entity.HasIndex(lease => lease.PropertyId);
-
             entity.HasIndex(lease => lease.Status);
         });
 
+        // =========================================================
+        // RENT SCHEDULE ITEMS
+        // =========================================================
         modelBuilder.Entity<RentScheduleItem>(entity =>
         {
             entity.HasKey(item => item.Id);
@@ -283,9 +419,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(item => item.LeaseAgreementId);
-
             entity.HasIndex(item => item.DueDate);
-
             entity.HasIndex(item => item.Status);
 
             entity.HasIndex(item => new
@@ -296,6 +430,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .IsUnique();
         });
 
+        // =========================================================
+        // APPLICATION DOCUMENTS
+        // =========================================================
         modelBuilder.Entity<ApplicationDocument>(entity =>
         {
             entity.HasKey(document => document.Id);
@@ -333,6 +470,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(document => document.DocumentType);
         });
 
+        // =========================================================
+        // APPLICATION VALIDATION WORKFLOWS
+        // =========================================================
         modelBuilder.Entity<ApplicationValidationWorkflow>(entity =>
         {
             entity.HasKey(workflow => workflow.Id);
@@ -375,6 +515,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(workflow => workflow.ApplicationId);
         });
 
+        // =========================================================
+        // APPLICATION VALIDATION STEPS
+        // =========================================================
         modelBuilder.Entity<ApplicationValidationStep>(entity =>
         {
             entity.HasKey(step => step.Id);
@@ -415,10 +558,17 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(step => step.WorkflowId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(step => new { step.WorkflowId, step.StepOrder })
-                .IsUnique();
+            entity.HasIndex(step => new
+            {
+                step.WorkflowId,
+                step.StepOrder
+            })
+            .IsUnique();
         });
 
+        // =========================================================
+        // PAYMENTS
+        // =========================================================
         modelBuilder.Entity<Payment>(entity =>
         {
             entity.HasKey(payment => payment.Id);
@@ -459,11 +609,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(payment => payment.RentScheduleItemId);
-
             entity.HasIndex(payment => payment.TenantId);
-
             entity.HasIndex(payment => payment.Status);
-
             entity.HasIndex(payment => payment.TransactionReference);
         });
     }
