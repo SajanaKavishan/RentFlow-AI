@@ -97,6 +97,7 @@ builder.Services.AddScoped<IRentalApplicationService, RentalApplicationService>(
 builder.Services.AddScoped<IRentalOfferService, RentalOfferService>();
 builder.Services.AddScoped<ILeaseAgreementService, LeaseAgreementService>();
 builder.Services.AddScoped<IRentScheduleService, RentScheduleService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IApplicationDocumentService, ApplicationDocumentService>();
 builder.Services.AddScoped<IApplicationDocumentContentService, ApplicationDocumentContentService>();
 builder.Services.AddScoped<IApplicationDataValidationTool, ApplicationDataValidationTool>();
