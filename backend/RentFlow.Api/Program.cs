@@ -136,7 +136,7 @@ builder.Services
 builder.Services.AddAuthorization();
 
 // =========================================================
-// SERVICES
+// CORE SERVICES
 // =========================================================
 
 builder.Services.AddScoped<
@@ -155,7 +155,16 @@ builder.Services.AddScoped<
     ICurrentUserService,
     CurrentUserService>();
 
+builder.Services.AddScoped<
+    IPasswordHasher<ApplicationUser>,
+    PasswordHasher<ApplicationUser>>();
+
+builder.Services.AddHttpContextAccessor();
+
+// =========================================================
 // PROPERTY MANAGEMENT
+// =========================================================
+
 builder.Services.AddScoped<
     IPropertyService,
     PropertyService>();
@@ -163,12 +172,6 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IPropertyImageService,
     PropertyImageService>();
-
-builder.Services.AddScoped<
-    IPasswordHasher<ApplicationUser>,
-    PasswordHasher<ApplicationUser>>();
-
-builder.Services.AddHttpContextAccessor();
 
 // =========================================================
 // RENTAL APPLICATION SERVICES
@@ -185,6 +188,26 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IApplicationDocumentContentService,
     ApplicationDocumentContentService>();
+
+// =========================================================
+// RENTAL PRICING / LEASE / PAYMENT SERVICES
+// =========================================================
+
+builder.Services.AddScoped<
+    IRentalOfferService,
+    RentalOfferService>();
+
+builder.Services.AddScoped<
+    ILeaseAgreementService,
+    LeaseAgreementService>();
+
+builder.Services.AddScoped<
+    IRentScheduleService,
+    RentScheduleService>();
+
+builder.Services.AddScoped<
+    IPaymentService,
+    PaymentService>();
 
 // =========================================================
 // APPLICATION VALIDATION / AI
