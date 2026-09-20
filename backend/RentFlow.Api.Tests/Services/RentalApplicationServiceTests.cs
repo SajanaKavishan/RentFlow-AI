@@ -189,6 +189,27 @@ public class RentalApplicationServiceTests
     }
 
     [Fact]
+    public async Task SubmitAsync_DoesNotPersistSubmissionOrNotification_WhenSaveFails()
+    {
+        var saveInterceptor = new FailingSaveChangesInterceptor();
+        await using var context = CreateContext(saveInterceptor);
+        var application = AddApplication(context, status: RentalApplicationStatus.Draft);
+        await context.SaveChangesAsync();
+        var service = new RentalApplicationService(context);
+        saveInterceptor.ShouldFail = true;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            service.SubmitAsync(application.Id, application.TenantId));
+
+        saveInterceptor.ShouldFail = false;
+        context.ChangeTracker.Clear();
+        var storedApplication = await context.RentalApplications.SingleAsync();
+        Assert.Equal(RentalApplicationStatus.Draft, storedApplication.Status);
+        Assert.Null(storedApplication.SubmittedAt);
+        Assert.Empty(await context.Notifications.ToListAsync());
+    }
+
+    [Fact]
     public async Task MarkUnderReviewAsync_ChangesSubmittedToUnderReview()
     {
         await using var context = CreateContext();
@@ -485,6 +506,23 @@ public class RentalApplicationServiceTests
             CreatedAt = DateTimeOffset.UtcNow,
             SubmittedAt = submittedAt
         };
+
+        if (!context.Properties.Local.Any(property => property.Id == application.PropertyId))
+        {
+            context.Properties.Add(new Property
+            {
+                Id = application.PropertyId,
+                LandlordId = Guid.NewGuid(),
+                Title = "Application test property",
+                Description = "Property used by rental application tests.",
+                Address = "1 Test Street",
+                City = "Colombo",
+                MonthlyRent = 100000m,
+                Bedrooms = 2,
+                Bathrooms = 1,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
 
         context.RentalApplications.Add(application);
         return application;

@@ -4,6 +4,23 @@ namespace RentFlow.Api.Services;
 
 internal static class NotificationEventFactory
 {
+    public static Notification ForViewingCreated(
+        ViewingRequest viewing,
+        Guid landlordId)
+    {
+        return new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientId = landlordId,
+            EventType = "viewing.created",
+            RelatedResourceType = "ViewingRequest",
+            RelatedResourceId = viewing.Id,
+            Title = "New viewing request",
+            Message = "A tenant submitted a viewing request for your property.",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
     public static Notification ForViewing(
         ViewingRequest viewing,
         ViewingStatus status)
@@ -62,6 +79,30 @@ internal static class NotificationEventFactory
             RelatedResourceId = application.Id,
             Title = title,
             Message = message + response,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    public static Notification ForRentalApplicationSubmission(
+        RentalApplication application,
+        Guid landlordId,
+        bool isResubmission)
+    {
+        return new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientId = landlordId,
+            EventType = isResubmission
+                ? "rental_application.resubmitted"
+                : "rental_application.submitted",
+            RelatedResourceType = "RentalApplication",
+            RelatedResourceId = application.Id,
+            Title = isResubmission
+                ? "Rental application resubmitted"
+                : "Rental application submitted",
+            Message = isResubmission
+                ? "A rental application was resubmitted after requested changes."
+                : "A rental application was submitted for your property.",
             CreatedAt = DateTimeOffset.UtcNow
         };
     }

@@ -112,6 +112,74 @@ public sealed class NotificationEventsTests
         Assert.Contains(page.Items, item => item.EventType == "rental_application.approved");
     }
 
+    [Fact]
+    public async Task ViewingCreationAndApplicationSubmissions_NotifyThePersistedPropertyLandlords()
+    {
+        using var factory = new AuthApiFactory();
+        var propertyA = await SeedPropertyAsync(factory, LandlordA);
+        var propertyB = await SeedPropertyAsync(factory, LandlordB);
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+
+        var viewingResponse = await tenant.PostAsJsonAsync(
+            "/api/viewings",
+            new
+            {
+                propertyId = propertyA.Id,
+                requestedDateTime = DateTimeOffset.UtcNow.AddDays(3),
+                tenantMessage = "I would like to view the property."
+            });
+        var applicationResponse = await tenant.PostAsJsonAsync(
+            "/api/rental-applications",
+            new
+            {
+                propertyId = propertyB.Id,
+                moveInDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+                monthlyIncome = 250000m,
+                occupation = "Engineer",
+                numberOfOccupants = 1,
+                tenantNote = "Application note."
+            });
+
+        Assert.Equal(HttpStatusCode.Created, viewingResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, applicationResponse.StatusCode);
+        var application = await applicationResponse.Content
+            .ReadFromJsonAsync<RentalApplicationResponseForTest>();
+        Assert.NotNull(application);
+
+        Assert.Equal(HttpStatusCode.OK, (await tenant.PatchAsync(
+            $"/api/rental-applications/{application!.Id}/submit", null)).StatusCode);
+        using var landlordB = AuthorizedClient(factory, LandlordB, UserRole.Landlord);
+        Assert.Equal(HttpStatusCode.OK, (await landlordB.PatchAsync(
+            $"/api/rental-applications/{application.Id}/review", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await landlordB.PatchAsJsonAsync(
+            $"/api/rental-applications/{application.Id}/request-changes",
+            new { landlordResponse = "Please update the application." })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await tenant.PatchAsync(
+            $"/api/rental-applications/{application.Id}/submit", null)).StatusCode);
+
+        using var landlordA = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        var landlordANotifications = await landlordA.GetFromJsonAsync<NotificationPageResponseDto>(
+            "/api/notifications?pageSize=100");
+        var landlordBNotifications = await landlordB.GetFromJsonAsync<NotificationPageResponseDto>(
+            "/api/notifications?pageSize=100");
+
+        Assert.NotNull(landlordANotifications);
+        Assert.NotNull(landlordBNotifications);
+        Assert.Single(landlordANotifications!.Items);
+        Assert.Equal("viewing.created", landlordANotifications.Items[0].EventType);
+        Assert.Equal("ViewingRequest", landlordANotifications.Items[0].RelatedResourceType);
+        Assert.Equal(2, landlordBNotifications!.Items.Count);
+        Assert.Equal(
+            ["rental_application.resubmitted", "rental_application.submitted"],
+            landlordBNotifications.Items.Select(item => item.EventType).ToArray());
+
+        using var unrelatedTenant = AuthorizedClient(factory, TenantB, UserRole.Tenant);
+        var unrelatedTenantNotifications = await unrelatedTenant.GetFromJsonAsync<NotificationPageResponseDto>(
+            "/api/notifications");
+        Assert.NotNull(unrelatedTenantNotifications);
+        Assert.Empty(unrelatedTenantNotifications!.Items);
+    }
+
     private static HttpClient AuthorizedClient(
         AuthApiFactory factory,
         Guid userId,
@@ -203,6 +271,11 @@ public sealed class NotificationEventsTests
         };
         await SeedAsync(factory, context => context.RentalApplications.Add(application));
         return application;
+    }
+
+    private sealed class RentalApplicationResponseForTest
+    {
+        public Guid Id { get; init; }
     }
 
     private static async Task SeedAsync(

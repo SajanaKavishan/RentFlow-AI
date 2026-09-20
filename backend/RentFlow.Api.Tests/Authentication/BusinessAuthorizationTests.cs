@@ -40,6 +40,7 @@ public sealed class BusinessAuthorizationTests
     public async Task Viewing_TenantIdentityComesFromJwt_AndTenantIsIsolated()
     {
         using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
         var otherViewing = await SeedViewingAsync(factory, TenantB);
         using var client = AuthorizedClient(factory, TenantA, UserRole.Tenant);
 
@@ -47,7 +48,7 @@ public sealed class BusinessAuthorizationTests
             $"/api/viewings?tenantId={TenantB}",
             new
             {
-                propertyId = Guid.NewGuid(),
+                propertyId = property.Id,
                 requestedDateTime = DateTimeOffset.UtcNow.AddDays(3),
                 tenantMessage = "JWT owner"
             });
@@ -89,17 +90,18 @@ public sealed class BusinessAuthorizationTests
     public async Task RentalApplication_TenantUsesJwtAndCanOnlyOperateOnOwnResources()
     {
         using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
         var other = await SeedApplicationAsync(factory, TenantB, RentalApplicationStatus.Draft);
         using var client = AuthorizedClient(factory, TenantA, UserRole.Tenant);
 
         var create = await client.PostAsJsonAsync(
-            $"/api/rental-applications?tenantId={TenantB}", ApplicationBody());
+            $"/api/rental-applications?tenantId={TenantB}", ApplicationBody(property.Id));
         var created = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement;
         var id = created.GetProperty("id").GetGuid();
         var list = await client.GetFromJsonAsync<JsonElement>("/api/rental-applications");
         var getOther = await client.GetAsync($"/api/rental-applications/{other.Id}");
         var update = await client.PutAsJsonAsync(
-            $"/api/rental-applications/{id}?tenantId={TenantB}", ApplicationBody());
+            $"/api/rental-applications/{id}?tenantId={TenantB}", ApplicationBody(property.Id));
         var submit = await client.PatchAsync($"/api/rental-applications/{id}/submit", null);
         var withdraw = await client.PatchAsync($"/api/rental-applications/{id}/withdraw", null);
         var review = await client.PatchAsync($"/api/rental-applications/{other.Id}/review", null);
@@ -587,9 +589,9 @@ public sealed class BusinessAuthorizationTests
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private static object ApplicationBody() => new
+    private static object ApplicationBody(Guid propertyId) => new
     {
-        propertyId = Guid.NewGuid(),
+        propertyId,
         moveInDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
         monthlyIncome = 250000m,
         occupation = "Engineer",

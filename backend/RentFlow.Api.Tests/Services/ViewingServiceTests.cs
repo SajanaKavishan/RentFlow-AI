@@ -18,6 +18,8 @@ public class ViewingServiceTests
         var tenantId = Guid.NewGuid();
         var propertyId = Guid.NewGuid();
         var requestedDateTime = DateTimeOffset.UtcNow.AddDays(2);
+        context.Properties.Add(CreateProperty(propertyId));
+        await context.SaveChangesAsync();
 
         var result = await service.CreateAsync(tenantId, new CreateViewingRequestDto
         {
@@ -62,6 +64,8 @@ public class ViewingServiceTests
         var tenantId = Guid.NewGuid();
         var propertyId = Guid.NewGuid();
         var requestedDateTime = DateTimeOffset.UtcNow.AddDays(3);
+        context.Properties.Add(CreateProperty(propertyId));
+        await context.SaveChangesAsync();
         var request = new CreateViewingRequestDto
         {
             PropertyId = propertyId,
@@ -75,6 +79,30 @@ public class ViewingServiceTests
 
         Assert.Equal(ViewingServiceError.Conflict, exception.Error);
         Assert.Equal(1, await context.ViewingRequests.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreateAsync_DoesNotPersistViewingOrNotification_WhenSaveFails()
+    {
+        var saveInterceptor = new FailingSaveChangesInterceptor();
+        await using var context = CreateContext(saveInterceptor);
+        var property = CreateProperty(Guid.NewGuid());
+        context.Properties.Add(property);
+        await context.SaveChangesAsync();
+        var service = new ViewingService(context);
+        saveInterceptor.ShouldFail = true;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            service.CreateAsync(Guid.NewGuid(), new CreateViewingRequestDto
+            {
+                PropertyId = property.Id,
+                RequestedDateTime = DateTimeOffset.UtcNow.AddDays(2)
+            }));
+
+        saveInterceptor.ShouldFail = false;
+        context.ChangeTracker.Clear();
+        Assert.Empty(await context.ViewingRequests.ToListAsync());
+        Assert.Empty(await context.Notifications.ToListAsync());
     }
 
     [Fact]
@@ -277,9 +305,40 @@ public class ViewingServiceTests
             CreatedAt = DateTimeOffset.UtcNow
         };
 
+        if (!context.Properties.Local.Any(property => property.Id == viewing.PropertyId))
+        {
+            context.Properties.Add(new Property
+            {
+                Id = viewing.PropertyId,
+                LandlordId = Guid.NewGuid(),
+                Title = "Viewing test property",
+                Description = "Property used by viewing service tests.",
+                Address = "1 Test Street",
+                City = "Colombo",
+                MonthlyRent = 100000m,
+                Bedrooms = 2,
+                Bathrooms = 1,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
+
         context.ViewingRequests.Add(viewing);
         return viewing;
     }
+
+    private static Property CreateProperty(Guid propertyId) => new()
+    {
+        Id = propertyId,
+        LandlordId = Guid.NewGuid(),
+        Title = "Viewing test property",
+        Description = "Property used by viewing service tests.",
+        Address = "1 Test Street",
+        City = "Colombo",
+        MonthlyRent = 100000m,
+        Bedrooms = 2,
+        Bathrooms = 1,
+        CreatedAt = DateTimeOffset.UtcNow
+    };
 
     private sealed class FailingSaveChangesInterceptor : SaveChangesInterceptor
     {
