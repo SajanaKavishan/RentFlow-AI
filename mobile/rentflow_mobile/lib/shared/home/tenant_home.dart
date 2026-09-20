@@ -19,6 +19,7 @@ class TenantHome extends StatefulWidget {
     required this.onPayRent,
     required this.onOpenDocuments,
     required this.onOpenNotifications,
+    this.unreadNotificationCount,
     this.viewingApiService,
     this.rentalApplicationApiService,
     this.now,
@@ -31,6 +32,7 @@ class TenantHome extends StatefulWidget {
   final VoidCallback onPayRent;
   final VoidCallback onOpenDocuments;
   final VoidCallback onOpenNotifications;
+  final int? unreadNotificationCount;
   final ViewingApiService? viewingApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
   final DateTime Function()? now;
@@ -99,6 +101,7 @@ class _TenantHomeState extends State<TenantHome> {
               date: _formatHeaderDate(now),
               greeting: _greetingForHour(now.hour),
               firstName: _firstName(widget.user.fullName),
+              unreadNotificationCount: widget.unreadNotificationCount,
               onOpenNotifications: widget.onOpenNotifications,
             ),
             const SizedBox(height: 18),
@@ -411,12 +414,14 @@ class _TenantHomeHeader extends StatelessWidget {
     required this.greeting,
     required this.firstName,
     required this.onOpenNotifications,
+    this.unreadNotificationCount,
   });
 
   final String date;
   final String greeting;
   final String firstName;
   final VoidCallback onOpenNotifications;
+  final int? unreadNotificationCount;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -453,12 +458,20 @@ class _TenantHomeHeader extends StatelessWidget {
         color: AppPalette.white,
         shape: const CircleBorder(side: BorderSide(color: AppPalette.outline)),
         clipBehavior: Clip.antiAlias,
-        child: IconButton(
-          tooltip: 'Notifications',
-          onPressed: onOpenNotifications,
-          icon: const Icon(
-            Icons.notifications_none_rounded,
-            color: AppPalette.darkOlive,
+        child: Badge(
+          isLabelVisible: unreadNotificationCount != null,
+          label: Text(
+            unreadNotificationCount != null && unreadNotificationCount! > 99
+                ? '99+'
+                : '${unreadNotificationCount ?? ''}',
+          ),
+          child: IconButton(
+            tooltip: 'Notifications',
+            onPressed: onOpenNotifications,
+            icon: const Icon(
+              Icons.notifications_none_rounded,
+              color: AppPalette.darkOlive,
+            ),
           ),
         ),
       ),
