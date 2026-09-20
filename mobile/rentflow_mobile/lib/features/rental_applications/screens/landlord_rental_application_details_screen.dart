@@ -67,11 +67,17 @@ class _LandlordRentalApplicationDetailsScreenState
   Future<List<ApplicationValidationRun>> _loadValidation() =>
       _validationService.getRunsForApplication(_application.id);
 
-  void _retryDocuments() => setState(() => _documents = _loadDocuments());
+  void _retryDocuments() {
+    setState(() {
+      _documents = _loadDocuments();
+    });
+  }
 
   Future<void> _retryValidation() async {
     final request = _loadValidation();
-    setState(() => _validationRuns = request);
+    setState(() {
+      _validationRuns = request;
+    });
     try {
       await request;
     } catch (_) {
@@ -86,7 +92,7 @@ class _LandlordRentalApplicationDetailsScreenState
       builder: (context) => AlertDialog(
         title: const Text('Approve application?'),
         content: const Text(
-          'This records your human decision and completes any validation run awaiting review.',
+          'Confirm that you have reviewed the application and available findings. Your approval will be recorded as the human decision.',
         ),
         actions: [
           TextButton(
@@ -111,24 +117,32 @@ class _LandlordRentalApplicationDetailsScreenState
 
   Future<void> _requestResponse({required bool requestingChanges}) async {
     if (!_canDecide || _submitting) return;
-    final controller = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    var responseText = '';
     final response = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
           requestingChanges ? 'Request changes' : 'Reject application',
         ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          minLines: 3,
-          maxLines: 5,
-          maxLength: 1000,
-          decoration: InputDecoration(
-            labelText: 'Response to tenant',
-            hintText: requestingChanges
-                ? 'Explain what needs to be updated.'
-                : 'Explain why the application is rejected.',
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            onChanged: (value) => responseText = value,
+            validator: (value) => value == null || value.trim().isEmpty
+                ? 'Enter a response for the tenant.'
+                : null,
+            autofocus: true,
+            minLines: 3,
+            maxLines: 5,
+            maxLength: 1000,
+            decoration: InputDecoration(
+              labelText: 'Response to tenant',
+              helperText: 'Required · up to 1,000 characters',
+              hintText: requestingChanges
+                  ? 'Explain what needs to be updated.'
+                  : 'Explain why the application is rejected.',
+            ),
           ),
         ),
         actions: [
@@ -138,8 +152,9 @@ class _LandlordRentalApplicationDetailsScreenState
           ),
           FilledButton(
             onPressed: () {
-              final value = controller.text.trim();
-              if (value.isNotEmpty) Navigator.pop(context, value);
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(context, responseText.trim());
+              }
             },
             style: requestingChanges
                 ? null
@@ -149,18 +164,16 @@ class _LandlordRentalApplicationDetailsScreenState
         ],
       ),
     );
-    controller.dispose();
     if (response == null || !mounted) return;
     await _submitDecision(
       successMessage: requestingChanges
           ? 'Changes requested from the tenant.'
           : 'Application rejected.',
       operation: requestingChanges
-          ? () => widget.rentalApplicationApiService
-                .requestApplicationChanges(
-                  id: _application.id,
-                  landlordResponse: response,
-                )
+          ? () => widget.rentalApplicationApiService.requestApplicationChanges(
+              id: _application.id,
+              landlordResponse: response,
+            )
           : () => widget.rentalApplicationApiService.rejectApplication(
               id: _application.id,
               landlordResponse: response,
@@ -225,21 +238,20 @@ class _LandlordRentalApplicationDetailsScreenState
             subtitle: 'Files attached to this application.',
           ),
           const SizedBox(height: AppSpacing.md),
-          _DocumentSummary(
-            future: _documents,
-            onRetry: _retryDocuments,
-          ),
+          _DocumentSummary(future: _documents, onRetry: _retryDocuments),
           const SizedBox(height: AppSpacing.lg),
-          const SectionHeader(
+          SectionHeader(
             title: 'AI Findings',
             subtitle:
                 'Validation assists the review. It does not make the human decision.',
+            trailing: IconButton(
+              tooltip: 'Refresh AI findings',
+              onPressed: _retryValidation,
+              icon: const Icon(Icons.refresh),
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
-          _ValidationReview(
-            future: _validationRuns,
-            onRetry: _retryValidation,
-          ),
+          _ValidationReview(future: _validationRuns, onRetry: _retryValidation),
           const SizedBox(height: AppSpacing.lg),
           const SectionHeader(
             title: 'Human Decision',
@@ -251,10 +263,10 @@ class _LandlordRentalApplicationDetailsScreenState
             submitting: _submitting,
             error: _actionError,
             status: _application.status,
+            landlordResponse: _application.landlordResponse,
             onApprove: _approve,
             onReject: () => _requestResponse(requestingChanges: false),
-            onRequestChanges: () =>
-                _requestResponse(requestingChanges: true),
+            onRequestChanges: () => _requestResponse(requestingChanges: true),
           ),
           const SizedBox(height: AppSpacing.xl),
         ],
@@ -273,7 +285,10 @@ class _StatusHeader extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('APPLICATION STATUS', style: Theme.of(context).textTheme.labelSmall),
+        Text(
+          'APPLICATION STATUS',
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
         const SizedBox(height: AppSpacing.sm),
         RentalApplicationStatusChip(status: application.status),
         const SizedBox(height: AppSpacing.md),
@@ -283,6 +298,13 @@ class _StatusHeader extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.xs),
         SelectableText(application.propertyId),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          'Tenant reference',
+          style: Theme.of(context).textTheme.labelMedium,
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        SelectableText(application.tenantId),
       ],
     ),
   );
@@ -299,33 +321,24 @@ class _ApplicationOverview extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(title: 'Application information'),
+          const SectionHeader(title: 'Application timeline'),
           const SizedBox(height: AppSpacing.base),
-          _DetailRow(label: 'Property reference', value: application.propertyId),
-          _DetailRow(label: 'Tenant reference', value: application.tenantId),
           _DetailRow(
             label: 'Created',
             value: _formatTimestamp(localizations, application.createdAt),
           ),
-          if (application.submittedAt case final value?)
-            _DetailRow(
-              label: 'Submitted',
-              value: _formatTimestamp(localizations, value),
-            ),
-          if (application.updatedAt case final value?)
-            _DetailRow(
-              label: 'Updated',
-              value: _formatTimestamp(localizations, value),
-            ),
-          if (_hasText(application.landlordResponse)) ...[
-            const Divider(height: AppSpacing.lg),
-            Text(
-              'Landlord response',
-              style: Theme.of(context).textTheme.labelMedium,
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(application.landlordResponse!.trim()),
-          ],
+          _DetailRow(
+            label: 'Submitted',
+            value: application.submittedAt == null
+                ? 'Not recorded'
+                : _formatTimestamp(localizations, application.submittedAt!),
+          ),
+          _DetailRow(
+            label: 'Updated',
+            value: application.updatedAt == null
+                ? 'Not recorded'
+                : _formatTimestamp(localizations, application.updatedAt!),
+          ),
         ],
       ),
     );
@@ -381,7 +394,7 @@ class _DocumentSummary extends StatelessWidget {
         if (documents.isEmpty) {
           return const EmptyState(
             title: 'No documents uploaded',
-            message: 'The API returned no documents for this application.',
+            message: 'No files are attached to this application yet.',
             compact: true,
           );
         }
@@ -392,7 +405,6 @@ class _DocumentSummary extends StatelessWidget {
             StatusChip(
               label:
                   '${documents.length} ${documents.length == 1 ? 'document' : 'documents'}',
-              tone: StatusTone.success,
               icon: Icons.attach_file,
             ),
             const SizedBox(height: AppSpacing.md),
@@ -456,25 +468,26 @@ class _ValidationReview extends StatelessWidget {
           );
         }
         if (snapshot.hasError) {
-          final error = snapshot.error;
           return ErrorState(
-            message: error is ApplicationValidationApiException
-                ? error.message
-                : 'Unable to load validation findings.',
+            message: 'Unable to load validation findings. Please try again.',
             onRetry: onRetry,
             compact: true,
           );
         }
         final runs = snapshot.data ?? const <ApplicationValidationRun>[];
         if (runs.isEmpty) {
-          return const IntegrationPendingState(
+          return const EmptyState(
             title: 'No validation review available',
             message:
-                'The API has not returned an authoritative validation run for this application.',
+                'No validation findings have been returned for this application yet.',
             compact: true,
           );
         }
-        final run = runs.first;
+        final run = runs.reduce(
+          (latest, candidate) => candidate.createdAt.isAfter(latest.createdAt)
+              ? candidate
+              : latest,
+        );
         return _ValidationFindings(run: run);
       },
     ),
@@ -504,7 +517,27 @@ class _ValidationFindings extends StatelessWidget {
               ? Icons.person_search_outlined
               : null,
         ),
-        if (run.requiresHumanApproval) ...[
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          'Updated ${_formatTimestamp(MaterialLocalizations.of(context), run.updatedAt)}',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        if (run.status == ApplicationValidationStatus.failed) ...[
+          const SizedBox(height: AppSpacing.md),
+          const _Notice(
+            icon: Icons.error_outline,
+            text:
+                'Validation failed. Available findings may be incomplete. Review the application and documents before deciding.',
+          ),
+        ] else if (run.status == ApplicationValidationStatus.completed) ...[
+          const SizedBox(height: AppSpacing.md),
+          const _Notice(
+            icon: Icons.task_alt,
+            text:
+                'Validation is complete. The application status shows the recorded human decision.',
+          ),
+        ] else if (run.requiresHumanApproval ||
+            run.status == ApplicationValidationStatus.awaitingHumanReview) ...[
           const SizedBox(height: AppSpacing.md),
           const _Notice(
             icon: Icons.verified_user_outlined,
@@ -514,7 +547,7 @@ class _ValidationFindings extends StatelessWidget {
         if (summary == null) ...[
           const SizedBox(height: AppSpacing.md),
           Text(
-            'Detailed findings are not available for this validation run.',
+            'Detailed findings are not available yet.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ] else ...[
@@ -522,8 +555,12 @@ class _ValidationFindings extends StatelessWidget {
           _FindingGroup(
             title: 'Missing required items',
             items: [
-              ...summary.applicationData.missingFields,
-              ...summary.documents.missingDocumentTypes,
+              ...summary.applicationData.missingFields.map(
+                (item) => 'Application: ${_findingLabel(item)}',
+              ),
+              ...summary.documents.missingDocumentTypes.map(
+                (item) => 'Document: ${_findingLabel(item)}',
+              ),
             ],
             emptyText: 'No missing required items were returned.',
           ),
@@ -533,9 +570,11 @@ class _ValidationFindings extends StatelessWidget {
             status: summary.deterministicChecks.passed
                 ? 'Passed'
                 : 'Needs attention',
-            items: summary.deterministicChecks.failedRules,
-            emptyText:
-                '${summary.deterministicChecks.passedRules.length} checks passed; no failed checks were returned.',
+            items: [
+              '${summary.deterministicChecks.passedRules.length} passed · ${summary.deterministicChecks.failedRules.length} failed',
+              ...summary.deterministicChecks.failedRules.map(_findingLabel),
+            ],
+            emptyText: 'No check details were returned.',
           ),
           const Divider(height: AppSpacing.lg),
           _FindingGroup(
@@ -551,10 +590,13 @@ class _ValidationFindings extends StatelessWidget {
           _FindingGroup(
             title: 'Document findings',
             status: summary.documents.isValid
-                ? 'Documents valid'
+                ? 'Required types present'
                 : 'Needs attention',
             items: [
-              '${summary.documents.presentDocumentTypes.length} document types present',
+              if (summary.documents.presentDocumentTypes.isNotEmpty)
+                'Present: ${summary.documents.presentDocumentTypes.map(_findingLabel).join(', ')}'
+              else
+                'No document types reported as present.',
               if (summary.documents.missingDocumentTypes.isNotEmpty)
                 '${summary.documents.missingDocumentTypes.length} document types missing',
             ],
@@ -582,15 +624,16 @@ class _FindingGroup extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Row(
+      Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Expanded(
-            child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-          ),
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
           if (status != null)
             StatusChip(
               label: status!,
-              tone: status == 'Passed' || status == 'Documents valid'
+              tone: status == 'Passed' || status == 'Required types present'
                   ? StatusTone.success
                   : StatusTone.warning,
             ),
@@ -652,6 +695,7 @@ class _HumanDecision extends StatelessWidget {
     required this.submitting,
     required this.error,
     required this.status,
+    required this.landlordResponse,
     required this.onApprove,
     required this.onReject,
     required this.onRequestChanges,
@@ -660,6 +704,7 @@ class _HumanDecision extends StatelessWidget {
   final bool submitting;
   final String? error;
   final RentalApplicationStatus status;
+  final String? landlordResponse;
   final VoidCallback onApprove;
   final VoidCallback onReject;
   final VoidCallback onRequestChanges;
@@ -669,6 +714,18 @@ class _HumanDecision extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Text(
+          'Landlord response',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          _hasText(landlordResponse)
+              ? landlordResponse!.trim()
+              : 'No response recorded.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const Divider(height: AppSpacing.lg),
         if (submitting) ...[
           const LinearProgressIndicator(),
           const SizedBox(height: AppSpacing.md),
@@ -718,7 +775,19 @@ class _HumanDecision extends StatelessWidget {
 
 bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
 
-List<String> _unique(List<String> values) => values.toSet().toList(growable: false);
+List<String> _unique(List<String> values) =>
+    values.toSet().toList(growable: false);
+
+String _findingLabel(String value) => switch (value) {
+  'MoveInDate' => 'Move-in date',
+  'MonthlyIncome' => 'Monthly income',
+  'Occupation' => 'Occupation',
+  'NumberOfOccupants' => 'Number of occupants',
+  'IdentityDocument' => 'Identity document',
+  'IncomeProof' => 'Income proof',
+  'EmploymentLetter' => 'Employment letter',
+  _ => value,
+};
 
 String _formatTimestamp(MaterialLocalizations localizations, DateTime value) {
   final local = value.toLocal();

@@ -55,7 +55,9 @@ class _LandlordRentalApplicationsScreenState
     final request = _apiService.getApplicationsByProperty(
       widget.propertyId!.trim(),
     );
-    setState(() => _applications = request);
+    setState(() {
+      _applications = request;
+    });
     try {
       await request;
     } catch (_) {
@@ -112,6 +114,14 @@ class _LandlordRentalApplicationsScreenState
     backgroundColor: AppPalette.background,
     appBar: AppBar(
       title: const Text('Rental Applications'),
+      actions: [
+        if (_hasPropertyId)
+          IconButton(
+            tooltip: 'Refresh applications',
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh),
+          ),
+      ],
       bottom: const PreferredSize(
         preferredSize: Size.fromHeight(1),
         child: Divider(height: 1),
@@ -121,8 +131,7 @@ class _LandlordRentalApplicationsScreenState
         ? const ModuleUnavailableState(
             title: 'Application queue unavailable',
             explanation:
-                'A real landlord property reference is required to load rental applications. Property integration is not available in the mobile app yet.',
-            owner: 'Property management',
+                'Applications will appear when property management supplies a property reference. Property integration is pending.',
           )
         : FutureBuilder<List<RentalApplication>>(
             future: _applications,
@@ -130,7 +139,8 @@ class _LandlordRentalApplicationsScreenState
               if (snapshot.connectionState != ConnectionState.done) {
                 return const LoadingState(
                   title: 'Loading applications',
-                  message: 'Checking the latest applications for this property.',
+                  message:
+                      'Checking the latest applications for this property.',
                 );
               }
               if (snapshot.hasError) {
@@ -160,14 +170,21 @@ class _LandlordRentalApplicationsScreenState
                     if (index == 0) {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: AppSpacing.base),
-                        child: SectionHeader(
-                          title: 'Review queue',
-                          subtitle:
-                              'Submitted and active reviews appear first.',
-                          trailing: StatusChip(
-                            label:
-                                '${applications.length} ${applications.length == 1 ? 'application' : 'applications'}',
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SectionHeader(
+                              title: 'Review queue',
+                              subtitle:
+                                  'Submitted, under review and changes requested first.',
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            Text(
+                              '${applications.length} total · ${applications.where((item) => item.status == RentalApplicationStatus.submitted || item.status == RentalApplicationStatus.underReview).length} ready for your decision',
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(color: AppPalette.olive),
+                            ),
+                          ],
                         ),
                       );
                     }
@@ -212,6 +229,7 @@ class _ApplicationReviewCard extends StatelessWidget {
     final localizations = MaterialLocalizations.of(context);
     return AppCard(
       key: ValueKey('landlord-application-card-${application.id}'),
+      padding: const EdgeInsets.all(AppSpacing.md),
       onTap: onOpen,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,27 +237,17 @@ class _ApplicationReviewCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: _needsReview ? AppPalette.pending : AppPalette.sage,
-                  borderRadius: BorderRadius.circular(AppRadii.small),
-                ),
-                child: Icon(
-                  _needsReview
-                      ? Icons.rate_review_outlined
-                      : Icons.description_outlined,
-                  color: AppPalette.darkOlive,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _needsReview ? 'REVIEW ATTENTION' : 'APPLICATION',
+                      application.status ==
+                              RentalApplicationStatus.changesRequested
+                          ? 'AWAITING TENANT UPDATE'
+                          : _needsReview
+                          ? 'READY FOR REVIEW'
+                          : 'APPLICATION',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: AppPalette.olive,
                         fontWeight: FontWeight.w800,
@@ -258,25 +266,30 @@ class _ApplicationReviewCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.base),
-          _Reference(label: 'Property reference', value: application.propertyId),
+          const SizedBox(height: AppSpacing.sm),
+          _Reference(
+            label: 'Property reference',
+            value: application.propertyId,
+          ),
           const SizedBox(height: AppSpacing.sm),
           _Reference(label: 'Tenant reference', value: application.tenantId),
           const Divider(height: AppSpacing.lg),
-          Wrap(
-            spacing: AppSpacing.base,
-            runSpacing: AppSpacing.sm,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (application.submittedAt case final submitted?)
-                _Timestamp(
-                  label: 'Submitted',
-                  value: _formatTimestamp(localizations, submitted),
-                ),
-              if (application.updatedAt case final updated?)
-                _Timestamp(
-                  label: 'Updated',
-                  value: _formatTimestamp(localizations, updated),
-                ),
+              _Timestamp(
+                label: 'Submitted',
+                value: application.submittedAt == null
+                    ? 'Not recorded'
+                    : _formatTimestamp(localizations, application.submittedAt!),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              _Timestamp(
+                label: 'Updated',
+                value: application.updatedAt == null
+                    ? 'Not recorded'
+                    : _formatTimestamp(localizations, application.updatedAt!),
+              ),
             ],
           ),
         ],
@@ -312,7 +325,12 @@ class _Timestamp extends StatelessWidget {
     children: [
       const Icon(Icons.schedule_outlined, size: 16, color: AppPalette.muted),
       const SizedBox(width: AppSpacing.xs),
-      Text('$label $value', style: Theme.of(context).textTheme.bodyMedium),
+      Expanded(
+        child: Text(
+          '$label $value',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ),
     ],
   );
 }
