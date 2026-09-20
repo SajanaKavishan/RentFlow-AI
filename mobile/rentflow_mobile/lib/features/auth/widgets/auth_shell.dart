@@ -78,7 +78,9 @@ class AuthShell extends StatelessWidget {
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
         systemNavigationBarColor: Color(0xFF1C2619),
+        systemNavigationBarDividerColor: Colors.transparent,
         systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarContrastEnforced: false,
       ),
       child: Scaffold(
         resizeToAvoidBottomInset: true,
@@ -97,92 +99,101 @@ class AuthShell extends StatelessWidget {
             SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final isCompact = constraints.maxHeight < 580;
-                  final gap = isCompact ? 18.0 : 46.0;
+                  const verticalPadding = 36.0;
+                  final isCompact = constraints.maxHeight < 620;
+                  final gap = isCompact
+                      ? 18.0
+                      : (constraints.maxHeight * 0.06).clamp(32.0, 52.0);
                   return SingleChildScrollView(
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 380),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: double.infinity,
-                              height: 44,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Semantics(
-                                    key: const Key('auth-brand'),
-                                    label: 'RentFlow AI',
-                                    child: const RentFlowBrand(
-                                      markSize: 38,
-                                      textSize: 15,
-                                    ),
-                                  ),
-                                  if (showBackButton)
-                                    Positioned(
-                                      left: 0,
-                                      child: IconButton(
-                                        tooltip: 'Back to sign in',
-                                        onPressed: () =>
-                                            Navigator.of(context).pop(),
-                                        icon: const Icon(
-                                          Icons.arrow_back_rounded,
-                                        ),
-                                        color: AppPalette.authCard,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: (constraints.maxHeight - verticalPadding)
+                            .clamp(0.0, double.infinity),
+                      ),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 380),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: double.infinity,
+                                height: 44,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Semantics(
+                                      key: const Key('auth-brand'),
+                                      label: 'RentFlow AI',
+                                      child: const RentFlowBrand(
+                                        markSize: 38,
+                                        textSize: 15,
                                       ),
                                     ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            const FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                'Find your perfect home, smarter.',
-                                key: Key('auth-hero'),
-                                maxLines: 1,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: AppPalette.authCard,
-                                  fontSize: 23,
-                                  height: 1.15,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.65,
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: gap),
-                            Theme(
-                              data: authTheme,
-                              child: Container(
-                                key: const Key('auth-card'),
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(18),
-                                decoration: BoxDecoration(
-                                  color: AppPalette.authCard,
-                                  borderRadius: BorderRadius.circular(
-                                    AppRadii.authCard,
-                                  ),
-                                  border: Border.all(
-                                    color: AppPalette.authBorder,
-                                  ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x420F140D),
-                                      blurRadius: 42,
-                                      offset: Offset(0, 18),
-                                    ),
+                                    if (showBackButton)
+                                      Positioned(
+                                        left: 0,
+                                        child: IconButton(
+                                          tooltip: 'Back to sign in',
+                                          onPressed: () =>
+                                              Navigator.of(context).pop(),
+                                          icon: const Icon(
+                                            Icons.arrow_back_rounded,
+                                          ),
+                                          color: AppPalette.authCard,
+                                        ),
+                                      ),
                                   ],
                                 ),
-                                child: child,
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 16),
+                              const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  'Find your perfect home, smarter.',
+                                  key: Key('auth-hero'),
+                                  maxLines: 1,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: AppPalette.authCard,
+                                    fontSize: 23,
+                                    height: 1.15,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.65,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: gap),
+                              Theme(
+                                data: authTheme,
+                                child: Container(
+                                  key: const Key('auth-card'),
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(18),
+                                  decoration: BoxDecoration(
+                                    color: AppPalette.authCard,
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadii.authCard,
+                                    ),
+                                    border: Border.all(
+                                      color: AppPalette.authBorder,
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x420F140D),
+                                        blurRadius: 42,
+                                        offset: Offset(0, 18),
+                                      ),
+                                    ],
+                                  ),
+                                  child: child,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
