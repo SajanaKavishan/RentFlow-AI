@@ -125,7 +125,17 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
         viewing.LandlordResponse = landlordResponse;
         viewing.UpdatedAt = DateTimeOffset.UtcNow;
 
+        dbContext.Notifications.Add(
+            NotificationEventFactory.ForViewing(viewing, ViewingStatus.Approved));
+
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return MapToResponse(viewing);
     }
@@ -147,7 +157,17 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
         viewing.LandlordResponse = landlordResponse.Trim();
         viewing.UpdatedAt = DateTimeOffset.UtcNow;
 
+        dbContext.Notifications.Add(
+            NotificationEventFactory.ForViewing(viewing, ViewingStatus.Rejected));
+
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return MapToResponse(viewing);
     }

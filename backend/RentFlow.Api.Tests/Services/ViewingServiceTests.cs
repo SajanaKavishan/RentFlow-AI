@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.Viewings;
 using RentFlow.Api.Models;
@@ -139,6 +140,26 @@ public class ViewingServiceTests
     }
 
     [Fact]
+    public async Task ApproveAsync_DoesNotPersistViewingOrNotification_WhenSaveFails()
+    {
+        var saveInterceptor = new FailingSaveChangesInterceptor();
+        await using var context = CreateContext(saveInterceptor);
+        var viewing = AddViewing(context, status: ViewingStatus.Pending);
+        await context.SaveChangesAsync();
+        var service = new ViewingService(context);
+        saveInterceptor.ShouldFail = true;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            service.ApproveAsync(viewing.Id, "Approved."));
+
+        saveInterceptor.ShouldFail = false;
+        context.ChangeTracker.Clear();
+        var storedViewing = await context.ViewingRequests.SingleAsync();
+        Assert.Equal(ViewingStatus.Pending, storedViewing.Status);
+        Assert.Empty(await context.Notifications.ToListAsync());
+    }
+
+    [Fact]
     public async Task CancelAsync_AllowsOwnerToCancelFuturePendingViewing()
     {
         await using var context = CreateContext();
@@ -225,13 +246,18 @@ public class ViewingServiceTests
         Assert.All(results, result => Assert.Equal(propertyId, result.PropertyId));
     }
 
-    private static ApplicationDbContext CreateContext()
+    private static ApplicationDbContext CreateContext(
+        SaveChangesInterceptor? saveChangesInterceptor = null)
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase($"ViewingServiceTests-{Guid.NewGuid()}")
-            .Options;
+        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase($"ViewingServiceTests-{Guid.NewGuid()}");
 
-        return new ApplicationDbContext(options);
+        if (saveChangesInterceptor is not null)
+        {
+            optionsBuilder.AddInterceptors(saveChangesInterceptor);
+        }
+
+        return new ApplicationDbContext(optionsBuilder.Options);
     }
 
     private static ViewingRequest AddViewing(
@@ -253,5 +279,23 @@ public class ViewingServiceTests
 
         context.ViewingRequests.Add(viewing);
         return viewing;
+    }
+
+    private sealed class FailingSaveChangesInterceptor : SaveChangesInterceptor
+    {
+        public bool ShouldFail { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (ShouldFail)
+            {
+                throw new DbUpdateException("Simulated decision persistence failure.");
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 }

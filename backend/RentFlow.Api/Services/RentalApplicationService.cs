@@ -316,7 +316,17 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             workflow.UpdatedAt = decisionAt;
         }
 
+        dbContext.Notifications.Add(
+            NotificationEventFactory.ForRentalApplication(application, targetStatus));
+
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return MapToResponse(application);
     }

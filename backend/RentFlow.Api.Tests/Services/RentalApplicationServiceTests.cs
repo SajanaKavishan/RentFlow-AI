@@ -327,6 +327,7 @@ public class RentalApplicationServiceTests
         Assert.Equal(originalApplicationUpdatedAt, storedApplication.UpdatedAt);
         Assert.Equal(ApplicationValidationWorkflowStatus.AwaitingHumanReview, storedWorkflow.Status);
         Assert.Equal(originalWorkflowUpdatedAt, storedWorkflow.UpdatedAt);
+        Assert.Empty(await context.Notifications.ToListAsync());
     }
 
     [Fact]
