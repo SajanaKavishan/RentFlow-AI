@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.Viewings;
 using RentFlow.Api.Models;
@@ -17,6 +18,8 @@ public class ViewingServiceTests
         var tenantId = Guid.NewGuid();
         var propertyId = Guid.NewGuid();
         var requestedDateTime = DateTimeOffset.UtcNow.AddDays(2);
+        context.Properties.Add(CreateProperty(propertyId));
+        await context.SaveChangesAsync();
 
         var result = await service.CreateAsync(tenantId, new CreateViewingRequestDto
         {
@@ -61,6 +64,8 @@ public class ViewingServiceTests
         var tenantId = Guid.NewGuid();
         var propertyId = Guid.NewGuid();
         var requestedDateTime = DateTimeOffset.UtcNow.AddDays(3);
+        context.Properties.Add(CreateProperty(propertyId));
+        await context.SaveChangesAsync();
         var request = new CreateViewingRequestDto
         {
             PropertyId = propertyId,
@@ -74,6 +79,30 @@ public class ViewingServiceTests
 
         Assert.Equal(ViewingServiceError.Conflict, exception.Error);
         Assert.Equal(1, await context.ViewingRequests.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreateAsync_DoesNotPersistViewingOrNotification_WhenSaveFails()
+    {
+        var saveInterceptor = new FailingSaveChangesInterceptor();
+        await using var context = CreateContext(saveInterceptor);
+        var property = CreateProperty(Guid.NewGuid());
+        context.Properties.Add(property);
+        await context.SaveChangesAsync();
+        var service = new ViewingService(context);
+        saveInterceptor.ShouldFail = true;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            service.CreateAsync(Guid.NewGuid(), new CreateViewingRequestDto
+            {
+                PropertyId = property.Id,
+                RequestedDateTime = DateTimeOffset.UtcNow.AddDays(2)
+            }));
+
+        saveInterceptor.ShouldFail = false;
+        context.ChangeTracker.Clear();
+        Assert.Empty(await context.ViewingRequests.ToListAsync());
+        Assert.Empty(await context.Notifications.ToListAsync());
     }
 
     [Fact]
@@ -136,6 +165,26 @@ public class ViewingServiceTests
         Assert.Equal(ViewingServiceError.Validation, exception.Error);
         Assert.Equal(ViewingStatus.Pending, viewing.Status);
         Assert.Null(viewing.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task ApproveAsync_DoesNotPersistViewingOrNotification_WhenSaveFails()
+    {
+        var saveInterceptor = new FailingSaveChangesInterceptor();
+        await using var context = CreateContext(saveInterceptor);
+        var viewing = AddViewing(context, status: ViewingStatus.Pending);
+        await context.SaveChangesAsync();
+        var service = new ViewingService(context);
+        saveInterceptor.ShouldFail = true;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            service.ApproveAsync(viewing.Id, "Approved."));
+
+        saveInterceptor.ShouldFail = false;
+        context.ChangeTracker.Clear();
+        var storedViewing = await context.ViewingRequests.SingleAsync();
+        Assert.Equal(ViewingStatus.Pending, storedViewing.Status);
+        Assert.Empty(await context.Notifications.ToListAsync());
     }
 
     [Fact]
@@ -225,13 +274,18 @@ public class ViewingServiceTests
         Assert.All(results, result => Assert.Equal(propertyId, result.PropertyId));
     }
 
-    private static ApplicationDbContext CreateContext()
+    private static ApplicationDbContext CreateContext(
+        SaveChangesInterceptor? saveChangesInterceptor = null)
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase($"ViewingServiceTests-{Guid.NewGuid()}")
-            .Options;
+        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase($"ViewingServiceTests-{Guid.NewGuid()}");
 
-        return new ApplicationDbContext(options);
+        if (saveChangesInterceptor is not null)
+        {
+            optionsBuilder.AddInterceptors(saveChangesInterceptor);
+        }
+
+        return new ApplicationDbContext(optionsBuilder.Options);
     }
 
     private static ViewingRequest AddViewing(
@@ -251,7 +305,56 @@ public class ViewingServiceTests
             CreatedAt = DateTimeOffset.UtcNow
         };
 
+        if (!context.Properties.Local.Any(property => property.Id == viewing.PropertyId))
+        {
+            context.Properties.Add(new Property
+            {
+                Id = viewing.PropertyId,
+                LandlordId = Guid.NewGuid(),
+                Title = "Viewing test property",
+                Description = "Property used by viewing service tests.",
+                Address = "1 Test Street",
+                City = "Colombo",
+                MonthlyRent = 100000m,
+                Bedrooms = 2,
+                Bathrooms = 1,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
+
         context.ViewingRequests.Add(viewing);
         return viewing;
+    }
+
+    private static Property CreateProperty(Guid propertyId) => new()
+    {
+        Id = propertyId,
+        LandlordId = Guid.NewGuid(),
+        Title = "Viewing test property",
+        Description = "Property used by viewing service tests.",
+        Address = "1 Test Street",
+        City = "Colombo",
+        MonthlyRent = 100000m,
+        Bedrooms = 2,
+        Bathrooms = 1,
+        CreatedAt = DateTimeOffset.UtcNow
+    };
+
+    private sealed class FailingSaveChangesInterceptor : SaveChangesInterceptor
+    {
+        public bool ShouldFail { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (ShouldFail)
+            {
+                throw new DbUpdateException("Simulated decision persistence failure.");
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 }

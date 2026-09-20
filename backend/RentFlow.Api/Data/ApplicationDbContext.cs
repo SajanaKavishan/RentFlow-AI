@@ -34,6 +34,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<ApplicationValidationStep> ApplicationValidationSteps =>
         Set<ApplicationValidationStep>();
 
+    public DbSet<Notification> Notifications => Set<Notification>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -78,6 +80,61 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(user => user.NormalizedEmail)
                 .IsUnique();
+        });
+
+        // =========================================================
+        // NOTIFICATIONS
+        // =========================================================
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(notification => notification.Id);
+
+            entity.Property(notification => notification.RecipientId)
+                .IsRequired();
+
+            entity.Property(notification => notification.EventType)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(notification => notification.RelatedResourceType)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(notification => notification.RelatedResourceId)
+                .IsRequired();
+
+            entity.Property(notification => notification.Title)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(notification => notification.Message)
+                .HasMaxLength(1000)
+                .IsRequired();
+
+            entity.Property(notification => notification.CreatedAt)
+                .IsRequired();
+
+            entity.Property(notification => notification.ReadAt)
+                .IsRequired(false);
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(notification => notification.RecipientId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(notification => new
+            {
+                notification.RecipientId,
+                notification.CreatedAt
+            });
+
+            entity.HasIndex(notification => new
+            {
+                notification.RecipientId,
+                notification.ReadAt
+            });
+
+            entity.HasIndex(notification => notification.EventType);
         });
 
         // =========================================================

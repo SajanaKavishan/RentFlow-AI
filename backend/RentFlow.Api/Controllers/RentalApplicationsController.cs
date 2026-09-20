@@ -15,6 +15,7 @@ namespace RentFlow.Api.Controllers;
 [Authorize]
 public class RentalApplicationsController(
     IRentalApplicationService rentalApplicationService,
+    IPropertyAccessGuard propertyAccessGuard,
     ICurrentUserService currentUser,
     ILogger<RentalApplicationsController> logger) : ControllerBase
 {
@@ -65,9 +66,13 @@ public class RentalApplicationsController(
         Guid propertyId,
         CancellationToken cancellationToken)
     {
-        // TODO(cross-component-auth): Restrict landlords to properties they own/manage.
         return ExecuteAsync(
-            () => rentalApplicationService.GetByPropertyAsync(propertyId, cancellationToken),
+            async () =>
+            {
+                await EnsureLandlordCanAccessPropertyAsync(propertyId, cancellationToken);
+                return await rentalApplicationService.GetByPropertyAsync(
+                    propertyId, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -111,9 +116,13 @@ public class RentalApplicationsController(
         Guid id,
         CancellationToken cancellationToken)
     {
-        // TODO(cross-component-auth): Restrict landlords to the application's property.
         return ExecuteAsync(
-            () => rentalApplicationService.MarkUnderReviewAsync(id, cancellationToken),
+            async () =>
+            {
+                await EnsureLandlordCanAccessApplicationAsync(id, cancellationToken);
+                return await rentalApplicationService.MarkUnderReviewAsync(
+                    id, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -127,13 +136,16 @@ public class RentalApplicationsController(
         [FromBody] LandlordApplicationDecisionDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(cross-component-auth): Restrict landlords to the application's property.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
-            () => rentalApplicationService.ApproveAsync(
-                id,
-                request.LandlordResponse,
-                cancellationToken),
+            async () =>
+            {
+                await EnsureLandlordCanAccessApplicationAsync(id, cancellationToken);
+                return await rentalApplicationService.ApproveAsync(
+                    id,
+                    request.LandlordResponse,
+                    cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -148,13 +160,16 @@ public class RentalApplicationsController(
         [FromBody] LandlordApplicationDecisionDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(cross-component-auth): Restrict landlords to the application's property.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
-            () => rentalApplicationService.RejectAsync(
-                id,
-                request.LandlordResponse ?? string.Empty,
-                cancellationToken),
+            async () =>
+            {
+                await EnsureLandlordCanAccessApplicationAsync(id, cancellationToken);
+                return await rentalApplicationService.RejectAsync(
+                    id,
+                    request.LandlordResponse ?? string.Empty,
+                    cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -169,13 +184,16 @@ public class RentalApplicationsController(
         [FromBody] LandlordApplicationDecisionDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(cross-component-auth): Restrict landlords to the application's property.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
-            () => rentalApplicationService.RequestChangesAsync(
-                id,
-                request.LandlordResponse ?? string.Empty,
-                cancellationToken),
+            async () =>
+            {
+                await EnsureLandlordCanAccessApplicationAsync(id, cancellationToken);
+                return await rentalApplicationService.RequestChangesAsync(
+                    id,
+                    request.LandlordResponse ?? string.Empty,
+                    cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -198,17 +216,48 @@ public class RentalApplicationsController(
         Guid id,
         CancellationToken cancellationToken)
     {
-        var application = currentUser.Role == UserRole.Tenant
-            ? await rentalApplicationService.GetByIdForTenantAsync(
-                id,
-                GetRequiredUserId(),
-                cancellationToken)
-            : await rentalApplicationService.GetByIdAsync(id, cancellationToken);
+        if (currentUser.Role == UserRole.Tenant)
+        {
+            return await rentalApplicationService.GetByIdForTenantAsync(
+                    id,
+                    GetRequiredUserId(),
+                    cancellationToken)
+                ?? throw RentalApplicationServiceException.NotFound(
+                    $"Rental application '{id}' was not found.");
+        }
 
-        // TODO(cross-component-auth): Restrict landlord reads to the application's property.
+        await EnsureLandlordCanAccessApplicationAsync(id, cancellationToken);
+        var application = await rentalApplicationService.GetByIdAsync(id, cancellationToken);
+
         return application
             ?? throw RentalApplicationServiceException.NotFound(
                 $"Rental application '{id}' was not found.");
+    }
+
+    private async Task EnsureLandlordCanAccessPropertyAsync(
+        Guid propertyId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.Role == UserRole.Landlord
+            && !await propertyAccessGuard.CanAccessPropertyAsync(
+                GetRequiredUserId(), propertyId, cancellationToken))
+        {
+            throw RentalApplicationServiceException.NotFound(
+                $"Property '{propertyId}' was not found.");
+        }
+    }
+
+    private async Task EnsureLandlordCanAccessApplicationAsync(
+        Guid applicationId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.Role == UserRole.Landlord
+            && !await propertyAccessGuard.CanAccessApplicationAsync(
+                GetRequiredUserId(), applicationId, cancellationToken))
+        {
+            throw RentalApplicationServiceException.NotFound(
+                $"Rental application '{applicationId}' was not found.");
+        }
     }
 
     private Guid GetRequiredUserId() => currentUser.UserId

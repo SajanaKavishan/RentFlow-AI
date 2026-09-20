@@ -34,6 +34,17 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
             throw ViewingServiceException.Validation("The requested viewing date and time must be in the future.");
         }
 
+        var landlordId = await dbContext.Properties
+            .Where(property => property.Id == request.PropertyId)
+            .Select(property => (Guid?)property.LandlordId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (!landlordId.HasValue || landlordId.Value == Guid.Empty)
+        {
+            throw ViewingServiceException.NotFound(
+                $"Property '{request.PropertyId}' was not found.");
+        }
+
         var duplicateExists = await dbContext.ViewingRequests.AnyAsync(
             viewing => viewing.TenantId == tenantId
                 && viewing.PropertyId == request.PropertyId
@@ -57,7 +68,17 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
         };
 
         dbContext.ViewingRequests.Add(viewing);
+        dbContext.Notifications.Add(
+            NotificationEventFactory.ForViewingCreated(viewing, landlordId.Value));
+
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return MapToResponse(viewing);
     }
@@ -125,7 +146,17 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
         viewing.LandlordResponse = landlordResponse;
         viewing.UpdatedAt = DateTimeOffset.UtcNow;
 
+        dbContext.Notifications.Add(
+            NotificationEventFactory.ForViewing(viewing, ViewingStatus.Approved));
+
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return MapToResponse(viewing);
     }
@@ -147,7 +178,17 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
         viewing.LandlordResponse = landlordResponse.Trim();
         viewing.UpdatedAt = DateTimeOffset.UtcNow;
 
+        dbContext.Notifications.Add(
+            NotificationEventFactory.ForViewing(viewing, ViewingStatus.Rejected));
+
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return MapToResponse(viewing);
     }
@@ -198,6 +239,24 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
 
         return viewing
             ?? throw ViewingServiceException.NotFound($"Viewing request '{viewingId}' was not found.");
+    }
+
+    private async Task<Guid> GetLandlordIdAsync(
+        Guid propertyId,
+        CancellationToken cancellationToken)
+    {
+        var landlordId = await dbContext.Properties
+            .Where(property => property.Id == propertyId)
+            .Select(property => (Guid?)property.LandlordId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (!landlordId.HasValue || landlordId.Value == Guid.Empty)
+        {
+            throw ViewingServiceException.NotFound(
+                $"Property '{propertyId}' was not found.");
+        }
+
+        return landlordId.Value;
     }
 
     private static void EnsurePending(ViewingRequest viewing, ViewingStatus targetStatus)

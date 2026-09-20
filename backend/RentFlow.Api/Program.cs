@@ -156,6 +156,10 @@ builder.Services.AddScoped<
     CurrentUserService>();
 
 builder.Services.AddScoped<
+    INotificationService,
+    NotificationService>();
+
+builder.Services.AddScoped<
     IPasswordHasher<ApplicationUser>,
     PasswordHasher<ApplicationUser>>();
 
@@ -168,6 +172,10 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<
     IPropertyService,
     PropertyService>();
+
+builder.Services.AddScoped<
+    IPropertyAccessGuard,
+    PropertyAccessGuard>();
 
 builder.Services.AddScoped<
     IPropertyImageService,

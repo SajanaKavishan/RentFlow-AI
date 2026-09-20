@@ -186,11 +186,29 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
+        var isResubmission = application.Status == RentalApplicationStatus.ChangesRequested;
         application.Status = RentalApplicationStatus.Submitted;
         application.SubmittedAt = now;
         application.UpdatedAt = now;
 
+        var landlordId = await GetLandlordIdAsync(
+            application.PropertyId,
+            cancellationToken);
+
+        dbContext.Notifications.Add(
+            NotificationEventFactory.ForRentalApplicationSubmission(
+                application,
+                landlordId,
+                isResubmission));
+
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return MapToResponse(application);
     }
@@ -316,7 +334,17 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             workflow.UpdatedAt = decisionAt;
         }
 
+        dbContext.Notifications.Add(
+            NotificationEventFactory.ForRentalApplication(application, targetStatus));
+
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return MapToResponse(application);
     }
@@ -366,6 +394,24 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
         return application
             ?? throw RentalApplicationServiceException.NotFound(
                 $"Rental application '{applicationId}' was not found.");
+    }
+
+    private async Task<Guid> GetLandlordIdAsync(
+        Guid propertyId,
+        CancellationToken cancellationToken)
+    {
+        var landlordId = await dbContext.Properties
+            .Where(property => property.Id == propertyId)
+            .Select(property => (Guid?)property.LandlordId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (!landlordId.HasValue || landlordId.Value == Guid.Empty)
+        {
+            throw RentalApplicationServiceException.NotFound(
+                $"Property '{propertyId}' was not found.");
+        }
+
+        return landlordId.Value;
     }
 
     private static void ValidateTenantId(Guid tenantId)

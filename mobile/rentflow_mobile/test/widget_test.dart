@@ -352,6 +352,35 @@ void main() {
     });
   }
 
+  for (final size in [
+    const Size(320, 480),
+    const Size(360, 640),
+    const Size(390, 844),
+    const Size(600, 1024),
+    const Size(844, 390),
+  ]) {
+    testWidgets('login stays responsive at ${size.width}x${size.height}', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.reset);
+
+      final controller = buildController(MemoryTokenStorage());
+      await tester.pumpWidget(MyApp(authController: controller));
+      await tester.pumpAndSettle();
+
+      expect(tester.getSize(find.byKey(const Key('auth-background'))), size);
+      expect(
+        tester.getSize(find.byKey(const Key('auth-card'))).width,
+        lessThanOrEqualTo(size.width - 48),
+      );
+      await tester.ensureVisible(find.byKey(const Key('login-register-link')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'login visibility toggle and submission use the real controller',
     (tester) async {

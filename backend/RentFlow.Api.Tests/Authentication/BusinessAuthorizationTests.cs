@@ -18,6 +18,8 @@ public sealed class BusinessAuthorizationTests
 {
     private static readonly Guid TenantA = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid TenantB = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    private static readonly Guid LandlordA = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid LandlordB = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     [Theory]
     [InlineData("/api/viewings")]
@@ -38,6 +40,7 @@ public sealed class BusinessAuthorizationTests
     public async Task Viewing_TenantIdentityComesFromJwt_AndTenantIsIsolated()
     {
         using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
         var otherViewing = await SeedViewingAsync(factory, TenantB);
         using var client = AuthorizedClient(factory, TenantA, UserRole.Tenant);
 
@@ -45,7 +48,7 @@ public sealed class BusinessAuthorizationTests
             $"/api/viewings?tenantId={TenantB}",
             new
             {
-                propertyId = Guid.NewGuid(),
+                propertyId = property.Id,
                 requestedDateTime = DateTimeOffset.UtcNow.AddDays(3),
                 tenantMessage = "JWT owner"
             });
@@ -70,8 +73,9 @@ public sealed class BusinessAuthorizationTests
     public async Task Viewing_ReviewerRolesCanDecide_AndMaintenanceIsDenied()
     {
         using var factory = new AuthApiFactory();
-        var viewing = await SeedViewingAsync(factory, TenantA);
-        using var landlord = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Landlord);
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        var viewing = await SeedViewingAsync(factory, TenantA, property.Id);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
         using var maintenance = AuthorizedClient(factory, Guid.NewGuid(), UserRole.MaintenanceTechnician);
 
         var approved = await landlord.PatchAsJsonAsync(
@@ -86,17 +90,18 @@ public sealed class BusinessAuthorizationTests
     public async Task RentalApplication_TenantUsesJwtAndCanOnlyOperateOnOwnResources()
     {
         using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
         var other = await SeedApplicationAsync(factory, TenantB, RentalApplicationStatus.Draft);
         using var client = AuthorizedClient(factory, TenantA, UserRole.Tenant);
 
         var create = await client.PostAsJsonAsync(
-            $"/api/rental-applications?tenantId={TenantB}", ApplicationBody());
+            $"/api/rental-applications?tenantId={TenantB}", ApplicationBody(property.Id));
         var created = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement;
         var id = created.GetProperty("id").GetGuid();
         var list = await client.GetFromJsonAsync<JsonElement>("/api/rental-applications");
         var getOther = await client.GetAsync($"/api/rental-applications/{other.Id}");
         var update = await client.PutAsJsonAsync(
-            $"/api/rental-applications/{id}?tenantId={TenantB}", ApplicationBody());
+            $"/api/rental-applications/{id}?tenantId={TenantB}", ApplicationBody(property.Id));
         var submit = await client.PatchAsync($"/api/rental-applications/{id}/submit", null);
         var withdraw = await client.PatchAsync($"/api/rental-applications/{id}/withdraw", null);
         var review = await client.PatchAsync($"/api/rental-applications/{other.Id}/review", null);
@@ -117,8 +122,11 @@ public sealed class BusinessAuthorizationTests
     public async Task RentalApplication_ReviewerRolesCanReview(UserRole role)
     {
         using var factory = new AuthApiFactory();
-        var application = await SeedApplicationAsync(factory, TenantA, RentalApplicationStatus.Submitted);
-        using var client = AuthorizedClient(factory, Guid.NewGuid(), role);
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        var application = await SeedApplicationAsync(
+            factory, TenantA, RentalApplicationStatus.Submitted, property.Id);
+        using var client = AuthorizedClient(
+            factory, role == UserRole.Landlord ? LandlordA : Guid.NewGuid(), role);
 
         var response = await client.PatchAsync(
             $"/api/rental-applications/{application.Id}/review", null);
@@ -192,9 +200,11 @@ public sealed class BusinessAuthorizationTests
     public async Task Documents_ReviewersCanRead_MaintenanceCannot()
     {
         using var factory = new AuthApiFactory();
-        var application = await SeedApplicationAsync(factory, TenantA, RentalApplicationStatus.Submitted);
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        var application = await SeedApplicationAsync(
+            factory, TenantA, RentalApplicationStatus.Submitted, property.Id);
         var document = await SeedDocumentAsync(factory, application.Id);
-        using var landlord = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Landlord, false);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord, false);
         using var maintenance = AuthorizedClient(factory, Guid.NewGuid(), UserRole.MaintenanceTechnician, false);
 
         var reviewDownload = await landlord.GetAsync($"/api/application-documents/{document.Id}/download");
@@ -208,10 +218,13 @@ public sealed class BusinessAuthorizationTests
     public async Task Validation_IsRejectedBeforeOrchestratorForUnauthorizedRoles()
     {
         using var factory = new AuthApiFactory();
-        var applicationId = Guid.NewGuid();
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        var application = await SeedApplicationAsync(
+            factory, TenantA, RentalApplicationStatus.Submitted, property.Id);
+        var applicationId = application.Id;
         using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
         using var maintenance = AuthorizedClient(factory, Guid.NewGuid(), UserRole.MaintenanceTechnician);
-        using var landlord = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Landlord);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
         using var anonymous = factory.CreateHttpsClient();
 
         var anonymousResponse = await anonymous.PostAsync(
@@ -235,11 +248,12 @@ public sealed class BusinessAuthorizationTests
     public async Task Validation_AdminCanRunAndReviewerCanViewHistory()
     {
         using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
         var application = await SeedApplicationAsync(
-            factory, TenantA, RentalApplicationStatus.Submitted);
+            factory, TenantA, RentalApplicationStatus.Submitted, property.Id);
         var workflow = await SeedValidationWorkflowAsync(factory, application.Id);
         using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
-        using var landlord = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Landlord);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
         using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
 
         var started = await admin.PostAsync(
@@ -258,9 +272,9 @@ public sealed class BusinessAuthorizationTests
     public async Task Viewing_CrossRoleRoundTrip_PersistsLandlordDecisionForTenantRefresh()
     {
         using var factory = new AuthApiFactory();
-        var propertyId = Guid.NewGuid();
+        var propertyId = (await SeedPropertyAsync(factory, LandlordA)).Id;
         using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
-        using var landlord = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Landlord);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
 
         var create = await tenant.PostAsJsonAsync("/api/viewings", new
         {
@@ -293,9 +307,9 @@ public sealed class BusinessAuthorizationTests
     public async Task RentalApplication_CrossRoleRoundTrip_PreservesDocumentsAndResubmissionRules()
     {
         using var factory = new AuthApiFactory();
-        var propertyId = Guid.NewGuid();
+        var propertyId = (await SeedPropertyAsync(factory, LandlordA)).Id;
         using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant, false);
-        using var landlord = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Landlord, false);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord, false);
 
         var create = await tenant.PostAsJsonAsync("/api/rental-applications", new
         {
@@ -374,6 +388,156 @@ public sealed class BusinessAuthorizationTests
             landlordRefresh.EnumerateArray().Single().GetProperty("status").GetInt32());
     }
 
+    [Fact]
+    public async Task Landlord_CannotAccessAnotherLandlordsPropertyResources()
+    {
+        using var factory = new AuthApiFactory();
+        _ = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+        var otherViewing = await SeedViewingAsync(factory, TenantB, otherProperty.Id);
+        var otherApplication = await SeedApplicationAsync(
+            factory, TenantB, RentalApplicationStatus.Submitted, otherProperty.Id);
+        var otherDocument = await SeedDocumentAsync(factory, otherApplication.Id);
+        var otherWorkflow = await SeedValidationWorkflowAsync(factory, otherApplication.Id);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord, false);
+
+        var responses = new[]
+        {
+            await landlord.GetAsync($"/api/viewings/{otherViewing.Id}"),
+            await landlord.GetAsync($"/api/viewings/property/{otherProperty.Id}"),
+            await landlord.PatchAsJsonAsync($"/api/viewings/{otherViewing.Id}/approve",
+                new { landlordResponse = "Not allowed" }),
+            await landlord.PatchAsJsonAsync($"/api/viewings/{otherViewing.Id}/reject",
+                new { landlordResponse = "Not allowed" }),
+            await landlord.GetAsync($"/api/rental-applications/{otherApplication.Id}"),
+            await landlord.GetAsync($"/api/rental-applications/property/{otherProperty.Id}"),
+            await landlord.PatchAsync(
+                $"/api/rental-applications/{otherApplication.Id}/review", null),
+            await landlord.PatchAsJsonAsync(
+                $"/api/rental-applications/{otherApplication.Id}/approve",
+                new { landlordResponse = "Not allowed" }),
+            await landlord.PatchAsJsonAsync(
+                $"/api/rental-applications/{otherApplication.Id}/reject",
+                new { landlordResponse = "Not allowed" }),
+            await landlord.PatchAsJsonAsync(
+                $"/api/rental-applications/{otherApplication.Id}/request-changes",
+                new { landlordResponse = "Not allowed" }),
+            await landlord.GetAsync(
+                $"/api/rental-applications/{otherApplication.Id}/documents"),
+            await landlord.GetAsync($"/api/application-documents/{otherDocument.Id}"),
+            await landlord.GetAsync(
+                $"/api/application-documents/{otherDocument.Id}/download"),
+            await landlord.PostAsync(
+                $"/api/rental-applications/{otherApplication.Id}/validation-runs", null),
+            await landlord.GetAsync(
+                $"/api/rental-applications/{otherApplication.Id}/validation-runs"),
+            await landlord.GetAsync(
+                $"/api/application-validation-workflows/{otherWorkflow.Id}")
+        };
+
+        Assert.All(responses, response => Assert.Equal(HttpStatusCode.NotFound, response.StatusCode));
+        Assert.Equal(0, factory.FileStorage.DownloadUrlCalls);
+        Assert.Equal(0, factory.ValidationOrchestrator.Calls);
+
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Equal(ViewingStatus.Pending,
+            (await context.ViewingRequests.SingleAsync(item => item.Id == otherViewing.Id)).Status);
+        Assert.Equal(RentalApplicationStatus.Submitted,
+            (await context.RentalApplications.SingleAsync(
+                item => item.Id == otherApplication.Id)).Status);
+
+        foreach (var response in responses)
+        {
+            response.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Landlord_CanReadDownloadAndStartValidationForOwnedProperty()
+    {
+        using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        _ = await SeedPropertyAsync(factory, LandlordB);
+        var viewing = await SeedViewingAsync(factory, TenantA, property.Id);
+        var application = await SeedApplicationAsync(
+            factory, TenantA, RentalApplicationStatus.Submitted, property.Id);
+        var document = await SeedDocumentAsync(factory, application.Id);
+        var workflow = await SeedValidationWorkflowAsync(factory, application.Id);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord, false);
+
+        var responses = new[]
+        {
+            await landlord.GetAsync($"/api/viewings/{viewing.Id}"),
+            await landlord.GetAsync($"/api/viewings/property/{property.Id}"),
+            await landlord.GetAsync($"/api/rental-applications/{application.Id}"),
+            await landlord.GetAsync($"/api/rental-applications/property/{property.Id}"),
+            await landlord.GetAsync($"/api/rental-applications/{application.Id}/documents"),
+            await landlord.GetAsync($"/api/application-documents/{document.Id}"),
+            await landlord.GetAsync($"/api/application-documents/{document.Id}/download"),
+            await landlord.PostAsync(
+                $"/api/rental-applications/{application.Id}/validation-runs", null),
+            await landlord.GetAsync(
+                $"/api/rental-applications/{application.Id}/validation-runs"),
+            await landlord.GetAsync($"/api/application-validation-workflows/{workflow.Id}")
+        };
+
+        Assert.All(responses, response =>
+            Assert.True(response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.Redirect));
+        Assert.Equal(1, factory.FileStorage.DownloadUrlCalls);
+        Assert.Equal(1, factory.ValidationOrchestrator.Calls);
+
+        foreach (var response in responses)
+        {
+            response.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Landlord_CanMakeDecisionsForOwnedPropertyResources()
+    {
+        using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        _ = await SeedPropertyAsync(factory, LandlordB);
+        var viewingToApprove = await SeedViewingAsync(factory, TenantA, property.Id);
+        var viewingToReject = await SeedViewingAsync(factory, TenantB, property.Id);
+        var applicationToReview = await SeedApplicationAsync(
+            factory, TenantA, RentalApplicationStatus.Submitted, property.Id);
+        var applicationToApprove = await SeedApplicationAsync(
+            factory, TenantB, RentalApplicationStatus.Submitted, property.Id);
+        var applicationToReject = await SeedApplicationAsync(
+            factory, Guid.NewGuid(), RentalApplicationStatus.Submitted, property.Id);
+        var applicationForChanges = await SeedApplicationAsync(
+            factory, Guid.NewGuid(), RentalApplicationStatus.Submitted, property.Id);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        var responses = new[]
+        {
+            await landlord.PatchAsJsonAsync($"/api/viewings/{viewingToApprove.Id}/approve",
+                new { landlordResponse = "Approved" }),
+            await landlord.PatchAsJsonAsync($"/api/viewings/{viewingToReject.Id}/reject",
+                new { landlordResponse = "Rejected" }),
+            await landlord.PatchAsync(
+                $"/api/rental-applications/{applicationToReview.Id}/review", null),
+            await landlord.PatchAsJsonAsync(
+                $"/api/rental-applications/{applicationToApprove.Id}/approve",
+                new { landlordResponse = "Approved" }),
+            await landlord.PatchAsJsonAsync(
+                $"/api/rental-applications/{applicationToReject.Id}/reject",
+                new { landlordResponse = "Rejected" }),
+            await landlord.PatchAsJsonAsync(
+                $"/api/rental-applications/{applicationForChanges.Id}/request-changes",
+                new { landlordResponse = "Please update" })
+        };
+
+        Assert.All(responses, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
+
+        foreach (var response in responses)
+        {
+            response.Dispose();
+        }
+    }
+
     [Theory]
     [InlineData("not-a-guid", "Tenant")]
     [InlineData("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", null)]
@@ -425,9 +589,9 @@ public sealed class BusinessAuthorizationTests
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private static object ApplicationBody() => new
+    private static object ApplicationBody(Guid propertyId) => new
     {
-        propertyId = Guid.NewGuid(),
+        propertyId,
         moveInDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
         monthlyIncome = 250000m,
         occupation = "Engineer",
@@ -447,11 +611,37 @@ public sealed class BusinessAuthorizationTests
         return form;
     }
 
-    private static async Task<ViewingRequest> SeedViewingAsync(AuthApiFactory factory, Guid tenantId)
+    private static async Task<Property> SeedPropertyAsync(
+        AuthApiFactory factory,
+        Guid landlordId)
+    {
+        var property = new Property
+        {
+            Id = Guid.NewGuid(),
+            LandlordId = landlordId,
+            Title = "Authorization test property",
+            Description = "Property used to verify landlord resource isolation.",
+            Address = "1 Test Street",
+            City = "Colombo",
+            MonthlyRent = 100000m,
+            Bedrooms = 2,
+            Bathrooms = 1,
+            IsAvailable = true,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        await SeedAsync(factory, context => context.Properties.Add(property));
+        return property;
+    }
+
+    private static async Task<ViewingRequest> SeedViewingAsync(
+        AuthApiFactory factory,
+        Guid tenantId,
+        Guid? propertyId = null)
     {
         var viewing = new ViewingRequest
         {
-            Id = Guid.NewGuid(), TenantId = tenantId, PropertyId = Guid.NewGuid(),
+            Id = Guid.NewGuid(), TenantId = tenantId,
+            PropertyId = propertyId ?? Guid.NewGuid(),
             RequestedDateTime = DateTimeOffset.UtcNow.AddDays(5),
             Status = ViewingStatus.Pending, CreatedAt = DateTimeOffset.UtcNow
         };
@@ -460,11 +650,15 @@ public sealed class BusinessAuthorizationTests
     }
 
     private static async Task<RentalApplication> SeedApplicationAsync(
-        AuthApiFactory factory, Guid tenantId, RentalApplicationStatus status)
+        AuthApiFactory factory,
+        Guid tenantId,
+        RentalApplicationStatus status,
+        Guid? propertyId = null)
     {
         var application = new RentalApplication
         {
-            Id = Guid.NewGuid(), TenantId = tenantId, PropertyId = Guid.NewGuid(),
+            Id = Guid.NewGuid(), TenantId = tenantId,
+            PropertyId = propertyId ?? Guid.NewGuid(),
             MoveInDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
             MonthlyIncome = 250000m, Occupation = "Engineer", NumberOfOccupants = 1,
             Status = status, CreatedAt = DateTimeOffset.UtcNow

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../features/auth/models/current_user.dart';
+import '../../features/notifications/screens/notifications_screen.dart';
+import '../../features/notifications/services/notification_api_service.dart';
 import '../../features/rental_applications/screens/my_rental_applications_screen.dart';
 import '../../features/rental_applications/screens/landlord_rental_applications_screen.dart';
 import '../../features/rental_applications/services/rental_application_api_service.dart';
@@ -23,6 +25,7 @@ class SharedAppShell extends StatefulWidget {
     this.applicationsContent,
     this.viewingApiService,
     this.rentalApplicationApiService,
+    this.notificationApiService,
     this.landlordPropertyId,
   });
 
@@ -34,14 +37,35 @@ class SharedAppShell extends StatefulWidget {
   final Widget? applicationsContent;
   final ViewingApiService? viewingApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
+  final NotificationApiService? notificationApiService;
   final String? landlordPropertyId;
 
   @override
   State<SharedAppShell> createState() => _SharedAppShellState();
 }
 
-class _SharedAppShellState extends State<SharedAppShell> {
+class _SharedAppShellState extends State<SharedAppShell>
+    with WidgetsBindingObserver {
   int _selectedIndex = 0;
+  int? _unreadCount;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshUnreadCount();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshUnreadCount();
+  }
 
   List<RoleDestination> get _destinations => destinationsFor(widget.user.role);
 
@@ -72,6 +96,33 @@ class _SharedAppShellState extends State<SharedAppShell> {
             MyViewingsScreen(viewingApiService: widget.viewingApiService),
       ),
     );
+  }
+
+  Future<void> _refreshUnreadCount() async {
+    final service = widget.notificationApiService;
+    if (service == null) return;
+    try {
+      final count = await service.getUnreadCount();
+      if (mounted) setState(() => _unreadCount = count > 0 ? count : null);
+    } catch (_) {
+      if (mounted) setState(() => _unreadCount = null);
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    final service = widget.notificationApiService;
+    if (service == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => NotificationsScreen(
+          notificationApiService: service,
+          userRole: widget.user.role,
+          viewingApiService: widget.viewingApiService,
+          rentalApplicationApiService: widget.rentalApplicationApiService,
+        ),
+      ),
+    );
+    await _refreshUnreadCount();
   }
 
   void _openLease() => _openPendingTenantModule(
@@ -198,12 +249,11 @@ class _SharedAppShellState extends State<SharedAppShell> {
         : Text(selected.label),
     actions: switch (selected.id) {
       RoleDestinationId.home => [
-        if (widget.user.role == UserRole.landlord)
-          IconButton(
-            tooltip: 'Notifications',
-            onPressed: _showNotificationsPending,
-            icon: const Icon(Icons.notifications_none_outlined),
-          ),
+        IconButton(
+          tooltip: 'Notifications',
+          onPressed: _openNotifications,
+          icon: _NotificationBell(unreadCount: _unreadCount),
+        ),
         if (widget.user.role != UserRole.tenant)
           IconButton(
             tooltip: 'Open profile',
@@ -242,11 +292,6 @@ class _SharedAppShellState extends State<SharedAppShell> {
     };
   }
 
-  void _showNotificationsPending() => AppSnackbars.show(
-    context,
-    message: 'Notifications are not connected yet.',
-  );
-
   Widget _featureFor(RoleDestinationId id) => switch (id) {
     RoleDestinationId.viewings =>
       widget.viewingsContent ?? const MyViewingsScreen(),
@@ -282,7 +327,8 @@ class _SharedAppShellState extends State<SharedAppShell> {
         onOpenLease: _openLease,
         onPayRent: _openPayRent,
         onOpenDocuments: _openDocuments,
-        onOpenNotifications: _showNotificationsPending,
+        unreadNotificationCount: _unreadCount,
+        onOpenNotifications: _openNotifications,
       );
     }
     if (widget.user.role == UserRole.landlord) {
@@ -297,6 +343,21 @@ class _SharedAppShellState extends State<SharedAppShell> {
       onSelected: _select,
     );
   }
+}
+
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell({this.unreadCount});
+
+  final int? unreadCount;
+
+  @override
+  Widget build(BuildContext context) => Badge(
+    isLabelVisible: unreadCount != null,
+    label: Text(
+      unreadCount != null && unreadCount! > 99 ? '99+' : '${unreadCount ?? ''}',
+    ),
+    child: const Icon(Icons.notifications_none_outlined),
+  );
 }
 
 class _RoleHome extends StatelessWidget {

@@ -15,6 +15,7 @@ namespace RentFlow.Api.Controllers;
 [Authorize]
 public class ViewingsController(
     IViewingService viewingService,
+    IPropertyAccessGuard propertyAccessGuard,
     ICurrentUserService currentUser,
     ILogger<ViewingsController> logger) : ControllerBase
 {
@@ -63,9 +64,12 @@ public class ViewingsController(
         Guid propertyId,
         CancellationToken cancellationToken)
     {
-        // TODO(cross-component-auth): Restrict landlords to properties they own/manage.
         return ExecuteAsync(
-            () => viewingService.GetByPropertyAsync(propertyId, cancellationToken),
+            async () =>
+            {
+                await EnsureLandlordCanAccessPropertyAsync(propertyId, cancellationToken);
+                return await viewingService.GetByPropertyAsync(propertyId, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -79,10 +83,14 @@ public class ViewingsController(
         [FromBody] UpdateViewingStatusDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(cross-component-auth): Restrict landlords to the viewing's property.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
-            () => viewingService.ApproveAsync(id, request.LandlordResponse, cancellationToken),
+            async () =>
+            {
+                await EnsureLandlordCanAccessViewingAsync(id, cancellationToken);
+                return await viewingService.ApproveAsync(
+                    id, request.LandlordResponse, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -97,10 +105,14 @@ public class ViewingsController(
         [FromBody] UpdateViewingStatusDto request,
         CancellationToken cancellationToken)
     {
-        // TODO(cross-component-auth): Restrict landlords to the viewing's property.
         // The route fixes the transition; request.Status cannot select another status.
         return ExecuteAsync(
-            () => viewingService.RejectAsync(id, request.LandlordResponse ?? string.Empty, cancellationToken),
+            async () =>
+            {
+                await EnsureLandlordCanAccessViewingAsync(id, cancellationToken);
+                return await viewingService.RejectAsync(
+                    id, request.LandlordResponse ?? string.Empty, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -123,13 +135,45 @@ public class ViewingsController(
         Guid id,
         CancellationToken cancellationToken)
     {
-        var viewing = currentUser.Role == UserRole.Tenant
-            ? await viewingService.GetByIdForTenantAsync(id, GetRequiredUserId(), cancellationToken)
-            : await viewingService.GetByIdAsync(id, cancellationToken);
+        if (currentUser.Role == UserRole.Tenant)
+        {
+            return await viewingService.GetByIdForTenantAsync(
+                    id, GetRequiredUserId(), cancellationToken)
+                ?? throw ViewingServiceException.NotFound(
+                    $"Viewing request '{id}' was not found.");
+        }
 
-        // TODO(cross-component-auth): Restrict landlord reads to the viewing's property.
+        await EnsureLandlordCanAccessViewingAsync(id, cancellationToken);
+        var viewing = await viewingService.GetByIdAsync(id, cancellationToken);
+
         return viewing
             ?? throw ViewingServiceException.NotFound($"Viewing request '{id}' was not found.");
+    }
+
+    private async Task EnsureLandlordCanAccessPropertyAsync(
+        Guid propertyId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.Role == UserRole.Landlord
+            && !await propertyAccessGuard.CanAccessPropertyAsync(
+                GetRequiredUserId(), propertyId, cancellationToken))
+        {
+            throw ViewingServiceException.NotFound(
+                $"Property '{propertyId}' was not found.");
+        }
+    }
+
+    private async Task EnsureLandlordCanAccessViewingAsync(
+        Guid viewingId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.Role == UserRole.Landlord
+            && !await propertyAccessGuard.CanAccessViewingAsync(
+                GetRequiredUserId(), viewingId, cancellationToken))
+        {
+            throw ViewingServiceException.NotFound(
+                $"Viewing request '{viewingId}' was not found.");
+        }
     }
 
     private Guid GetRequiredUserId() => currentUser.UserId
