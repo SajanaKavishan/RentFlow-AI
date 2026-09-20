@@ -156,6 +156,10 @@ builder.Services.AddScoped<
     CurrentUserService>();
 
 builder.Services.AddScoped<
+    INotificationService,
+    NotificationService>();
+
+builder.Services.AddScoped<
     IPasswordHasher<ApplicationUser>,
     PasswordHasher<ApplicationUser>>();
 
