@@ -1,0 +1,174 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using RentFlow.Api.DTOs.LeaseAgreements;
+using RentFlow.Api.Services;
+using RentFlow.Api.Services.Interfaces;
+
+namespace RentFlow.Api.Controllers;
+
+[ApiController]
+[Route("api/lease-agreements")]
+[Authorize]
+public class LeaseAgreementsController : ControllerBase
+{
+    private readonly ILeaseAgreementService _leaseAgreementService;
+    private readonly ICurrentUserService _currentUserService;
+
+    public LeaseAgreementsController(
+        ILeaseAgreementService leaseAgreementService,
+        ICurrentUserService currentUserService)
+    {
+        _leaseAgreementService = leaseAgreementService;
+        _currentUserService = currentUserService;
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "Landlord,Admin")]
+    public async Task<IActionResult> Create(
+        [FromBody] CreateLeaseAgreementDto dto,
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var lease = await _leaseAgreementService.CreateAsync(
+                dto,
+                cancellationToken);
+
+            return CreatedAtAction(
+                nameof(GetById),
+                new { id = lease.Id },
+                lease);
+        });
+    }
+
+    [HttpGet("mine")]
+    [Authorize(Roles = "Tenant")]
+    public async Task<IActionResult> GetMine(
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var tenantId = _currentUserService.UserId;
+
+            if (tenantId is null)
+            {
+                return Unauthorized(new
+                {
+                    message = "Authenticated user ID was not found."
+                });
+            }
+
+            var leases = await _leaseAgreementService.GetByTenantAsync(
+                tenantId.Value,
+                cancellationToken);
+
+            return Ok(leases);
+        });
+    }
+
+    [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Tenant,Landlord,Admin")]
+    public async Task<IActionResult> GetById(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var lease = await _leaseAgreementService.GetByIdAsync(
+                id,
+                cancellationToken);
+
+            if (lease is null)
+            {
+                return NotFound(new
+                {
+                    message = "Lease agreement was not found."
+                });
+            }
+
+            return Ok(lease);
+        });
+    }
+
+    [HttpPatch("{id:guid}/activate")]
+    [Authorize(Roles = "Landlord,Admin")]
+    public async Task<IActionResult> Activate(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var lease = await _leaseAgreementService.ActivateAsync(
+                id,
+                cancellationToken);
+
+            return Ok(lease);
+        });
+    }
+
+    [HttpPatch("{id:guid}/terminate")]
+    [Authorize(Roles = "Landlord,Admin")]
+    public async Task<IActionResult> Terminate(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var lease = await _leaseAgreementService.TerminateAsync(
+                id,
+                cancellationToken);
+
+            return Ok(lease);
+        });
+    }
+
+    [HttpPatch("{id:guid}/complete")]
+    [Authorize(Roles = "Landlord,Admin")]
+    public async Task<IActionResult> Complete(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var lease = await _leaseAgreementService.CompleteAsync(
+                id,
+                cancellationToken);
+
+            return Ok(lease);
+        });
+    }
+
+    private async Task<IActionResult> ExecuteAsync(
+        Func<Task<IActionResult>> action)
+    {
+        try
+        {
+            return await action();
+        }
+        catch (LeaseAgreementServiceException ex)
+        {
+            return ex.Error switch
+            {
+                LeaseAgreementServiceError.Validation =>
+                    BadRequest(new { message = ex.Message }),
+
+                LeaseAgreementServiceError.NotFound =>
+                    NotFound(new { message = ex.Message }),
+
+                LeaseAgreementServiceError.Conflict =>
+                    Conflict(new { message = ex.Message }),
+
+                _ =>
+                    StatusCode(
+                        StatusCodes.Status500InternalServerError,
+                        new { message = "An unexpected error occurred." })
+            };
+        }
+        catch
+        {
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { message = "An unexpected error occurred." });
+        }
+    }
+}

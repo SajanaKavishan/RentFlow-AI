@@ -3,24 +3,44 @@ using RentFlow.Api.Models;
 
 namespace RentFlow.Api.Data;
 
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    : DbContext(options)
 {
     public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
+
+    public DbSet<Property> Properties => Set<Property>();
+
+    public DbSet<PropertyAmenity> PropertyAmenities => Set<PropertyAmenity>();
+
+    public DbSet<PropertyImage> PropertyImages => Set<PropertyImage>();
 
     public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
 
     public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
 
+    public DbSet<RentalOffer> RentalOffers => Set<RentalOffer>();
+
+    public DbSet<LeaseAgreement> LeaseAgreements => Set<LeaseAgreement>();
+
+    public DbSet<RentScheduleItem> RentScheduleItems => Set<RentScheduleItem>();
+
+    public DbSet<Payment> Payments => Set<Payment>();
+
     public DbSet<ApplicationDocument> ApplicationDocuments => Set<ApplicationDocument>();
 
-    public DbSet<ApplicationValidationWorkflow> ApplicationValidationWorkflows => Set<ApplicationValidationWorkflow>();
+    public DbSet<ApplicationValidationWorkflow> ApplicationValidationWorkflows =>
+        Set<ApplicationValidationWorkflow>();
 
-    public DbSet<ApplicationValidationStep> ApplicationValidationSteps => Set<ApplicationValidationStep>();
+    public DbSet<ApplicationValidationStep> ApplicationValidationSteps =>
+        Set<ApplicationValidationStep>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
+        // =========================================================
+        // USERS
+        // =========================================================
         modelBuilder.Entity<ApplicationUser>(entity =>
         {
             entity.HasKey(user => user.Id);
@@ -56,13 +76,127 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(user => user.CreatedAt)
                 .IsRequired();
 
-            entity.Property(user => user.UpdatedAt)
-                .IsRequired();
-
             entity.HasIndex(user => user.NormalizedEmail)
                 .IsUnique();
         });
 
+        // =========================================================
+        // PROPERTIES
+        // =========================================================
+        modelBuilder.Entity<Property>(entity =>
+        {
+            entity.HasKey(property => property.Id);
+
+            entity.Property(property => property.LandlordId)
+                .IsRequired();
+
+            entity.Property(property => property.Title)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(property => property.Description)
+                .HasMaxLength(2000)
+                .IsRequired();
+
+            entity.Property(property => property.Address)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(property => property.City)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(property => property.MonthlyRent)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(property => property.Bedrooms)
+                .IsRequired();
+
+            entity.Property(property => property.Bathrooms)
+                .IsRequired();
+
+            entity.Property(property => property.IsAvailable)
+                .IsRequired();
+
+            entity.Property(property => property.CreatedAt)
+                .IsRequired();
+
+            entity.Property(property => property.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(property => property.Landlord)
+                .WithMany()
+                .HasForeignKey(property => property.LandlordId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(property => property.LandlordId);
+            entity.HasIndex(property => property.City);
+            entity.HasIndex(property => property.MonthlyRent);
+            entity.HasIndex(property => property.IsAvailable);
+        });
+
+        // =========================================================
+        // PROPERTY AMENITIES
+        // =========================================================
+        modelBuilder.Entity<PropertyAmenity>(entity =>
+        {
+            entity.HasKey(amenity => amenity.Id);
+
+            entity.Property(amenity => amenity.PropertyId)
+                .IsRequired();
+
+            entity.Property(amenity => amenity.Name)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.HasOne(amenity => amenity.Property)
+                .WithMany(property => property.Amenities)
+                .HasForeignKey(amenity => amenity.PropertyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(amenity => amenity.PropertyId);
+        });
+
+        // =========================================================
+        // PROPERTY IMAGES
+        // =========================================================
+        modelBuilder.Entity<PropertyImage>(entity =>
+        {
+            entity.HasKey(image => image.Id);
+
+            entity.Property(image => image.PropertyId)
+                .IsRequired();
+
+            entity.Property(image => image.OriginalFileName)
+                .HasMaxLength(255)
+                .IsRequired();
+
+            entity.Property(image => image.StorageKey)
+                .HasMaxLength(512)
+                .IsRequired();
+
+            entity.Property(image => image.ContentType)
+                .HasMaxLength(255)
+                .IsRequired();
+
+            entity.Property(image => image.FileSizeBytes)
+                .IsRequired();
+
+            entity.Property(image => image.UploadedAt)
+                .IsRequired();
+
+            entity.HasOne(image => image.Property)
+                .WithMany(property => property.Images)
+                .HasForeignKey(image => image.PropertyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(image => image.PropertyId);
+        });
+
+        // =========================================================
+        // VIEWING REQUESTS
+        // =========================================================
         modelBuilder.Entity<ViewingRequest>(entity =>
         {
             entity.HasKey(viewing => viewing.Id);
@@ -92,6 +226,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .IsRequired(false);
         });
 
+        // =========================================================
+        // RENTAL APPLICATIONS
+        // =========================================================
         modelBuilder.Entity<RentalApplication>(entity =>
         {
             entity.HasKey(application => application.Id);
@@ -141,6 +278,161 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(application => application.Status);
         });
 
+        // =========================================================
+        // RENTAL OFFERS
+        // =========================================================
+        modelBuilder.Entity<RentalOffer>(entity =>
+        {
+            entity.HasKey(offer => offer.Id);
+
+            entity.Property(offer => offer.RentalApplicationId)
+                .IsRequired();
+
+            entity.Property(offer => offer.TenantId)
+                .IsRequired();
+
+            entity.Property(offer => offer.PropertyId)
+                .IsRequired();
+
+            entity.Property(offer => offer.MonthlyRent)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(offer => offer.SecurityDeposit)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(offer => offer.ProposedStartDate)
+                .IsRequired();
+
+            entity.Property(offer => offer.ProposedEndDate)
+                .IsRequired();
+
+            entity.Property(offer => offer.ExpiresAt)
+                .IsRequired();
+
+            entity.Property(offer => offer.Status)
+                .IsRequired();
+
+            entity.Property(offer => offer.LandlordNote)
+                .HasMaxLength(1000)
+                .IsRequired(false);
+
+            entity.Property(offer => offer.CreatedAt)
+                .IsRequired();
+
+            entity.Property(offer => offer.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(offer => offer.RentalApplication)
+                .WithMany()
+                .HasForeignKey(offer => offer.RentalApplicationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(offer => offer.RentalApplicationId);
+            entity.HasIndex(offer => offer.TenantId);
+            entity.HasIndex(offer => offer.PropertyId);
+            entity.HasIndex(offer => offer.Status);
+        });
+
+        // =========================================================
+        // LEASE AGREEMENTS
+        // =========================================================
+        modelBuilder.Entity<LeaseAgreement>(entity =>
+        {
+            entity.HasKey(lease => lease.Id);
+
+            entity.Property(lease => lease.RentalOfferId)
+                .IsRequired();
+
+            entity.Property(lease => lease.TenantId)
+                .IsRequired();
+
+            entity.Property(lease => lease.PropertyId)
+                .IsRequired();
+
+            entity.Property(lease => lease.MonthlyRent)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(lease => lease.SecurityDeposit)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(lease => lease.StartDate)
+                .IsRequired();
+
+            entity.Property(lease => lease.EndDate)
+                .IsRequired();
+
+            entity.Property(lease => lease.Status)
+                .IsRequired();
+
+            entity.Property(lease => lease.CreatedAt)
+                .IsRequired();
+
+            entity.Property(lease => lease.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(lease => lease.RentalOffer)
+                .WithMany()
+                .HasForeignKey(lease => lease.RentalOfferId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(lease => lease.RentalOfferId)
+                .IsUnique();
+
+            entity.HasIndex(lease => lease.TenantId);
+            entity.HasIndex(lease => lease.PropertyId);
+            entity.HasIndex(lease => lease.Status);
+        });
+
+        // =========================================================
+        // RENT SCHEDULE ITEMS
+        // =========================================================
+        modelBuilder.Entity<RentScheduleItem>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.LeaseAgreementId)
+                .IsRequired();
+
+            entity.Property(item => item.DueDate)
+                .IsRequired();
+
+            entity.Property(item => item.Amount)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(item => item.Status)
+                .IsRequired();
+
+            entity.Property(item => item.CreatedAt)
+                .IsRequired();
+
+            entity.Property(item => item.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(item => item.LeaseAgreement)
+                .WithMany()
+                .HasForeignKey(item => item.LeaseAgreementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(item => item.LeaseAgreementId);
+            entity.HasIndex(item => item.DueDate);
+            entity.HasIndex(item => item.Status);
+
+            entity.HasIndex(item => new
+            {
+                item.LeaseAgreementId,
+                item.DueDate
+            })
+            .IsUnique();
+        });
+
+        // =========================================================
+        // APPLICATION DOCUMENTS
+        // =========================================================
         modelBuilder.Entity<ApplicationDocument>(entity =>
         {
             entity.HasKey(document => document.Id);
@@ -178,6 +470,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(document => document.DocumentType);
         });
 
+        // =========================================================
+        // APPLICATION VALIDATION WORKFLOWS
+        // =========================================================
         modelBuilder.Entity<ApplicationValidationWorkflow>(entity =>
         {
             entity.HasKey(workflow => workflow.Id);
@@ -220,6 +515,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(workflow => workflow.ApplicationId);
         });
 
+        // =========================================================
+        // APPLICATION VALIDATION STEPS
+        // =========================================================
         modelBuilder.Entity<ApplicationValidationStep>(entity =>
         {
             entity.HasKey(step => step.Id);
@@ -260,8 +558,60 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(step => step.WorkflowId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(step => new { step.WorkflowId, step.StepOrder })
-                .IsUnique();
+            entity.HasIndex(step => new
+            {
+                step.WorkflowId,
+                step.StepOrder
+            })
+            .IsUnique();
+        });
+
+        // =========================================================
+        // PAYMENTS
+        // =========================================================
+        modelBuilder.Entity<Payment>(entity =>
+        {
+            entity.HasKey(payment => payment.Id);
+
+            entity.Property(payment => payment.RentScheduleItemId)
+                .IsRequired();
+
+            entity.Property(payment => payment.TenantId)
+                .IsRequired();
+
+            entity.Property(payment => payment.Amount)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(payment => payment.PaymentMethod)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(payment => payment.TransactionReference)
+                .HasMaxLength(200)
+                .IsRequired(false);
+
+            entity.Property(payment => payment.Status)
+                .IsRequired();
+
+            entity.Property(payment => payment.PaidAt)
+                .IsRequired(false);
+
+            entity.Property(payment => payment.CreatedAt)
+                .IsRequired();
+
+            entity.Property(payment => payment.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(payment => payment.RentScheduleItem)
+                .WithMany()
+                .HasForeignKey(payment => payment.RentScheduleItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(payment => payment.RentScheduleItemId);
+            entity.HasIndex(payment => payment.TenantId);
+            entity.HasIndex(payment => payment.Status);
+            entity.HasIndex(payment => payment.TransactionReference);
         });
     }
 }

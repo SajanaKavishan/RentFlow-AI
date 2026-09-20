@@ -12,151 +12,327 @@ using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
+
 const string DevelopmentCorsPolicy = "DevelopmentCors";
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found.");
+// =========================================================
+// DATABASE
+// =========================================================
+
+var connectionString =
+    builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException(
+        "Connection string 'DefaultConnection' was not found.");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
+// =========================================================
+// CONFIGURATION OPTIONS
+// =========================================================
+
 builder.Services.AddOptions<CloudflareR2Options>()
-    .Bind(builder.Configuration.GetSection(CloudflareR2Options.SectionName))
+    .Bind(builder.Configuration.GetSection(
+        CloudflareR2Options.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
 builder.Services.AddOptions<AgentServiceOptions>()
-    .Bind(builder.Configuration.GetSection(AgentServiceOptions.SectionName));
+    .Bind(builder.Configuration.GetSection(
+        AgentServiceOptions.SectionName));
 
 builder.Services.AddOptions<DocumentAnalysisOptions>()
-    .Bind(builder.Configuration.GetSection(DocumentAnalysisOptions.SectionName))
+    .Bind(builder.Configuration.GetSection(
+        DocumentAnalysisOptions.SectionName))
     .ValidateDataAnnotations()
-    .Validate(options => options.AllowedContentTypes.All(contentType =>
-        contentType is "application/pdf" or "image/jpeg" or "image/png"),
+    .Validate(
+        options => options.AllowedContentTypes.All(contentType =>
+            contentType is "application/pdf"
+                or "image/jpeg"
+                or "image/png"),
         "DocumentAnalysis contains an unsupported content type.")
     .ValidateOnStart();
 
 builder.Services.AddOptions<JwtOptions>()
-    .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
+    .Bind(builder.Configuration.GetSection(
+        JwtOptions.SectionName))
     .ValidateDataAnnotations()
     .Validate(
-        options => Encoding.UTF8.GetByteCount(options.SigningKey) >= 32,
-        "Jwt:SigningKey must be at least 32 bytes. Configure it with user-secrets or an environment variable.")
+        options =>
+            Encoding.UTF8.GetByteCount(options.SigningKey) >= 32,
+        "Jwt:SigningKey must be at least 32 bytes. " +
+        "Configure it with user-secrets or an environment variable.")
     .ValidateOnStart();
 
-var jwtSection = builder.Configuration.GetSection(JwtOptions.SectionName);
+// =========================================================
+// JWT AUTHENTICATION
+// =========================================================
+
+var jwtSection =
+    builder.Configuration.GetSection(JwtOptions.SectionName);
+
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        var jwtOptions = jwtSection.Get<JwtOptions>() ?? new JwtOptions();
+        var jwtOptions =
+            jwtSection.Get<JwtOptions>() ?? new JwtOptions();
+
         options.MapInboundClaims = false;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidIssuer = jwtOptions.Issuer,
-            ValidateAudience = true,
-            ValidAudience = jwtOptions.Audience,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromMinutes(1),
-            NameClaimType = "sub",
-            RoleClaimType = "role"
-        };
+
+        options.TokenValidationParameters =
+            new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = jwtOptions.Issuer,
+
+                ValidateAudience = true,
+                ValidAudience = jwtOptions.Audience,
+
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey =
+                    new SymmetricSecurityKey(
+                        Encoding.UTF8.GetBytes(
+                            jwtOptions.SigningKey)),
+
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(1),
+
+                NameClaimType = "sub",
+                RoleClaimType = "role"
+            };
+
         options.Events = new JwtBearerEvents
         {
             OnTokenValidated = context =>
             {
-                var subject = context.Principal?.FindFirstValue("sub");
-                var roleValue = context.Principal?.FindFirstValue("role");
-                if (!Guid.TryParse(subject, out var userId)
+                var subject =
+                    context.Principal?
+                        .FindFirstValue("sub");
+
+                var roleValue =
+                    context.Principal?
+                        .FindFirstValue("role");
+
+                if (!Guid.TryParse(
+                        subject,
+                        out var userId)
                     || userId == Guid.Empty
-                    || !Enum.TryParse<UserRole>(roleValue, ignoreCase: false, out var role)
+                    || !Enum.TryParse<UserRole>(
+                        roleValue,
+                        ignoreCase: false,
+                        out var role)
                     || !Enum.IsDefined(role))
                 {
-                    context.Fail("The token identity claims are invalid.");
+                    context.Fail(
+                        "The token identity claims are invalid.");
                 }
 
                 return Task.CompletedTask;
             }
         };
     });
+
 builder.Services.AddAuthorization();
 
-builder.Services.AddScoped<IViewingService, ViewingService>();
-builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
-builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, PasswordHasher<ApplicationUser>>();
+// =========================================================
+// CORE SERVICES
+// =========================================================
+
+builder.Services.AddScoped<
+    IViewingService,
+    ViewingService>();
+
+builder.Services.AddScoped<
+    IAuthService,
+    AuthService>();
+
+builder.Services.AddScoped<
+    IJwtTokenService,
+    JwtTokenService>();
+
+builder.Services.AddScoped<
+    ICurrentUserService,
+    CurrentUserService>();
+
+builder.Services.AddScoped<
+    IPasswordHasher<ApplicationUser>,
+    PasswordHasher<ApplicationUser>>();
+
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<IRentalApplicationService, RentalApplicationService>();
-builder.Services.AddScoped<IApplicationDocumentService, ApplicationDocumentService>();
-builder.Services.AddScoped<IApplicationDocumentContentService, ApplicationDocumentContentService>();
-builder.Services.AddScoped<IApplicationDataValidationTool, ApplicationDataValidationTool>();
-builder.Services.AddScoped<IDocumentValidationTool, DocumentValidationTool>();
-builder.Services.AddScoped<IDeterministicApplicationRuleTool, DeterministicApplicationRuleTool>();
-builder.Services.AddScoped<IApplicationValidationOrchestrator, ApplicationValidationOrchestrator>();
-builder.Services.AddScoped<IApplicationValidationQueryService, ApplicationValidationQueryService>();
-builder.Services.AddHttpClient<IApplicationValidationAgentClient, ApplicationValidationAgentClient>(client =>
-    client.Timeout = Timeout.InfiniteTimeSpan);
-builder.Services.AddSingleton<IFileStorageService, CloudflareR2StorageService>();
-builder.Services.AddSingleton(TimeProvider.System);
+
+// =========================================================
+// PROPERTY MANAGEMENT
+// =========================================================
+
+builder.Services.AddScoped<
+    IPropertyService,
+    PropertyService>();
+
+builder.Services.AddScoped<
+    IPropertyImageService,
+    PropertyImageService>();
+
+// =========================================================
+// RENTAL APPLICATION SERVICES
+// =========================================================
+
+builder.Services.AddScoped<
+    IRentalApplicationService,
+    RentalApplicationService>();
+
+builder.Services.AddScoped<
+    IApplicationDocumentService,
+    ApplicationDocumentService>();
+
+builder.Services.AddScoped<
+    IApplicationDocumentContentService,
+    ApplicationDocumentContentService>();
+
+// =========================================================
+// RENTAL PRICING / LEASE / PAYMENT SERVICES
+// =========================================================
+
+builder.Services.AddScoped<
+    IRentalOfferService,
+    RentalOfferService>();
+
+builder.Services.AddScoped<
+    ILeaseAgreementService,
+    LeaseAgreementService>();
+
+builder.Services.AddScoped<
+    IRentScheduleService,
+    RentScheduleService>();
+
+builder.Services.AddScoped<
+    IPaymentService,
+    PaymentService>();
+
+// =========================================================
+// APPLICATION VALIDATION / AI
+// =========================================================
+
+builder.Services.AddScoped<
+    IApplicationDataValidationTool,
+    ApplicationDataValidationTool>();
+
+builder.Services.AddScoped<
+    IDocumentValidationTool,
+    DocumentValidationTool>();
+
+builder.Services.AddScoped<
+    IDeterministicApplicationRuleTool,
+    DeterministicApplicationRuleTool>();
+
+builder.Services.AddScoped<
+    IApplicationValidationOrchestrator,
+    ApplicationValidationOrchestrator>();
+
+builder.Services.AddScoped<
+    IApplicationValidationQueryService,
+    ApplicationValidationQueryService>();
+
+builder.Services.AddHttpClient<
+    IApplicationValidationAgentClient,
+    ApplicationValidationAgentClient>(
+        client =>
+        {
+            client.Timeout =
+                Timeout.InfiniteTimeSpan;
+        });
+
+// =========================================================
+// CLOUDFLARE R2 STORAGE
+// =========================================================
+
+builder.Services.AddSingleton<
+    IFileStorageService,
+    CloudflareR2StorageService>();
+
+builder.Services.AddSingleton(
+    TimeProvider.System);
+
+// =========================================================
+// CONTROLLERS / SWAGGER
+// =========================================================
+
 builder.Services.AddControllers();
+
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen(options =>
 {
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header
-    });
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        [new OpenApiSecurityScheme
+    options.AddSecurityDefinition(
+        "Bearer",
+        new OpenApiSecurityScheme
         {
-            Reference = new OpenApiReference
-            {
-                Type = ReferenceType.SecurityScheme,
-                Id = "Bearer"
-            }
-        }] = Array.Empty<string>()
-    });
+            Name = "Authorization",
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            In = ParameterLocation.Header
+        });
+
+    options.AddSecurityRequirement(
+        new OpenApiSecurityRequirement
+        {
+            [
+                new OpenApiSecurityScheme
+                {
+                    Reference =
+                        new OpenApiReference
+                        {
+                            Type =
+                                ReferenceType.SecurityScheme,
+                            Id = "Bearer"
+                        }
+                }
+            ] = Array.Empty<string>()
+        });
 });
+
+// =========================================================
+// DEVELOPMENT CORS
+// =========================================================
 
 if (builder.Environment.IsDevelopment())
 {
     builder.Services.AddCors(options =>
     {
-        options.AddPolicy(DevelopmentCorsPolicy, policy =>
-        {
-            policy
-                .WithOrigins("http://localhost:5173")
-                .AllowAnyHeader()
-                .AllowAnyMethod();
-        });
+        options.AddPolicy(
+            DevelopmentCorsPolicy,
+            policy =>
+            {
+                policy
+                    .WithOrigins(
+                        "http://localhost:5173")
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
+            });
     });
 }
 
+// =========================================================
+// APP
+// =========================================================
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
+
     app.UseSwaggerUI();
-    app.UseCors(DevelopmentCorsPolicy);
+
+    app.UseCors(
+        DevelopmentCorsPolicy);
 }
 
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
+
 app.UseAuthorization();
 
 app.MapControllers();

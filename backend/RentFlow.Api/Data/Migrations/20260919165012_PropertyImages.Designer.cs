@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using RentFlow.Api.Data;
@@ -11,9 +12,11 @@ using RentFlow.Api.Data;
 namespace RentFlow.Api.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260919165012_PropertyImages")]
+    partial class PropertyImages
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -206,108 +209,6 @@ namespace RentFlow.Api.Data.Migrations
                     b.ToTable("ApplicationValidationWorkflows");
                 });
 
-            modelBuilder.Entity("RentFlow.Api.Models.LeaseAgreement", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("EndDate")
-                        .HasColumnType("date");
-
-                    b.Property<decimal>("MonthlyRent")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("PropertyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("RentalOfferId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("SecurityDeposit")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateOnly>("StartDate")
-                        .HasColumnType("date");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PropertyId");
-
-                    b.HasIndex("RentalOfferId")
-                        .IsUnique();
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("LeaseAgreements");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.Payment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset?>("PaidAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PaymentMethod")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("RentScheduleItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TransactionReference")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RentScheduleItemId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("TransactionReference");
-
-                    b.ToTable("Payments");
-                });
-
             modelBuilder.Entity("RentFlow.Api.Models.Property", b =>
                 {
                     b.Property<Guid>("Id")
@@ -427,45 +328,6 @@ namespace RentFlow.Api.Data.Migrations
                     b.ToTable("PropertyImages");
                 });
 
-            modelBuilder.Entity("RentFlow.Api.Models.RentScheduleItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("DueDate")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("LeaseAgreementId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DueDate");
-
-                    b.HasIndex("LeaseAgreementId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("LeaseAgreementId", "DueDate")
-                        .IsUnique();
-
-                    b.ToTable("RentScheduleItems");
-                });
-
             modelBuilder.Entity("RentFlow.Api.Models.RentalApplication", b =>
                 {
                     b.Property<Guid>("Id")
@@ -522,64 +384,6 @@ namespace RentFlow.Api.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.ToTable("RentalApplications");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.RentalOffer", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LandlordNote")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<decimal>("MonthlyRent")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("PropertyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("ProposedEndDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly>("ProposedStartDate")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("RentalApplicationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("SecurityDeposit")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PropertyId");
-
-                    b.HasIndex("RentalApplicationId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("RentalOffers");
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.ViewingRequest", b =>
@@ -650,28 +454,6 @@ namespace RentFlow.Api.Data.Migrations
                     b.Navigation("Application");
                 });
 
-            modelBuilder.Entity("RentFlow.Api.Models.LeaseAgreement", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.RentalOffer", "RentalOffer")
-                        .WithMany()
-                        .HasForeignKey("RentalOfferId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("RentalOffer");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.Payment", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.RentScheduleItem", "RentScheduleItem")
-                        .WithMany()
-                        .HasForeignKey("RentScheduleItemId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("RentScheduleItem");
-                });
-
             modelBuilder.Entity("RentFlow.Api.Models.Property", b =>
                 {
                     b.HasOne("RentFlow.Api.Models.ApplicationUser", "Landlord")
@@ -703,28 +485,6 @@ namespace RentFlow.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Property");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.RentScheduleItem", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.LeaseAgreement", "LeaseAgreement")
-                        .WithMany()
-                        .HasForeignKey("LeaseAgreementId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("LeaseAgreement");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.RentalOffer", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.RentalApplication", "RentalApplication")
-                        .WithMany()
-                        .HasForeignKey("RentalApplicationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("RentalApplication");
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.ApplicationValidationWorkflow", b =>
