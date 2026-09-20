@@ -114,7 +114,12 @@ class _SharedAppShellState extends State<SharedAppShell>
     if (service == null) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => NotificationsScreen(notificationApiService: service),
+        builder: (_) => NotificationsScreen(
+          notificationApiService: service,
+          userRole: widget.user.role,
+          viewingApiService: widget.viewingApiService,
+          rentalApplicationApiService: widget.rentalApplicationApiService,
+        ),
       ),
     );
     await _refreshUnreadCount();

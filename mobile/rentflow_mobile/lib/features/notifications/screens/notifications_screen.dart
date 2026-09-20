@@ -1,14 +1,30 @@
 import 'package:flutter/material.dart';
 
+import '../../../features/auth/models/current_user.dart';
+import '../../rental_applications/screens/landlord_rental_application_details_screen.dart';
+import '../../rental_applications/screens/rental_application_details_screen.dart';
+import '../../rental_applications/services/rental_application_api_service.dart';
+import '../../viewings/screens/landlord_viewing_request_details_screen.dart';
+import '../../viewings/screens/my_viewings_screen.dart';
+import '../../viewings/services/viewing_api_service.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../models/notification.dart';
 import '../services/notification_api_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key, required this.notificationApiService});
+  const NotificationsScreen({
+    super.key,
+    required this.notificationApiService,
+    this.userRole = UserRole.tenant,
+    this.viewingApiService,
+    this.rentalApplicationApiService,
+  });
 
   final NotificationApiService notificationApiService;
+  final UserRole userRole;
+  final ViewingApiService? viewingApiService;
+  final RentalApplicationApiService? rentalApplicationApiService;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -94,17 +110,138 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Future<void> _markAsRead(int index) async {
+  Future<void> _selectNotification(int index) async {
     final item = _items[index];
-    if (item.isRead) return;
-    try {
-      final confirmed = await widget.notificationApiService.markAsRead(item.id);
+    var confirmed = item;
+    if (!item.isRead) {
+      try {
+        confirmed = await widget.notificationApiService.markAsRead(item.id);
+      } catch (error) {
+        if (mounted) AppSnackbars.show(context, message: _messageFor(error));
+        return;
+      }
       if (!mounted) return;
       setState(() => _items[index] = confirmed);
-    } catch (error) {
-      if (!mounted) return;
-      AppSnackbars.show(context, message: _messageFor(error));
     }
+    await _openRelatedResource(confirmed);
+  }
+
+  Future<void> _openRelatedResource(AppNotification notification) async {
+    final resourceType = notification.relatedResourceType.trim();
+    final resourceId = notification.relatedResourceId.trim();
+    final eventType = notification.eventType.trim();
+    if (resourceId.isEmpty || !_isSupportedEvent(resourceType, eventType)) {
+      _showNavigationMessage(
+        'This notification does not have a supported destination.',
+      );
+      return;
+    }
+
+    try {
+      if (resourceType == 'ViewingRequest') {
+        await _openViewing(resourceId);
+      } else {
+        await _openApplication(resourceId);
+      }
+    } on ViewingApiException catch (error) {
+      if (mounted) _showNavigationMessage(error.message);
+    } on RentalApplicationApiException catch (error) {
+      if (mounted) _showNavigationMessage(error.message);
+    } catch (_) {
+      if (mounted) {
+        _showNavigationMessage(
+          'This resource is unavailable or you do not have access to it.',
+        );
+      }
+    }
+  }
+
+  bool _isSupportedEvent(String resourceType, String eventType) {
+    return switch (resourceType) {
+      'ViewingRequest' => const {
+        'viewing.created',
+        'viewing.approved',
+        'viewing.rejected',
+      }.contains(eventType),
+      'RentalApplication' => const {
+        'rental_application.submitted',
+        'rental_application.resubmitted',
+        'rental_application.approved',
+        'rental_application.rejected',
+        'rental_application.changes_requested',
+      }.contains(eventType),
+      _ => false,
+    };
+  }
+
+  Future<void> _openViewing(String id) async {
+    final service = widget.viewingApiService;
+    if (service == null) {
+      _showNavigationMessage('Viewing details are not available right now.');
+      return;
+    }
+    if (widget.userRole == UserRole.tenant) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => MyViewingsScreen(viewingApiService: service),
+        ),
+      );
+      return;
+    }
+    if (widget.userRole != UserRole.landlord &&
+        widget.userRole != UserRole.admin) {
+      _showNavigationMessage(
+        'Viewing details are not available for this role.',
+      );
+      return;
+    }
+    final viewing = await service.getViewingById(id);
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => LandlordViewingRequestDetailsScreen(
+          viewing: viewing,
+          viewingApiService: service,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openApplication(String id) async {
+    final service = widget.rentalApplicationApiService;
+    if (service == null) {
+      _showNavigationMessage(
+        'Application details are not available right now.',
+      );
+      return;
+    }
+    final application = await service.getApplicationById(id);
+    if (!mounted) return;
+    final destination = switch (widget.userRole) {
+      UserRole.tenant => RentalApplicationDetailsScreen(
+        application: application,
+        rentalApplicationApiService: service,
+      ),
+      UserRole.landlord ||
+      UserRole.admin => LandlordRentalApplicationDetailsScreen(
+        application: application,
+        rentalApplicationApiService: service,
+      ),
+      UserRole.maintenanceTechnician => null,
+    };
+    if (destination == null) {
+      _showNavigationMessage(
+        'Application details are not available for this role.',
+      );
+      return;
+    }
+    await Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute<void>(builder: (_) => destination));
+  }
+
+  void _showNavigationMessage(String message) {
+    if (mounted) AppSnackbars.show(context, message: message);
   }
 
   String _messageFor(Object error) => error is NotificationApiException
@@ -152,7 +289,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           }
           return _NotificationTile(
             notification: _items[index],
-            onTap: () => _markAsRead(index),
+            onTap: () => _selectNotification(index),
           );
         },
       ),
