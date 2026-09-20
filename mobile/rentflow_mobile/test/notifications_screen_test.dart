@@ -118,6 +118,135 @@ void main() {
     },
   );
 
+  testWidgets(
+    'already-read notification opens repeatedly without another PATCH',
+    (tester) async {
+      var markReadCalls = 0;
+      final apiClient = _clientForNotification(
+        notification: _notificationJson(
+          isRead: true,
+          eventType: 'rental_application.approved',
+          resourceType: 'RentalApplication',
+          resourceId: 'application-1',
+        ),
+        resourceResponse: _applicationJson,
+        onMarkAsRead: () => markReadCalls++,
+      );
+      addTearDown(apiClient.close);
+
+      await tester.pumpWidget(_screen(apiClient));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Viewing approved'));
+      await tester.pumpAndSettle();
+      expect(find.byType(RentalApplicationDetailsScreen), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Viewing approved'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RentalApplicationDetailsScreen), findsOneWidget);
+      expect(markReadCalls, 0);
+    },
+  );
+
+  testWidgets('empty notification state supports pull-to-refresh', (
+    tester,
+  ) async {
+    var notificationCalls = 0;
+    final apiClient = ApiClient(
+      baseUrl: 'http://test',
+      tokenStorage: fixtures.MemoryTokenStorage('test-token'),
+      httpClient: MockClient((request) async {
+        notificationCalls++;
+        final items = notificationCalls == 1
+            ? <Map<String, dynamic>>[]
+            : [_notificationJson()];
+        return http.Response(
+          jsonEncode({
+            'items': items,
+            'pagination': {
+              'page': 1,
+              'pageSize': 20,
+              'totalCount': items.length,
+              'totalPages': items.isEmpty ? 0 : 1,
+              'hasNextPage': false,
+              'hasPreviousPage': false,
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(apiClient.close);
+
+    await tester.pumpWidget(_screen(apiClient));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No notifications yet'), findsOneWidget);
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+
+    await tester.drag(find.byType(ListView), const Offset(0, 400));
+    await tester.pumpAndSettle();
+
+    expect(notificationCalls, 2);
+    expect(find.text('Viewing approved'), findsOneWidget);
+  });
+
+  testWidgets('populated notification list still paginates', (tester) async {
+    final requestedPages = <int>[];
+    final apiClient = ApiClient(
+      baseUrl: 'http://test',
+      tokenStorage: fixtures.MemoryTokenStorage('test-token'),
+      httpClient: MockClient((request) async {
+        final page = int.parse(request.url.queryParameters['page']!);
+        requestedPages.add(page);
+        final items = page == 1
+            ? List.generate(
+                20,
+                (index) => {
+                  ..._notificationJson(),
+                  'id': 'notification-$index',
+                  'title': 'Page one notification $index',
+                },
+              )
+            : [
+                {
+                  ..._notificationJson(),
+                  'id': 'notification-20',
+                  'title': 'Page two notification',
+                },
+              ];
+        return http.Response(
+          jsonEncode({
+            'items': items,
+            'pagination': {
+              'page': page,
+              'pageSize': 20,
+              'totalCount': 21,
+              'totalPages': 2,
+              'hasNextPage': page == 1,
+              'hasPreviousPage': page > 1,
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(apiClient.close);
+
+    await tester.pumpWidget(_screen(apiClient));
+    await tester.pumpAndSettle();
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+
+    await tester.fling(find.byType(ListView), const Offset(0, -3000), 6000);
+    await tester.pumpAndSettle();
+
+    expect(requestedPages, [1, 2]);
+    expect(find.text('Page two notification'), findsOneWidget);
+  });
+
   testWidgets('tenant application notification opens application details', (
     tester,
   ) async {
@@ -246,12 +375,14 @@ ApiClient _clientForNotification({
   required Map<String, dynamic> notification,
   Object? resourceResponse,
   int resourceStatus = 200,
+  VoidCallback? onMarkAsRead,
   VoidCallback? onResource,
 }) => ApiClient(
   baseUrl: 'http://test',
   tokenStorage: fixtures.MemoryTokenStorage('test-token'),
   httpClient: MockClient((request) async {
     if (request.method == 'PATCH') {
+      onMarkAsRead?.call();
       return http.Response(jsonEncode({...notification, 'isRead': true}), 200);
     }
     if (request.url.path == '/api/notifications') {

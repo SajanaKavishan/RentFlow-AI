@@ -266,9 +266,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return ErrorState(message: _messageFor(_error!), onRetry: _loadFirstPage);
     }
     if (_items.isEmpty) {
-      return const EmptyState(
-        title: 'No notifications yet',
-        message: 'New activity will appear here when it is available.',
+      return RefreshIndicator(
+        color: AppPalette.olive,
+        onRefresh: () => _loadFirstPage(refreshing: true),
+        child: LayoutBuilder(
+          builder: (context, constraints) => ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              SizedBox(
+                height: constraints.maxHeight,
+                child: const EmptyState(
+                  title: 'No notifications yet',
+                  message:
+                      'New activity will appear here when it is available.',
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
     return RefreshIndicator(
@@ -308,7 +323,7 @@ class _NotificationTile extends StatelessWidget {
     final unread = !notification.isRead;
     return AppCard(
       color: unread ? AppPalette.sage : AppPalette.white,
-      onTap: unread ? onTap : null,
+      onTap: onTap,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
