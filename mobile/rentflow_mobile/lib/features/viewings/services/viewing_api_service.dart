@@ -47,9 +47,55 @@ class ViewingApiService {
     return _parseViewingList(response.body);
   }
 
-  Future<void> cancelViewing({required String id}) async {
+  Future<Viewing> cancelViewing({required String id}) async {
     final uri = apiClient.buildUri('${ApiConstants.viewingsPath}/$id/cancel');
-    await _send(() => apiClient.patch(uri));
+    final response = await _send(() => apiClient.patch(uri));
+    return _parseViewing(response.body);
+  }
+
+  Future<Viewing> approveViewing({
+    required String id,
+    String? landlordResponse,
+  }) async {
+    final uri = apiClient.buildUri('${ApiConstants.viewingsPath}/$id/approve');
+    final response = await _send(
+      () => apiClient.patch(
+        uri,
+        body: jsonEncode({
+          'status': ViewingStatus.approved.value,
+          'landlordResponse': _nullableTrimmed(landlordResponse),
+        }),
+      ),
+    );
+    return _parseStatusTransition(
+      response.body,
+      expectedStatus: ViewingStatus.approved,
+    );
+  }
+
+  Future<Viewing> rejectViewing({
+    required String id,
+    required String landlordResponse,
+  }) async {
+    final uri = apiClient.buildUri('${ApiConstants.viewingsPath}/$id/reject');
+    final response = await _send(
+      () => apiClient.patch(
+        uri,
+        body: jsonEncode({
+          'status': ViewingStatus.rejected.value,
+          'landlordResponse': landlordResponse.trim(),
+        }),
+      ),
+    );
+    return _parseStatusTransition(
+      response.body,
+      expectedStatus: ViewingStatus.rejected,
+    );
+  }
+
+  String? _nullableTrimmed(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   Future<http.Response> _send(Future<http.Response> Function() request) async {
@@ -96,6 +142,19 @@ class ViewingApiService {
         'The viewing service returned an invalid response.',
       );
     }
+  }
+
+  Viewing _parseStatusTransition(
+    String body, {
+    required ViewingStatus expectedStatus,
+  }) {
+    final viewing = _parseViewing(body);
+    if (viewing.status != expectedStatus) {
+      throw const ViewingApiException(
+        'The viewing service did not confirm the requested status change.',
+      );
+    }
+    return viewing;
   }
 
   List<Viewing> _parseViewingList(String body) {

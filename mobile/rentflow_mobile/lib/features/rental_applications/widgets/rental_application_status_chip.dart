@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/shared_widgets.dart';
 import '../models/rental_application.dart';
 
 class RentalApplicationStatusChip extends StatelessWidget {
@@ -9,67 +10,48 @@ class RentalApplicationStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appearance = switch (status) {
-      RentalApplicationStatus.draft => const _StatusAppearance(
-        label: 'Draft',
-        foreground: Color(0xFF626262),
-        background: Color(0xFFE9E7E2),
+    final (label, icon, tone) = switch (status) {
+      RentalApplicationStatus.draft => (
+        'Draft',
+        Icons.edit_note_outlined,
+        StatusTone.neutral,
       ),
-      RentalApplicationStatus.submitted => const _StatusAppearance(
-        label: 'Submitted',
-        foreground: Color(0xFF765B13),
-        background: Color(0xFFFFF1C7),
+      RentalApplicationStatus.submitted => (
+        'Submitted',
+        Icons.send_outlined,
+        StatusTone.pending,
       ),
-      RentalApplicationStatus.underReview => const _StatusAppearance(
-        label: 'Under Review',
-        foreground: Color(0xFF43556A),
-        background: Color(0xFFDDE7EF),
+      RentalApplicationStatus.underReview => (
+        'Under Review',
+        Icons.manage_search_outlined,
+        StatusTone.progress,
       ),
-      RentalApplicationStatus.changesRequested => const _StatusAppearance(
-        label: 'Changes Requested',
-        foreground: Color(0xFF755028),
-        background: Color(0xFFF2E4D2),
+      RentalApplicationStatus.changesRequested => (
+        'Changes Requested',
+        Icons.priority_high_rounded,
+        StatusTone.danger,
       ),
-      RentalApplicationStatus.approved => const _StatusAppearance(
-        label: 'Approved',
-        foreground: Color(0xFF35613B),
-        background: Color(0xFFDDEDDD),
+      RentalApplicationStatus.approved => (
+        'Approved',
+        Icons.check_circle_outline,
+        StatusTone.success,
       ),
-      RentalApplicationStatus.rejected => const _StatusAppearance(
-        label: 'Rejected',
-        foreground: Color(0xFF8A3535),
-        background: Color(0xFFF5DDDC),
+      RentalApplicationStatus.rejected => (
+        'Rejected',
+        Icons.cancel_outlined,
+        StatusTone.danger,
       ),
-      RentalApplicationStatus.withdrawn => const _StatusAppearance(
-        label: 'Withdrawn',
-        foreground: Color(0xFF626262),
-        background: Color(0xFFE9E7E2),
+      RentalApplicationStatus.withdrawn => (
+        'Withdrawn',
+        Icons.undo_outlined,
+        StatusTone.neutral,
       ),
     };
 
-    return Chip(
-      label: Text(appearance.label),
-      labelStyle: TextStyle(
-        color: appearance.foreground,
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-      ),
-      backgroundColor: appearance.background,
-      side: BorderSide.none,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      visualDensity: VisualDensity.compact,
+    return Semantics(
+      label: 'Application status: $label',
+      excludeSemantics: true,
+      child: StatusChip(label: label, icon: icon, tone: tone),
     );
   }
-}
-
-class _StatusAppearance {
-  const _StatusAppearance({
-    required this.label,
-    required this.foreground,
-    required this.background,
-  });
-
-  final String label;
-  final Color foreground;
-  final Color background;
 }

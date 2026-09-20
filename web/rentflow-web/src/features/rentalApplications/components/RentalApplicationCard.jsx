@@ -62,6 +62,8 @@ function RentalApplicationCard({
   const isSubmitted = application.status === RENTAL_APPLICATION_STATUS.SUBMITTED
   const isUnderReview =
     application.status === RENTAL_APPLICATION_STATUS.UNDER_REVIEW
+  const isChangesRequested =
+    application.status === RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED
   const canAct = isSubmitted || isUnderReview
 
   async function loadDocuments() {
@@ -155,55 +157,101 @@ function RentalApplicationCard({
 
   return (
     <article
-      className={`application-card${canAct ? ' application-card--priority' : ''}`}
+      className={`application-card${canAct ? ' application-card--priority' : ''}${isChangesRequested ? ' application-card--changes' : ''}`}
     >
       <div className="application-card__heading">
         <div>
           <p className="application-card__eyebrow">
             {isSubmitted
-              ? 'New rental application'
+              ? 'Needs landlord review'
               : isUnderReview
                 ? 'Review in progress'
+                : isChangesRequested
+                  ? 'Waiting for tenant updates'
                 : 'Rental application'}
           </p>
           <h2>Move in {formatDateOnly(application.moveInDate)}</h2>
-          <p className="application-card__tenant">
-            Tenant ID: <span>{application.tenantId}</span>
-          </p>
         </div>
         <RentalApplicationStatusBadge status={application.status} />
       </div>
 
+      {isChangesRequested && (
+        <div className="application-card__attention" role="status">
+          <div className="application-card__attention-icon" aria-hidden="true">
+            !
+          </div>
+          <div>
+            <strong>Tenant update required</strong>
+            <span>
+              This application is waiting for the tenant to update and
+              resubmit it before another landlord decision.
+            </span>
+          </div>
+        </div>
+      )}
+
+      <dl className="application-card__references">
+        <div>
+          <dt>Application reference</dt>
+          <dd>{application.id}</dd>
+        </div>
+        <div>
+          <dt>Tenant reference</dt>
+          <dd>{application.tenantId}</dd>
+        </div>
+        <div>
+          <dt>Property reference</dt>
+          <dd>{application.propertyId}</dd>
+        </div>
+      </dl>
+
       <dl className="application-card__facts">
+        <div>
+          <dt>Move-in date</dt>
+          <dd>{formatDateOnly(application.moveInDate)}</dd>
+        </div>
         <div>
           <dt>Monthly income</dt>
           <dd>{formatIncome(application.monthlyIncome)}</dd>
-        </div>
-        <div>
-          <dt>Occupation</dt>
-          <dd>{application.occupation || 'Not provided'}</dd>
         </div>
         <div>
           <dt>Occupants</dt>
           <dd>{application.numberOfOccupants}</dd>
         </div>
         <div>
-          <dt>Submitted</dt>
-          <dd>
-            {application.submittedAt
-              ? formatDateTime(application.submittedAt)
-              : 'Not submitted'}
-          </dd>
+          <dt>Created</dt>
+          <dd>{formatDateTime(application.createdAt)}</dd>
         </div>
       </dl>
 
+      {(application.submittedAt || application.updatedAt) && (
+        <dl className="application-card__timeline" aria-label="Application activity">
+          {application.submittedAt && (
+            <div>
+              <dt>Submitted</dt>
+              <dd>{formatDateTime(application.submittedAt)}</dd>
+            </div>
+          )}
+          {application.updatedAt && (
+            <div>
+              <dt>Last updated</dt>
+              <dd>{formatDateTime(application.updatedAt)}</dd>
+            </div>
+          )}
+        </dl>
+      )}
+
       <div className="application-card__notes">
+        <div>
+          <span>Occupation</span>
+          <p>{application.occupation || 'Not provided'}</p>
+        </div>
         <div>
           <span>Tenant note</span>
           <p>{application.tenantNote?.trim() || 'No note provided.'}</p>
         </div>
         {application.landlordResponse?.trim() && (
-          <div className="application-card__response">
+          <div className="application-card__response application-card__notes--wide">
             <span>Your response</span>
             <p>{application.landlordResponse}</p>
           </div>
@@ -217,8 +265,9 @@ function RentalApplicationCard({
           onClick={toggleDocuments}
           aria-expanded={documentsExpanded}
           aria-controls={`application-documents-${application.id}`}
+          aria-label={`${documentsExpanded ? 'Hide' : 'Review'} documents for application ${application.id}`}
         >
-          {documentsExpanded ? 'Hide documents' : 'View documents'}
+          {documentsExpanded ? 'Hide documents' : 'Review documents'}
         </button>
       </div>
 
@@ -230,9 +279,16 @@ function RentalApplicationCard({
         >
           <div className="application-documents__header">
             <div>
-              <h3>Supporting documents</h3>
-              <p>Private files supplied with this rental application.</p>
+              <p className="application-documents__eyebrow">Document review</p>
+              <h3>Tenant-provided documents</h3>
+              <p>Review the files supplied with this application.</p>
             </div>
+            {documentsState.status === 'success' && (
+              <span className="application-documents__count">
+                {documentsState.items.length}{' '}
+                {documentsState.items.length === 1 ? 'document' : 'documents'}
+              </span>
+            )}
           </div>
 
           {documentsState.status === 'loading' && (
@@ -291,126 +347,148 @@ function RentalApplicationCard({
 
       <ApplicationValidationSection
         applicationId={application.id}
+        applicationUpdatedAt={
+          application.updatedAt ||
+          application.submittedAt ||
+          application.createdAt
+        }
         canRun={canAct}
       />
 
-      {canAct && !action && (
-        <div className="application-card__actions">
-          {isSubmitted && (
-            <button
-              type="button"
-              className="application-button application-button--quiet"
-              onClick={() => onReview(application.id)}
-              disabled={isUpdating}
-            >
-              {isUpdating ? 'Saving...' : 'Start review'}
-            </button>
-          )}
-          <button
-            type="button"
-            className="application-button application-button--primary"
-            onClick={() => openAction('approve')}
-            disabled={isUpdating}
-          >
-            Approve
-          </button>
-          <button
-            type="button"
-            className="application-button application-button--danger-quiet"
-            onClick={() => openAction('reject')}
-            disabled={isUpdating}
-          >
-            Reject
-          </button>
-          <button
-            type="button"
-            className="application-button application-button--quiet"
-            onClick={() => openAction('changes')}
-            disabled={isUpdating}
-          >
-            Request changes
-          </button>
-        </div>
-      )}
-
-      {canAct && action && (
-        <form className="application-card__decision" onSubmit={submitAction}>
-          <div>
-            <h3>
-              {action === 'approve'
-                ? 'Approve application?'
-                : action === 'reject'
-                  ? 'Reject application'
-                  : 'Request changes'}
-            </h3>
-            <p>
-              {action === 'approve'
-                ? 'You may include an optional response for the tenant.'
-                : action === 'reject'
-                  ? 'Explain why this application cannot be approved.'
-                  : 'Tell the tenant exactly what needs to be updated.'}
-            </p>
+      {canAct && (
+        <section
+          className="application-card__decision-panel"
+          aria-label="Landlord decision"
+        >
+          <div className="application-card__decision-header">
+            <div>
+              <p className="application-card__eyebrow">Landlord decision</p>
+              <h3>Choose the next step</h3>
+            </div>
+            <p>Review tenant data, documents, and findings before acting.</p>
           </div>
-          <label htmlFor={`${action}-response-${application.id}`}>
-            {action === 'approve'
-              ? 'Response (optional)'
-              : action === 'reject'
-                ? 'Rejection reason'
-                : 'Changes required'}
-          </label>
-          <textarea
-            id={`${action}-response-${application.id}`}
-            value={response}
-            onChange={(event) => setResponse(event.target.value)}
-            rows="4"
-            maxLength="1000"
-            disabled={isUpdating}
-            aria-describedby={
-              validationError ? `${application.id}-decision-error` : undefined
-            }
-          />
-          {validationError && (
-            <p
-              className="application-form-error"
-              id={`${application.id}-decision-error`}
-              role="alert"
-            >
-              {validationError}
-            </p>
+
+          {!action && (
+            <div className="application-card__actions">
+              {isSubmitted && (
+                <button
+                  type="button"
+                  className="application-button application-button--quiet"
+                  onClick={() => onReview(application.id)}
+                  disabled={isUpdating}
+                >
+                  {isUpdating ? 'Saving...' : 'Start review'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="application-button application-button--primary"
+                onClick={() => openAction('approve')}
+                disabled={isUpdating}
+              >
+                Approve
+              </button>
+              <button
+                type="button"
+                className="application-button application-button--danger-quiet"
+                onClick={() => openAction('reject')}
+                disabled={isUpdating}
+              >
+                Reject
+              </button>
+              <button
+                type="button"
+                className="application-button application-button--quiet"
+                onClick={() => openAction('changes')}
+                disabled={isUpdating}
+              >
+                Request changes
+              </button>
+            </div>
           )}
-          {actionError && (
+
+          {action && (
+            <form className="application-card__decision" onSubmit={submitAction}>
+              <div>
+                <h3>
+                  {action === 'approve'
+                    ? 'Approve application?'
+                    : action === 'reject'
+                      ? 'Reject application'
+                      : 'Request changes'}
+                </h3>
+                <p>
+                  {action === 'approve'
+                    ? 'You may include an optional response for the tenant.'
+                    : action === 'reject'
+                      ? 'Explain why this application cannot be approved.'
+                      : 'Tell the tenant exactly what needs to be updated.'}
+                </p>
+              </div>
+              <label htmlFor={`${action}-response-${application.id}`}>
+                {action === 'approve'
+                  ? 'Response (optional)'
+                  : action === 'reject'
+                    ? 'Rejection reason'
+                    : 'Changes required'}
+              </label>
+              <textarea
+                id={`${action}-response-${application.id}`}
+                value={response}
+                onChange={(event) => setResponse(event.target.value)}
+                rows="4"
+                maxLength="1000"
+                disabled={isUpdating}
+                aria-describedby={
+                  validationError
+                    ? `${application.id}-decision-error`
+                    : undefined
+                }
+              />
+              {validationError && (
+                <p
+                  className="application-form-error"
+                  id={`${application.id}-decision-error`}
+                  role="alert"
+                >
+                  {validationError}
+                </p>
+              )}
+              {actionError && (
+                <p className="application-form-error" role="alert">
+                  {actionError}
+                </p>
+              )}
+              <div className="application-card__actions">
+                <button
+                  type="submit"
+                  className={
+                    action === 'reject'
+                      ? 'application-button application-button--danger'
+                      : 'application-button application-button--primary'
+                  }
+                  disabled={isUpdating}
+                >
+                  {isUpdating ? 'Saving...' : 'Confirm'}
+                </button>
+                <button
+                  type="button"
+                  className="application-button application-button--quiet"
+                  onClick={closeAction}
+                  disabled={isUpdating}
+                >
+                  Go back
+                </button>
+              </div>
+            </form>
+          )}
+
+          {actionError && !action && (
             <p className="application-form-error" role="alert">
               {actionError}
             </p>
           )}
-          <div className="application-card__actions">
-            <button
-              type="submit"
-              className={
-                action === 'reject'
-                  ? 'application-button application-button--danger'
-                  : 'application-button application-button--primary'
-              }
-              disabled={isUpdating}
-            >
-              {isUpdating ? 'Saving...' : 'Confirm'}
-            </button>
-            <button
-              type="button"
-              className="application-button application-button--quiet"
-              onClick={closeAction}
-              disabled={isUpdating}
-            >
-              Go back
-            </button>
-          </div>
-        </form>
-      )}
-
-      {actionError && !action && (
-        <p className="application-form-error" role="alert">
-          {actionError}
-        </p>
+        </section>
       )}
     </article>
   )

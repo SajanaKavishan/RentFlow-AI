@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/shared_widgets.dart';
 import '../models/viewing.dart';
 
 class ViewingStatusChip extends StatelessWidget {
@@ -9,57 +10,38 @@ class ViewingStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appearance = switch (status) {
-      ViewingStatus.pending => const _StatusAppearance(
-        label: 'Pending',
-        foreground: Color(0xFF765B13),
-        background: Color(0xFFFFF1C7),
+    final (label, icon, tone) = switch (status) {
+      ViewingStatus.pending => (
+        'Pending',
+        Icons.schedule_outlined,
+        StatusTone.pending,
       ),
-      ViewingStatus.approved => const _StatusAppearance(
-        label: 'Approved',
-        foreground: Color(0xFF35613B),
-        background: Color(0xFFDDEDDD),
+      ViewingStatus.approved => (
+        'Approved',
+        Icons.check_circle_outline,
+        StatusTone.success,
       ),
-      ViewingStatus.rejected => const _StatusAppearance(
-        label: 'Rejected',
-        foreground: Color(0xFF8A3535),
-        background: Color(0xFFF5DDDC),
+      ViewingStatus.rejected => (
+        'Rejected',
+        Icons.cancel_outlined,
+        StatusTone.danger,
       ),
-      ViewingStatus.cancelled => const _StatusAppearance(
-        label: 'Cancelled',
-        foreground: Color(0xFF626262),
-        background: Color(0xFFE9E7E2),
+      ViewingStatus.cancelled => (
+        'Cancelled',
+        Icons.event_busy_outlined,
+        StatusTone.neutral,
       ),
-      ViewingStatus.completed => const _StatusAppearance(
-        label: 'Completed',
-        foreground: Color(0xFF43556A),
-        background: Color(0xFFDDE7EF),
+      ViewingStatus.completed => (
+        'Completed',
+        Icons.task_alt_outlined,
+        StatusTone.progress,
       ),
     };
 
-    return Chip(
-      label: Text(appearance.label),
-      labelStyle: TextStyle(
-        color: appearance.foreground,
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-      ),
-      backgroundColor: appearance.background,
-      side: BorderSide.none,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      visualDensity: VisualDensity.compact,
+    return Semantics(
+      label: 'Viewing status: $label',
+      excludeSemantics: true,
+      child: StatusChip(label: label, icon: icon, tone: tone),
     );
   }
-}
-
-class _StatusAppearance {
-  const _StatusAppearance({
-    required this.label,
-    required this.foreground,
-    required this.background,
-  });
-
-  final String label;
-  final Color foreground;
-  final Color background;
 }

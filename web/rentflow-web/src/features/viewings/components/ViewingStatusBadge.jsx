@@ -15,7 +15,11 @@ function ViewingStatusBadge({ status }) {
   }
 
   return (
-    <span className={`viewing-status viewing-status--${details.tone}`}>
+    <span
+      className={`viewing-status viewing-status--${details.tone}`}
+      aria-label={`Viewing status: ${details.label}`}
+    >
+      <span className="viewing-status__dot" aria-hidden="true" />
       {details.label}
     </span>
   )

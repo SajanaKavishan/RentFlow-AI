@@ -26,6 +26,10 @@ function enumLabel(value, labels) {
   return value.replace(/([a-z])([A-Z])/g, '$1 $2')
 }
 
+function enumKey(value, labels) {
+  return enumLabel(value, labels).toLowerCase().replace(/[^a-z0-9]+/g, '-')
+}
+
 function formatDateTime(value) {
   const date = new Date(value)
   return Number.isNaN(date.getTime())
@@ -76,7 +80,10 @@ function FindingList({ title, items, emptyMessage, tone = '' }) {
 
   return (
     <div className={`validation-findings__group${tone ? ` validation-findings__group--${tone}` : ''}`}>
-      <h5>{title}</h5>
+      <div className="validation-findings__heading">
+        <h5>{title}</h5>
+        <span>{findings.length}</span>
+      </div>
       {findings.length ? (
         <ul>
           {findings.map((item, index) => (
@@ -127,7 +134,10 @@ function SupportingDocumentCard({ document }) {
   return (
     <article className="supporting-document-card">
       <div className="supporting-document-card__header">
-        <h6>{document.documentType || 'Supporting document'}</h6>
+        <div>
+          <p className="supporting-document-card__eyebrow">Document finding</p>
+          <h6>{enumLabel(document.documentType) || 'Supporting document'}</h6>
+        </div>
         <span
           className={`supporting-document-card__review supporting-document-card__review--${document.requiresManualReview ? 'required' : 'clear'}`}
         >
@@ -136,6 +146,7 @@ function SupportingDocumentCard({ document }) {
       </div>
 
       <dl className="supporting-document-card__metadata">
+        <div><dt>Document reference</dt><dd>{document.documentId}</dd></div>
         <div><dt>Readable</dt><dd>{document.readable ? 'Yes' : 'No'}</dd></div>
         <div><dt>Detected category</dt><dd>{document.detectedDocumentCategory || 'Unknown'}</dd></div>
         <div><dt>Confidence</dt><dd>{document.confidenceLabel || 'Unknown'}</dd></div>
@@ -172,7 +183,13 @@ function SupportingDocumentVerification({ documents }) {
   const verification = Array.isArray(documents) ? documents : []
   return (
     <section className="structured-validation-section" aria-label="Supporting document verification">
-      <h4>Supporting document verification</h4>
+      <div className="structured-validation-section__header">
+        <div>
+          <p>AI document findings</p>
+          <h4>Supporting document verification</h4>
+        </div>
+        <span>{verification.length} reviewed</span>
+      </div>
       {verification.length ? (
         <div className="supporting-document-grid">
           {verification.map((document, index) => (
@@ -185,6 +202,55 @@ function SupportingDocumentVerification({ documents }) {
       ) : (
         <p className="structured-validation-section__empty">No supporting documents were analyzed.</p>
       )}
+    </section>
+  )
+}
+
+function isWorkflowStale(workflow, applicationUpdatedAt) {
+  const workflowTime = Date.parse(workflow.updatedAt || workflow.createdAt || '')
+  const applicationTime = Date.parse(applicationUpdatedAt || '')
+  return (
+    Number.isFinite(workflowTime) &&
+    Number.isFinite(applicationTime) &&
+    applicationTime > workflowTime
+  )
+}
+
+function AgenticReviewOverview({ review }) {
+  if (!review) return null
+
+  return (
+    <section
+      className="structured-validation-section"
+      aria-label="AI review summary"
+    >
+      <div className="structured-validation-section__header">
+        <div>
+          <p>Advisory analysis</p>
+          <h4>AI review summary</h4>
+        </div>
+        {review.agentVersion && <span>Version {review.agentVersion}</span>}
+      </div>
+      <div className="agentic-review-overview">
+        <div className="agentic-review-overview__summary">
+          <span>Recommendation</span>
+          <strong>{review.recommendation || 'No recommendation reported'}</strong>
+          <p>{review.summary || 'No AI review summary was reported.'}</p>
+        </div>
+        <div className="validation-findings">
+          <FindingList
+            title="Key findings"
+            items={review.keyFindings}
+            emptyMessage="No key findings were reported."
+          />
+          <FindingList
+            title="AI warnings"
+            items={review.warnings}
+            emptyMessage="No AI warnings were reported."
+            tone={review.warnings?.length ? 'warning' : 'success'}
+          />
+        </div>
+      </div>
     </section>
   )
 }
@@ -269,7 +335,7 @@ function ValidationStep({ step }) {
   )
 }
 
-function WorkflowResult({ workflow }) {
+function WorkflowResult({ workflow, applicationUpdatedAt, canRun }) {
   const summary = workflow.summary
   const warnings = summary
     ? [
@@ -282,9 +348,41 @@ function WorkflowResult({ workflow }) {
     (left, right) => left.stepOrder - right.stepOrder,
   )
   const agenticReview = summary?.agenticReview
+  const workflowStatus = enumLabel(workflow.status, WORKFLOW_STATUS)
+  const workflowStatusKey = enumKey(workflow.status, WORKFLOW_STATUS)
+  const isAwaitingHumanReview = workflowStatusKey === 'awaiting-human-review'
+  const isStale = canRun && isWorkflowStale(workflow, applicationUpdatedAt)
 
   return (
     <div className="validation-workflow">
+      <div
+        className={`validation-workflow__status validation-workflow__status--${workflowStatusKey}`}
+        role="status"
+      >
+        <span className="validation-workflow__status-icon" aria-hidden="true">
+          {isAwaitingHumanReview ? '!' : '•'}
+        </span>
+        <div>
+          <span>Workflow status</span>
+          <strong>{workflowStatus}</strong>
+          <p>
+            {isAwaitingHumanReview
+              ? 'Automated checks are ready. A landlord must review the evidence and make the final decision.'
+              : 'Review the workflow output and supporting evidence below.'}
+          </p>
+          <span className="validation-workflow__updated">
+            Last updated {formatDateTime(workflow.updatedAt || workflow.createdAt)}
+          </span>
+        </div>
+      </div>
+
+      {isStale && (
+        <p className="validation-workflow__stale" role="status">
+          This application changed after this validation run. Run validation
+          again before relying on these findings.
+        </p>
+      )}
+
       <div className="validation-workflow__summary">
         <div>
           <span>Completeness score</span>
@@ -295,8 +393,8 @@ function WorkflowResult({ workflow }) {
           <strong>{workflow.recommendation || 'Validation incomplete'}</strong>
         </div>
         <div>
-          <span>Workflow status</span>
-          <strong>{enumLabel(workflow.status, WORKFLOW_STATUS)}</strong>
+          <span>Current step</span>
+          <strong>{workflow.currentStep ?? 'Not reported'}</strong>
         </div>
         <div>
           <span>Human review</span>
@@ -307,40 +405,82 @@ function WorkflowResult({ workflow }) {
       </div>
 
       {summary && (
-        <div className="validation-findings" aria-label="Automated validation findings">
-          <FindingList
-            title="Missing application information"
-            items={summary.applicationData?.missingFields}
-            emptyMessage="No required application information is missing."
-          />
-          <FindingList
-            title="Missing required documents"
-            items={summary.documents?.missingDocumentTypes}
-            emptyMessage="No required documents are missing."
-          />
-          <FindingList
-            title="Warnings"
-            items={warnings}
-            emptyMessage="No warnings were reported."
-            tone="warning"
-          />
-          <FindingList
-            title="Deterministic rules passed"
-            items={summary.deterministicRules?.passedRules}
-            emptyMessage="No passing rule results were reported."
-            tone="success"
-          />
-          <FindingList
-            title="Deterministic rules requiring attention"
-            items={summary.deterministicRules?.failedRules}
-            emptyMessage="No deterministic rules failed."
-            tone="danger"
-          />
-        </div>
+        <>
+          <section className="structured-validation-section">
+            <div className="structured-validation-section__header">
+              <div>
+                <p>Completeness</p>
+                <h4>Required items and warnings</h4>
+              </div>
+            </div>
+            <div
+              className="validation-findings"
+              aria-label="Required items and validation warnings"
+            >
+              <FindingList
+                title="Missing application information"
+                items={summary.applicationData?.missingFields}
+                emptyMessage="No required application information is missing."
+                tone={
+                  summary.applicationData?.missingFields?.length
+                    ? 'warning'
+                    : 'success'
+                }
+              />
+              <FindingList
+                title="Missing required documents"
+                items={summary.documents?.missingDocumentTypes}
+                emptyMessage="No required documents are missing."
+                tone={
+                  summary.documents?.missingDocumentTypes?.length
+                    ? 'danger'
+                    : 'success'
+                }
+              />
+              <FindingList
+                title="Warnings"
+                items={warnings}
+                emptyMessage="No warnings were reported."
+                tone={warnings.length ? 'warning' : 'success'}
+              />
+            </div>
+          </section>
+
+          <section className="structured-validation-section">
+            <div className="structured-validation-section__header">
+              <div>
+                <p>Rule-based checks</p>
+                <h4>Deterministic checks</h4>
+              </div>
+            </div>
+            <div
+              className="validation-findings"
+              aria-label="Deterministic validation checks"
+            >
+              <FindingList
+                title="Checks passed"
+                items={summary.deterministicRules?.passedRules}
+                emptyMessage="No passing rule results were reported."
+                tone="success"
+              />
+              <FindingList
+                title="Checks requiring attention"
+                items={summary.deterministicRules?.failedRules}
+                emptyMessage="No deterministic rules failed."
+                tone={
+                  summary.deterministicRules?.failedRules?.length
+                    ? 'danger'
+                    : 'success'
+                }
+              />
+            </div>
+          </section>
+        </>
       )}
 
       {agenticReview && (
         <>
+          <AgenticReviewOverview review={agenticReview} />
           <SupportingDocumentVerification
             documents={agenticReview.supportingDocumentVerification}
           />
@@ -362,7 +502,11 @@ function WorkflowResult({ workflow }) {
   )
 }
 
-function ApplicationValidationSection({ applicationId, canRun }) {
+function ApplicationValidationSection({
+  applicationId,
+  applicationUpdatedAt,
+  canRun,
+}) {
   const [state, setState] = useState({
     status: 'loading',
     runs: [],
@@ -370,6 +514,8 @@ function ApplicationValidationSection({ applicationId, canRun }) {
     error: '',
   })
   const [isRunning, setIsRunning] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [runNotice, setRunNotice] = useState('')
 
   useEffect(() => {
     let isActive = true
@@ -397,13 +543,24 @@ function ApplicationValidationSection({ applicationId, canRun }) {
     return () => {
       isActive = false
     }
-  }, [applicationId])
+  }, [applicationId, reloadKey])
+
+  function retryValidationHistory() {
+    setState({
+      status: 'loading',
+      runs: [],
+      selectedId: null,
+      error: '',
+    })
+    setReloadKey((current) => current + 1)
+  }
 
   async function runValidation() {
     if (isRunning || !canRun) return
 
     setIsRunning(true)
     setState((current) => ({ ...current, error: '' }))
+    setRunNotice('')
     try {
       const workflow = await runApplicationValidation(applicationId)
       setState((current) => ({
@@ -412,6 +569,7 @@ function ApplicationValidationSection({ applicationId, canRun }) {
         selectedId: workflow.id,
         error: '',
       }))
+      setRunNotice('Validation workflow updated from the service.')
     } catch (error) {
       setState((current) => ({
         ...current,
@@ -431,9 +589,9 @@ function ApplicationValidationSection({ applicationId, canRun }) {
     <section className="application-validation" aria-label="Application validation">
       <div className="application-validation__header">
         <div>
-          <p className="application-validation__eyebrow">Automated findings</p>
-          <h3>Application validation</h3>
-          <p>Check application completeness, documents, and deterministic rules.</p>
+          <p className="application-validation__eyebrow">AI review workspace</p>
+          <h3>Automated validation findings</h3>
+          <p>Review workflow status, deterministic checks, and document findings.</p>
         </div>
         <button
           type="button"
@@ -446,9 +604,17 @@ function ApplicationValidationSection({ applicationId, canRun }) {
       </div>
 
       <p className="application-validation__boundary">
-        Automated validation supports review only. Final rental decisions require
-        landlord approval.
+        <strong>Human decision required.</strong> Automated validation can flag
+        evidence, missing items, and warnings, but it does not approve or reject
+        an application. A landlord must review the source documents and make the
+        final decision.
       </p>
+
+      {runNotice && (
+        <p className="application-validation__notice" role="status">
+          {runNotice}
+        </p>
+      )}
 
       {!canRun && (
         <p className="application-validation__unavailable">
@@ -464,7 +630,23 @@ function ApplicationValidationSection({ applicationId, canRun }) {
         </div>
       )}
 
-      {state.error && (
+      {state.status === 'error' && (
+        <div className="application-validation__error" role="alert">
+          <div>
+            <strong>Validation history unavailable</strong>
+            <p>{state.error}</p>
+          </div>
+          <button
+            type="button"
+            className="application-button application-button--quiet"
+            onClick={retryValidationHistory}
+          >
+            Retry validation history
+          </button>
+        </div>
+      )}
+
+      {state.status === 'success' && state.error && (
         <p className="application-form-error" role="alert">
           {state.error}
         </p>
@@ -503,7 +685,11 @@ function ApplicationValidationSection({ applicationId, canRun }) {
               </select>
             </div>
           )}
-          <WorkflowResult workflow={selectedRun} />
+          <WorkflowResult
+            workflow={selectedRun}
+            applicationUpdatedAt={applicationUpdatedAt}
+            canRun={canRun}
+          />
         </>
       )}
     </section>

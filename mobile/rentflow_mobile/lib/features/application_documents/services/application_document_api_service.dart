@@ -23,7 +23,7 @@ class ApplicationDocumentApiService {
     return _parseDocumentList(response.body);
   }
 
-  Future<ApplicationDocument?> uploadDocument({
+  Future<ApplicationDocument> uploadDocument({
     required String applicationId,
     required ApplicationDocumentType documentType,
     required String fileName,
@@ -46,7 +46,6 @@ class ApplicationDocumentApiService {
       );
 
     final response = await _sendStreamed(() => apiClient.send(request));
-    if (response.body.trim().isEmpty) return null;
     return _parseDocument(response.body);
   }
 

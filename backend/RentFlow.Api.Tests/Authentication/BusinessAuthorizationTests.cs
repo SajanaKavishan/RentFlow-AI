@@ -254,6 +254,126 @@ public sealed class BusinessAuthorizationTests
         Assert.Equal(HttpStatusCode.Forbidden, tenantHistory.StatusCode);
     }
 
+    [Fact]
+    public async Task Viewing_CrossRoleRoundTrip_PersistsLandlordDecisionForTenantRefresh()
+    {
+        using var factory = new AuthApiFactory();
+        var propertyId = Guid.NewGuid();
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+        using var landlord = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Landlord);
+
+        var create = await tenant.PostAsJsonAsync("/api/viewings", new
+        {
+            propertyId,
+            requestedDateTime = DateTimeOffset.UtcNow.AddDays(4),
+            tenantMessage = "Please confirm accessibility."
+        });
+        var created = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement;
+        var viewingId = created.GetProperty("id").GetGuid();
+
+        var landlordQueue = await landlord.GetFromJsonAsync<JsonElement>(
+            $"/api/viewings/property/{propertyId}");
+        var decision = await landlord.PatchAsJsonAsync(
+            $"/api/viewings/{viewingId}/approve",
+            new { landlordResponse = "Accessibility confirmed." });
+        var tenantRefresh = await tenant.GetFromJsonAsync<JsonElement>("/api/viewings");
+        var refreshed = tenantRefresh.EnumerateArray().Single();
+
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        Assert.Single(landlordQueue.EnumerateArray());
+        Assert.Equal(TenantA, landlordQueue.EnumerateArray().Single()
+            .GetProperty("tenantId").GetGuid());
+        Assert.Equal(HttpStatusCode.OK, decision.StatusCode);
+        Assert.Equal((int)ViewingStatus.Approved, refreshed.GetProperty("status").GetInt32());
+        Assert.Equal("Accessibility confirmed.",
+            refreshed.GetProperty("landlordResponse").GetString());
+    }
+
+    [Fact]
+    public async Task RentalApplication_CrossRoleRoundTrip_PreservesDocumentsAndResubmissionRules()
+    {
+        using var factory = new AuthApiFactory();
+        var propertyId = Guid.NewGuid();
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant, false);
+        using var landlord = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Landlord, false);
+
+        var create = await tenant.PostAsJsonAsync("/api/rental-applications", new
+        {
+            propertyId,
+            moveInDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            monthlyIncome = 250000m,
+            occupation = "Engineer",
+            numberOfOccupants = 2,
+            tenantNote = "Cross-role workflow"
+        });
+        var created = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement;
+        var applicationId = created.GetProperty("id").GetGuid();
+
+        using var identityForm = DocumentForm("IdentityDocument", "identity.pdf");
+        using var incomeForm = DocumentForm("IncomeProof", "income.pdf");
+        var identityUpload = await tenant.PostAsync(
+            $"/api/rental-applications/{applicationId}/documents", identityForm);
+        var incomeUpload = await tenant.PostAsync(
+            $"/api/rental-applications/{applicationId}/documents", incomeForm);
+        var submit = await tenant.PatchAsync(
+            $"/api/rental-applications/{applicationId}/submit", null);
+
+        var landlordQueue = await landlord.GetFromJsonAsync<JsonElement>(
+            $"/api/rental-applications/property/{propertyId}");
+        var documents = await landlord.GetFromJsonAsync<JsonElement>(
+            $"/api/rental-applications/{applicationId}/documents");
+        var validation = await landlord.PostAsync(
+            $"/api/rental-applications/{applicationId}/validation-runs", null);
+        var validationBody = JsonDocument.Parse(
+            await validation.Content.ReadAsStringAsync()).RootElement;
+
+        var changes = await landlord.PatchAsJsonAsync(
+            $"/api/rental-applications/{applicationId}/request-changes",
+            new { landlordResponse = "Add current employment details." });
+        var tenantRefresh = await tenant.GetFromJsonAsync<JsonElement>(
+            "/api/rental-applications");
+        var changedApplication = tenantRefresh.EnumerateArray().Single();
+
+        var update = await tenant.PutAsJsonAsync(
+            $"/api/rental-applications/{applicationId}", new
+            {
+                moveInDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(35)),
+                monthlyIncome = 260000m,
+                occupation = "Senior Engineer",
+                numberOfOccupants = 2,
+                tenantNote = "Employment details updated"
+            });
+        using var employmentForm = DocumentForm(
+            "EmploymentLetter", "employment.pdf");
+        var employmentUpload = await tenant.PostAsync(
+            $"/api/rental-applications/{applicationId}/documents", employmentForm);
+        var resubmit = await tenant.PatchAsync(
+            $"/api/rental-applications/{applicationId}/submit", null);
+        var landlordRefresh = await landlord.GetFromJsonAsync<JsonElement>(
+            $"/api/rental-applications/property/{propertyId}");
+
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, identityUpload.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, incomeUpload.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, submit.StatusCode);
+        Assert.Single(landlordQueue.EnumerateArray());
+        Assert.Equal(2, documents.GetArrayLength());
+        Assert.Equal(HttpStatusCode.Created, validation.StatusCode);
+        Assert.Equal((int)ApplicationValidationWorkflowStatus.AwaitingHumanReview,
+            validationBody.GetProperty("status").GetInt32());
+        Assert.True(validationBody.GetProperty("requiresHumanApproval").GetBoolean());
+        Assert.Equal(HttpStatusCode.OK, changes.StatusCode);
+        Assert.Equal((int)RentalApplicationStatus.ChangesRequested,
+            changedApplication.GetProperty("status").GetInt32());
+        Assert.Equal("Add current employment details.",
+            changedApplication.GetProperty("landlordResponse").GetString());
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, employmentUpload.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, resubmit.StatusCode);
+        Assert.Equal((int)RentalApplicationStatus.Submitted,
+            landlordRefresh.EnumerateArray().Single().GetProperty("status").GetInt32());
+    }
+
     [Theory]
     [InlineData("not-a-guid", "Tenant")]
     [InlineData("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", null)]
@@ -314,6 +434,18 @@ public sealed class BusinessAuthorizationTests
         numberOfOccupants = 2,
         tenantNote = "Test"
     };
+
+    private static MultipartFormDataContent DocumentForm(
+        string documentType,
+        string fileName)
+    {
+        var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent([1, 2, 3]);
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        form.Add(file, "file", fileName);
+        form.Add(new StringContent(documentType), "documentType");
+        return form;
+    }
 
     private static async Task<ViewingRequest> SeedViewingAsync(AuthApiFactory factory, Guid tenantId)
     {
