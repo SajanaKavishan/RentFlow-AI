@@ -170,6 +170,10 @@ builder.Services.AddScoped<
     PropertyService>();
 
 builder.Services.AddScoped<
+    IPropertyAccessGuard,
+    PropertyAccessGuard>();
+
+builder.Services.AddScoped<
     IPropertyImageService,
     PropertyImageService>();
 
