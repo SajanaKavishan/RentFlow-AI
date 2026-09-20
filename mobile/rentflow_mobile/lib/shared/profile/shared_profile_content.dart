@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../features/auth/controllers/auth_controller.dart';
 import '../../features/auth/models/current_user.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
@@ -14,87 +15,140 @@ class SharedProfileContent extends StatelessWidget {
   final CurrentUser user;
   final VoidCallback? onOpenApplications;
 
+  void _showDetails(
+    BuildContext context, {
+    required String title,
+    required Map<String, String> values,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: AppSpacing.page,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: AppSpacing.sm),
+              const Text(
+                'These details are read-only. Editing is unavailable.',
+              ),
+              for (final entry in values.entries) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Text(entry.key, style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: AppSpacing.xs),
+                SelectableText(
+                  _availableValue(entry.value),
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              ],
+              const SizedBox(height: AppSpacing.lg),
+              OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => AuthenticatedPage(
     maxWidth: 580,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PageHeader(
-          eyebrow: 'Profile',
-          title: user.fullName.trim().isEmpty ? 'Your account' : user.fullName,
-          subtitle:
-              'Authenticated account details and shared RentFlow settings.',
-          trailing: _ProfileAvatar(name: user.fullName),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
+          child: Column(
+            children: [
+              CircleAvatar(
+                radius: 36,
+                backgroundColor: AppPalette.sage,
+                foregroundColor: AppPalette.darkOlive,
+                child: Text(
+                  _initials(user.fullName),
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.base),
+              Text(
+                _availableValue(user.fullName),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                _availableValue(user.email),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: AppSpacing.lg),
         _ProfileSection(
           title: 'Account',
           children: [
-            _ProfileValueTile(
-              icon: Icons.badge_outlined,
-              label: 'Full name',
-              value: _availableValue(user.fullName),
-            ),
-            _ProfileValueTile(
-              icon: Icons.alternate_email,
-              label: 'Email',
-              value: _availableValue(user.email),
-            ),
-            _ProfileValueTile(
-              icon: Icons.phone_outlined,
-              label: 'Phone number',
-              value: _availableValue(user.phoneNumber),
-            ),
-            _ProfileValueTile(
+            _ProfileTile(
               icon: Icons.person_outline,
-              label: 'Role',
-              value: user.role.value,
+              title: 'Personal information',
+              subtitle: 'View your account details',
+              onTap: () => _showDetails(
+                context,
+                title: 'Personal information',
+                values: {'Full name': user.fullName},
+              ),
             ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        const _ProfileSection(
-          title: 'Security',
-          children: [
-            _PendingProfileTile(
+            _ProfileTile(
+              icon: Icons.alternate_email,
+              title: 'Email & phone',
+              subtitle: 'View your contact details',
+              onTap: () => _showDetails(
+                context,
+                title: 'Email & phone',
+                values: {'Email': user.email, 'Phone number': user.phoneNumber},
+              ),
+            ),
+            const _ProfileTile(
               icon: Icons.lock_outline,
               title: 'Password & security',
-              message: 'Security settings are not available in the mobile app.',
+              subtitle: 'Not available yet',
             ),
+            if (user.role == UserRole.tenant)
+              _ProfileTile(
+                icon: Icons.folder_outlined,
+                title: 'My documents',
+                subtitle: onOpenApplications == null
+                    ? 'Not available yet'
+                    : 'View documents in your applications',
+                onTap: onOpenApplications,
+              ),
           ],
         ),
         const SizedBox(height: AppSpacing.lg),
         const _ProfileSection(
           title: 'Preferences',
           children: [
-            _PendingProfileTile(
-              icon: Icons.tune_outlined,
-              title: 'App preferences',
-              message: 'Preference controls have not been integrated yet.',
+            _ProfileTile(
+              icon: Icons.notifications_none_outlined,
+              title: 'Notifications',
+              subtitle: 'Not available yet',
             ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        _ProfileSection(
-          title: 'Documents',
-          children: [
-            _ProfileActionTile(
-              icon: Icons.folder_outlined,
-              title: 'Application documents',
-              message: onOpenApplications == null
-                  ? 'Document access is not available for this mobile workspace.'
-                  : 'Documents are managed within each rental application.',
-              status: onOpenApplications == null
-                  ? const StatusChip(
-                      label: 'Integration pending',
-                      tone: StatusTone.warning,
-                    )
-                  : null,
-              actionLabel: onOpenApplications == null
-                  ? null
-                  : 'Open applications',
-              onAction: onOpenApplications,
+            _ProfileTile(
+              icon: Icons.language_outlined,
+              title: 'Language',
+              subtitle: 'Not available yet',
             ),
           ],
         ),
@@ -102,39 +156,41 @@ class SharedProfileContent extends StatelessWidget {
         const _ProfileSection(
           title: 'Support',
           children: [
-            _PendingProfileTile(
+            _ProfileTile(
               icon: Icons.help_outline,
               title: 'Help & support',
-              message: 'In-app support is not connected yet.',
+              subtitle: 'Not available yet',
+            ),
+            // The existing feedback service has no delivery transport.
+            _ProfileTile(
+              icon: Icons.chat_bubble_outline,
+              title: 'Feedback',
+              subtitle: 'Message delivery unavailable',
             ),
           ],
         ),
+        const SizedBox(height: AppSpacing.lg),
+        OutlinedButton.icon(
+          key: const Key('profile-sign-out'),
+          onPressed: () => AuthScope.of(context).logout(),
+          icon: const Icon(Icons.logout, size: 20),
+          label: const Text('Sign out'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppPalette.danger,
+            side: const BorderSide(color: AppPalette.outline),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.base),
+        Text(
+          'RentFlow AI v2.4.1 · © 2026',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: AppPalette.secondaryText.withValues(alpha: 0.55),
+            fontSize: 11,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
       ],
-    ),
-  );
-}
-
-class _ProfileAvatar extends StatelessWidget {
-  const _ProfileAvatar({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 52,
-    height: 52,
-    alignment: Alignment.center,
-    decoration: const BoxDecoration(
-      color: AppPalette.darkOlive,
-      shape: BoxShape.circle,
-    ),
-    child: Text(
-      _initials(name),
-      style: const TextStyle(
-        color: AppPalette.white,
-        fontSize: 17,
-        fontWeight: FontWeight.w800,
-      ),
     ),
   );
 }
@@ -149,14 +205,23 @@ class _ProfileSection extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      SectionHeader(title: title),
+      Padding(
+        padding: const EdgeInsets.only(left: AppSpacing.xs),
+        child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+      ),
       const SizedBox(height: AppSpacing.md),
       AppCard(
+        padding: EdgeInsets.zero,
         child: Column(
           children: [
             for (var index = 0; index < children.length; index++) ...[
               children[index],
-              if (index < children.length - 1) const Divider(height: 1),
+              if (index < children.length - 1)
+                const Divider(
+                  height: 1,
+                  indent: 56,
+                  endIndent: AppSpacing.base,
+                ),
             ],
           ],
         ),
@@ -165,116 +230,52 @@ class _ProfileSection extends StatelessWidget {
   );
 }
 
-class _ProfileValueTile extends StatelessWidget {
-  const _ProfileValueTile({
+class _ProfileTile extends StatelessWidget {
+  const _ProfileTile({
     required this.icon,
-    required this.label,
-    required this.value,
+    required this.title,
+    required this.subtitle,
+    this.onTap,
   });
 
   final IconData icon;
-  final String label;
-  final String value;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 21, color: AppPalette.olive),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: AppPalette.secondaryText,
-                ),
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    enabled: onTap != null,
+    child: InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.base),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: AppPalette.olive),
+            const SizedBox(width: AppSpacing.base),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+                ],
               ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(value, style: Theme.of(context).textTheme.bodyLarge),
+            ),
+            if (onTap != null) ...[
+              const SizedBox(width: AppSpacing.sm),
+              const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: AppPalette.secondaryText,
+              ),
             ],
-          ),
+          ],
         ),
-      ],
-    ),
-  );
-}
-
-class _PendingProfileTile extends StatelessWidget {
-  const _PendingProfileTile({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => _ProfileActionTile(
-    icon: icon,
-    title: title,
-    message: message,
-    status: const StatusChip(
-      label: 'Integration pending',
-      tone: StatusTone.warning,
-    ),
-  );
-}
-
-class _ProfileActionTile extends StatelessWidget {
-  const _ProfileActionTile({
-    required this.icon,
-    required this.title,
-    required this.message,
-    this.status,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-  final Widget? status;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 22, color: AppPalette.olive),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: AppSpacing.xs),
-              Text(message, style: Theme.of(context).textTheme.bodyMedium),
-              if (status != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                status!,
-              ],
-              if (actionLabel != null && onAction != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                TextButton.icon(
-                  onPressed: onAction,
-                  icon: const Icon(Icons.arrow_forward, size: 18),
-                  label: Text(actionLabel!),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
+      ),
     ),
   );
 }
@@ -288,9 +289,10 @@ String _initials(String value) {
   final words = value
       .trim()
       .split(RegExp(r'\s+'))
-      .where((word) => word.isNotEmpty)
+      .where((word) => word.isNotEmpty);
+  if (words.isEmpty) return '?';
+  return words
       .take(2)
-      .toList(growable: false);
-  if (words.isEmpty) return 'RF';
-  return words.map((word) => word[0].toUpperCase()).join();
+      .map((word) => word.characters.first.toUpperCase())
+      .join();
 }

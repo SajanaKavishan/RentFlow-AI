@@ -434,14 +434,7 @@ void main() {
       await tester.tap(navigationDestination('Profile'));
       await tester.pumpAndSettle();
       expect(find.text('user@example.com'), findsOneWidget);
-      expect(find.text('+94 77 123 4567'), findsOneWidget);
-      for (final section in [
-        'Account',
-        'Security',
-        'Preferences',
-        'Documents',
-        'Support',
-      ]) {
+      for (final section in ['Account', 'Preferences', 'Support']) {
         expect(find.text(section), findsOneWidget);
       }
     },
@@ -501,7 +494,8 @@ void main() {
     final storage = await pumpShell(tester, UserRole.tenant);
     await tester.tap(navigationDestination('Profile'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Logout'));
+    await tester.ensureVisible(find.text('Sign out'));
+    await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
     expect(storage.token, isNull);
   });

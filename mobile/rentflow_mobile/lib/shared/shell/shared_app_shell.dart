@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../features/auth/controllers/auth_controller.dart';
 import '../../features/auth/models/current_user.dart';
 import '../../features/rental_applications/screens/my_rental_applications_screen.dart';
 import '../../features/rental_applications/screens/landlord_rental_applications_screen.dart';
@@ -213,14 +212,6 @@ class _SharedAppShellState extends State<SharedAppShell> {
           ),
         const SizedBox(width: AppSpacing.sm),
       ],
-      RoleDestinationId.profile => [
-        TextButton.icon(
-          onPressed: () => AuthScope.of(context).logout(),
-          icon: const Icon(Icons.logout, size: 18),
-          label: const Text('Logout'),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-      ],
       _ => null,
     },
     bottom: const PreferredSize(
@@ -235,7 +226,7 @@ class _SharedAppShellState extends State<SharedAppShell> {
       DestinationExperience.profile => SharedProfileContent(
         user: widget.user,
         onOpenApplications: widget.user.role == UserRole.tenant
-            ? () => _selectDestination(RoleDestinationId.applications)
+            ? _openDocuments
             : null,
       ),
       DestinationExperience.feature => _featureFor(destination.id),

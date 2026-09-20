@@ -586,7 +586,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Logout'));
+    await tester.ensureVisible(find.text('Sign out'));
+    await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('login-submit')), findsOneWidget);
     expect(storage.token, isNull);
