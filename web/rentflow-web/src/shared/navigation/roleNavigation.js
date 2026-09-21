@@ -31,6 +31,16 @@ export const NAV_ITEMS = Object.freeze([
     note: 'Application validation and document review',
   },
   {
+    id: 'lease-payments', label: 'Lease & Payments', path: '/modules/lease-payments', roles: [T], available: false,
+    owner: 'Lease and payment management',
+    description: 'Your lease details and payment schedule will appear here when these features are available.',
+  },
+  {
+    id: 'tenant-maintenance', label: 'Maintenance', path: '/modules/maintenance', roles: [T], available: false,
+    owner: 'Maintenance',
+    description: 'Maintenance requests and updates will appear here when this feature is available.',
+  },
+  {
     id: 'pricing-lease', label: 'Pricing / Lease', path: '/modules/pricing-lease', roles: [L], available: false,
     owner: 'Pricing and lease management',
     description: 'Pricing and lease tools will be connected when that module is merged.',

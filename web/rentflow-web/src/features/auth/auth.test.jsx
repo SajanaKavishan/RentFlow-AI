@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App.jsx'
 import { ApiError, apiRequest, setUnauthorizedHandler } from '../../core/api/apiClient.js'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
@@ -26,7 +26,8 @@ function renderApp(api, initialEntry = '/login') {
 }
 
 describe('React authentication', () => {
-  afterEach(() => { cleanup(); setUnauthorizedHandler(null) })
+  beforeEach(() => { vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response('[]', { status: 200 })))) })
+  afterEach(() => { cleanup(); setUnauthorizedHandler(null); vi.unstubAllGlobals() })
 
   it('persists and clears the access token through the storage abstraction', () => {
     tokenStorage.setToken('access-token')

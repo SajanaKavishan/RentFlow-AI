@@ -5,6 +5,7 @@ import { navigationForRole } from '../navigation/roleNavigation.js'
 import Icon from '../ui/Icons.jsx'
 import { BrandWordmark } from '../ui/BrandLogo.jsx'
 import { initialsForName } from '../ui/userDisplay.js'
+import { USER_ROLES } from '../../features/auth/authModel.js'
 import './shell.css'
 
 function iconForItem(label) {
@@ -18,6 +19,7 @@ function iconForItem(label) {
 
 export default function AppShell() {
   const { user, logout } = useAuth()
+  const isTenant = user.role === USER_ROLES.TENANT
   const location = useLocation()
   const [menu, setMenu] = useState({ path: location.pathname, open: false })
   const menuOpen = menu.path === location.pathname && menu.open
@@ -26,7 +28,13 @@ export default function AppShell() {
   useEffect(() => {
     if (!menuOpen) return undefined
     const sidebar = sidebarRef.current
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     sidebar?.querySelector('a[href]')?.focus()
+    const desktop = window.matchMedia('(min-width: 901px)')
+    const onDesktop = (event) => {
+      if (event.matches) setMenu({ path: location.pathname, open: false })
+    }
     const onKeyDown = (event) => {
       if (event.key === 'Escape') { setMenu({ path: location.pathname, open: false }); menuRef.current?.focus() }
       if (event.key === 'Tab' && sidebar) {
@@ -39,7 +47,12 @@ export default function AppShell() {
       }
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    desktop.addEventListener('change', onDesktop)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKeyDown)
+      desktop.removeEventListener('change', onDesktop)
+    }
   }, [menuOpen, location.pathname])
   const items = navigationForRole(user.role)
   const current = items.find((item) => item.path === location.pathname)?.label
@@ -49,9 +62,10 @@ export default function AppShell() {
     <Icon name={iconForItem(item.label)} size={19} /><span className="shared-nav-link__label">{item.label}</span>{!item.available && <span className="shared-nav-link__soon">Soon</span>}
   </NavLink>
 
-  return <div className="shared-shell">
+  return <div className={`shared-shell${isTenant ? ' shared-shell--tenant' : ''}`}>
     <aside ref={sidebarRef} id="shared-navigation" role={menuOpen ? 'dialog' : undefined} aria-modal={menuOpen ? 'true' : undefined} aria-label={menuOpen ? 'Navigation menu' : undefined} className={`shared-sidebar${menuOpen ? ' shared-sidebar--open' : ''}`}>
-      <Link className="shared-brand" to="/dashboard" aria-label="RentFlow dashboard" onClick={closeMenu}><BrandWordmark className="shared-brand__image" decorative /></Link>
+      <Link className="shared-brand" to="/dashboard" aria-label="RentFlow dashboard" onClick={closeMenu}>{isTenant ? <><span className="shared-brand__symbol"><Icon name="home" size={23} /></span><span><strong>RentFlow AI</strong><small>Property Management</small></span></> : <BrandWordmark className="shared-brand__image" decorative />}</Link>
+      <button className="shared-sidebar__close" type="button" aria-label="Close menu" onClick={closeMenu}><Icon name="close" size={20} /></button>
       <div className="shared-sidebar__workspace"><span className="shared-sidebar__workspace-dot" aria-hidden="true" /><span>{user.role} workspace</span></div>
       <nav aria-label="Primary navigation" className="shared-sidebar__nav">
         <div className="shared-sidebar__nav-main">{items.filter((item) => item.path !== '/profile').map(navLink)}</div>
@@ -65,7 +79,7 @@ export default function AppShell() {
       <header className="shared-topbar">
         <button ref={menuRef} type="button" className="shared-menu-button" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="shared-navigation" onClick={() => setMenu({ path: location.pathname, open: !menuOpen })}><Icon name={menuOpen ? 'close' : 'menu'} size={22} /></button>
         <div className="shared-topbar__title"><span className="shared-topbar__eyebrow">{user.role} workspace</span><strong>{current}</strong></div>
-        <Link className="shared-topbar__account" to="/profile" title={user.email} onClick={closeMenu} aria-label={`Profile for ${user.fullName}`}><span className="shared-topbar__name">{user.fullName}</span><span className="shared-avatar" aria-hidden="true">{initialsForName(user.fullName)}</span></Link>
+        <Link className="shared-topbar__account" to="/profile" title={user.email} onClick={closeMenu} aria-label={`Profile for ${user.fullName}`}><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span>{isTenant && <span className="shared-topbar__role">Tenant</span>}</span><span className="shared-avatar" aria-hidden="true">{initialsForName(user.fullName)}</span></Link>
       </header>
       <div className="shared-shell__content"><Outlet /></div>
     </div>

@@ -1,5 +1,28 @@
 # React + Vite
 
+## Tenant dashboard
+
+The tenant dashboard reuses the shared role navigation, authenticated user profile,
+API client and UI tokens. Its olive sidebar and cream card layout adapt to a mobile
+navigation drawer and stacked cards on narrow screens.
+
+- Application totals, under-review counts and change requests use
+  `GET /api/rental-applications`.
+- Upcoming viewings are approved records with a future `requestedDateTime` from
+  `GET /api/viewings`; pending requests are counted separately. Dates display in
+  the browser's local time zone. Summaries load when the dashboard mounts and
+  failed requests can be retried independently.
+- Both APIs derive the tenant from the bearer session. Loading, empty and failed
+  responses have separate states; account changes discard previous summaries.
+- My Viewings and My Applications retain `/modules/my-viewings` and
+  `/modules/my-applications`. These existing web destinations are integration
+  placeholders; their management workflows are currently in the mobile app.
+- Property browsing/recommendations, lease/payments and maintenance await their
+  owning modules. The dashboard shows pending states without invented records.
+
+Run `npm run lint`, `npm test` and `npm run build` to validate the web app
+(`npm.cmd` can be used on Windows if PowerShell script execution is disabled).
+
 ## Authentication
 
 Phase 2 stores only the JWT access token behind `tokenStorage` using browser

@@ -46,6 +46,10 @@ export function getApplicationById(id) {
   return request(applicationPath(id))
 }
 
+export function getMyApplications() {
+  return request('/api/rental-applications')
+}
+
 export function markUnderReview(id) {
   return request(applicationPath(id, 'review'), { method: 'PATCH' })
 }

@@ -1,7 +1,7 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App.jsx'
 import { tokenStorage } from '../core/auth/tokenStorage.js'
 import { AuthProvider } from '../features/auth/AuthContext.jsx'
@@ -16,7 +16,11 @@ function renderApp(role, path = '/dashboard', authenticated = true) {
   return render(<MemoryRouter initialEntries={[path]}><AuthProvider api={api}><App /></AuthProvider></MemoryRouter>)
 }
 
-afterEach(() => { cleanup(); tokenStorage.clearToken() })
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response('[]', { status: 200 }))))
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+})
+afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals() })
 
 describe('shared React shell', () => {
   it('keeps unauthenticated routes on login outside the shell', async () => {
@@ -42,7 +46,7 @@ describe('shared React shell', () => {
   })
 
   it.each([
-    ['Tenant', ['Dashboard', 'Properties', 'My Viewings', 'My Applications', 'Profile']],
+    ['Tenant', ['Dashboard', 'Properties', 'My Viewings', 'My Applications', 'Lease & Payments', 'Maintenance', 'Profile']],
     ['Landlord', ['Dashboard', 'Properties', 'Viewing Requests', 'Rental Applications', 'AI Review', 'Pricing / Lease', 'Payments', 'Maintenance', 'Profile']],
     ['MaintenanceTechnician', ['Dashboard', 'Assigned Work', 'Profile']],
     ['Admin', ['Dashboard', 'Users', 'AI / System Overview', 'Profile']],
@@ -102,6 +106,32 @@ describe('shared React shell', () => {
     expect(within(nav).getByRole('button', { name: 'Logout' })).toBeInTheDocument()
     await userEvent.click(within(nav).getByRole('link', { name: 'Viewing Requests' }))
     expect(await screen.findByRole('heading', { name: 'Viewing requests workflow' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('contains keyboard focus and restores scrolling when the mobile menu closes', async () => {
+    renderApp('Tenant')
+    const open = await screen.findByRole('button', { name: 'Open navigation' })
+    await userEvent.click(open)
+    expect(document.body.style.overflow).toBe('hidden')
+    await userEvent.tab({ shift: true })
+    expect(screen.getByRole('button', { name: 'Logout' })).toHaveFocus()
+    await userEvent.tab()
+    expect(screen.getByRole('link', { name: 'RentFlow dashboard' })).toHaveFocus()
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(document.body.style.overflow).toBe('')
+    expect(open).toHaveFocus()
+  })
+
+  it('clears the mobile dialog and scroll lock when switching to desktop', async () => {
+    let resize
+    matchMedia.mockReturnValue({ matches: false, addEventListener: (_, listener) => { resize = listener }, removeEventListener: vi.fn() })
+    renderApp('Tenant')
+    await userEvent.click(await screen.findByRole('button', { name: 'Open navigation' }))
+    await act(async () => { resize({ matches: true }) })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(document.body.style.overflow).toBe('')
     expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute('aria-expanded', 'false')
   })
 
