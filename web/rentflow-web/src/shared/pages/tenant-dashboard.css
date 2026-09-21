@@ -3,7 +3,7 @@
 .tenant-dashboard__greeting > div { min-width: 0; }
 .tenant-dashboard__greeting h1 { margin: 6px 0 8px; font-size: clamp(1.8rem, 2.8vw, 2.4rem); line-height: 1.25; letter-spacing: -.04em; overflow-wrap: anywhere; }
 .tenant-dashboard__greeting p { margin: 0; color: var(--muted); line-height: 1.65; font-size: .9rem; }
-.tenant-dashboard__greeting .tenant-dashboard__eyebrow { font-size: .95rem; font-weight: 600; }
+.tenant-dashboard__greeting .tenant-dashboard__eyebrow { color: var(--olive-700); font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .tenant-dashboard__greeting > .shared-button { flex: none; min-height: 50px; }
 .tenant-dashboard__summaries { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
 .tenant-dashboard .shared-card { box-shadow: 0 1px 3px rgb(48 60 31 / 12%); }

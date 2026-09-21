@@ -53,6 +53,9 @@ describe('shared React shell', () => {
   ])('renders the exact navigation map for %s', async (role, expectedLabels) => {
     renderApp(role)
     const nav = await screen.findByRole('navigation', { name: 'Primary navigation' })
+    const brand = screen.getByRole('link', { name: 'RentFlow dashboard' })
+    expect(brand.querySelector('img')).toHaveAttribute('src', expect.stringContaining('rentflow-wordmark'))
+    expect(brand).toHaveTextContent('A better way to rent')
     const labels = within(nav).getAllByRole('link').map((link) => link.textContent.replace('Soon', ''))
     expect(labels).toEqual(expectedLabels)
   })

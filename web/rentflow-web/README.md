@@ -23,6 +23,31 @@ navigation drawer and stacked cards on narrow screens.
 Run `npm run lint`, `npm test` and `npm run build` to validate the web app
 (`npm.cmd` can be used on Windows if PowerShell script execution is disabled).
 
+## Landlord dashboard
+
+`/dashboard` renders the landlord overview for the authenticated Landlord role.
+It reuses `usePropertyContext`: the dashboard accepts an actual selected property
+via `?propertyId=<UUID>` or router navigation state `{ propertyId }`. No property
+is hardcoded, selected automatically, or persisted in a separate store.
+
+- Summaries call the existing `getViewingsByProperty` and
+  `getApplicationsByProperty` services: `GET /api/viewings/property/{propertyId}`
+  and `GET /api/rental-applications/property/{propertyId}`. The shared API client
+  supplies the session token; backend property-ownership checks remain authoritative.
+- Cards show total records and the same status counts used by the existing
+  workflows: pending viewings, submitted applications, under-review applications
+  and changes requested. No landlord-wide endpoints or AI requests are made.
+- Each card has independent loading, empty, error and retry states. Missing or
+  invalid property context makes no requests and shows the shared selection state.
+  Property/account changes clear previous summaries and ignore late responses.
+- Shortcuts retain `/viewing-requests`, `/rental-applications` and `/ai-review`,
+  forwarding the selected property in the query string. AI Review continues to
+  use the existing application validation/document workflow.
+- Property integration still needs to provide a property-selection entry point
+  into this dashboard. Property names, portfolio totals, pricing, leases, payments
+  and maintenance remain with their owning modules; no new management module or
+  property picker is introduced here.
+
 ## Authentication
 
 Phase 2 stores only the JWT access token behind `tokenStorage` using browser

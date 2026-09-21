@@ -1,0 +1,46 @@
+.landlord-dashboard { width: min(100% - 80px, 1280px); padding-top: 40px; }
+.landlord-dashboard .shared-page-header { margin-bottom: 30px; }
+.landlord-dashboard .shared-page-header h1 { font-size: clamp(1.8rem, 2.8vw, 2.4rem); letter-spacing: -.04em; }
+.landlord-dashboard .shared-card { box-shadow: 0 1px 3px rgb(48 60 31 / 12%); }
+.landlord-dashboard__context { display: flex; align-items: center; gap: 18px; margin-bottom: 24px; padding: 22px 24px; border: 1px solid var(--olive-100); border-radius: var(--radius-card); background: var(--olive-50); }
+.landlord-dashboard__context > div { min-width: 0; }
+.landlord-dashboard__context h2 { margin: 0 0 5px; color: var(--olive-900); font-size: 1rem; }
+.landlord-dashboard__context p { margin: 0; color: var(--olive-700); font-size: .85rem; line-height: 1.7; }
+.landlord-dashboard__context code { display: block; margin-top: 8px; color: var(--olive-900); font-size: .78rem; overflow-wrap: anywhere; }
+.landlord-dashboard__selection { display: block; }
+.landlord-dashboard__icon { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; color: var(--olive-900); background: var(--olive-100); }
+.landlord-dashboard__summaries { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.landlord-summary { display: flex; flex-direction: column; align-items: stretch; gap: 20px; min-height: 260px; }
+.landlord-summary__heading { display: flex; align-items: center; gap: 14px; }
+.landlord-summary__heading h2 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
+.landlord-summary p { margin: 0; color: var(--muted); font-size: .85rem; line-height: 1.7; overflow-wrap: anywhere; }
+.landlord-summary__state { display: grid; justify-items: start; gap: 14px; }
+.landlord-summary__state .shared-status { white-space: normal; }
+.landlord-summary__total { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; }
+.landlord-summary__total strong { color: var(--ink); font-size: 2.2rem; line-height: 1.2; }
+.landlord-summary__counts { display: flex; flex-wrap: wrap; gap: 18px 28px; margin: 0; padding-top: 16px; border-top: 1px solid var(--border); }
+.landlord-summary__counts div { display: grid; gap: 6px; }
+.landlord-summary__counts dt { color: var(--muted); font-size: .75rem; }
+.landlord-summary__counts dd { margin: 0; color: var(--olive-900); font-size: 1.15rem; font-weight: 800; }
+.landlord-summary__link { min-height: 44px; display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); color: var(--olive-900); font-size: .84rem; font-weight: 800; text-decoration: none; }
+.landlord-summary__link:hover { text-decoration: underline; text-underline-offset: 4px; }
+.landlord-dashboard__note { margin: 14px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.7; }
+.landlord-dashboard__ai { margin-top: 32px; }
+.landlord-dashboard__ai-card { display: flex; align-items: center; gap: 20px; }
+.landlord-dashboard__ai-card > div { flex: 1; min-width: 0; }
+.landlord-dashboard__ai-card h2 { margin: 0 0 6px; font-size: 1.05rem; }
+.landlord-dashboard__ai-card p { margin: 0; color: var(--muted); font-size: .85rem; line-height: 1.7; }
+.landlord-dashboard__ai-card .shared-button { flex: none; }
+@media (max-width: 1200px) {
+  .landlord-dashboard { width: calc(100% - 48px); }
+}
+@media (max-width: 650px) {
+  .landlord-dashboard { width: calc(100% - 32px); padding-top: 28px; }
+  .landlord-dashboard__context { padding: 20px; align-items: flex-start; }
+  .landlord-dashboard__summaries { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .landlord-summary { min-height: 220px; }
+  .landlord-dashboard__ai { margin-top: 28px; }
+  .landlord-dashboard__ai-card { align-items: flex-start; flex-wrap: wrap; }
+  .landlord-dashboard__ai-card > div { flex-basis: calc(100% - 68px); }
+  .landlord-dashboard__ai-card .shared-button { width: 100%; }
+}

@@ -5,10 +5,12 @@ import { AppCard, PageHeader, StatusBadge } from '../ui/States.jsx'
 import Icon from '../ui/Icons.jsx'
 import { USER_ROLES } from '../../features/auth/authModel.js'
 import TenantDashboard from './TenantDashboard.jsx'
+import LandlordDashboard from './LandlordDashboard.jsx'
 
 export default function DashboardPage() {
   const { user } = useAuth()
   if (user.role === USER_ROLES.TENANT) return <TenantDashboard key={user.id} user={user} />
+  if (user.role === USER_ROLES.LANDLORD) return <LandlordDashboard key={user.id} user={user} />
   const items = navigationForRole(user.role).filter((item) => item.path !== '/dashboard' && item.path !== '/profile')
   const available = items.filter((item) => item.available)
   const pending = items.filter((item) => !item.available)
