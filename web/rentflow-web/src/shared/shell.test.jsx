@@ -10,6 +10,7 @@ vi.mock('../features/viewings/pages/ViewingRequestsPage.jsx', () => ({ default: 
 vi.mock('../features/rentalApplications/pages/RentalApplicationsPage.jsx', () => ({ default: () => <main><h1>Rental applications workflow</h1></main> }))
 
 const userFor = (role) => ({ id: 'user-id', fullName: 'Taylor Example', email: 'taylor@example.com', phoneNumber: '+94 77 123 4567', role })
+const propertyId = '88888888-8888-8888-8888-888888888888'
 function renderApp(role, path = '/dashboard', authenticated = true) {
   if (authenticated) tokenStorage.setToken('test-token')
   const api = { login: vi.fn(), register: vi.fn(), getCurrentUser: vi.fn().mockResolvedValue(userFor(role)) }
@@ -110,6 +111,42 @@ describe('shared React shell', () => {
     await userEvent.click(within(nav).getByRole('link', { name: 'Viewing Requests' }))
     expect(await screen.findByRole('heading', { name: 'Viewing requests workflow' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it.each([
+    ['/dashboard query', `/dashboard?propertyId=${propertyId}`],
+    ['/dashboard router state', { pathname: '/dashboard', state: { propertyId } }],
+    ['property route', `/properties/${propertyId}/viewing-requests`],
+  ])('keeps the actual landlord property across navigation from %s', async (_, entry) => {
+    renderApp('Landlord', entry)
+    const nav = await screen.findByRole('navigation', { name: 'Primary navigation' })
+    for (const [name, path] of [
+      ['Dashboard', '/dashboard'],
+      ['Viewing Requests', '/viewing-requests'],
+      ['Rental Applications', '/rental-applications'],
+      ['AI Review', '/ai-review'],
+    ]) {
+      expect(within(nav).getByRole('link', { name })).toHaveAttribute('href', `${path}?propertyId=${propertyId}`)
+    }
+    expect(screen.getByRole('link', { name: 'RentFlow dashboard' })).toHaveAttribute('href', `/dashboard?propertyId=${propertyId}`)
+    expect(screen.getByRole('link', { name: 'Profile for Taylor Example' })).toHaveAttribute('href', `/profile?propertyId=${propertyId}`)
+    if (typeof entry === 'string' && entry.startsWith('/properties/')) {
+      expect(within(nav).getByRole('link', { name: 'Viewing Requests' })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByRole('banner')).toHaveTextContent('Viewing Requests')
+    }
+    await userEvent.click(within(nav).getByRole('link', { name: 'Rental Applications' }))
+    expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'AI Review' })).toHaveAttribute('href', `/ai-review?propertyId=${propertyId}`)
+    await userEvent.click(within(nav).getByRole('link', { name: 'AI Review' }))
+    expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'AI Review' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('does not invent or propagate a malformed property ID in landlord navigation', async () => {
+    renderApp('Landlord', '/viewing-requests?propertyId=not-a-property')
+    const nav = await screen.findByRole('navigation', { name: 'Primary navigation' })
+    expect(within(nav).getByRole('link', { name: 'Rental Applications' })).toHaveAttribute('href', '/rental-applications')
+    expect(screen.getByRole('link', { name: 'RentFlow dashboard' })).toHaveAttribute('href', '/dashboard')
   })
 
   it('contains keyboard focus and restores scrolling when the mobile menu closes', async () => {

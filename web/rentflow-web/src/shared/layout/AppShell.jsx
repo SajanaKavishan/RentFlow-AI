@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/useAuth.js'
 import { navigationForRole } from '../navigation/roleNavigation.js'
 import Icon from '../ui/Icons.jsx'
 import { BrandWordmark } from '../ui/BrandLogo.jsx'
 import { initialsForName } from '../ui/userDisplay.js'
 import { USER_ROLES } from '../../features/auth/authModel.js'
+import { propertyIdFromLocation } from '../property/usePropertyContext.js'
 import './shell.css'
+
+function navigationPath(pathname) {
+  const scoped = /^\/properties\/[^/]+\/(viewing-requests|rental-applications|ai-review)\/?$/.exec(pathname)
+  return scoped ? `/${scoped[1]}` : pathname
+}
 
 function iconForItem(label) {
   if (label === 'Dashboard') return 'home'
@@ -22,6 +28,9 @@ export default function AppShell() {
   const roleLabel = user.role === USER_ROLES.MAINTENANCE_TECHNICIAN
     ? 'Maintenance technician' : user.role
   const location = useLocation()
+  const propertyId = user.role === USER_ROLES.LANDLORD ? propertyIdFromLocation(location) : null
+  const activePath = navigationPath(location.pathname)
+  const scopedPath = (path) => propertyId ? `${path}?${new URLSearchParams({ propertyId })}` : path
   const [menu, setMenu] = useState({ path: location.pathname, open: false })
   const menuOpen = menu.path === location.pathname && menu.open
   const menuRef = useRef(null)
@@ -56,16 +65,16 @@ export default function AppShell() {
     }
   }, [menuOpen, location.pathname])
   const items = navigationForRole(user.role)
-  const current = items.find((item) => item.path === location.pathname)?.label
+  const current = items.find((item) => item.path === activePath)?.label
     || (location.pathname === '/unauthorized' ? 'Access restricted' : 'RentFlow AI')
   const closeMenu = () => { setMenu({ path: location.pathname, open: false }); if (menuOpen) menuRef.current?.focus() }
-  const navLink = (item) => <NavLink key={`${item.label}-${item.path}`} to={item.path} end={item.path === '/dashboard'} onClick={closeMenu} className={({ isActive }) => `shared-nav-link${isActive ? ' shared-nav-link--active' : ''}`}>
+  const navLink = (item) => <Link key={`${item.label}-${item.path}`} to={scopedPath(item.path)} aria-current={activePath === item.path ? 'page' : undefined} onClick={closeMenu} className={`shared-nav-link${activePath === item.path ? ' shared-nav-link--active' : ''}`}>
     <Icon name={iconForItem(item.label)} size={19} /><span className="shared-nav-link__label">{item.label}</span>{!item.available && <span className="shared-nav-link__soon">Soon</span>}
-  </NavLink>
+  </Link>
 
   return <div className="shared-shell">
     <aside ref={sidebarRef} id="shared-navigation" role={menuOpen ? 'dialog' : undefined} aria-modal={menuOpen ? 'true' : undefined} aria-label={menuOpen ? 'Navigation menu' : undefined} className={`shared-sidebar${menuOpen ? ' shared-sidebar--open' : ''}`}>
-      <Link className="shared-brand" to="/dashboard" aria-label="RentFlow dashboard" onClick={closeMenu}>
+      <Link className="shared-brand" to={scopedPath('/dashboard')} aria-label="RentFlow dashboard" onClick={closeMenu}>
         <BrandWordmark className="shared-brand__image" decorative />
         <span className="shared-brand__tagline">A better way to rent</span>
       </Link>
@@ -82,7 +91,7 @@ export default function AppShell() {
       <header className="shared-topbar">
         <button ref={menuRef} type="button" className="shared-menu-button" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="shared-navigation" onClick={() => setMenu({ path: location.pathname, open: !menuOpen })}><Icon name={menuOpen ? 'close' : 'menu'} size={22} /></button>
         <div className="shared-topbar__title"><span className="shared-topbar__eyebrow">{roleLabel} workspace</span><strong>{current}</strong></div>
-        <Link className="shared-topbar__account" to="/profile" title={user.email} onClick={closeMenu} aria-label={`Profile for ${user.fullName}`}><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span><span className="shared-topbar__role">{roleLabel}</span></span><span className="shared-avatar" aria-hidden="true">{initialsForName(user.fullName)}</span></Link>
+        <Link className="shared-topbar__account" to={scopedPath('/profile')} title={user.email} onClick={closeMenu} aria-label={`Profile for ${user.fullName}`}><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span><span className="shared-topbar__role">{roleLabel}</span></span><span className="shared-avatar" aria-hidden="true">{initialsForName(user.fullName)}</span></Link>
       </header>
       <div className="shared-shell__content"><Outlet /></div>
     </div>

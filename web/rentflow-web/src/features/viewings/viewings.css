@@ -1,7 +1,7 @@
 .viewings-page {
-  width: min(1120px, calc(100% - 48px));
+  width: min(1120px, calc(100% - 64px));
   margin: 0 auto;
-  padding: 56px 0 80px;
+  padding: clamp(40px, 5vw, 72px) 0 80px;
 }
 
 .viewings-page__header {
@@ -19,19 +19,18 @@
 .viewings-page__header h1 {
   margin: 6px 0 12px;
   color: var(--ink);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(2.35rem, 5vw, 4rem);
-  font-weight: 500;
-  letter-spacing: -0.045em;
-  line-height: 1;
+  font-size: clamp(2rem, 3.8vw, 3.15rem);
+  font-weight: 800;
+  letter-spacing: -0.055em;
+  line-height: 1.17;
 }
 
 .viewings-page__header p {
   max-width: 650px;
   margin: 0;
   color: var(--muted);
-  font-size: 1rem;
-  line-height: 1.65;
+  font-size: .92rem;
+  line-height: 1.75;
 }
 
 .viewings-page__eyebrow,
@@ -633,22 +632,12 @@
 }
 
 @media (max-width: 900px) {
-  .viewings-page {
-    width: min(100% - 40px, 1120px);
-    padding-top: 44px;
-  }
-
   .viewing-card__overview {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 680px) {
-  .viewings-page {
-    width: min(100% - 28px, 1120px);
-    padding: 36px 0 56px;
-  }
-
   .viewings-page__header {
     align-items: stretch;
     flex-direction: column;
@@ -700,6 +689,13 @@
 
   .viewing-card__decision {
     padding: 18px;
+  }
+}
+
+@media (max-width: 620px) {
+  .viewings-page {
+    width: min(100% - 32px, 1120px);
+    padding: 36px 0 56px;
   }
 }
 
