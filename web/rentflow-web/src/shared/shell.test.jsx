@@ -77,7 +77,7 @@ describe('shared React shell', () => {
   it('shows profile details and logs out', async () => {
     renderApp('Tenant', '/profile')
     expect(await screen.findByRole('heading', { name: 'Profile' })).toBeInTheDocument()
-    expect(screen.getByText('taylor@example.com')).toBeInTheDocument()
+    expect(screen.getAllByText('taylor@example.com')).toHaveLength(2)
     expect(screen.getByText('+94 77 123 4567')).toBeInTheDocument()
     await userEvent.click(screen.getAllByRole('button', { name: 'Logout' })[0])
     expect(await screen.findByRole('heading', { name: 'Sign in to RentFlow' })).toBeInTheDocument()
