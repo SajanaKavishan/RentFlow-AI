@@ -9,6 +9,10 @@ import { USER_ROLES } from '../../features/auth/authModel.js'
 import { propertyIdFromLocation } from '../property/usePropertyContext.js'
 import { getUnreadCount } from '../../features/notifications/notificationsApi.js'
 import { NotificationCountContext } from '../../features/notifications/NotificationCountContext.js'
+import { PendingViewingsContext } from './PendingViewingsContext.js'
+import { PendingApplicationsContext } from './PendingApplicationsContext.js'
+import { getViewingsByProperty, VIEWING_STATUS } from '../../features/viewings/services/viewingApiService.js'
+import { getApplicationsByProperty, RENTAL_APPLICATION_STATUS } from '../../features/rentalApplications/services/rentalApplicationApiService.js'
 import './shell.css'
 
 function navigationPath(pathname) {
@@ -24,6 +28,14 @@ function iconForItem(label) {
   if (/Maintenance/.test(label)) return 'tools'
   if (/Application|AI|System|Lease|Payment/.test(label)) return 'document'
   return 'building'
+}
+
+function pendingCountForProperty(records, propertyId, isPending) {
+  if (!Array.isArray(records) || records.some((record) =>
+    !record || typeof record.id !== 'string' || !record.id.trim() ||
+    typeof record.propertyId !== 'string' || record.propertyId.toLowerCase() !== propertyId.toLowerCase() ||
+    !Number.isInteger(record.status)) || new Set(records.map((record) => record.id.toLowerCase())).size !== records.length) return null
+  return records.filter(isPending).length
 }
 
 export default function AppShell() {
@@ -47,7 +59,50 @@ export default function AppShell() {
     return () => { requestCounter.current++ }
   }, [location.pathname, user.id, refreshCount])
   const propertyId = user.role === USER_ROLES.LANDLORD ? propertyIdFromLocation(location) : null
+  const [viewingSummary, setViewingSummary] = useState(null)
+  const [applicationSummary, setApplicationSummary] = useState(null)
+  const [dismissedViewings, setDismissedViewings] = useState(null)
+  const [dismissedApplications, setDismissedApplications] = useState(null)
+  const publishPendingViewings = useCallback((summaryPropertyId, count) => {
+    setViewingSummary({ userId: user.id, propertyId: summaryPropertyId, count })
+  }, [user.id])
+  const publishPendingApplications = useCallback((summaryPropertyId, count) => {
+    setApplicationSummary({ userId: user.id, propertyId: summaryPropertyId, count })
+  }, [user.id])
+  const pendingViewings = viewingSummary?.userId === user.id && viewingSummary.propertyId === propertyId
+    ? viewingSummary.count : null
+  const pendingApplications = applicationSummary?.userId === user.id && applicationSummary.propertyId === propertyId
+    ? applicationSummary.count : null
+  const shownViewings = pendingViewings > 0 && !(
+    dismissedViewings?.userId === user.id && dismissedViewings.propertyId === propertyId &&
+    pendingViewings <= dismissedViewings.count
+  ) ? pendingViewings : 0
+  const shownApplications = pendingApplications > 0 && !(
+    dismissedApplications?.userId === user.id && dismissedApplications.propertyId === propertyId &&
+    pendingApplications <= dismissedApplications.count
+  ) ? pendingApplications : 0
   const activePath = navigationPath(location.pathname)
+  useEffect(() => {
+    if (user.role !== USER_ROLES.LANDLORD || !propertyId || activePath === '/dashboard' ||
+      (viewingSummary?.userId === user.id && viewingSummary.propertyId === propertyId && viewingSummary.count !== null)) return undefined
+    let active = true
+    getViewingsByProperty(propertyId).then((records) => {
+      const count = pendingCountForProperty(records, propertyId, (record) => record.status === VIEWING_STATUS.PENDING)
+      if (active && count !== null) setViewingSummary({ userId: user.id, propertyId, count })
+    }).catch(() => {})
+    return () => { active = false }
+  }, [user.id, user.role, propertyId, activePath, viewingSummary])
+  useEffect(() => {
+    if (user.role !== USER_ROLES.LANDLORD || !propertyId || activePath === '/dashboard' ||
+      (applicationSummary?.userId === user.id && applicationSummary.propertyId === propertyId && applicationSummary.count !== null)) return undefined
+    let active = true
+    getApplicationsByProperty(propertyId).then((records) => {
+      const count = pendingCountForProperty(records, propertyId, (record) =>
+        [RENTAL_APPLICATION_STATUS.SUBMITTED, RENTAL_APPLICATION_STATUS.UNDER_REVIEW].includes(record.status))
+      if (active && count !== null) setApplicationSummary({ userId: user.id, propertyId, count })
+    }).catch(() => {})
+    return () => { active = false }
+  }, [user.id, user.role, propertyId, activePath, applicationSummary])
   const scopedPath = (path) => propertyId ? `${path}?${new URLSearchParams({ propertyId })}` : path
   const [menu, setMenu] = useState({ path: location.pathname, open: false })
   const menuOpen = menu.path === location.pathname && menu.open
@@ -86,9 +141,16 @@ export default function AppShell() {
   const current = (activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : items.find((item) => item.path === activePath)?.label)
     || (location.pathname === '/unauthorized' ? 'Access restricted' : 'RentFlow AI')
   const closeMenu = () => { setMenu({ path: location.pathname, open: false }); if (menuOpen) menuRef.current?.focus() }
-  const navLink = (item) => <Link key={`${item.label}-${item.path}`} to={scopedPath(item.path)} aria-current={activePath === item.path ? 'page' : undefined} onClick={closeMenu} className={`shared-nav-link${activePath === item.path ? ' shared-nav-link--active' : ''}`}>
-    <Icon name={iconForItem(item.label)} size={19} /><span className="shared-nav-link__label">{item.label}</span>{!item.available && <span className="shared-nav-link__soon">Soon</span>}
+  const navLink = (item) => {
+    const badgeCount = item.id === 'viewing-requests' ? shownViewings : item.id === 'rental-applications' ? shownApplications : 0
+    return <Link key={`${item.label}-${item.path}`} to={scopedPath(item.path)} aria-current={activePath === item.path ? 'page' : undefined} aria-label={badgeCount ? `${item.label}, ${badgeCount} pending` : undefined} onClick={() => {
+    if (item.id === 'viewing-requests' && shownViewings) setDismissedViewings({ userId: user.id, propertyId, count: shownViewings })
+    if (item.id === 'rental-applications' && shownApplications) setDismissedApplications({ userId: user.id, propertyId, count: shownApplications })
+    closeMenu()
+  }} className={`shared-nav-link${activePath === item.path ? ' shared-nav-link--active' : ''}`}>
+    <Icon name={iconForItem(item.label)} size={19} /><span className="shared-nav-link__label">{item.label}</span>{badgeCount > 0 && <span className="shared-nav-link__pending" aria-hidden="true">{badgeCount}</span>}{!item.available && <span className="shared-nav-link__soon">Soon</span>}
   </Link>
+  }
 
   return <div className="shared-shell">
     <aside ref={sidebarRef} id="shared-navigation" role={menuOpen ? 'dialog' : undefined} aria-modal={menuOpen ? 'true' : undefined} aria-label={menuOpen ? 'Navigation menu' : undefined} className={`shared-sidebar${menuOpen ? ' shared-sidebar--open' : ''}`}>
@@ -112,7 +174,7 @@ export default function AppShell() {
         <Link className="shared-topbar__notifications" to="/notifications" onClick={closeMenu} aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'} aria-current={activePath === '/notifications' ? 'page' : undefined}><Icon name="bell" size={21} />{unreadCount > 0 && <span className="shared-topbar__notification-count" aria-hidden="true">{unreadCount}</span>}</Link>
         <Link className="shared-topbar__account" to={scopedPath('/profile')} title={user.email} onClick={closeMenu} aria-label={`Profile for ${user.fullName}`}><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span></span><span className="shared-avatar" aria-hidden="true">{initialsForName(user.fullName)}</span></Link>
       </header>
-      <NotificationCountContext.Provider value={{ refreshCount }}><div className="shared-shell__content"><Outlet key={user.id} /></div></NotificationCountContext.Provider>
+      <NotificationCountContext.Provider value={{ refreshCount }}><PendingViewingsContext.Provider value={publishPendingViewings}><PendingApplicationsContext.Provider value={publishPendingApplications}><div className="shared-shell__content"><Outlet key={user.id} /></div></PendingApplicationsContext.Provider></PendingViewingsContext.Provider></NotificationCountContext.Provider>
     </div>
   </div>
 }

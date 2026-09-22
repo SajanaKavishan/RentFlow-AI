@@ -35,15 +35,24 @@ is hardcoded, selected automatically, or persisted in a separate store.
   `getApplicationsByProperty` services: `GET /api/viewings/property/{propertyId}`
   and `GET /api/rental-applications/property/{propertyId}`. The shared API client
   supplies the session token; backend property-ownership checks remain authoritative.
-- Cards show total records and the same status counts used by the existing
-  workflows: pending viewings, submitted applications, under-review applications
-  and changes requested. No landlord-wide endpoints are used.
-- Each card has independent loading, empty, error and retry states. Missing or
+- The four-card row shows Active Properties, Pending Viewings, Applications and
+  Revenue This Month in that order. Pending Viewings counts pending requests and
+  shows the property request total; Applications shows its real total and status
+  counts. The property and revenue cards explicitly say "Integration pending"
+  until their owning modules provide data. No landlord-wide endpoints are used.
+- Each API-backed card has independent loading, empty, error and retry states. Missing or
   invalid property context makes no requests and shows the shared selection state.
   Property/account changes clear previous summaries and ignore late responses.
 - Shortcuts retain `/viewing-requests`, `/rental-applications` and `/ai-review`,
   forwarding the selected property in the query string. AI Review continues to
   use the existing application validation/document workflow.
+- Viewing Requests and Rental Applications show olive pending-count badges in
+  the landlord sidebar when their scoped summaries are available. The
+  application badge counts submitted and under-review records. Opening either
+  workflow dismisses only its badge in the current shell session; the underlying
+  records keep their actual statuses until the landlord acts. The card links are
+  visually hidden while the whole viewing/application cards remain accessible
+  workflow links.
 - Needs Attention includes pending viewings, submitted/under-review applications,
   and confirmed AI workflows awaiting human review or reporting failure. AI
   summaries use `GET /api/rental-applications/{applicationId}/validation-runs`

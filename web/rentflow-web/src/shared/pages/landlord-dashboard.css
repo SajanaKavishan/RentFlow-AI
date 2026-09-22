@@ -9,21 +9,35 @@
 .landlord-dashboard__context code { display: block; color: var(--olive-900); font-size: .75rem; overflow-wrap: anywhere; }
 .landlord-dashboard__selection { display: block; }
 .landlord-dashboard__icon { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; color: var(--olive-900); background: var(--olive-100); }
-.landlord-dashboard__summaries { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.landlord-dashboard .landlord-summary { display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 18px 20px; }
-.landlord-summary__heading { display: flex; align-items: center; gap: 14px; }
-.landlord-summary__heading h2 { margin: 0; font-size: .95rem; overflow-wrap: anywhere; }
-.landlord-summary p { margin: 0; color: var(--muted); font-size: .85rem; line-height: 1.7; overflow-wrap: anywhere; }
+.landlord-dashboard__summaries { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.landlord-dashboard .landlord-summary { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-height: 0; padding: 18px 20px 12px; border-color: var(--border); box-shadow: 0 2px 5px rgb(48 60 31 / 8%); transition: border-color 160ms ease, box-shadow 160ms ease; }
+.landlord-summary:not(.landlord-summary--integration):hover, .landlord-summary:focus-within { border-color: var(--olive-100); box-shadow: 0 5px 14px rgb(48 60 31 / 12%); }
+.landlord-summary .landlord-dashboard__icon { width: 38px; height: 38px; margin-bottom: 2px; }
+.landlord-summary--building .landlord-dashboard__icon { color: var(--olive-900); background: var(--olive-100); }
+.landlord-summary--calendar .landlord-dashboard__icon { color: #4c57c2; background: #edf0ff; }
+.landlord-summary--document .landlord-dashboard__icon { color: #a55e13; background: #fff4df; }
+.landlord-summary--trend .landlord-dashboard__icon { color: #18805a; background: #e8f7ee; }
+.landlord-summary h2 { margin: -6px 0 0; color: var(--ink); font-size: .96rem; line-height: 1.35; overflow-wrap: anywhere; }
+.landlord-summary--integration h2 { margin-top: 0; }
+.landlord-summary p { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.5; overflow-wrap: anywhere; }
+.landlord-summary__pending { display: inline-block; margin-top: 5px; padding: 5px 8px; border-radius: 999px; color: var(--olive-700); background: var(--olive-50); font-size: .7rem; font-weight: 800; line-height: 1.2; }
 .landlord-summary__state { display: grid; justify-items: start; gap: 10px; }
 .landlord-summary__state .shared-status { white-space: normal; }
-.landlord-summary__total { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; }
-.landlord-summary__total strong { color: var(--ink); font-size: 1.9rem; line-height: 1.2; }
-.landlord-summary__counts { display: flex; flex-wrap: wrap; gap: 10px 24px; margin: 0; }
-.landlord-summary__counts div { display: flex; align-items: baseline; gap: 8px; }
+.landlord-summary__total { color: var(--ink); font-size: 2rem; font-weight: 800; line-height: 1.1; letter-spacing: -.04em; }
+.landlord-summary__counts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0; }
+.landlord-summary__counts div { display: flex; align-items: baseline; gap: 6px; }
 .landlord-summary__counts dt { color: var(--muted); font-size: .75rem; }
-.landlord-summary__counts dd { margin: 0; color: var(--olive-900); font-size: .95rem; font-weight: 800; }
-.landlord-summary__link { min-height: 44px; display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); color: var(--olive-900); font-size: .84rem; font-weight: 800; text-decoration: none; }
-.landlord-summary__link:hover { text-decoration: underline; text-underline-offset: 4px; }
+.landlord-summary__counts dd { margin: 0; color: var(--olive-900); font-size: .85rem; font-weight: 800; }
+.landlord-summary__link { position: absolute; inset: 0; border-radius: inherit; }
+.landlord-summary__state button { position: relative; z-index: 1; }
+.landlord-summary:focus-within { outline: 2px solid var(--olive-700); outline-offset: 2px; }
+.landlord-dashboard__summaries--unavailable .landlord-summary { min-height: 0; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 12px 16px; }
+.landlord-summary--unavailable .landlord-dashboard__icon { width: 34px; height: 34px; margin: 0; }
+.landlord-summary--unavailable h2 { flex: 1; min-width: 130px; margin: 0; }
+.landlord-summary .landlord-summary__unavailable { color: var(--muted); font-size: .72rem; }
+.landlord-dashboard__summaries--unavailable .landlord-summary--integration { align-content: center; }
+.landlord-dashboard__summaries--unavailable .landlord-summary--integration .landlord-summary__pending { order: 1; margin-top: 0; }
+.landlord-dashboard__summaries--unavailable .landlord-summary--integration h2 { flex: 1; min-width: 120px; }
 .landlord-dashboard__note { margin: 14px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.7; }
 .landlord-dashboard__ai { margin-top: 22px; }
 .landlord-dashboard .landlord-dashboard__ai-card { display: flex; align-items: center; gap: 16px; padding: 18px 20px; }
@@ -56,6 +70,7 @@
 .landlord-recent .application-status { font-size: .7rem; white-space: nowrap; }
 @media (max-width: 1200px) {
   .landlord-dashboard { width: calc(100% - 48px); }
+  .landlord-dashboard__summaries { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 650px) {
   .landlord-dashboard { width: calc(100% - 32px); padding-top: 22px; }

@@ -47,24 +47,50 @@ describe('landlord dashboard', () => {
     expect(screen.getByRole('heading', { name: 'Select a property' })).toBeInTheDocument()
     expect(screen.getByText(/Property integration pending/)).toBeInTheDocument()
     expect(screen.queryByText('Property required')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Summary unavailable')).toHaveLength(2)
+    const cards = document.querySelector('.landlord-dashboard__summaries')
+    expect(within(cards).getAllByRole('region').map((card) => card.getAttribute('aria-label'))).toEqual([
+      'Active Properties', 'Pending Viewings', 'Applications', 'Revenue This Month',
+    ])
+    expect(within(cards).getAllByText('Integration pending')).toHaveLength(2)
+    expect(document.querySelector('.landlord-dashboard__summaries--unavailable')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Needs Attention' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Recent Applications' })).not.toBeInTheDocument()
     expect(getApplicationValidationRuns).not.toHaveBeenCalled()
     expect(screen.queryByText('0')).not.toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText(/Viewing Requests, \d+ pending/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Rental Applications, \d+ pending/)).not.toBeInTheDocument()
   })
 
   it('summarizes status counts using only the existing authenticated property endpoints', async () => {
     renderApp()
-    const visits = screen.getByRole('region', { name: 'Viewing Requests' })
-    const apps = screen.getByRole('region', { name: 'Rental Applications' })
-    expect(await within(visits).findByText('6')).toBeInTheDocument()
-    expect(within(visits).getByText('Pending response').nextElementSibling).toHaveTextContent('2')
+    const cards = document.querySelector('.landlord-dashboard__summaries')
+    expect(within(cards).getAllByRole('region').map((card) => card.getAttribute('aria-label'))).toEqual([
+      'Active Properties', 'Pending Viewings', 'Applications', 'Revenue This Month',
+    ])
+    const visits = screen.getByRole('region', { name: 'Pending Viewings' })
+    const apps = screen.getByRole('region', { name: 'Applications' })
+    expect(await within(visits).findByText('2')).toBeInTheDocument()
+    expect(within(visits).getByText('2').tagName).toBe('STRONG')
+    expect(within(visits).getByText('6 total requests')).toBeInTheDocument()
+    expect(within(visits).getByRole('link', { name: 'Open Viewing Requests' })).toHaveAttribute('href', `/viewing-requests?propertyId=${propertyId}`)
+    expect(within(visits).queryByText('Open Viewing Requests')).not.toBeInTheDocument()
     expect(await within(apps).findByText('8')).toBeInTheDocument()
+    expect(within(apps).getByText('8').tagName).toBe('STRONG')
+    expect(within(apps).getByRole('heading', { name: 'Applications' })).toBeInTheDocument()
+    expect(within(apps).getByRole('link', { name: 'Open Rental Applications' })).toHaveAttribute('href', `/rental-applications?propertyId=${propertyId}`)
+    expect(within(apps).queryByText('Open Rental Applications')).not.toBeInTheDocument()
     for (const [label, count] of [['Submitted', '2'], ['Under review', '1'], ['Changes requested', '1']]) {
       expect(within(apps).getByText(label).nextElementSibling).toHaveTextContent(count)
     }
     expect(screen.getByRole('region', { name: 'Property context' })).toHaveTextContent(propertyId)
+    for (const title of ['Active Properties', 'Revenue This Month']) {
+      const card = screen.getByRole('region', { name: title })
+      expect(within(card).getByText('Integration pending')).toBeInTheDocument()
+      expect(within(card).queryByRole('link')).not.toBeInTheDocument()
+      expect(within(card).queryByText(/\$|\d+ properties/i)).not.toBeInTheDocument()
+    }
     expect(fetch).toHaveBeenCalledTimes(2)
     expect(fetch.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname).sort()).toEqual([
       `/api/rental-applications/property/${propertyId}`, `/api/viewings/property/${propertyId}`,
@@ -76,9 +102,39 @@ describe('landlord dashboard', () => {
     }
   })
 
+  it('shows the scoped pending viewing count in the sidebar and hides it after opening the workflow', async () => {
+    const { router } = renderApp()
+    const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
+    const viewingLink = await within(nav).findByRole('link', { name: 'Viewing Requests, 2 pending' })
+    expect(within(viewingLink).getByText('2')).toHaveClass('shared-nav-link__pending')
+    await userEvent.click(viewingLink)
+    expect(await screen.findByRole('heading', { name: 'Viewing requests' })).toBeInTheDocument()
+    expect(router.state.location.search).toBe(`?propertyId=${propertyId}`)
+    expect(within(nav).getByRole('link', { name: 'Viewing Requests' })).not.toHaveTextContent('2')
+    await userEvent.click(within(nav).getByRole('link', { name: 'Dashboard' }))
+    await screen.findByText('6 total requests')
+    expect(within(nav).getByRole('link', { name: 'Viewing Requests' })).not.toHaveTextContent('2')
+  })
+
+  it('shows only reviewable applications in the sidebar and dismisses that badge independently', async () => {
+    const { router } = renderApp()
+    const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
+    const applicationLink = await within(nav).findByRole('link', { name: 'Rental Applications, 3 pending' })
+    expect(within(applicationLink).getByText('3')).toHaveClass('shared-nav-link__pending')
+    expect(within(nav).getByRole('link', { name: 'Viewing Requests, 2 pending' })).toBeInTheDocument()
+    await userEvent.click(applicationLink)
+    expect(await screen.findByRole('heading', { name: 'Rental applications' })).toBeInTheDocument()
+    expect(router.state.location.search).toBe(`?propertyId=${propertyId}`)
+    expect(within(nav).getByRole('link', { name: 'Rental Applications' })).not.toHaveTextContent('3')
+    expect(within(nav).getByRole('link', { name: 'Viewing Requests, 2 pending' })).toBeInTheDocument()
+    await userEvent.click(within(nav).getByRole('link', { name: 'Dashboard' }))
+    await screen.findByText('8')
+    expect(within(nav).getByRole('link', { name: 'Rental Applications' })).not.toHaveTextContent('3')
+  })
+
   it('uses router-state property context and retains it in all three workflow shortcuts', async () => {
     renderApp({ pathname: '/dashboard', state: { propertyId } })
-    await screen.findByText('Total requests')
+    await screen.findByRole('region', { name: 'Recent Applications' })
     const dashboard = screen.getByRole('main')
     for (const [label, path] of [['Viewing Requests', '/viewing-requests'], ['Rental Applications', '/rental-applications'], ['AI Review', '/ai-review']]) {
       const links = within(dashboard).getAllByRole('link', { name: `Open ${label}` })
@@ -95,8 +151,8 @@ describe('landlord dashboard', () => {
     expect(screen.queryByText('0')).not.toBeInTheDocument()
     await act(async () => { finishViewings(json([])) })
     expect(screen.getByText('No viewing requests for this property yet.')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Viewing Requests' })).toHaveAttribute('aria-busy', 'false')
-    expect(screen.getByRole('region', { name: 'Rental Applications' })).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('region', { name: 'Pending Viewings' })).toHaveAttribute('aria-busy', 'false')
+    expect(screen.getByRole('region', { name: 'Applications' })).toHaveAttribute('aria-busy', 'true')
     expect(screen.getAllByText('Loading summary…')).toHaveLength(1)
   })
 
@@ -119,10 +175,10 @@ describe('landlord dashboard', () => {
     })
     renderApp()
     expect(await screen.findByRole('alert')).toHaveTextContent('request failed')
-    expect(await screen.findByText(failed === 'viewings' ? '8' : '6')).toBeInTheDocument()
+    expect(await within(screen.getByRole('region', { name: failed === 'viewings' ? 'Applications' : 'Pending Viewings' })).findByText(failed === 'viewings' ? '8' : '2')).toBeInTheDocument()
     expect(screen.queryByText('0')).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: failed === 'viewings' ? 'Retry viewing requests' : 'Retry rental applications' }))
-    expect(await screen.findByText(failed === 'viewings' ? '6' : '8')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: failed === 'viewings' ? 'Retry pending viewings' : 'Retry applications' }))
+    expect(await within(screen.getByRole('region', { name: failed === 'viewings' ? 'Pending Viewings' : 'Applications' })).findByText(failed === 'viewings' ? '2' : '8')).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledTimes(3)
   })
 
@@ -154,7 +210,7 @@ describe('landlord dashboard', () => {
     await act(async () => { await router.navigate(scopedDashboard(otherPropertyId)) })
     expect(await screen.findByText('No rental applications for this property yet.')).toBeInTheDocument()
     await act(async () => { oldRequests[0](json(viewings)); oldRequests[1](json(applications)) })
-    expect(screen.queryByText('6')).not.toBeInTheDocument()
+    expect(screen.queryByText('6 total requests')).not.toBeInTheDocument()
     expect(screen.queryByText('8')).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Property context' })).toHaveTextContent(otherPropertyId)
     expect(fetch.mock.calls.slice(2).every(([url]) => url.endsWith(otherPropertyId))).toBe(true)
@@ -171,7 +227,7 @@ describe('landlord dashboard', () => {
     await act(async () => { await router.navigate(scopedDashboard(otherPropertyId)) })
     expect(screen.getAllByText('Loading summary…')).toHaveLength(2)
     expect(screen.queryByText('8')).not.toBeInTheDocument()
-    expect(screen.queryByText('6')).not.toBeInTheDocument()
+    expect(screen.queryByText('6 total requests')).not.toBeInTheDocument()
   })
 
   it('discards the previous account’s requests when the authenticated landlord changes', async () => {

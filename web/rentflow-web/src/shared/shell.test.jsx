@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -111,6 +111,49 @@ describe('shared React shell', () => {
     await userEvent.click(within(nav).getByRole('link', { name: 'Viewing Requests' }))
     expect(await screen.findByRole('heading', { name: 'Viewing requests workflow' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('loads the pending badge from the authorized property endpoint on a direct landlord route', async () => {
+    fetch.mockImplementation((url) => Promise.resolve(new Response(JSON.stringify(
+      url.includes(`/api/viewings/property/${propertyId}`)
+        ? [0, 0, 1].map((status, index) => ({ id: `viewing-${index}`, propertyId, status })) : [],
+    ), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    renderApp('Landlord', `/rental-applications?propertyId=${propertyId}`)
+    const nav = await screen.findByRole('navigation', { name: 'Primary navigation' })
+    const link = await within(nav).findByRole('link', { name: 'Viewing Requests, 2 pending' })
+    expect(within(link).getByText('2')).toHaveClass('shared-nav-link__pending')
+    expect(fetch.mock.calls.map(([url]) => new URL(url).pathname).filter((path) => path.startsWith('/api/viewings'))).toEqual([`/api/viewings/property/${propertyId}`])
+    await userEvent.click(link)
+    expect(await screen.findByRole('heading', { name: 'Viewing requests workflow' })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'Viewing Requests' })).not.toHaveTextContent('2')
+  })
+
+  it('loads the application badge from its authorized property endpoint on a direct landlord route', async () => {
+    fetch.mockImplementation((url) => Promise.resolve(new Response(JSON.stringify(
+      url.includes(`/api/rental-applications/property/${propertyId}`)
+        ? [0, 1, 2, 3, 4].map((status, index) => ({ id: `application-${index}`, propertyId, status })) : [],
+    ), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    renderApp('Landlord', `/viewing-requests?propertyId=${propertyId}`)
+    const nav = await screen.findByRole('navigation', { name: 'Primary navigation' })
+    const link = await within(nav).findByRole('link', { name: 'Rental Applications, 2 pending' })
+    expect(within(link).getByText('2')).toHaveClass('shared-nav-link__pending')
+    expect(fetch.mock.calls.map(([url]) => new URL(url).pathname).filter((path) => path.startsWith('/api/rental-applications'))).toEqual([`/api/rental-applications/property/${propertyId}`])
+    await userEvent.click(link)
+    expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'Rental Applications' })).not.toHaveTextContent('2')
+  })
+
+  it('does not show a pending badge for viewings belonging to another property', async () => {
+    fetch.mockImplementation((url) => Promise.resolve(new Response(JSON.stringify(
+      url.includes(`/api/viewings/property/${propertyId}`)
+        ? [{ id: 'other-viewing', propertyId: '99999999-9999-9999-9999-999999999999', status: 0 }] : [],
+    ), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    renderApp('Landlord', `/rental-applications?propertyId=${propertyId}`)
+    const nav = await screen.findByRole('navigation', { name: 'Primary navigation' })
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => url.includes(`/api/viewings/property/${propertyId}`))).toBe(true))
+    await act(async () => {})
+    expect(within(nav).getByRole('link', { name: 'Viewing Requests' })).not.toHaveTextContent('1')
+    expect(within(nav).queryByText('1', { selector: '.shared-nav-link__pending' })).not.toBeInTheDocument()
   })
 
   it.each([

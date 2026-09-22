@@ -1,3 +1,4 @@
+import { useContext, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getViewingsByProperty, VIEWING_STATUS } from '../../features/viewings/services/viewingApiService.js'
 import { getApplicationsByProperty, RENTAL_APPLICATION_STATUS } from '../../features/rentalApplications/services/rentalApplicationApiService.js'
@@ -8,24 +9,34 @@ import RentalApplicationStatusBadge from '../../features/rentalApplications/comp
 import Icon from '../ui/Icons.jsx'
 import usePropertySummary from './usePropertySummary.js'
 import useDashboardValidation, { isReviewable, WORKFLOW_STATUS } from './useDashboardValidation.js'
+import { PendingViewingsContext } from '../layout/PendingViewingsContext.js'
+import { PendingApplicationsContext } from '../layout/PendingApplicationsContext.js'
 import './landlord-dashboard.css'
 
-function SummaryCard({ title, icon, summary, to, children }) {
+function SummaryCard({ title, icon, summary, to, actionLabel, count, children }) {
   return (
-    <section className="shared-card landlord-summary" aria-label={title} aria-busy={summary.status === 'loading'}>
-      <div className="landlord-summary__heading">
-        <span className="landlord-dashboard__icon"><Icon name={icon} size={24} /></span>
-        <h2>{title}</h2>
-      </div>
+    <section className={`shared-card landlord-summary landlord-summary--${icon}${summary.status === 'property-required' ? ' landlord-summary--unavailable' : ''}`} aria-label={title} aria-busy={summary.status === 'loading'}>
+      <span className="landlord-dashboard__icon" aria-hidden="true"><Icon name={icon} size={22} /></span>
+      {summary.status === 'ready' && <strong className="landlord-summary__total">{count}</strong>}
+      <h2>{title}</h2>
+      {summary.status === 'property-required' && <p className="landlord-summary__unavailable">Summary unavailable</p>}
       {summary.status === 'loading' && <p className="landlord-summary__state" role="status">Loading summary…</p>}
       {summary.status === 'error' && <div className="landlord-summary__state" role="alert">
         <p>{summary.message}</p>
         <button type="button" className="shared-button shared-button--outline" onClick={summary.retry}>Retry {title.toLowerCase()}</button>
       </div>}
       {summary.status === 'ready' && children}
-      <Link className="landlord-summary__link" to={to}>Open {title}<Icon name="arrow" size={18} /></Link>
+      <Link className="landlord-summary__link" to={to} aria-label={actionLabel} />
     </section>
   )
+}
+
+function PendingIntegrationCard({ title, icon }) {
+  return <section className={`shared-card landlord-summary landlord-summary--${icon} landlord-summary--integration`} aria-label={title}>
+    <span className="landlord-dashboard__icon" aria-hidden="true"><Icon name={icon} size={22} /></span>
+    <span className="landlord-summary__pending">Integration pending</span>
+    <h2>{title}</h2>
+  </section>
 }
 
 function AttentionRow({ icon, title, description, to, action }) {
@@ -69,12 +80,20 @@ export default function LandlordDashboard({ user }) {
 }
 
 function LandlordOverview({ user, propertyId }) {
+  const publishPendingViewings = useContext(PendingViewingsContext)
+  const publishPendingApplications = useContext(PendingApplicationsContext)
   const viewings = usePropertySummary(getViewingsByProperty, propertyId)
   const applications = usePropertySummary(getApplicationsByProperty, propertyId)
   const validation = useDashboardValidation(applications)
   const scopedPath = (path) => propertyId ? `${path}?${new URLSearchParams({ propertyId })}` : path
   const pendingViewings = viewings.data.filter((item) => item.status === VIEWING_STATUS.PENDING).length
+  useEffect(() => {
+    publishPendingViewings?.(propertyId, viewings.status === 'ready' ? pendingViewings : null)
+  }, [propertyId, viewings.status, pendingViewings, publishPendingViewings])
   const reviewableApplications = applications.data.filter(isReviewable).length
+  useEffect(() => {
+    publishPendingApplications?.(propertyId, applications.status === 'ready' ? reviewableApplications : null)
+  }, [propertyId, applications.status, reviewableApplications, publishPendingApplications])
   const awaitingReview = validation.attention.filter((item) => item.status === WORKFLOW_STATUS.AWAITING_HUMAN_REVIEW).length
   const failedWorkflows = validation.attention.filter((item) => item.status === WORKFLOW_STATUS.FAILED).length
   const hasAttention = pendingViewings + reviewableApplications + validation.attention.length > 0
@@ -95,19 +114,17 @@ function LandlordOverview({ user, propertyId }) {
         <div><h2>Selected property</h2><code>{propertyId}</code></div>
       </section> : <PropertySelectionState className="landlord-dashboard__context landlord-dashboard__selection" />}
 
-      <div className="landlord-dashboard__summaries">
-        <SummaryCard title="Viewing Requests" icon="calendar" summary={viewings} to={scopedPath('/viewing-requests')}>
-          <p className="landlord-summary__total"><strong>{viewings.data.length}</strong><span>Total requests</span></p>
-          {viewings.data.length === 0 ? <p>No viewing requests for this property yet.</p> : <dl className="landlord-summary__counts">
-            <div><dt>Pending response</dt><dd>{pendingViewings}</dd></div>
-          </dl>}
+      <div className={`landlord-dashboard__summaries${propertyId ? '' : ' landlord-dashboard__summaries--unavailable'}`}>
+        <PendingIntegrationCard title="Active Properties" icon="building" />
+        <SummaryCard title="Pending Viewings" icon="calendar" summary={viewings} count={pendingViewings} to={scopedPath('/viewing-requests')} actionLabel="Open Viewing Requests">
+          <p>{viewings.data.length === 0 ? 'No viewing requests for this property yet.' : `${viewings.data.length} total ${viewings.data.length === 1 ? 'request' : 'requests'}`}</p>
         </SummaryCard>
-        <SummaryCard title="Rental Applications" icon="document" summary={applications} to={scopedPath('/rental-applications')}>
-          <p className="landlord-summary__total"><strong>{applications.data.length}</strong><span>Total applications</span></p>
+        <SummaryCard title="Applications" icon="document" summary={applications} count={applications.data.length} to={scopedPath('/rental-applications')} actionLabel="Open Rental Applications">
           {applications.data.length === 0 ? <p>No rental applications for this property yet.</p> : <dl className="landlord-summary__counts">
             {applicationCounts.map((entry) => <div key={entry.status}><dt>{entry.label}</dt><dd>{entry.count}</dd></div>)}
           </dl>}
         </SummaryCard>
+        <PendingIntegrationCard title="Revenue This Month" icon="trend" />
       </div>
       {propertyId && <p className="landlord-dashboard__note">Summaries load when you open this dashboard. Open a workspace to review the latest records.</p>}
 
