@@ -130,17 +130,27 @@ describe('tenant dashboard', () => {
     expect(visits.querySelector('time')).toBeNull()
   })
 
-  it.each([
-    ['My Applications', '/modules/my-applications', 'Tenant applications and documents'],
-  ])('keeps the %s quick action on its existing route with honest availability', async (label, path, explanation) => {
+  it('opens My Applications from the dashboard quick action', async () => {
+    fetch.mockImplementation(() => Promise.resolve(json([])))
     renderApp()
     const actions = screen.getByRole('region', { name: 'Quick actions' })
-    const link = within(actions).getByRole('link', { name: new RegExp(label) })
-    expect(link).toHaveAttribute('href', path)
-    expect(link).toHaveTextContent('Web integration pending')
+    const link = within(actions).getByRole('link', { name: /My Applications/ })
+    expect(link).toHaveAttribute('href', '/modules/my-applications')
+    expect(link).toHaveTextContent('Open your workspace')
     await userEvent.click(link)
-    expect(screen.getByRole('heading', { name: label })).toBeInTheDocument()
-    expect(screen.getByText(new RegExp(explanation))).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'No applications yet' })).toBeInTheDocument()
+    const sidebarLink = within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'My Applications' })
+    expect(sidebarLink).toHaveAttribute('href', '/modules/my-applications')
+    expect(sidebarLink).not.toHaveTextContent('Soon')
+  })
+
+  it('opens My Applications from the tenant sidebar', async () => {
+    fetch.mockImplementation(() => Promise.resolve(json([])))
+    renderApp()
+    const sidebarLink = within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'My Applications' })
+    expect(sidebarLink).not.toHaveTextContent('Soon')
+    await userEvent.click(sidebarLink)
+    expect(await screen.findByRole('heading', { name: 'No applications yet' })).toBeInTheDocument()
   })
 
   it('opens the available read-only My Viewings page from the dashboard', async () => {

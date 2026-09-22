@@ -5,6 +5,7 @@ import LoginPage from './features/auth/pages/LoginPage.jsx'
 import RegisterPage from './features/auth/pages/RegisterPage.jsx'
 import { USER_ROLES } from './features/auth/authModel.js'
 import RentalApplicationsPage from './features/rentalApplications/pages/RentalApplicationsPage.jsx'
+import MyApplicationsPage from './features/rentalApplications/pages/MyApplicationsPage.jsx'
 import ViewingRequestsPage from './features/viewings/pages/ViewingRequestsPage.jsx'
 import MyViewingsPage from './features/viewings/pages/MyViewingsPage.jsx'
 import AppShell from './shared/layout/AppShell.jsx'
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/unauthorized" element={<UnauthorizedState />} />
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT]} />}>
           <Route path="/modules/my-viewings" element={<MyViewingsPage />} />
+          <Route path="/modules/my-applications" element={<MyApplicationsPage />} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
           <Route path="/viewing-requests" element={<ViewingRequestsPage />} />

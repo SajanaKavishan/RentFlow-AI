@@ -18,9 +18,7 @@ export const NAV_ITEMS = Object.freeze([
     id: 'my-viewings', label: 'My Viewings', path: '/modules/my-viewings', roles: [T], available: true,
   },
   {
-    id: 'my-applications', label: 'My Applications', path: '/modules/my-applications', roles: [T], available: false,
-    owner: 'Application integration',
-    description: 'Tenant applications and documents are currently available in the RentFlow mobile app.',
+    id: 'my-applications', label: 'My Applications', path: '/modules/my-applications', roles: [T], available: true,
   },
   { id: 'viewing-requests', label: 'Viewing Requests', path: '/viewing-requests', roles: [L], available: true },
   { id: 'rental-applications', label: 'Rental Applications', path: '/rental-applications', roles: [L], available: true },
