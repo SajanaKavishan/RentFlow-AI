@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/useAuth.js'
 import { getNotifications, markNotificationRead } from './notificationsApi.js'
+import { notificationDestination, notificationNavigationError } from './notificationNavigation.js'
 import { useNotificationCount } from './NotificationCountContext.js'
 import { AppCard, PageHeader } from '../../shared/ui/States.jsx'
 import Icon from '../../shared/ui/Icons.jsx'
@@ -13,6 +16,8 @@ function notificationTime(value) {
 }
 
 export default function NotificationsPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
   const { refreshCount } = useNotificationCount()
   const [page, setPage] = useState(1)
   const [data, setData] = useState(null)
@@ -21,9 +26,13 @@ export default function NotificationsPage() {
   const [selectedId, setSelectedId] = useState(null)
   const [markingIds, setMarkingIds] = useState([])
   const [markError, setMarkError] = useState(null)
+  const [navigationError, setNavigationError] = useState(null)
+  const [openingId, setOpeningId] = useState(null)
   const [reload, setReload] = useState(0)
   const requestId = useRef(0)
   const markingRef = useRef(new Set())
+  const openingRef = useRef(new Set())
+  const selectedRef = useRef(null)
   const confirmedReads = useRef(new Map())
   const mounted = useRef(true)
 
@@ -61,26 +70,49 @@ export default function NotificationsPage() {
     setLoading(true)
     setError('')
     setMarkError(null)
+    setNavigationError(null)
     setSelectedId(null)
+    selectedRef.current = null
   }
 
   const select = async (item) => {
+    selectedRef.current = item.id
     setSelectedId(item.id)
     setMarkError(null)
-    if (item.isRead || markingRef.current.has(item.id)) return
-    markingRef.current.add(item.id)
-    setMarkingIds(Array.from(markingRef.current))
+    setNavigationError(null)
+    if (openingRef.current.has(item.id)) return
+    openingRef.current.add(item.id)
+    setOpeningId(item.id)
     try {
-      const updated = await markNotificationRead(item.id)
-      if (!mounted.current) return
-      confirmedReads.current.set(item.id, updated)
-      setData((current) => current && ({ ...current, items: current.items.map((entry) => entry.id === item.id ? updated : entry) }))
-      refreshCount()
-    } catch (failure) {
-      if (mounted.current) setMarkError({ id: item.id, message: failure.message })
+      if (!item.isRead) {
+        markingRef.current.add(item.id)
+        setMarkingIds(Array.from(markingRef.current))
+        try {
+          const updated = await markNotificationRead(item.id)
+          if (!mounted.current) return
+          confirmedReads.current.set(item.id, updated)
+          setData((current) => current && ({ ...current, items: current.items.map((entry) => entry.id === item.id ? updated : entry) }))
+          refreshCount()
+        } catch (failure) {
+          if (mounted.current) setMarkError({ id: item.id, message: failure.message })
+          return
+        } finally {
+          markingRef.current.delete(item.id)
+          if (mounted.current) setMarkingIds(Array.from(markingRef.current))
+        }
+      }
+      if (!mounted.current || selectedRef.current !== item.id) return
+      try {
+        const path = await notificationDestination(item, user.role)
+        if (mounted.current && selectedRef.current === item.id) navigate(path)
+      } catch (failure) {
+        if (mounted.current && selectedRef.current === item.id) {
+          setNavigationError({ id: item.id, message: notificationNavigationError(failure) })
+        }
+      }
     } finally {
-      markingRef.current.delete(item.id)
-      if (mounted.current) setMarkingIds(Array.from(markingRef.current))
+      openingRef.current.delete(item.id)
+      if (mounted.current) setOpeningId(null)
     }
   }
 
@@ -100,7 +132,7 @@ export default function NotificationsPage() {
           </button>)}
         </section>
         <AppCard className="notifications-detail">
-          {selected ? <><span className="notifications-detail__eyebrow">{selected.isRead ? 'Read notification' : markingIds.includes(selected.id) ? 'Marking as read…' : 'Unread notification'}</span><h2>{selected.title}</h2><time dateTime={selected.createdAt}>{notificationTime(selected.createdAt)}</time><p>{selected.message}</p>{markError?.id === selected.id && <div role="alert" className="shared-notice shared-notice--error">{markError.message} Select this notification to try again.</div>}</>
+          {selected ? <><span className="notifications-detail__eyebrow">{markingIds.includes(selected.id) ? 'Marking as read…' : openingId === selected.id ? 'Opening related record…' : selected.isRead ? 'Read notification' : 'Unread notification'}</span><h2>{selected.title}</h2><time dateTime={selected.createdAt}>{notificationTime(selected.createdAt)}</time><p>{selected.message}</p>{markError?.id === selected.id && <div role="alert" className="shared-notice shared-notice--error">{markError.message} Select this notification to try again.</div>}{navigationError?.id === selected.id && <div role="alert" className="shared-notice shared-notice--error">{navigationError.message} Select this notification to try again.</div>}</>
             : <div className="notifications-detail__placeholder"><Icon name="bell" size={26} /><h2>Select a notification</h2><p>Choose an update to read its full message.</p></div>}
         </AppCard>
       </div>

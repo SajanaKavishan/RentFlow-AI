@@ -10,6 +10,7 @@ import AppShell from './shared/layout/AppShell.jsx'
 import DashboardPage from './shared/pages/DashboardPage.jsx'
 import ProfilePage from './shared/pages/ProfilePage.jsx'
 import NotificationsPage from './features/notifications/NotificationsPage.jsx'
+import NotificationResourcePage from './features/notifications/NotificationResourcePage.jsx'
 import { NotFoundState, UnauthorizedState, UnavailableState } from './shared/ui/States.jsx'
 import LandingPage from './features/landing/pages/LandingPage.jsx'
 
@@ -23,6 +24,12 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT, USER_ROLES.LANDLORD]} />}>
+          <Route path="/notifications/rental-application/:id" element={<NotificationResourcePage resourceType="RentalApplication" />} />
+        </Route>
+        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
+          <Route path="/notifications/viewing-request/:id" element={<NotificationResourcePage resourceType="ViewingRequest" />} />
+        </Route>
         <Route path="/unauthorized" element={<UnauthorizedState />} />
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
           <Route path="/viewing-requests" element={<ViewingRequestsPage />} />

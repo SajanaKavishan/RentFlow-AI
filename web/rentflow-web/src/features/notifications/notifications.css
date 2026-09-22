@@ -26,5 +26,13 @@
 .notifications-feedback__icon { color: var(--olive-700); }
 .notifications-pagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 28px; color: var(--muted); font-size: .8rem; font-weight: 700; }
 .notifications-pagination button:disabled, .notifications-page__heading button:disabled { opacity: .5; cursor: default; }
+.notification-resource { max-width: 960px; }
+.notification-resource .shared-page-header { margin-bottom: 18px; }
+.notification-resource__back { width: fit-content; margin-bottom: 24px; }
+.notification-resource__card { height: auto; }
+.notification-resource__details { display: grid; gap: 16px; margin: 24px 0 0; }
+.notification-resource__details div { display: grid; gap: 4px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.notification-resource__details dt { color: var(--muted); font-size: .75rem; font-weight: 700; }
+.notification-resource__details dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; white-space: pre-wrap; }
 @media (max-width: 760px) { .notifications-layout { grid-template-columns: 1fr; } .notifications-detail { position: static; } }
 @media (max-width: 520px) { .notifications-page__heading { align-items: flex-start; flex-direction: column; } .notifications-pagination { gap: 10px; } .notifications-pagination .shared-button { padding: 9px 12px; } }

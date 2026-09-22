@@ -12,6 +12,7 @@ import { NotificationCountContext } from '../../features/notifications/Notificat
 import './shell.css'
 
 function navigationPath(pathname) {
+  if (pathname.startsWith('/notifications/')) return '/notifications'
   const scoped = /^\/properties\/[^/]+\/(viewing-requests|rental-applications|ai-review)\/?$/.exec(pathname)
   return scoped ? `/${scoped[1]}` : pathname
 }

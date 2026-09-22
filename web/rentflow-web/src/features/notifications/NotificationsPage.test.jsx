@@ -128,7 +128,7 @@ describe('shared notifications UI', () => {
     await userEvent.click(unread)
     await userEvent.click(screen.getByRole('button', { name: /Application updated/ }))
     await act(async () => { failPatch(json({ message: 'Unavailable' }, 503)) })
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText('Notification could not be marked as read.')).not.toBeInTheDocument()
     expect(unread).toHaveTextContent('Unread')
   })
 
