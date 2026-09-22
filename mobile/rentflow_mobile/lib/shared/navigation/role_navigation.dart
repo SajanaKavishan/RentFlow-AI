@@ -109,10 +109,7 @@ List<RoleDestination> destinationsFor(UserRole role) => switch (role) {
       id: RoleDestinationId.assignedWork,
       label: 'Assigned Work',
       icon: Icons.handyman_outlined,
-      experience: DestinationExperience.unavailable,
-      owner: 'Maintenance',
-      explanation:
-          'Assigned maintenance work will appear here after the maintenance module is integrated.',
+      experience: DestinationExperience.feature,
     ),
     _profile,
   ],

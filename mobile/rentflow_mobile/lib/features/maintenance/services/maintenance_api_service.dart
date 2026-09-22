@@ -55,6 +55,24 @@ class MaintenanceApiService {
     return _parseObject(response.body);
   }
 
+  Future<MaintenanceRequest> startWork({required String id}) async {
+    final uri = apiClient.buildUri('/api/maintenance-requests/$id/start-work');
+    final response = await _send(() => apiClient.patch(uri));
+    return _parseStatusTransition(
+      response.body,
+      expectedStatus: MaintenanceRequestStatus.inProgress,
+    );
+  }
+
+  Future<MaintenanceRequest> completeWork({required String id}) async {
+    final uri = apiClient.buildUri('/api/maintenance-requests/$id/complete-work');
+    final response = await _send(() => apiClient.patch(uri));
+    return _parseStatusTransition(
+      response.body,
+      expectedStatus: MaintenanceRequestStatus.completed,
+    );
+  }
+
   Future<http.Response> _send(Future<http.Response> Function() request) async {
     late final http.Response response;
     try {
@@ -99,6 +117,19 @@ class MaintenanceApiService {
         'The maintenance service returned an invalid response.',
       );
     }
+  }
+
+  MaintenanceRequest _parseStatusTransition(
+    String body, {
+    required MaintenanceRequestStatus expectedStatus,
+  }) {
+    final request = _parseObject(body);
+    if (request.status != expectedStatus) {
+      throw const MaintenanceApiException(
+        'The maintenance service did not confirm the requested status change.',
+      );
+    }
+    return request;
   }
 
   List<MaintenanceRequest> _parseList(String body) {
