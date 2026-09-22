@@ -48,7 +48,7 @@ function LandlordOverview({ user, propertyId }) {
 
   return (
     <main className="shared-page landlord-dashboard">
-      <PageHeader eyebrow="Landlord workspace" title={`Welcome, ${user.fullName.trim() || 'there'}`}>
+      <PageHeader title={`Welcome, ${user.fullName.trim() || 'there'}`}>
         <p>Review requests, follow up on applications and keep your property moving.</p>
       </PageHeader>
 

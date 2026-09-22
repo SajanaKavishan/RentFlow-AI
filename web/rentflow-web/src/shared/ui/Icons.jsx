@@ -14,6 +14,8 @@ const paths = {
   eye: <><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="2.5" /></>,
   eyeOff: <><path d="M3 3l18 18M9 6.5A11 11 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3.3 3.7M6 8.4A17 17 0 0 0 2 12s4 6 10 6a11 11 0 0 0 4-.8" /></>,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5m0-8h.01" /></>,
+  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 9h18c0-1-3-2-3-9" /><path d="M10 21h4" /></>,
+  refresh: <><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9A7 7 0 0 1 18 7l2 5M4 12l2 5a7 7 0 0 0 12.4-2" /></>,
   alert: <><path d="m12 3 10 18H2z" /><path d="M12 9v5m0 3h.01" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="m16 16 5 5" /></>,
 }

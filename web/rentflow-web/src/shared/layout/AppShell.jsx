@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/useAuth.js'
 import { navigationForRole } from '../navigation/roleNavigation.js'
@@ -7,6 +7,8 @@ import { BrandWordmark } from '../ui/BrandLogo.jsx'
 import { initialsForName } from '../ui/userDisplay.js'
 import { USER_ROLES } from '../../features/auth/authModel.js'
 import { propertyIdFromLocation } from '../property/usePropertyContext.js'
+import { getUnreadCount } from '../../features/notifications/notificationsApi.js'
+import { NotificationCountContext } from '../../features/notifications/NotificationCountContext.js'
 import './shell.css'
 
 function navigationPath(pathname) {
@@ -25,9 +27,24 @@ function iconForItem(label) {
 
 export default function AppShell() {
   const { user, logout } = useAuth()
-  const roleLabel = user.role === USER_ROLES.MAINTENANCE_TECHNICIAN
-    ? 'Maintenance technician' : user.role
+  const portalRole = user.role === USER_ROLES.MAINTENANCE_TECHNICIAN ? 'Technician' : user.role
   const location = useLocation()
+  const [countResult, setCountResult] = useState(null)
+  const unreadCount = countResult?.userId === user.id ? countResult.count : null
+  const countRequest = useRef(0)
+  const refreshCount = useCallback(() => {
+    const request = ++countRequest.current
+    return getUnreadCount().then((count) => {
+      if (request === countRequest.current) setCountResult({ userId: user.id, count })
+    }).catch(() => {
+      if (request === countRequest.current) setCountResult({ userId: user.id, count: null })
+    })
+  }, [user.id])
+  useEffect(() => {
+    const requestCounter = countRequest
+    refreshCount()
+    return () => { requestCounter.current++ }
+  }, [location.pathname, user.id, refreshCount])
   const propertyId = user.role === USER_ROLES.LANDLORD ? propertyIdFromLocation(location) : null
   const activePath = navigationPath(location.pathname)
   const scopedPath = (path) => propertyId ? `${path}?${new URLSearchParams({ propertyId })}` : path
@@ -65,7 +82,7 @@ export default function AppShell() {
     }
   }, [menuOpen, location.pathname])
   const items = navigationForRole(user.role)
-  const current = items.find((item) => item.path === activePath)?.label
+  const current = (activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : items.find((item) => item.path === activePath)?.label)
     || (location.pathname === '/unauthorized' ? 'Access restricted' : 'RentFlow AI')
   const closeMenu = () => { setMenu({ path: location.pathname, open: false }); if (menuOpen) menuRef.current?.focus() }
   const navLink = (item) => <Link key={`${item.label}-${item.path}`} to={scopedPath(item.path)} aria-current={activePath === item.path ? 'page' : undefined} onClick={closeMenu} className={`shared-nav-link${activePath === item.path ? ' shared-nav-link--active' : ''}`}>
@@ -78,6 +95,7 @@ export default function AppShell() {
         <BrandWordmark className="shared-brand__image" decorative />
         <span className="shared-brand__tagline">A better way to rent</span>
       </Link>
+      <span className="shared-brand__workspace">{portalRole} workspace</span>
       <button className="shared-sidebar__close" type="button" aria-label="Close menu" onClick={closeMenu}><Icon name="close" size={20} /></button>
       <nav aria-label="Primary navigation" className="shared-sidebar__nav">
         <div className="shared-sidebar__nav-main">{items.filter((item) => item.path !== '/profile').map(navLink)}</div>
@@ -90,10 +108,11 @@ export default function AppShell() {
     <div className="shared-shell__body">
       <header className="shared-topbar">
         <button ref={menuRef} type="button" className="shared-menu-button" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="shared-navigation" onClick={() => setMenu({ path: location.pathname, open: !menuOpen })}><Icon name={menuOpen ? 'close' : 'menu'} size={22} /></button>
-        <div className="shared-topbar__title"><span className="shared-topbar__eyebrow">{roleLabel} workspace</span><strong>{current}</strong></div>
-        <Link className="shared-topbar__account" to={scopedPath('/profile')} title={user.email} onClick={closeMenu} aria-label={`Profile for ${user.fullName}`}><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span><span className="shared-topbar__role">{roleLabel}</span></span><span className="shared-avatar" aria-hidden="true">{initialsForName(user.fullName)}</span></Link>
+        <div className="shared-topbar__title"><strong>{current}</strong></div>
+        <Link className="shared-topbar__notifications" to="/notifications" onClick={closeMenu} aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'} aria-current={activePath === '/notifications' ? 'page' : undefined}><Icon name="bell" size={21} />{unreadCount > 0 && <span className="shared-topbar__notification-count" aria-hidden="true">{unreadCount}</span>}</Link>
+        <Link className="shared-topbar__account" to={scopedPath('/profile')} title={user.email} onClick={closeMenu} aria-label={`Profile for ${user.fullName}`}><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span></span><span className="shared-avatar" aria-hidden="true">{initialsForName(user.fullName)}</span></Link>
       </header>
-      <div className="shared-shell__content"><Outlet /></div>
+      <NotificationCountContext.Provider value={{ refreshCount }}><div className="shared-shell__content"><Outlet key={user.id} /></div></NotificationCountContext.Provider>
     </div>
   </div>
 }

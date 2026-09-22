@@ -4,6 +4,10 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App.jsx'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
+
+vi.mock('../../features/notifications/notificationsApi.js', async (importOriginal) => ({
+  ...(await importOriginal()), getUnreadCount: vi.fn().mockResolvedValue(0),
+}))
 import { AuthProvider } from '../../features/auth/AuthContext.jsx'
 import { AuthContext } from '../../features/auth/useAuth.js'
 

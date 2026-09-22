@@ -7,6 +7,10 @@ import { AuthProvider } from '../../features/auth/AuthContext.jsx'
 import { AuthContext } from '../../features/auth/useAuth.js'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 
+vi.mock('../../features/notifications/notificationsApi.js', async (importOriginal) => ({
+  ...(await importOriginal()), getUnreadCount: vi.fn().mockResolvedValue(0),
+}))
+
 const tenant = { id: 'tenant-one', fullName: 'Amara Silva', email: 'amara@example.com', phoneNumber: '', role: 'Tenant' }
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const applications = [0, 1, 2, 2, 3, 4, 5, 6].map((status, index) => ({ id: `application-${index}`, status }))

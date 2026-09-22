@@ -9,6 +9,7 @@ import ViewingRequestsPage from './features/viewings/pages/ViewingRequestsPage.j
 import AppShell from './shared/layout/AppShell.jsx'
 import DashboardPage from './shared/pages/DashboardPage.jsx'
 import ProfilePage from './shared/pages/ProfilePage.jsx'
+import NotificationsPage from './features/notifications/NotificationsPage.jsx'
 import { NotFoundState, UnauthorizedState, UnavailableState } from './shared/ui/States.jsx'
 import LandingPage from './features/landing/pages/LandingPage.jsx'
 
@@ -21,6 +22,7 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/unauthorized" element={<UnauthorizedState />} />
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
           <Route path="/viewing-requests" element={<ViewingRequestsPage />} />
