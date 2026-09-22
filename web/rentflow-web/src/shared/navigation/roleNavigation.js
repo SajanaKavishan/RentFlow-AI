@@ -15,9 +15,7 @@ export const NAV_ITEMS = Object.freeze([
     description: 'Property discovery and management will appear here after the property module is integrated.',
   },
   {
-    id: 'my-viewings', label: 'My Viewings', path: '/modules/my-viewings', roles: [T], available: false,
-    owner: 'Viewing integration',
-    description: 'Tenant viewing management is currently available in the RentFlow mobile app.',
+    id: 'my-viewings', label: 'My Viewings', path: '/modules/my-viewings', roles: [T], available: true,
   },
   {
     id: 'my-applications', label: 'My Applications', path: '/modules/my-applications', roles: [T], available: false,

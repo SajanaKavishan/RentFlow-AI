@@ -38,6 +38,7 @@ function mockEndpoints(item, resource = application, resourceStatus = 200) {
     const path = new URL(url, 'http://localhost').pathname
     if (path === '/api/notifications/unread-count') return Promise.resolve(json({ unreadCount: item.isRead ? 0 : 1 }))
     if (path === '/api/notifications') return Promise.resolve(json(page(item)))
+    if (path === '/api/viewings') return Promise.resolve(json(resource.id === viewingId ? [resource] : []))
     if (options?.method === 'PATCH') return Promise.resolve(json({ ...item, isRead: true, readAt: '2026-09-22T10:00:00Z' }))
     if (path === `/api/rental-applications/${applicationId}` || path === `/api/viewings/${viewingId}`) {
       return Promise.resolve(json(resourceStatus === 200 ? resource : { message: 'Unavailable' }, resourceStatus))
@@ -92,6 +93,7 @@ describe('notification resource navigation', () => {
     renderInbox('Tenant')
     await userEvent.click(await screen.findByRole('button', { name: /An update/ }))
     expect(await screen.findByRole('heading', { name: 'My Viewings' })).toBeInTheDocument()
+    expect(await screen.findByText(propertyId)).toBeInTheDocument()
     expect(screen.queryByText(viewingId)).not.toBeInTheDocument()
     expect(fetch.mock.calls.filter(([url]) => new URL(url, 'http://localhost').pathname === `/api/viewings/${viewingId}`)).toHaveLength(1)
   })

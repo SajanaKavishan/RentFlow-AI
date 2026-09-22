@@ -1,0 +1,21 @@
+.my-viewings-page { max-width: 1050px; }
+.my-viewings-page__heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 28px; }
+.my-viewings-page__heading .shared-page-header { margin: 0; }
+.my-viewings-page__heading > button { flex: none; }
+.my-viewings-page__heading button:disabled { opacity: .5; cursor: default; }
+.my-viewings-list { display: grid; gap: 16px; }
+.my-viewing-card { height: auto; }
+.my-viewing-card__top { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.my-viewing-card__top h2 { margin: 0; color: var(--ink); font-size: 1.1rem; }
+.my-viewing-card__details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 24px 0 0; }
+.my-viewing-card__details dt, .my-viewing-card__response h3 { margin: 0 0 6px; color: var(--muted); font-size: .75rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.my-viewing-card__details dd { margin: 0; color: var(--ink); font-size: .9rem; overflow-wrap: anywhere; }
+.my-viewing-card__details code { font-size: .8rem; overflow-wrap: anywhere; }
+.my-viewing-card__response { margin-top: 24px; padding: 18px; border-radius: var(--radius-sm); background: var(--olive-50); }
+.my-viewing-card__response p { margin: 0; color: var(--ink); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.my-viewings-state { min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-card); color: var(--muted); background: var(--surface); text-align: center; }
+.my-viewings-state h2, .my-viewings-state p { margin: 0; }
+.my-viewings-state h2 { color: var(--ink); }
+.my-viewings-state svg { color: var(--olive-700); }
+@media (max-width: 700px) { .my-viewing-card__details { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .my-viewings-page__heading { align-items: flex-start; flex-direction: column; } }

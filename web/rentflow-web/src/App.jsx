@@ -6,6 +6,7 @@ import RegisterPage from './features/auth/pages/RegisterPage.jsx'
 import { USER_ROLES } from './features/auth/authModel.js'
 import RentalApplicationsPage from './features/rentalApplications/pages/RentalApplicationsPage.jsx'
 import ViewingRequestsPage from './features/viewings/pages/ViewingRequestsPage.jsx'
+import MyViewingsPage from './features/viewings/pages/MyViewingsPage.jsx'
 import AppShell from './shared/layout/AppShell.jsx'
 import DashboardPage from './shared/pages/DashboardPage.jsx'
 import ProfilePage from './shared/pages/ProfilePage.jsx'
@@ -31,6 +32,9 @@ export default function App() {
           <Route path="/notifications/viewing-request/:id" element={<NotificationResourcePage resourceType="ViewingRequest" />} />
         </Route>
         <Route path="/unauthorized" element={<UnauthorizedState />} />
+        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT]} />}>
+          <Route path="/modules/my-viewings" element={<MyViewingsPage />} />
+        </Route>
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
           <Route path="/viewing-requests" element={<ViewingRequestsPage />} />
           <Route

@@ -131,7 +131,6 @@ describe('tenant dashboard', () => {
   })
 
   it.each([
-    ['My Viewings', '/modules/my-viewings', 'Tenant viewing management'],
     ['My Applications', '/modules/my-applications', 'Tenant applications and documents'],
   ])('keeps the %s quick action on its existing route with honest availability', async (label, path, explanation) => {
     renderApp()
@@ -142,6 +141,19 @@ describe('tenant dashboard', () => {
     await userEvent.click(link)
     expect(screen.getByRole('heading', { name: label })).toBeInTheDocument()
     expect(screen.getByText(new RegExp(explanation))).toBeInTheDocument()
+  })
+
+  it('opens the available read-only My Viewings page from the dashboard', async () => {
+    fetch.mockImplementation(() => Promise.resolve(json([])))
+    renderApp()
+    const actions = screen.getByRole('region', { name: 'Quick actions' })
+    const link = within(actions).getByRole('link', { name: /My Viewings/ })
+    expect(link).toHaveAttribute('href', '/modules/my-viewings')
+    expect(link).toHaveTextContent('Open your workspace')
+    await userEvent.click(link)
+    expect(await screen.findByRole('heading', { name: 'No viewing requests yet' })).toBeInTheDocument()
+    const sidebarLink = within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'My Viewings' })
+    expect(sidebarLink).not.toHaveTextContent('Soon')
   })
 
   it.each(['Lease & Payments', 'Maintenance'])('provides a pending tenant destination for %s', async (label) => {
