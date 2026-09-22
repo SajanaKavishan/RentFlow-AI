@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
+import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import RentalApplicationCard from '../components/RentalApplicationCard.jsx'
 import {
   approveApplication,
@@ -11,13 +13,10 @@ import {
 } from '../services/rentalApplicationApiService.js'
 import '../rentalApplications.css'
 
-// TODO(dev-only): Replace this temporary property ID with the property selected
-// from authenticated landlord/property navigation.
-const TEMPORARY_PROPERTY_ID = '22222222-2222-2222-2222-222222222222'
-
 const STATUS_PRIORITY = {
   [RENTAL_APPLICATION_STATUS.SUBMITTED]: 0,
   [RENTAL_APPLICATION_STATUS.UNDER_REVIEW]: 1,
+  [RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED]: 2,
 }
 
 function safeErrorMessage(error, fallback) {
@@ -26,8 +25,8 @@ function safeErrorMessage(error, fallback) {
 
 function sortApplications(applications) {
   return [...applications].sort((left, right) => {
-    const leftPriority = STATUS_PRIORITY[left.status] ?? 2
-    const rightPriority = STATUS_PRIORITY[right.status] ?? 2
+    const leftPriority = STATUS_PRIORITY[left.status] ?? 3
+    const rightPriority = STATUS_PRIORITY[right.status] ?? 3
     if (leftPriority !== rightPriority) return leftPriority - rightPriority
 
     const leftDate = Date.parse(left.submittedAt || left.createdAt || '') || 0
@@ -37,23 +36,33 @@ function sortApplications(applications) {
 }
 
 function RentalApplicationsPage() {
+  const { propertyId } = usePropertyContext()
   const [pageState, setPageState] = useState({
     status: 'loading',
+    propertyId: null,
     applications: [],
     error: '',
   })
   const [updatingId, setUpdatingId] = useState(null)
   const [actionError, setActionError] = useState({ id: null, message: '' })
   const [notice, setNotice] = useState('')
+  const pageStatus = !propertyId
+    ? 'property-required'
+    : pageState.propertyId === propertyId
+      ? pageState.status
+      : 'loading'
 
   useEffect(() => {
+    if (!propertyId) return undefined
+
     let isActive = true
 
-    getApplicationsByProperty(TEMPORARY_PROPERTY_ID)
+    getApplicationsByProperty(propertyId)
       .then((applications) => {
         if (isActive) {
           setPageState({
             status: 'success',
+            propertyId,
             applications: sortApplications(applications),
             error: '',
           })
@@ -63,6 +72,7 @@ function RentalApplicationsPage() {
         if (!isActive) return
         setPageState({
           status: 'error',
+          propertyId,
           applications: [],
           error: safeErrorMessage(
             error,
@@ -74,25 +84,32 @@ function RentalApplicationsPage() {
     return () => {
       isActive = false
     }
-  }, [])
+  }, [propertyId])
 
   async function loadApplications() {
-    setPageState((current) => ({ ...current, status: 'loading', error: '' }))
+    if (!propertyId) return
+
+    setPageState((current) => ({
+      ...current,
+      status: 'loading',
+      propertyId,
+      error: '',
+    }))
     setActionError({ id: null, message: '' })
     setNotice('')
 
     try {
-      const applications = await getApplicationsByProperty(
-        TEMPORARY_PROPERTY_ID,
-      )
+      const applications = await getApplicationsByProperty(propertyId)
       setPageState({
         status: 'success',
+        propertyId,
         applications: sortApplications(applications),
         error: '',
       })
     } catch (error) {
       setPageState({
         status: 'error',
+        propertyId,
         applications: [],
         error: safeErrorMessage(
           error,
@@ -167,33 +184,63 @@ function RentalApplicationsPage() {
     )
   }
 
+  const reviewCounts = pageState.applications.reduce(
+    (counts, application) => {
+      if (application.status === RENTAL_APPLICATION_STATUS.SUBMITTED) {
+        counts.submitted += 1
+      } else if (
+        application.status === RENTAL_APPLICATION_STATUS.UNDER_REVIEW
+      ) {
+        counts.underReview += 1
+      } else if (
+        application.status === RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED
+      ) {
+        counts.changesRequested += 1
+      }
+      return counts
+    },
+    { submitted: 0, underReview: 0, changesRequested: 0 },
+  )
+  const attentionCount =
+    reviewCounts.submitted +
+    reviewCounts.underReview +
+    reviewCounts.changesRequested
+
   return (
-    <main className="applications-page">
+    <main
+      className="applications-page"
+      aria-busy={pageStatus === 'loading'}
+    >
       <header className="applications-page__header">
         <div>
           <p className="applications-page__eyebrow">Landlord workspace</p>
           <h1>Rental applications</h1>
           <p>
-            Review tenant details and respond to applications for your property.
+            Review tenant details, supporting documents, and validation findings
+            before making a landlord decision.
           </p>
         </div>
         <button
           type="button"
           className="application-button application-button--quiet"
           onClick={loadApplications}
-          disabled={pageState.status === 'loading'}
+          disabled={!propertyId || pageStatus === 'loading'}
         >
           Refresh
         </button>
       </header>
 
-      {notice && (
+      {pageStatus === 'property-required' && (
+        <PropertySelectionState className="applications-state" />
+      )}
+
+      {pageStatus === 'success' && notice && (
         <div className="applications-notice" role="status">
           {notice}
         </div>
       )}
 
-      {pageState.status === 'loading' && (
+      {pageStatus === 'loading' && (
         <section className="applications-state" aria-live="polite">
           <span className="applications-spinner" aria-hidden="true" />
           <h2>Loading rental applications</h2>
@@ -201,7 +248,7 @@ function RentalApplicationsPage() {
         </section>
       )}
 
-      {pageState.status === 'error' && (
+      {pageStatus === 'error' && (
         <section
           className="applications-state applications-state--error"
           role="alert"
@@ -221,7 +268,7 @@ function RentalApplicationsPage() {
         </section>
       )}
 
-      {pageState.status === 'success' &&
+      {pageStatus === 'success' &&
         pageState.applications.length === 0 && (
           <section className="applications-state">
             <div className="applications-state__icon" aria-hidden="true">
@@ -232,27 +279,58 @@ function RentalApplicationsPage() {
           </section>
         )}
 
-      {pageState.status === 'success' &&
+      {pageStatus === 'success' &&
         pageState.applications.length > 0 && (
-          <section
-            className="applications-list"
-            aria-label="Rental applications"
-          >
-            {pageState.applications.map((application) => (
-              <RentalApplicationCard
-                key={application.id}
-                application={application}
-                isUpdating={updatingId === application.id}
-                actionError={
-                  actionError.id === application.id ? actionError.message : ''
-                }
-                onReview={handleReview}
-                onApprove={handleApprove}
-                onReject={handleReject}
-                onRequestChanges={handleRequestChanges}
-              />
-            ))}
-          </section>
+          <>
+            <section
+              className="applications-summary"
+              aria-label="Application review summary"
+            >
+              <div className="applications-summary__intro">
+                <p className="applications-page__eyebrow">Review queue</p>
+                <h2>Applications needing attention</h2>
+                <p>
+                  {attentionCount === 0
+                    ? 'No applications currently need action.'
+                    : `${attentionCount} ${attentionCount === 1 ? 'application needs' : 'applications need'} attention. Priority items are listed first.`}
+                </p>
+              </div>
+              <dl className="applications-summary__counts">
+                <div className="applications-summary__count applications-summary__count--submitted">
+                  <dt>Submitted</dt>
+                  <dd>{reviewCounts.submitted}</dd>
+                </div>
+                <div className="applications-summary__count applications-summary__count--review">
+                  <dt>Under review</dt>
+                  <dd>{reviewCounts.underReview}</dd>
+                </div>
+                <div className="applications-summary__count applications-summary__count--changes">
+                  <dt>Changes requested</dt>
+                  <dd>{reviewCounts.changesRequested}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section
+              className="applications-list"
+              aria-label="Rental applications"
+            >
+              {pageState.applications.map((application) => (
+                <RentalApplicationCard
+                  key={application.id}
+                  application={application}
+                  isUpdating={updatingId === application.id}
+                  actionError={
+                    actionError.id === application.id ? actionError.message : ''
+                  }
+                  onReview={handleReview}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
+                  onRequestChanges={handleRequestChanges}
+                />
+              ))}
+            </section>
+          </>
         )}
     </main>
   )

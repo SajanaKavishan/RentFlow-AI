@@ -2,7 +2,6 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using RentFlow.Api.Data;
 
@@ -22,718 +21,403 @@ namespace RentFlow.Api.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("RentFlow.Api.Models.ApplicationDocument", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ApplicationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<int>("DocumentType")
-                        .HasColumnType("integer");
-
-                    b.Property<long>("FileSizeBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("OriginalFileName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("StorageKey")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<DateTimeOffset>("UploadedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ApplicationId");
-
-                    b.HasIndex("DocumentType");
-
-                    b.ToTable("ApplicationDocuments");
-                });
-
             modelBuilder.Entity("RentFlow.Api.Models.ApplicationUser", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("Email")
-                        .IsRequired()
                         .HasMaxLength(320)
-                        .HasColumnType("character varying(320)");
-
-                    b.Property<string>("FullName")
                         .IsRequired()
+                        .HasColumnType("character varying(320)");
+                    b.Property<string>("FullName")
                         .HasMaxLength(200)
+                        .IsRequired()
                         .HasColumnType("character varying(200)");
-
+                    b.Property<string>("NormalizedEmail")
+                        .HasMaxLength(320)
+                        .IsRequired()
+                        .HasColumnType("character varying(320)");
+                    b.Property<string>("PasswordHash")
+                        .HasMaxLength(512)
+                        .IsRequired()
+                        .HasColumnType("character varying(512)");
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(32)
+                        .IsRequired()
+                        .HasColumnType("character varying(32)");
+                    b.Property<string>("Role")
+                        .HasMaxLength(32)
+                        .IsRequired()
+                        .HasColumnType("character varying(32)");
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
-
-                    b.Property<string>("NormalizedEmail")
-                        .IsRequired()
-                        .HasMaxLength(320)
-                        .HasColumnType("character varying(320)");
-
-                    b.Property<string>("PasswordHash")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<string>("PhoneNumber")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
-
                     b.HasKey("Id");
-
                     b.HasIndex("NormalizedEmail")
                         .IsUnique();
-
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("RentFlow.Api.Models.ApplicationValidationStep", b =>
+            modelBuilder.Entity("RentFlow.Api.Models.Property", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<string>("AgentName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("InputSummary")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("ResultJson")
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset?>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("StepOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("WorkflowId")
-                        .HasColumnType("uuid");
-
+                    b.Property<Guid>("LandlordId").HasColumnType("uuid");
+                    b.Property<string>("Title").HasMaxLength(200).IsRequired().HasColumnType("character varying(200)");
+                    b.Property<string>("Description").HasMaxLength(2000).IsRequired().HasColumnType("character varying(2000)");
+                    b.Property<string>("Address").HasMaxLength(500).IsRequired().HasColumnType("character varying(500)");
+                    b.Property<string>("City").HasMaxLength(100).IsRequired().HasColumnType("character varying(100)");
+                    b.Property<decimal>("MonthlyRent").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<int>("Bedrooms").HasColumnType("integer");
+                    b.Property<int>("Bathrooms").HasColumnType("integer");
+                    b.Property<bool>("IsAvailable").HasColumnType("boolean");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("timestamp with time zone");
                     b.HasKey("Id");
+                    b.HasIndex("LandlordId");
+                    b.HasIndex("City");
+                    b.HasIndex("MonthlyRent");
+                    b.HasIndex("IsAvailable");
+                    b.ToTable("Properties");
+                });
 
-                    b.HasIndex("WorkflowId", "StepOrder")
-                        .IsUnique();
+            modelBuilder.Entity("RentFlow.Api.Models.PropertyAmenity", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("PropertyId").HasColumnType("uuid");
+                    b.Property<string>("Name").HasMaxLength(100).IsRequired().HasColumnType("character varying(100)");
+                    b.HasKey("Id");
+                    b.HasIndex("PropertyId");
+                    b.ToTable("PropertyAmenities");
+                });
 
-                    b.ToTable("ApplicationValidationSteps");
+            modelBuilder.Entity("RentFlow.Api.Models.PropertyImage", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("PropertyId").HasColumnType("uuid");
+                    b.Property<string>("OriginalFileName").HasMaxLength(255).IsRequired().HasColumnType("character varying(255)");
+                    b.Property<string>("StorageKey").HasMaxLength(512).IsRequired().HasColumnType("character varying(512)");
+                    b.Property<string>("ContentType").HasMaxLength(255).IsRequired().HasColumnType("character varying(255)");
+                    b.Property<long>("FileSizeBytes").HasColumnType("bigint");
+                    b.Property<DateTimeOffset>("UploadedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("PropertyId");
+                    b.ToTable("PropertyImages");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.ViewingRequest", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("TenantId").HasColumnType("uuid");
+                    b.Property<Guid>("PropertyId").HasColumnType("uuid");
+                    b.Property<DateTimeOffset>("RequestedDateTime").HasColumnType("timestamp with time zone");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<string>("TenantMessage").HasMaxLength(1000).HasColumnType("character varying(1000)");
+                    b.Property<string>("LandlordResponse").HasMaxLength(1000).HasColumnType("character varying(1000)");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.ToTable("ViewingRequests");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.RentalApplication", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("TenantId").HasColumnType("uuid");
+                    b.Property<Guid>("PropertyId").HasColumnType("uuid");
+                    b.Property<DateOnly>("MoveInDate").HasColumnType("date");
+                    b.Property<decimal>("MonthlyIncome").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<string>("Occupation").HasMaxLength(200).IsRequired().HasColumnType("character varying(200)");
+                    b.Property<int>("NumberOfOccupants").HasColumnType("integer");
+                    b.Property<string>("TenantNote").HasMaxLength(1000).HasColumnType("character varying(1000)");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<string>("LandlordResponse").HasMaxLength(1000).HasColumnType("character varying(1000)");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("SubmittedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("TenantId");
+                    b.HasIndex("PropertyId");
+                    b.HasIndex("Status");
+                    b.ToTable("RentalApplications");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.RentalOffer", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("RentalApplicationId").HasColumnType("uuid");
+                    b.Property<Guid>("TenantId").HasColumnType("uuid");
+                    b.Property<Guid>("PropertyId").HasColumnType("uuid");
+                    b.Property<decimal>("MonthlyRent").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<decimal>("SecurityDeposit").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<DateOnly>("ProposedStartDate").HasColumnType("date");
+                    b.Property<DateOnly>("ProposedEndDate").HasColumnType("date");
+                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<string>("LandlordNote").HasMaxLength(1000).HasColumnType("character varying(1000)");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("RentalApplicationId");
+                    b.HasIndex("TenantId");
+                    b.HasIndex("PropertyId");
+                    b.HasIndex("Status");
+                    b.ToTable("RentalOffers");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.LeaseAgreement", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("RentalOfferId").HasColumnType("uuid");
+                    b.Property<Guid>("TenantId").HasColumnType("uuid");
+                    b.Property<Guid>("PropertyId").HasColumnType("uuid");
+                    b.Property<decimal>("MonthlyRent").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<decimal>("SecurityDeposit").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<DateOnly>("StartDate").HasColumnType("date");
+                    b.Property<DateOnly>("EndDate").HasColumnType("date");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("RentalOfferId").IsUnique();
+                    b.HasIndex("TenantId");
+                    b.HasIndex("PropertyId");
+                    b.HasIndex("Status");
+                    b.ToTable("LeaseAgreements");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.RentScheduleItem", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("LeaseAgreementId").HasColumnType("uuid");
+                    b.Property<DateOnly>("DueDate").HasColumnType("date");
+                    b.Property<decimal>("Amount").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("LeaseAgreementId");
+                    b.HasIndex("DueDate");
+                    b.HasIndex("Status");
+                    b.ToTable("RentScheduleItems");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.Payment", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("RentScheduleItemId").HasColumnType("uuid");
+                    b.Property<Guid>("TenantId").HasColumnType("uuid");
+                    b.Property<decimal>("Amount").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<string>("PaymentMethod").HasMaxLength(100).IsRequired().HasColumnType("character varying(100)");
+                    b.Property<string>("TransactionReference").HasMaxLength(200).HasColumnType("character varying(200)");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("PaidAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("RentScheduleItemId");
+                    b.HasIndex("TenantId");
+                    b.HasIndex("Status");
+                    b.HasIndex("TransactionReference");
+                    b.ToTable("Payments");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.ApplicationDocument", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("ApplicationId").HasColumnType("uuid");
+                    b.Property<int>("DocumentType").HasColumnType("integer");
+                    b.Property<string>("OriginalFileName").HasMaxLength(255).IsRequired().HasColumnType("character varying(255)");
+                    b.Property<string>("StorageKey").HasMaxLength(512).IsRequired().HasColumnType("character varying(512)");
+                    b.Property<string>("ContentType").HasMaxLength(255).IsRequired().HasColumnType("character varying(255)");
+                    b.Property<long>("FileSizeBytes").HasColumnType("bigint");
+                    b.Property<DateTimeOffset>("UploadedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("ApplicationId");
+                    b.HasIndex("DocumentType");
+                    b.ToTable("ApplicationDocuments");
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.ApplicationValidationWorkflow", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ApplicationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal?>("CompletenessScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("CurrentStep")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Objective")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("Recommendation")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<bool>("RequiresHumanApproval")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("ApplicationId").HasColumnType("uuid");
+                    b.Property<string>("Objective").HasMaxLength(2000).IsRequired().HasColumnType("character varying(2000)");
+                    b.Property<string>("Recommendation").HasMaxLength(4000).HasColumnType("character varying(4000)");
+                    b.Property<int>("CurrentStep").HasColumnType("integer");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<bool>("RequiresHumanApproval").HasColumnType("boolean");
+                    b.Property<decimal?>("CompletenessScore").HasPrecision(5, 2).HasColumnType("numeric(5,2)");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("UpdatedAt").HasColumnType("timestamp with time zone");
                     b.HasKey("Id");
-
                     b.HasIndex("ApplicationId");
-
                     b.ToTable("ApplicationValidationWorkflows");
                 });
 
-            modelBuilder.Entity("RentFlow.Api.Models.MaintenanceAttachment", b =>
+            modelBuilder.Entity("RentFlow.Api.Models.ApplicationValidationStep", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AttachmentType")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<long>("FileSize")
-                        .HasColumnType("bigint");
-
-                    b.Property<Guid>("MaintenanceRequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("StorageKey")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<Guid>("UploadedByUserId")
-                        .HasColumnType("uuid");
-
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("WorkflowId").HasColumnType("uuid");
+                    b.Property<int>("StepOrder").HasColumnType("integer");
+                    b.Property<string>("AgentName").HasMaxLength(200).IsRequired().HasColumnType("character varying(200)");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<string>("InputSummary").HasMaxLength(4000).HasColumnType("character varying(4000)");
+                    b.Property<string>("ResultJson").HasColumnType("text");
+                    b.Property<string>("ErrorMessage").HasMaxLength(4000).HasColumnType("character varying(4000)");
+                    b.Property<DateTimeOffset?>("StartedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("CompletedAt").HasColumnType("timestamp with time zone");
                     b.HasKey("Id");
-
-                    b.HasIndex("MaintenanceRequestId");
-
-                    b.HasIndex("UploadedByUserId");
-
-                    b.HasIndex("MaintenanceRequestId", "CreatedAt");
-
-                    b.ToTable("MaintenanceAttachments");
+                    b.HasIndex("WorkflowId", "StepOrder").IsUnique();
+                    b.ToTable("ApplicationValidationSteps");
                 });
 
-            modelBuilder.Entity("RentFlow.Api.Models.MaintenanceCoordinationStep", b =>
+            modelBuilder.Entity("RentFlow.Api.Models.Notification", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("InputSummary")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("OutputSummary")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<DateTimeOffset?>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("StepName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<int>("StepOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ValidationSummary")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<Guid>("WorkflowId")
-                        .HasColumnType("uuid");
-
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("RecipientId").HasColumnType("uuid");
+                    b.Property<string>("EventType").HasMaxLength(100).IsRequired().HasColumnType("character varying(100)");
+                    b.Property<Guid>("RelatedResourceId").HasColumnType("uuid");
+                    b.Property<string>("RelatedResourceType").HasMaxLength(100).IsRequired().HasColumnType("character varying(100)");
+                    b.Property<string>("Title").HasMaxLength(200).IsRequired().HasColumnType("character varying(200)");
+                    b.Property<string>("Message").HasMaxLength(1000).IsRequired().HasColumnType("character varying(1000)");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("ReadAt").HasColumnType("timestamp with time zone");
                     b.HasKey("Id");
-
-                    b.HasIndex("WorkflowId", "StepOrder")
-                        .IsUnique();
-
-                    b.ToTable("MaintenanceCoordinationSteps");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.MaintenanceCoordinationWorkflow", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AgentVersion")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<int>("ApprovalStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("CurrentStep")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("ExecutionSummary")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("FinalResultJson")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("MaintenanceRequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Objective")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("PlanSummary")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<bool>("RequiresHumanApproval")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MaintenanceRequestId");
-
-                    b.ToTable("MaintenanceCoordinationWorkflows");
+                    b.HasIndex("RecipientId", "CreatedAt");
+                    b.HasIndex("RecipientId", "ReadAt");
+                    b.HasIndex("EventType");
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.MaintenanceRequest", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AssignmentNotes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("CancellationReason")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<int>("Category")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<int>("Priority")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("PropertyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("TechnicianId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TenantAccessNotes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("TriageNotes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("PropertyId").HasColumnType("uuid");
+                    b.Property<Guid?>("TechnicianId").HasColumnType("uuid");
+                    b.Property<Guid>("TenantId").HasColumnType("uuid");
+                    b.Property<int>("Category").HasColumnType("integer");
+                    b.Property<int>("Priority").HasColumnType("integer");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<string>("Title").HasMaxLength(200).IsRequired().HasColumnType("character varying(200)");
+                    b.Property<string>("Description").HasMaxLength(4000).IsRequired().HasColumnType("character varying(4000)");
+                    b.Property<string>("AssignmentNotes").HasMaxLength(2000).HasColumnType("character varying(2000)");
+                    b.Property<string>("TriageNotes").HasMaxLength(2000).HasColumnType("character varying(2000)");
+                    b.Property<string>("CancellationReason").HasMaxLength(2000).HasColumnType("character varying(2000)");
+                    b.Property<string>("TenantAccessNotes").HasMaxLength(1000).HasColumnType("character varying(1000)");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("CompletedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("timestamp with time zone");
                     b.HasKey("Id");
-
                     b.HasIndex("PropertyId");
-
                     b.HasIndex("Status");
-
                     b.HasIndex("TechnicianId");
-
                     b.HasIndex("TenantId");
-
                     b.HasIndex("Priority", "Status");
-
-                    b.HasIndex("PropertyId", "Status");
-
-                    b.HasIndex("TechnicianId", "Status");
-
-                    b.HasIndex("TenantId", "CreatedAt");
-
                     b.ToTable("MaintenanceRequests");
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.MaintenanceStatusHistory", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("ChangedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ChangedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("FromStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("MaintenanceRequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<int>("ToStatus")
-                        .HasColumnType("integer");
-
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("MaintenanceRequestId").HasColumnType("uuid");
+                    b.Property<int?>("FromStatus").HasColumnType("integer");
+                    b.Property<int>("ToStatus").HasColumnType("integer");
+                    b.Property<Guid?>("ChangedByUserId").HasColumnType("uuid");
+                    b.Property<string>("Notes").HasMaxLength(2000).HasColumnType("character varying(2000)");
+                    b.Property<DateTimeOffset>("ChangedAt").HasColumnType("timestamp with time zone");
                     b.HasKey("Id");
-
                     b.HasIndex("MaintenanceRequestId");
-
                     b.HasIndex("MaintenanceRequestId", "ChangedAt");
-
                     b.ToTable("MaintenanceStatusHistories");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.RentalApplication", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LandlordResponse")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<decimal>("MonthlyIncome")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateOnly>("MoveInDate")
-                        .HasColumnType("date");
-
-                    b.Property<int>("NumberOfOccupants")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Occupation")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid>("PropertyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset?>("SubmittedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TenantNote")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PropertyId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("RentalApplications");
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.RepairEstimate", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("AdditionalCost")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("LaborCost")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("MaintenanceRequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<decimal>("PartsCost")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("ReviewNotes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<DateTimeOffset?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ReviewedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset?>("SubmittedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("TechnicianId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("TotalCost")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("VersionNumber")
-                        .HasColumnType("integer");
-
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("MaintenanceRequestId").HasColumnType("uuid");
+                    b.Property<Guid>("TechnicianId").HasColumnType("uuid");
+                    b.Property<decimal>("LaborCost").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<decimal>("PartsCost").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<decimal>("AdditionalCost").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<decimal>("TotalCost").HasPrecision(18, 2).HasColumnType("numeric(18,2)");
+                    b.Property<string>("Notes").HasMaxLength(4000).HasColumnType("character varying(4000)");
+                    b.Property<string>("ReviewNotes").HasMaxLength(2000).HasColumnType("character varying(2000)");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<int>("VersionNumber").HasColumnType("integer");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("SubmittedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("ReviewedAt").HasColumnType("timestamp with time zone");
+                    b.Property<Guid?>("ReviewedByUserId").HasColumnType("uuid");
+                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("timestamp with time zone");
                     b.HasKey("Id");
-
                     b.HasIndex("MaintenanceRequestId");
-
                     b.HasIndex("MaintenanceRequestId", "CreatedAt");
-
                     b.HasIndex("MaintenanceRequestId", "Status");
-
-                    b.HasIndex("MaintenanceRequestId", "VersionNumber")
-                        .IsUnique();
-
+                    b.HasIndex("MaintenanceRequestId", "VersionNumber").IsUnique();
                     b.ToTable("RepairEstimates");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.ViewingRequest", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LandlordResponse")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<Guid>("PropertyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("RequestedDateTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TenantMessage")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ViewingRequests");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.ApplicationDocument", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.RentalApplication", null)
-                        .WithMany()
-                        .HasForeignKey("ApplicationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.ApplicationValidationStep", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.ApplicationValidationWorkflow", "Workflow")
-                        .WithMany("Steps")
-                        .HasForeignKey("WorkflowId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Workflow");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.ApplicationValidationWorkflow", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.RentalApplication", "Application")
-                        .WithMany()
-                        .HasForeignKey("ApplicationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Application");
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.MaintenanceAttachment", b =>
                 {
-                    b.HasOne("RentFlow.Api.Models.MaintenanceRequest", null)
-                        .WithMany()
-                        .HasForeignKey("MaintenanceRequestId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("MaintenanceRequestId").HasColumnType("uuid");
+                    b.Property<Guid>("UploadedByUserId").HasColumnType("uuid");
+                    b.Property<string>("AttachmentType").HasMaxLength(100).HasColumnType("character varying(100)");
+                    b.Property<string>("FileName").HasMaxLength(255).IsRequired().HasColumnType("character varying(255)");
+                    b.Property<string>("StorageKey").HasMaxLength(512).IsRequired().HasColumnType("character varying(512)");
+                    b.Property<string>("ContentType").HasMaxLength(255).IsRequired().HasColumnType("character varying(255)");
+                    b.Property<long>("FileSize").HasColumnType("bigint");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("MaintenanceRequestId");
+                    b.HasIndex("UploadedByUserId");
+                    b.HasIndex("MaintenanceRequestId", "CreatedAt");
+                    b.ToTable("MaintenanceAttachments");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.MaintenanceCoordinationWorkflow", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("MaintenanceRequestId").HasColumnType("uuid");
+                    b.Property<string>("Objective").HasMaxLength(2000).IsRequired().HasColumnType("character varying(2000)");
+                    b.Property<string>("PlanSummary").HasMaxLength(4000).HasColumnType("character varying(4000)");
+                    b.Property<string>("ExecutionSummary").HasMaxLength(4000).HasColumnType("character varying(4000)");
+                    b.Property<string>("FinalResultJson").HasColumnType("text");
+                    b.Property<int>("CurrentStep").HasColumnType("integer");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<int>("ApprovalStatus").HasColumnType("integer");
+                    b.Property<bool>("RequiresHumanApproval").HasColumnType("boolean");
+                    b.Property<string>("ErrorMessage").HasMaxLength(4000).HasColumnType("character varying(4000)");
+                    b.Property<string>("AgentVersion").HasMaxLength(200).HasColumnType("character varying(200)");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("MaintenanceRequestId");
+                    b.ToTable("MaintenanceCoordinationWorkflows");
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.MaintenanceCoordinationStep", b =>
                 {
-                    b.HasOne("RentFlow.Api.Models.MaintenanceCoordinationWorkflow", "Workflow")
-                        .WithMany("Steps")
-                        .HasForeignKey("WorkflowId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Workflow");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.MaintenanceCoordinationWorkflow", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.MaintenanceRequest", "MaintenanceRequest")
-                        .WithMany()
-                        .HasForeignKey("MaintenanceRequestId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("MaintenanceRequest");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.MaintenanceStatusHistory", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.MaintenanceRequest", "MaintenanceRequest")
-                        .WithMany()
-                        .HasForeignKey("MaintenanceRequestId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("MaintenanceRequest");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.RepairEstimate", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.MaintenanceRequest", "MaintenanceRequest")
-                        .WithMany()
-                        .HasForeignKey("MaintenanceRequestId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("MaintenanceRequest");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.ApplicationValidationWorkflow", b =>
-                {
-                    b.Navigation("Steps");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.MaintenanceCoordinationWorkflow", b =>
-                {
-                    b.Navigation("Steps");
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("WorkflowId").HasColumnType("uuid");
+                    b.Property<string>("StepName").HasMaxLength(200).IsRequired().HasColumnType("character varying(200)");
+                    b.Property<int>("StepOrder").HasColumnType("integer");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<string>("InputSummary").HasMaxLength(4000).HasColumnType("character varying(4000)");
+                    b.Property<string>("OutputSummary").HasMaxLength(4000).HasColumnType("character varying(4000)");
+                    b.Property<string>("ValidationSummary").HasMaxLength(4000).HasColumnType("character varying(4000)");
+                    b.Property<string>("ErrorMessage").HasMaxLength(4000).HasColumnType("character varying(4000)");
+                    b.Property<DateTimeOffset?>("StartedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset?>("CompletedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("WorkflowId", "StepOrder").IsUnique();
+                    b.ToTable("MaintenanceCoordinationSteps");
                 });
 #pragma warning restore 612, 618
         }

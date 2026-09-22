@@ -9,6 +9,13 @@ export const PUBLIC_REGISTRATION_ROLES = Object.freeze([
   USER_ROLES.LANDLORD,
 ])
 const supportedRoles = new Set(Object.values(USER_ROLES))
+const authenticatedHomes = Object.freeze(Object.fromEntries(
+  Object.values(USER_ROLES).map((role) => [role, '/dashboard']),
+))
+
+export function authenticatedHomePathForRole(role) {
+  return authenticatedHomes[role] || '/dashboard'
+}
 
 export function parseCurrentUser(value) {
   if (!value || typeof value.id !== 'string' || typeof value.fullName !== 'string' ||

@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiRequest } from '../../../core/api/apiClient.js'
 import { tokenStorage } from '../../../core/auth/tokenStorage.js'
-import { getApplicationDocuments } from '../../applicationDocuments/services/applicationDocumentApiService.js'
+import {
+  downloadApplicationDocument,
+  getApplicationDocuments,
+} from '../../applicationDocuments/services/applicationDocumentApiService.js'
 import {
   getApplicationValidationRuns,
   runApplicationValidation,
@@ -73,6 +76,33 @@ describe('JWT client contracts', () => {
     )
     expect(url).not.toContain('tenantId')
     expect(options.headers.Authorization).toBe('Bearer test-token')
+  })
+
+  it('opens an authenticated document response without exposing a storage key', async () => {
+    const documentId = '44444444-4444-4444-4444-444444444444'
+    const replace = vi.fn()
+    const downloadWindow = {
+      opener: window,
+      location: { replace },
+      close: vi.fn(),
+    }
+    const createObjectURL = vi.fn(() => 'blob:rentflow-document')
+    const revokeObjectURL = vi.fn()
+    const documentResponse = new Response('private document', { status: 200 })
+    vi.spyOn(window, 'open').mockReturnValue(downloadWindow)
+    vi.spyOn(window, 'setTimeout').mockImplementation(() => 1)
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    fetch.mockResolvedValueOnce(documentResponse)
+
+    await downloadApplicationDocument(documentId)
+
+    const [url, options] = fetch.mock.calls[0]
+    expect(url).toContain(`/api/application-documents/${documentId}/download`)
+    expect(url).not.toContain('storageKey')
+    expect(options.headers.Authorization).toBe('Bearer test-token')
+    expect(downloadWindow.opener).toBeNull()
+    expect(createObjectURL).toHaveBeenCalledOnce()
+    expect(replace).toHaveBeenCalledWith('blob:rentflow-document')
   })
 
   it.each([

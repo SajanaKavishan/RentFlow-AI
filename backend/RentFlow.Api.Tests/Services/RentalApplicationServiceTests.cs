@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.RentalApplications;
 using RentFlow.Api.Models;
@@ -188,6 +189,27 @@ public class RentalApplicationServiceTests
     }
 
     [Fact]
+    public async Task SubmitAsync_DoesNotPersistSubmissionOrNotification_WhenSaveFails()
+    {
+        var saveInterceptor = new FailingSaveChangesInterceptor();
+        await using var context = CreateContext(saveInterceptor);
+        var application = AddApplication(context, status: RentalApplicationStatus.Draft);
+        await context.SaveChangesAsync();
+        var service = new RentalApplicationService(context);
+        saveInterceptor.ShouldFail = true;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            service.SubmitAsync(application.Id, application.TenantId));
+
+        saveInterceptor.ShouldFail = false;
+        context.ChangeTracker.Clear();
+        var storedApplication = await context.RentalApplications.SingleAsync();
+        Assert.Equal(RentalApplicationStatus.Draft, storedApplication.Status);
+        Assert.Null(storedApplication.SubmittedAt);
+        Assert.Empty(await context.Notifications.ToListAsync());
+    }
+
+    [Fact]
     public async Task MarkUnderReviewAsync_ChangesSubmittedToUnderReview()
     {
         await using var context = CreateContext();
@@ -212,6 +234,14 @@ public class RentalApplicationServiceTests
     {
         await using var context = CreateContext();
         var application = AddApplication(context, status: initialStatus);
+        var workflow = AddValidationWorkflow(context, application.Id);
+        var failedWorkflow = AddValidationWorkflow(
+            context,
+            application.Id,
+            ApplicationValidationWorkflowStatus.Failed);
+        var workflowCreatedAt = workflow.CreatedAt;
+        var workflowUpdatedAt = workflow.UpdatedAt;
+        var failedWorkflowUpdatedAt = failedWorkflow.UpdatedAt;
         await context.SaveChangesAsync();
         var service = new RentalApplicationService(context);
 
@@ -220,6 +250,35 @@ public class RentalApplicationServiceTests
         Assert.Equal(RentalApplicationStatus.Approved, result.Status);
         Assert.Equal("Approved.", result.LandlordResponse);
         Assert.NotNull(result.UpdatedAt);
+        Assert.Equal(ApplicationValidationWorkflowStatus.Completed, workflow.Status);
+        Assert.Equal(workflowCreatedAt, workflow.CreatedAt);
+        Assert.True(workflow.UpdatedAt > workflowUpdatedAt);
+        Assert.Equal(result.UpdatedAt, workflow.UpdatedAt);
+        Assert.True(workflow.RequiresHumanApproval);
+        Assert.Equal(ApplicationValidationWorkflowStatus.Failed, failedWorkflow.Status);
+        Assert.Equal(failedWorkflowUpdatedAt, failedWorkflow.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task RejectAsync_CompletesAwaitingHumanReviewWorkflow()
+    {
+        await using var context = CreateContext();
+        var application = AddApplication(context, status: RentalApplicationStatus.UnderReview);
+        var workflow = AddValidationWorkflow(context, application.Id);
+        var originalCreatedAt = workflow.CreatedAt;
+        var originalUpdatedAt = workflow.UpdatedAt;
+        await context.SaveChangesAsync();
+        var service = new RentalApplicationService(context);
+
+        var result = await service.RejectAsync(application.Id, "  Income could not be verified.  ");
+
+        Assert.Equal(RentalApplicationStatus.Rejected, result.Status);
+        Assert.Equal("Income could not be verified.", result.LandlordResponse);
+        Assert.Equal(ApplicationValidationWorkflowStatus.Completed, workflow.Status);
+        Assert.Equal(originalCreatedAt, workflow.CreatedAt);
+        Assert.True(workflow.UpdatedAt > originalUpdatedAt);
+        Assert.Equal(result.UpdatedAt, workflow.UpdatedAt);
+        Assert.True(workflow.RequiresHumanApproval);
     }
 
     [Fact]
@@ -246,6 +305,9 @@ public class RentalApplicationServiceTests
     {
         await using var context = CreateContext();
         var application = AddApplication(context, status: initialStatus);
+        var workflow = AddValidationWorkflow(context, application.Id);
+        var originalCreatedAt = workflow.CreatedAt;
+        var originalUpdatedAt = workflow.UpdatedAt;
         await context.SaveChangesAsync();
         var service = new RentalApplicationService(context);
 
@@ -254,6 +316,39 @@ public class RentalApplicationServiceTests
         Assert.Equal(RentalApplicationStatus.ChangesRequested, result.Status);
         Assert.Equal("Add income evidence.", result.LandlordResponse);
         Assert.NotNull(result.UpdatedAt);
+        Assert.Equal(ApplicationValidationWorkflowStatus.Completed, workflow.Status);
+        Assert.Equal(originalCreatedAt, workflow.CreatedAt);
+        Assert.True(workflow.UpdatedAt > originalUpdatedAt);
+        Assert.Equal(result.UpdatedAt, workflow.UpdatedAt);
+        Assert.True(workflow.RequiresHumanApproval);
+    }
+
+    [Fact]
+    public async Task LandlordDecision_DoesNotPersistWorkflowCompletion_WhenSaveFails()
+    {
+        var saveInterceptor = new FailingSaveChangesInterceptor();
+        await using var context = CreateContext(saveInterceptor);
+        var application = AddApplication(context, status: RentalApplicationStatus.UnderReview);
+        var workflow = AddValidationWorkflow(context, application.Id);
+        var originalApplicationUpdatedAt = application.UpdatedAt;
+        var originalWorkflowUpdatedAt = workflow.UpdatedAt;
+        await context.SaveChangesAsync();
+        var service = new RentalApplicationService(context);
+        saveInterceptor.ShouldFail = true;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            service.ApproveAsync(application.Id, "Approved."));
+
+        saveInterceptor.ShouldFail = false;
+        context.ChangeTracker.Clear();
+        var storedApplication = await context.RentalApplications.SingleAsync();
+        var storedWorkflow = await context.ApplicationValidationWorkflows.SingleAsync();
+        Assert.Equal(RentalApplicationStatus.UnderReview, storedApplication.Status);
+        Assert.Null(storedApplication.LandlordResponse);
+        Assert.Equal(originalApplicationUpdatedAt, storedApplication.UpdatedAt);
+        Assert.Equal(ApplicationValidationWorkflowStatus.AwaitingHumanReview, storedWorkflow.Status);
+        Assert.Equal(originalWorkflowUpdatedAt, storedWorkflow.UpdatedAt);
+        Assert.Empty(await context.Notifications.ToListAsync());
     }
 
     [Fact]
@@ -352,13 +447,18 @@ public class RentalApplicationServiceTests
         Assert.All(results, result => Assert.Equal(propertyId, result.PropertyId));
     }
 
-    private static ApplicationDbContext CreateContext()
+    private static ApplicationDbContext CreateContext(
+        SaveChangesInterceptor? saveChangesInterceptor = null)
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase($"RentalApplicationServiceTests-{Guid.NewGuid()}")
-            .Options;
+        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase($"RentalApplicationServiceTests-{Guid.NewGuid()}");
 
-        return new ApplicationDbContext(options);
+        if (saveChangesInterceptor is not null)
+        {
+            optionsBuilder.AddInterceptors(saveChangesInterceptor);
+        }
+
+        return new ApplicationDbContext(optionsBuilder.Options);
     }
 
     private static CreateRentalApplicationDto CreateValidRequest(Guid? propertyId = null)
@@ -407,8 +507,68 @@ public class RentalApplicationServiceTests
             SubmittedAt = submittedAt
         };
 
+        if (!context.Properties.Local.Any(property => property.Id == application.PropertyId))
+        {
+            context.Properties.Add(new Property
+            {
+                Id = application.PropertyId,
+                LandlordId = Guid.NewGuid(),
+                Title = "Application test property",
+                Description = "Property used by rental application tests.",
+                Address = "1 Test Street",
+                City = "Colombo",
+                MonthlyRent = 100000m,
+                Bedrooms = 2,
+                Bathrooms = 1,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
+
         context.RentalApplications.Add(application);
         return application;
+    }
+
+    private static ApplicationValidationWorkflow AddValidationWorkflow(
+        ApplicationDbContext context,
+        Guid applicationId,
+        ApplicationValidationWorkflowStatus status =
+            ApplicationValidationWorkflowStatus.AwaitingHumanReview)
+    {
+        var createdAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var workflow = new ApplicationValidationWorkflow
+        {
+            Id = Guid.NewGuid(),
+            ApplicationId = applicationId,
+            Objective = "Validate application for landlord review.",
+            Status = status,
+            CurrentStep = 4,
+            CompletenessScore = 100m,
+            Recommendation = "Ready for landlord review",
+            RequiresHumanApproval = true,
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt.AddMinutes(5)
+        };
+
+        context.ApplicationValidationWorkflows.Add(workflow);
+        return workflow;
+    }
+
+    private sealed class FailingSaveChangesInterceptor : SaveChangesInterceptor
+    {
+        public bool ShouldFail { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (ShouldFail)
+            {
+                throw new DbUpdateException("Simulated decision persistence failure.");
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 
     private static DateOnly UtcToday() => DateOnly.FromDateTime(DateTime.UtcNow);

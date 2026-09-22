@@ -50,6 +50,16 @@ class RentalApplicationApiService {
     return _parseApplicationList(response.body);
   }
 
+  Future<List<RentalApplication>> getApplicationsByProperty(
+    String propertyId,
+  ) async {
+    final uri = apiClient.buildUri(
+      '${ApiConstants.rentalApplicationsPath}/property/$propertyId',
+    );
+    final response = await _send(() => apiClient.get(uri));
+    return _parseApplicationList(response.body);
+  }
+
   Future<RentalApplication> updateApplication({
     required String id,
     required DateTime moveInDate,
@@ -76,17 +86,79 @@ class RentalApplicationApiService {
     return _parseApplication(response.body);
   }
 
-  Future<RentalApplication?> submitApplication({required String id}) async {
+  Future<RentalApplication> submitApplication({required String id}) async {
     final uri = apiClient.buildUri(
       '${ApiConstants.rentalApplicationsPath}/$id/submit',
     );
     final response = await _send(() => apiClient.patch(uri));
-    if (response.body.trim().isEmpty) return null;
     return _parseApplication(response.body);
   }
 
   Future<RentalApplication> withdrawApplication({required String id}) {
     return _patchAction(id: id, action: 'withdraw');
+  }
+
+  Future<RentalApplication> approveApplication({
+    required String id,
+    String? landlordResponse,
+  }) {
+    return _landlordDecision(
+      id: id,
+      action: 'approve',
+      status: RentalApplicationStatus.approved,
+      landlordResponse: landlordResponse,
+    );
+  }
+
+  Future<RentalApplication> rejectApplication({
+    required String id,
+    required String landlordResponse,
+  }) {
+    return _landlordDecision(
+      id: id,
+      action: 'reject',
+      status: RentalApplicationStatus.rejected,
+      landlordResponse: landlordResponse,
+    );
+  }
+
+  Future<RentalApplication> requestApplicationChanges({
+    required String id,
+    required String landlordResponse,
+  }) {
+    return _landlordDecision(
+      id: id,
+      action: 'request-changes',
+      status: RentalApplicationStatus.changesRequested,
+      landlordResponse: landlordResponse,
+    );
+  }
+
+  Future<RentalApplication> _landlordDecision({
+    required String id,
+    required String action,
+    required RentalApplicationStatus status,
+    String? landlordResponse,
+  }) async {
+    final uri = apiClient.buildUri(
+      '${ApiConstants.rentalApplicationsPath}/$id/$action',
+    );
+    final response = await _send(
+      () => apiClient.patch(
+        uri,
+        body: jsonEncode({
+          'status': status.value,
+          'landlordResponse': landlordResponse,
+        }),
+      ),
+    );
+    final application = _parseApplication(response.body);
+    if (application.status != status) {
+      throw const RentalApplicationApiException(
+        'The rental application service returned an unexpected decision status.',
+      );
+    }
+    return application;
   }
 
   Future<RentalApplication> _patchAction({

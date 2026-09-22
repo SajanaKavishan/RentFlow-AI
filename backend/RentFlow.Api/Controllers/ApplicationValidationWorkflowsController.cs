@@ -16,6 +16,8 @@ namespace RentFlow.Api.Controllers;
 public class ApplicationValidationWorkflowsController(
     IApplicationValidationOrchestrator orchestrator,
     IApplicationValidationQueryService queryService,
+    IPropertyAccessGuard propertyAccessGuard,
+    ICurrentUserService currentUser,
     ILogger<ApplicationValidationWorkflowsController> logger) : ControllerBase
 {
     [HttpPost("rental-applications/{applicationId:guid}/validation-runs")]
@@ -27,9 +29,14 @@ public class ApplicationValidationWorkflowsController(
         Guid applicationId,
         CancellationToken cancellationToken)
     {
-        // TODO(cross-component-auth): Restrict landlords to the application's property.
         return ExecuteAsync(
-            () => orchestrator.StartValidationAsync(applicationId, cancellationToken),
+            async () =>
+            {
+                await EnsureLandlordCanAccessApplicationAsync(
+                    applicationId, cancellationToken);
+                return await orchestrator.StartValidationAsync(
+                    applicationId, cancellationToken);
+            },
             workflow => CreatedAtAction(
                 nameof(GetById),
                 new { workflowId = workflow.Id },
@@ -43,9 +50,14 @@ public class ApplicationValidationWorkflowsController(
         Guid applicationId,
         CancellationToken cancellationToken)
     {
-        // TODO(cross-component-auth): Restrict landlords to the application's property.
         return ExecuteAsync(
-            () => queryService.GetByApplicationAsync(applicationId, cancellationToken),
+            async () =>
+            {
+                await EnsureLandlordCanAccessApplicationAsync(
+                    applicationId, cancellationToken);
+                return await queryService.GetByApplicationAsync(
+                    applicationId, cancellationToken);
+            },
             workflows => Ok(workflows));
     }
 
@@ -56,14 +68,48 @@ public class ApplicationValidationWorkflowsController(
         Guid workflowId,
         CancellationToken cancellationToken)
     {
-        // TODO(cross-component-auth): Restrict landlords to the workflow application's property.
         return ExecuteAsync(
-            async () => await queryService.GetByIdAsync(workflowId, cancellationToken)
-                ?? throw new ApplicationValidationException(
-                    ApplicationValidationError.NotFound,
-                    $"Application validation workflow '{workflowId}' was not found."),
+            async () =>
+            {
+                await EnsureLandlordCanAccessWorkflowAsync(workflowId, cancellationToken);
+                return await queryService.GetByIdAsync(workflowId, cancellationToken)
+                    ?? throw new ApplicationValidationException(
+                        ApplicationValidationError.NotFound,
+                        $"Application validation workflow '{workflowId}' was not found.");
+            },
             workflow => Ok(workflow));
     }
+
+    private async Task EnsureLandlordCanAccessApplicationAsync(
+        Guid applicationId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.Role == UserRole.Landlord
+            && !await propertyAccessGuard.CanAccessApplicationAsync(
+                GetRequiredUserId(), applicationId, cancellationToken))
+        {
+            throw new ApplicationValidationException(
+                ApplicationValidationError.NotFound,
+                $"Rental application '{applicationId}' was not found.");
+        }
+    }
+
+    private async Task EnsureLandlordCanAccessWorkflowAsync(
+        Guid workflowId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.Role == UserRole.Landlord
+            && !await propertyAccessGuard.CanAccessWorkflowAsync(
+                GetRequiredUserId(), workflowId, cancellationToken))
+        {
+            throw new ApplicationValidationException(
+                ApplicationValidationError.NotFound,
+                $"Application validation workflow '{workflowId}' was not found.");
+        }
+    }
+
+    private Guid GetRequiredUserId() => currentUser.UserId
+        ?? throw new InvalidOperationException("The authenticated JWT has no valid user ID.");
 
     private async Task<ActionResult<T>> ExecuteAsync<T>(
         Func<Task<T>> operation,

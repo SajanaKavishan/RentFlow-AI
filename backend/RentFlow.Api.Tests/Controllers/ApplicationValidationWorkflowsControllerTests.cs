@@ -118,6 +118,8 @@ public class ApplicationValidationWorkflowsControllerTests
         return new ApplicationValidationWorkflowsController(
             orchestrator,
             queryService,
+            new AllowingPropertyAccessGuard(),
+            new AdminCurrentUserService(),
             NullLogger<ApplicationValidationWorkflowsController>.Instance)
         {
             ControllerContext = new ControllerContext
@@ -207,5 +209,30 @@ public class ApplicationValidationWorkflowsControllerTests
             RequestedApplicationId = applicationId;
             return Task.FromResult(ByApplication);
         }
+    }
+
+    private sealed class AllowingPropertyAccessGuard : IPropertyAccessGuard
+    {
+        public Task<bool> CanAccessPropertyAsync(Guid landlordId, Guid propertyId,
+            CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public Task<bool> CanAccessViewingAsync(Guid landlordId, Guid viewingId,
+            CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public Task<bool> CanAccessApplicationAsync(Guid landlordId, Guid applicationId,
+            CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public Task<bool> CanAccessDocumentAsync(Guid landlordId, Guid documentId,
+            CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public Task<bool> CanAccessWorkflowAsync(Guid landlordId, Guid workflowId,
+            CancellationToken cancellationToken = default) => Task.FromResult(true);
+    }
+
+    private sealed class AdminCurrentUserService : ICurrentUserService
+    {
+        public bool IsAuthenticated => true;
+        public Guid? UserId => Guid.NewGuid();
+        public UserRole? Role => UserRole.Admin;
     }
 }

@@ -15,6 +15,7 @@ namespace RentFlow.Api.Controllers;
 [Authorize]
 public class ApplicationDocumentsController(
     IApplicationDocumentService applicationDocumentService,
+    IPropertyAccessGuard propertyAccessGuard,
     ICurrentUserService currentUser,
     ILogger<ApplicationDocumentsController> logger) : ControllerBase
 {
@@ -58,11 +59,19 @@ public class ApplicationDocumentsController(
         CancellationToken cancellationToken)
     {
         return ExecuteAsync(
-            () => currentUser.Role == UserRole.Tenant
-                ? applicationDocumentService.GetByApplicationAsync(
-                    applicationId, GetRequiredUserId(), cancellationToken)
-                : applicationDocumentService.GetByApplicationForReviewAsync(
-                    applicationId, cancellationToken),
+            async () =>
+            {
+                if (currentUser.Role == UserRole.Tenant)
+                {
+                    return await applicationDocumentService.GetByApplicationAsync(
+                        applicationId, GetRequiredUserId(), cancellationToken);
+                }
+
+                await EnsureLandlordCanAccessApplicationAsync(
+                    applicationId, cancellationToken);
+                return await applicationDocumentService.GetByApplicationForReviewAsync(
+                    applicationId, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -93,11 +102,19 @@ public class ApplicationDocumentsController(
     {
         return ExecuteAsync(async () =>
         {
-            var signedUrl = currentUser.Role == UserRole.Tenant
-                ? await applicationDocumentService.GenerateDownloadUrlAsync(
-                    documentId, GetRequiredUserId(), cancellationToken)
-                : await applicationDocumentService.GenerateDownloadUrlForReviewAsync(
+            string signedUrl;
+            if (currentUser.Role == UserRole.Tenant)
+            {
+                signedUrl = await applicationDocumentService.GenerateDownloadUrlAsync(
+                    documentId, GetRequiredUserId(), cancellationToken);
+            }
+            else
+            {
+                await EnsureLandlordCanAccessDocumentAsync(documentId, cancellationToken);
+                signedUrl = await applicationDocumentService.GenerateDownloadUrlForReviewAsync(
                     documentId, cancellationToken);
+            }
+
             return Redirect(signedUrl);
         });
     }
@@ -122,18 +139,45 @@ public class ApplicationDocumentsController(
         });
     }
 
-    private Task<ApplicationDocumentResponseDto?> GetAuthorizedDocumentAsync(
+    private async Task<ApplicationDocumentResponseDto?> GetAuthorizedDocumentAsync(
         Guid documentId,
         CancellationToken cancellationToken)
     {
         if (currentUser.Role == UserRole.Tenant)
         {
-            return applicationDocumentService.GetByIdAsync(
+            return await applicationDocumentService.GetByIdAsync(
                 documentId, GetRequiredUserId(), cancellationToken);
         }
 
-        // TODO(cross-component-auth): Restrict landlord document review to their properties.
-        return applicationDocumentService.GetByIdForReviewAsync(documentId, cancellationToken);
+        await EnsureLandlordCanAccessDocumentAsync(documentId, cancellationToken);
+        return await applicationDocumentService.GetByIdForReviewAsync(
+            documentId, cancellationToken);
+    }
+
+    private async Task EnsureLandlordCanAccessApplicationAsync(
+        Guid applicationId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.Role == UserRole.Landlord
+            && !await propertyAccessGuard.CanAccessApplicationAsync(
+                GetRequiredUserId(), applicationId, cancellationToken))
+        {
+            throw ApplicationDocumentServiceException.NotFound(
+                "The rental application was not found.");
+        }
+    }
+
+    private async Task EnsureLandlordCanAccessDocumentAsync(
+        Guid documentId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.Role == UserRole.Landlord
+            && !await propertyAccessGuard.CanAccessDocumentAsync(
+                GetRequiredUserId(), documentId, cancellationToken))
+        {
+            throw ApplicationDocumentServiceException.NotFound(
+                "The application document was not found.");
+        }
     }
 
     private Guid GetRequiredUserId() => currentUser.UserId

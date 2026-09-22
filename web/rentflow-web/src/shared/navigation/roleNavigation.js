@@ -1,0 +1,65 @@
+import { USER_ROLES } from '../../features/auth/authModel.js'
+
+const ALL = Object.values(USER_ROLES)
+const T = USER_ROLES.TENANT
+const L = USER_ROLES.LANDLORD
+const M = USER_ROLES.MAINTENANCE_TECHNICIAN
+const A = USER_ROLES.ADMIN
+
+// Availability is explicit: only shipped routes are marked available.
+export const NAV_ITEMS = Object.freeze([
+  { id: 'dashboard', label: 'Dashboard', path: '/dashboard', roles: ALL, available: true },
+  {
+    id: 'properties', label: 'Properties', path: '/modules/properties', roles: [T, L], available: false,
+    owner: 'Property management',
+    description: 'Property discovery and management will appear here after the property module is integrated.',
+  },
+  {
+    id: 'my-viewings', label: 'My Viewings', path: '/modules/my-viewings', roles: [T], available: false,
+    owner: 'Viewing integration',
+    description: 'Tenant viewing management is currently available in the RentFlow mobile app.',
+  },
+  {
+    id: 'my-applications', label: 'My Applications', path: '/modules/my-applications', roles: [T], available: false,
+    owner: 'Application integration',
+    description: 'Tenant applications and documents are currently available in the RentFlow mobile app.',
+  },
+  { id: 'viewing-requests', label: 'Viewing Requests', path: '/viewing-requests', roles: [L], available: true },
+  { id: 'rental-applications', label: 'Rental Applications', path: '/rental-applications', roles: [L], available: true },
+  {
+    id: 'ai-review', label: 'AI Review', path: '/ai-review', roles: [L], available: true,
+    note: 'Application validation and document review',
+  },
+  {
+    id: 'pricing-lease', label: 'Pricing / Lease', path: '/modules/pricing-lease', roles: [L], available: false,
+    owner: 'Pricing and lease management',
+    description: 'Pricing and lease tools will be connected when that module is merged.',
+  },
+  {
+    id: 'payments', label: 'Payments', path: '/modules/payments', roles: [L], available: false,
+    owner: 'Payments', description: 'Payment management will be connected when that module is merged.',
+  },
+  {
+    id: 'maintenance', label: 'Maintenance', path: '/modules/maintenance', roles: [L], available: false,
+    owner: 'Maintenance', description: 'Maintenance management will be connected when that module is merged.',
+  },
+  {
+    id: 'assigned-work', label: 'Assigned Work', path: '/modules/assigned-work', roles: [M], available: false,
+    owner: 'Maintenance',
+    description: 'Assigned maintenance work will appear here after the maintenance module is integrated.',
+  },
+  {
+    id: 'users', label: 'Users', path: '/modules/users', roles: [A], available: false,
+    owner: 'Administration',
+    description: 'User management is not part of the shared application shell and has not been integrated yet.',
+  },
+  {
+    id: 'ai-system-overview', label: 'AI / System Overview', path: '/modules/ai-system-overview', roles: [A], available: false,
+    owner: 'Administration',
+    description: 'System-wide AI monitoring will appear here when an admin data source is available.',
+  },
+  { id: 'profile', label: 'Profile', path: '/profile', roles: ALL, available: true },
+])
+
+export function navigationForRole(role) { return NAV_ITEMS.filter((item) => item.roles.includes(role)) }
+export function navigationItemForPath(role, path) { return navigationForRole(role).find((item) => item.path === path) }

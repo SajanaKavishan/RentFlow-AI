@@ -4,26 +4,31 @@ import ViewingStatusBadge from './ViewingStatusBadge.jsx'
 
 const viewingDateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'full',
+})
+const viewingTimeFormatter = new Intl.DateTimeFormat(undefined, {
   timeStyle: 'short',
 })
 
-function formatViewingDate(value) {
+function parseViewingDate(value) {
   const date = new Date(value)
-  return Number.isNaN(date.getTime())
-    ? 'Date unavailable'
-    : viewingDateFormatter.format(date)
+  return Number.isNaN(date.getTime()) ? null : date
 }
 
 function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) {
   const [action, setAction] = useState(null)
   const [response, setResponse] = useState('')
   const [validationError, setValidationError] = useState('')
+  const [hasSubmitted, setHasSubmitted] = useState(false)
   const isPending = viewing.status === VIEWING_STATUS.PENDING
+  const requestedDate = parseViewingDate(viewing.requestedDateTime)
+  const tenantMessage = viewing.tenantMessage?.trim()
+  const landlordResponse = viewing.landlordResponse?.trim()
 
   function openAction(nextAction) {
     setAction(nextAction)
     setResponse('')
     setValidationError('')
+    setHasSubmitted(false)
   }
 
   function closeAction() {
@@ -31,6 +36,7 @@ function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) 
     setAction(null)
     setResponse('')
     setValidationError('')
+    setHasSubmitted(false)
   }
 
   async function submitAction(event) {
@@ -43,6 +49,7 @@ function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) 
     }
 
     setValidationError('')
+    setHasSubmitted(true)
     const succeeded =
       action === 'approve'
         ? await onApprove(viewing.id, trimmedResponse)
@@ -52,39 +59,76 @@ function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) 
   }
 
   return (
-    <article className={`viewing-card${isPending ? ' viewing-card--pending' : ''}`}>
+    <article
+      className={`viewing-card${isPending ? ' viewing-card--pending' : ''}`}
+      aria-label={`Viewing request ${viewing.id}`}
+    >
       <div className="viewing-card__heading">
         <div>
           <p className="viewing-card__eyebrow">
             {isPending ? 'New viewing request' : 'Viewing request'}
           </p>
-          <h2>{formatViewingDate(viewing.requestedDateTime)}</h2>
+          <h2>{isPending ? 'Awaiting your response' : 'Viewing details'}</h2>
         </div>
         <ViewingStatusBadge status={viewing.status} />
       </div>
 
-      <div className="viewing-card__details">
-        <div>
-          <span>Tenant message</span>
-          <p>{viewing.tenantMessage?.trim() || 'No message provided.'}</p>
+      <div className="viewing-card__overview">
+        <div className="viewing-card__schedule">
+          <span className="viewing-card__schedule-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M7 3v3m10-3v3M4.5 9h15M6 5h12a2 2 0 0 1 2 2v12H4V7a2 2 0 0 1 2-2Z" />
+            </svg>
+          </span>
+          <div>
+            <span>Requested appointment</span>
+            {requestedDate ? (
+              <time dateTime={viewing.requestedDateTime}>
+                <strong>{viewingDateFormatter.format(requestedDate)}</strong>
+                <small>{viewingTimeFormatter.format(requestedDate)}</small>
+              </time>
+            ) : (
+              <strong>Date and time unavailable</strong>
+            )}
+          </div>
         </div>
-        {viewing.landlordResponse?.trim() && (
+
+        <dl className="viewing-card__references">
+          <div>
+            <dt>Tenant reference</dt>
+            <dd title={viewing.tenantId}>{viewing.tenantId || 'Unavailable'}</dd>
+          </div>
+          <div>
+            <dt>Property reference</dt>
+            <dd title={viewing.propertyId}>
+              {viewing.propertyId || 'Unavailable'}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <div className="viewing-card__conversation">
+        <div className="viewing-card__message">
+          <span>Tenant message</span>
+          <p>{tenantMessage || 'No message was included with this request.'}</p>
+        </div>
+        {landlordResponse && (
           <div className="viewing-card__response">
             <span>Your response</span>
-            <p>{viewing.landlordResponse}</p>
+            <p>{landlordResponse}</p>
           </div>
         )}
       </div>
 
       {isPending && !action && (
-        <div className="viewing-card__actions">
+        <div className="viewing-card__actions viewing-card__actions--primary">
           <button
             type="button"
             className="button button--primary"
             onClick={() => openAction('approve')}
             disabled={isUpdating}
           >
-            Approve
+            Approve request
           </button>
           <button
             type="button"
@@ -92,13 +136,17 @@ function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) 
             onClick={() => openAction('reject')}
             disabled={isUpdating}
           >
-            Reject
+            Reject request
           </button>
         </div>
       )}
 
       {isPending && action && (
-        <form className="viewing-card__decision" onSubmit={submitAction}>
+        <form
+          className="viewing-card__decision"
+          onSubmit={submitAction}
+          aria-busy={isUpdating}
+        >
           <div>
             <h3>{action === 'approve' ? 'Approve request?' : 'Reject request'}</h3>
             <p>
@@ -119,15 +167,19 @@ function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) 
             disabled={isUpdating}
             aria-describedby={validationError ? `${viewing.id}-error` : undefined}
           />
+          <p className="viewing-card__character-count" aria-live="polite">
+            {response.length}/500 characters
+          </p>
           {validationError && (
             <p className="form-error" id={`${viewing.id}-error`} role="alert">
               {validationError}
             </p>
           )}
-          {actionError && (
-            <p className="form-error" role="alert">
-              {actionError}
-            </p>
+          {hasSubmitted && actionError && (
+            <div className="viewing-card__action-error" role="alert">
+              <span aria-hidden="true">!</span>
+              <p>{actionError}</p>
+            </div>
           )}
           <div className="viewing-card__actions">
             <button
