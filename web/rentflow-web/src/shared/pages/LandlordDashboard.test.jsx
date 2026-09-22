@@ -10,6 +10,11 @@ vi.mock('../../features/notifications/notificationsApi.js', async (importOrigina
 }))
 import { AuthProvider } from '../../features/auth/AuthContext.jsx'
 import { AuthContext } from '../../features/auth/useAuth.js'
+import { getApplicationValidationRuns } from '../../features/rentalApplications/services/applicationValidationApiService.js'
+
+vi.mock('../../features/rentalApplications/services/applicationValidationApiService.js', async (importOriginal) => ({
+  ...(await importOriginal()), getApplicationValidationRuns: vi.fn(),
+}))
 
 // Fixture IDs are only used by tests; production always uses the existing context.
 const propertyId = '88888888-8888-8888-8888-888888888888'
@@ -30,6 +35,7 @@ function renderApp(entry = scopedDashboard(), user = landlord) {
 
 beforeEach(() => {
   tokenStorage.setToken('landlord-token')
+  getApplicationValidationRuns.mockReset().mockResolvedValue([])
   vi.stubGlobal('fetch', vi.fn((url) => Promise.resolve(json(isViewing(url) ? viewings : applications))))
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -40,7 +46,10 @@ describe('landlord dashboard', () => {
     expect(screen.getByRole('heading', { name: 'Welcome, Nila Perera' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Select a property' })).toBeInTheDocument()
     expect(screen.getByText(/Property integration pending/)).toBeInTheDocument()
-    expect(screen.getAllByText('Property required')).toHaveLength(2)
+    expect(screen.queryByText('Property required')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Needs Attention' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Recent Applications' })).not.toBeInTheDocument()
+    expect(getApplicationValidationRuns).not.toHaveBeenCalled()
     expect(screen.queryByText('0')).not.toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
   })
@@ -220,5 +229,172 @@ describe('landlord dashboard', () => {
     render(<RouterProvider router={router} />)
     expect(await screen.findByRole('heading', { name: 'Sign in to RentFlow' })).toBeInTheDocument()
     expect(tokenStorage.getToken()).toBeNull()
+  })
+
+  it('shows only pending viewings and reviewable applications as attention actions', async () => {
+    renderApp()
+    const attention = await screen.findByRole('region', { name: 'Needs Attention' })
+    expect(within(attention).getByText('2 pending viewing requests')).toBeInTheDocument()
+    expect(within(attention).getByText('3 applications ready for review')).toBeInTheDocument()
+    expect(within(attention).queryByText(/changes requested/i)).not.toBeInTheDocument()
+    expect(within(attention).getByRole('link', { name: 'Review viewings' })).toHaveAttribute('href', `/viewing-requests?propertyId=${propertyId}`)
+    expect(within(attention).getByRole('link', { name: 'Review applications' })).toHaveAttribute('href', `/rental-applications?propertyId=${propertyId}`)
+    expect(getApplicationValidationRuns.mock.calls.map(([id]) => id)).toEqual(['application-1', 'application-2', 'application-3'])
+  })
+
+  it('omits attention when loaded records have no landlord actions', async () => {
+    fetch.mockImplementation((url) => Promise.resolve(json(isViewing(url) ? viewings.filter((item) => item.status !== 0) : applications.filter((item) => ![1, 2].includes(item.status)))))
+    renderApp()
+    await screen.findByRole('region', { name: 'Recent Applications' })
+    expect(screen.queryByRole('heading', { name: 'Needs Attention' })).not.toBeInTheDocument()
+    expect(getApplicationValidationRuns).not.toHaveBeenCalled()
+  })
+
+  it('shows five recent references, real dates and statuses without private tenant details', async () => {
+    const records = applications.map((item, index) => ({ ...item, createdAt: `2026-09-${String(index + 1).padStart(2, '0')}T12:00:00Z`, monthlyIncome: 987654, occupation: 'Private occupation', tenantNote: 'Private note', tenantId: 'private-tenant' }))
+    // Submitted date takes precedence over creation date.
+    records[0].submittedAt = '2026-09-20T12:00:00Z'
+    fetch.mockImplementation((url) => Promise.resolve(json(isViewing(url) ? [] : records)))
+    renderApp()
+    const recent = await screen.findByRole('region', { name: 'Recent Applications' })
+    const rows = within(recent).getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(5)
+    expect(rows.map((row) => within(row).getByRole('rowheader').textContent)).toEqual(['application-0', 'application-7', 'application-6', 'application-5', 'application-4'])
+    expect(rows[0].querySelector('time')).toHaveAttribute('dateTime', records[0].submittedAt)
+    expect(within(rows[0]).getByLabelText('Application status: Draft')).toBeInTheDocument()
+    expect(within(rows[1]).getByLabelText('Application status: Withdrawn')).toBeInTheDocument()
+    expect(within(rows[0]).getByRole('link')).toHaveAttribute('href', `/notifications/rental-application/application-0?propertyId=${propertyId}`)
+    expect(screen.queryByText(/987654|Private occupation|Private note|private-tenant/)).not.toBeInTheDocument()
+  })
+
+  it('opens a recent application in the existing authorized detail workflow', async () => {
+    const record = { ...applications[1], createdAt: '2026-09-20T12:00:00Z', moveInDate: '2026-10-01', monthlyIncome: 1000, numberOfOccupants: 1 }
+    fetch.mockImplementation((url) => Promise.resolve(json(isViewing(url) ? [] : url.includes('/property/') ? [record] : url.endsWith('/validation-runs') ? [] : record)))
+    const { router } = renderApp()
+    await userEvent.click(await screen.findByRole('link', { name: 'Open application application-1' }))
+    expect(await screen.findByRole('heading', { name: 'Rental application' })).toBeInTheDocument()
+    expect(router.state.location.search).toBe(`?propertyId=${propertyId}`)
+    expect(await screen.findByRole('button', { name: 'Start review' })).toBeInTheDocument()
+  })
+
+  it('fetches AI runs with authentication only for scoped reviewable applications and uses the latest run', async () => {
+    const actual = await vi.importActual('../../features/rentalApplications/services/applicationValidationApiService.js')
+    getApplicationValidationRuns.mockImplementation(actual.getApplicationValidationRuns)
+    fetch.mockImplementation((url) => {
+      if (url.includes('/validation-runs')) {
+        const id = url.split('/').at(-2)
+        return Promise.resolve(json([{ id: `latest-${id}`, applicationId: id, status: id === 'application-1' ? 2 : id === 'application-2' ? 4 : 3 }, { id: `old-${id}`, applicationId: id, status: 2 }]))
+      }
+      return Promise.resolve(json(isViewing(url) ? viewings : applications))
+    })
+    renderApp()
+    expect(await screen.findByText('1 AI workflow awaits human review')).toBeInTheDocument()
+    expect(screen.getByText('1 AI workflow needs a retry')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Review AI findings' })).toHaveAttribute('href', `/ai-review?propertyId=${propertyId}`)
+    const validationCalls = fetch.mock.calls.filter(([url]) => url.endsWith('/validation-runs'))
+    expect(validationCalls).toHaveLength(3)
+    validationCalls.forEach(([, options]) => {
+      expect(options.headers.Authorization).toBe('Bearer landlord-token')
+      expect(options.method).toBeUndefined()
+    })
+  })
+
+  it('keeps AI Review accessible and labels partial failures without inventing results', async () => {
+    getApplicationValidationRuns.mockImplementation((id) => id === 'application-1'
+      ? Promise.resolve([{ id: 'run-one', applicationId: id, status: 2 }])
+      : Promise.reject(new Error('private service detail')))
+    renderApp()
+    expect(await screen.findByText(/AI summary unavailable or incomplete/)).toBeInTheDocument()
+    expect(screen.getByText('1 AI workflow awaits human review')).toBeInTheDocument()
+    expect(screen.queryByText('private service detail')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open AI Review' })).toHaveAttribute('href', `/ai-review?propertyId=${propertyId}`)
+  })
+
+  it('discards AI results after property changes', async () => {
+    const pending = []
+    getApplicationValidationRuns.mockImplementation((id) => new Promise((resolve) => pending.push(() => resolve([{ id: 'old-run', applicationId: id, status: 2 }]))))
+    const { router } = renderApp()
+    await screen.findByRole('region', { name: 'Recent Applications' })
+    fetch.mockImplementation(() => Promise.resolve(json([])))
+    await act(async () => { await router.navigate(scopedDashboard(otherPropertyId)) })
+    await act(async () => { pending.forEach((resolve) => resolve()) })
+    expect(screen.queryByText(/workflow awaits human review/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Needs Attention' })).not.toBeInTheDocument()
+  })
+
+  it('rejects mismatched property records before showing rows or requesting AI data', async () => {
+    fetch.mockImplementation(() => Promise.resolve(json([{ ...applications[1], propertyId: otherPropertyId }])))
+    renderApp()
+    expect(await screen.findAllByRole('alert')).toHaveLength(2)
+    expect(screen.queryByRole('heading', { name: 'Recent Applications' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Needs Attention' })).not.toBeInTheDocument()
+    expect(getApplicationValidationRuns).not.toHaveBeenCalled()
+  })
+
+  it('rejects duplicate records instead of inflating counts or rendering duplicate application rows', async () => {
+    fetch.mockImplementation(() => Promise.resolve(json([applications[1], applications[1]])))
+    renderApp()
+    expect(await screen.findAllByRole('alert')).toHaveLength(2)
+    expect(screen.queryByRole('heading', { name: 'Recent Applications' })).not.toBeInTheDocument()
+    expect(getApplicationValidationRuns).not.toHaveBeenCalled()
+  })
+
+  it('uses a valid creation date when submission dates are malformed and never invents missing dates', async () => {
+    const records = [
+      { ...applications[5], submittedAt: 'invalid', createdAt: '2026-09-19T12:00:00Z' },
+      { ...applications[6], submittedAt: 123, createdAt: null },
+    ]
+    fetch.mockImplementation((url) => Promise.resolve(json(isViewing(url) ? [] : records)))
+    renderApp()
+    const recent = await screen.findByRole('region', { name: 'Recent Applications' })
+    expect(recent.querySelectorAll('time')).toHaveLength(1)
+    expect(recent.querySelector('time')).toHaveAttribute('dateTime', records[0].createdAt)
+    expect(within(recent).getByText('Date unavailable')).toBeInTheDocument()
+  })
+
+  it.each([
+    null,
+    [{ id: 'run', applicationId: 'another-application', status: 2 }],
+    [{ id: 'run', applicationId: 'application-1', status: 99 }],
+    [{ id: 123, applicationId: 'application-1', status: 2 }],
+  ])('keeps AI Review available when workflow data is malformed: %j', async (runs) => {
+    getApplicationValidationRuns.mockResolvedValue(runs)
+    renderApp()
+    expect(await screen.findByText(/AI summary unavailable or incomplete/)).toBeInTheDocument()
+    expect(screen.getByText(/AI counts include only confirmed results/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Review AI findings' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Open validation' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open AI Review' })).toHaveAttribute('href', `/ai-review?propertyId=${propertyId}`)
+  })
+
+  it('discards pending AI requests when the authenticated account changes', async () => {
+    const pending = []
+    getApplicationValidationRuns.mockImplementation((id) => new Promise((resolve) => pending.push(() => resolve([{ id: 'old-run', applicationId: id, status: 2 }]))))
+    const { changeUser } = renderApp()
+    await screen.findByRole('region', { name: 'Recent Applications' })
+    expect(getApplicationValidationRuns).toHaveBeenCalledTimes(3)
+    fetch.mockImplementation(() => Promise.resolve(json([])))
+    changeUser({ ...landlord, id: 'landlord-two', fullName: 'Amara Silva' })
+    await screen.findByText('No rental applications for this property yet.')
+    await act(async () => { pending.forEach((resolve) => resolve()) })
+    expect(screen.queryByRole('heading', { name: 'Needs Attention' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Recent Applications' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/workflow awaits human review/)).not.toBeInTheDocument()
+  })
+
+  it('limits AI requests in flight and stops queued requests after leaving the property', async () => {
+    const records = Array.from({ length: 9 }, (_, index) => ({ ...applications[1], id: `application-${index}` }))
+    fetch.mockImplementation((url) => Promise.resolve(json(isViewing(url) ? [] : records)))
+    const pending = []
+    getApplicationValidationRuns.mockImplementation(() => new Promise((resolve) => pending.push(resolve)))
+    const { router } = renderApp()
+    await screen.findByRole('region', { name: 'Recent Applications' })
+    expect(getApplicationValidationRuns).toHaveBeenCalledTimes(4)
+    await act(async () => { pending[0]([]) })
+    expect(getApplicationValidationRuns).toHaveBeenCalledTimes(5)
+    await act(async () => { await router.navigate('/dashboard') })
+    await act(async () => { pending.slice(1).forEach((resolve) => resolve([])) })
+    expect(getApplicationValidationRuns).toHaveBeenCalledTimes(5)
+    expect(screen.queryByRole('heading', { name: 'Needs Attention' })).not.toBeInTheDocument()
   })
 })

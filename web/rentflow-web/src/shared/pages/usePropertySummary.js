@@ -13,7 +13,9 @@ export default function usePropertySummary(load, propertyId) {
       try {
         const data = await load(propertyId)
         if (!Array.isArray(data) || data.some((item) =>
-          !item || typeof item.id !== 'string' || !Number.isInteger(item.status))) {
+          !item || typeof item.id !== 'string' || !item.id.trim() || !Number.isInteger(item.status) ||
+          typeof item.propertyId !== 'string' || item.propertyId.toLowerCase() !== propertyId.toLowerCase()) ||
+          new Set(data.map((item) => item.id.toLowerCase())).size !== data.length) {
           throw new ApiError('The service returned an invalid summary. Please try again.')
         }
         if (active) setState({ propertyId, attempt, status: 'ready', data })

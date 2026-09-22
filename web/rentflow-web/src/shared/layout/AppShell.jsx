@@ -97,7 +97,6 @@ export default function AppShell() {
         <span className="shared-brand__tagline">A better way to rent</span>
       </Link>
       <span className="shared-brand__workspace">{portalRole} workspace</span>
-      <button className="shared-sidebar__close" type="button" aria-label="Close menu" onClick={closeMenu}><Icon name="close" size={20} /></button>
       <nav aria-label="Primary navigation" className="shared-sidebar__nav">
         <div className="shared-sidebar__nav-main">{items.filter((item) => item.path !== '/profile').map(navLink)}</div>
         <div className="shared-sidebar__nav-bottom">{items.filter((item) => item.path === '/profile').map(navLink)}
