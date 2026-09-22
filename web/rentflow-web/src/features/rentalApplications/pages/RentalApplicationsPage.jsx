@@ -206,6 +206,9 @@ function RentalApplicationsPage() {
       <header className="applications-page__header">
         <div>
           <h1>Rental Applications</h1>
+          <p className="applications-page__description">
+            Review tenant applications, supporting documents, and validation findings before making a decision.
+          </p>
           {pageStatus === 'success' && <p className="applications-page__count">
             {applications.length} total <span aria-hidden="true">&middot;</span> {awaitingReview} awaiting review
           </p>}

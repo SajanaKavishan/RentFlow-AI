@@ -179,6 +179,7 @@ describe('shared React shell', () => {
     }
     await userEvent.click(within(nav).getByRole('link', { name: 'Rental Applications' }))
     expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
+    expect(within(screen.getByRole('banner')).getByText('Applications')).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: 'AI Review' })).toHaveAttribute('href', `/ai-review?propertyId=${propertyId}`)
     await userEvent.click(within(nav).getByRole('link', { name: 'AI Review' }))
     expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
