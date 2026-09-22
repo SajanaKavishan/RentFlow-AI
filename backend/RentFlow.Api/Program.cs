@@ -101,6 +101,9 @@ builder.Services.AddScoped<IApplicationDocumentContentService, ApplicationDocume
 builder.Services.AddScoped<IApplicationDataValidationTool, ApplicationDataValidationTool>();
 builder.Services.AddScoped<IDocumentValidationTool, DocumentValidationTool>();
 builder.Services.AddScoped<IDeterministicApplicationRuleTool, DeterministicApplicationRuleTool>();
+builder.Services.AddScoped<IMaintenanceRequestDataValidationTool, MaintenanceRequestDataValidationTool>();
+builder.Services.AddScoped<IMaintenanceCoordinationRuleTool, MaintenanceCoordinationRuleTool>();
+builder.Services.AddScoped<IMaintenanceCoordinationOrchestrator, MaintenanceCoordinationOrchestrator>();
 builder.Services.AddScoped<IApplicationValidationOrchestrator, ApplicationValidationOrchestrator>();
 builder.Services.AddScoped<IApplicationValidationQueryService, ApplicationValidationQueryService>();
 builder.Services.AddHttpClient<IApplicationValidationAgentClient, ApplicationValidationAgentClient>(client =>

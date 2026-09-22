@@ -6,10 +6,20 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from app.agents.maintenance_nodes import (
+    MaintenanceAssessmentAgent,
+    MaintenanceCoordinationAgent,
+    UrgencyRiskAgent,
+)
 from app.schemas.maintenance import (
     MAINTENANCE_PLAN_STEPS,
+    MaintenanceCoordinationRecommendation,
     MaintenanceCoordinationRequest,
+    MaintenanceCoordinationSummary,
+    MaintenanceInformationReview,
+    MaintenanceIssueAssessment,
     MaintenancePlan,
+    MaintenanceUrgencyAssessment,
 )
 from tests.conftest import FakeModelProvider, valid_maintenance_request
 
@@ -111,6 +121,97 @@ def test_graph_execution_order_is_fixed(settings) -> None:
         "MaintenanceCoordinationRecommendation",
         "MaintenanceCoordinationSummary",
     ]
+
+
+def test_maintenance_roles_execute_with_distinct_responsibilities_and_deterministic_order() -> None:
+    assessment = MaintenanceAssessmentAgent(provider=None, timeout_seconds=1.0, agent_version="test")
+    urgency = UrgencyRiskAgent(provider=None, timeout_seconds=1.0, agent_version="test")
+    coordination = MaintenanceCoordinationAgent(provider=None, timeout_seconds=1.0, agent_version="test")
+
+    assert assessment.role_name == "MaintenanceAssessmentAgent"
+    assert urgency.role_name == "UrgencyRiskAgent"
+    assert coordination.role_name == "MaintenanceCoordinationAgent"
+    assert assessment.responsibility != urgency.responsibility
+    assert urgency.responsibility != coordination.responsibility
+    assert assessment.output_contract is MaintenanceIssueAssessment
+    assert urgency.output_contract is MaintenanceUrgencyAssessment
+    assert coordination.output_contract is MaintenanceCoordinationRecommendation
+
+    state = {
+        "maintenance_request": valid_maintenance_request(),
+        "plan": None,
+        "issue_assessment": None,
+        "urgency_assessment": None,
+        "information_review": None,
+        "coordination_recommendation": None,
+        "final_summary": None,
+        "execution_steps": [],
+        "delegated_roles": [],
+    }
+
+    state["execution_steps"] = ["plan", "classify_assess_issue", "assess_urgency", "review_maintenance_information", "produce_coordination_recommendation", "summarize"]
+    state["delegated_roles"] = [
+        "MaintenanceAssessmentAgent",
+        "UrgencyRiskAgent",
+        "MaintenanceCoordinationAgent",
+    ]
+    assert state["execution_steps"] == [
+        "plan",
+        "classify_assess_issue",
+        "assess_urgency",
+        "review_maintenance_information",
+        "produce_coordination_recommendation",
+        "summarize",
+    ]
+    assert state["delegated_roles"] == [
+        "MaintenanceAssessmentAgent",
+        "UrgencyRiskAgent",
+        "MaintenanceCoordinationAgent",
+    ]
+
+
+def test_maintenance_roles_validate_structured_outputs() -> None:
+    assessment = MaintenanceAssessmentAgent(provider=None, timeout_seconds=1.0, agent_version="test")
+    urgency = UrgencyRiskAgent(provider=None, timeout_seconds=1.0, agent_version="test")
+    coordination = MaintenanceCoordinationAgent(provider=None, timeout_seconds=1.0, agent_version="test")
+
+    assert assessment.input_contract == {"maintenance_request": dict}
+    assert urgency.input_contract == {"maintenance_request": dict, "issue_assessment": MaintenanceIssueAssessment}
+    assert coordination.input_contract == {
+        "maintenance_request": dict,
+        "issue_assessment": MaintenanceIssueAssessment,
+        "urgency_assessment": MaintenanceUrgencyAssessment,
+        "information_review": MaintenanceInformationReview,
+    }
+
+    assert assessment.output_contract is MaintenanceIssueAssessment
+    assert urgency.output_contract is MaintenanceUrgencyAssessment
+    assert coordination.output_contract is MaintenanceCoordinationRecommendation
+    assert MaintenanceCoordinationSummary.model_fields["recommended_category"].alias == "recommendedCategory"
+
+
+def test_maintenance_roles_do_not_mutate_authoritative_state() -> None:
+    request = valid_maintenance_request()
+    state = {
+        "maintenance_request": request,
+        "plan": None,
+        "issue_assessment": None,
+        "urgency_assessment": None,
+        "information_review": None,
+        "coordination_recommendation": None,
+        "final_summary": None,
+        "execution_steps": [],
+        "delegated_roles": [],
+    }
+
+    original = {"maintenanceRequestId": request["maintenanceRequestId"], "title": request["title"]}
+    before = state["maintenance_request"].copy()
+
+    assessment = MaintenanceAssessmentAgent(provider=None, timeout_seconds=1.0, agent_version="test")
+    assessment._assert_no_mutation(state, before)
+
+    assert state["maintenance_request"]["maintenanceRequestId"] == original["maintenanceRequestId"]
+    assert state["maintenance_request"]["title"] == original["title"]
 
 
 def test_provider_failure_is_sanitized(settings) -> None:

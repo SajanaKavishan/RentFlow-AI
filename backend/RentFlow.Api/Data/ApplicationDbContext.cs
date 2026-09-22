@@ -17,6 +17,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<ApplicationValidationStep> ApplicationValidationSteps => Set<ApplicationValidationStep>();
 
+    public DbSet<MaintenanceCoordinationWorkflow> MaintenanceCoordinationWorkflows => Set<MaintenanceCoordinationWorkflow>();
+
+    public DbSet<MaintenanceCoordinationStep> MaintenanceCoordinationSteps => Set<MaintenanceCoordinationStep>();
+
     public DbSet<MaintenanceRequest> MaintenanceRequests => Set<MaintenanceRequest>();
 
     public DbSet<MaintenanceStatusHistory> MaintenanceStatusHistories => Set<MaintenanceStatusHistory>();
@@ -251,6 +255,111 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.Property(step => step.ResultJson)
                 .HasColumnType("text")
+                .IsRequired(false);
+
+            entity.Property(step => step.ErrorMessage)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.StartedAt)
+                .IsRequired(false);
+
+            entity.Property(step => step.CompletedAt)
+                .IsRequired(false);
+
+            entity.HasOne(step => step.Workflow)
+                .WithMany(workflow => workflow.Steps)
+                .HasForeignKey(step => step.WorkflowId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(step => new { step.WorkflowId, step.StepOrder })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<MaintenanceCoordinationWorkflow>(entity =>
+        {
+            entity.HasKey(workflow => workflow.Id);
+
+            entity.Property(workflow => workflow.MaintenanceRequestId)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.Objective)
+                .HasMaxLength(2000)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.Status)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.CurrentStep)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.AgentVersion)
+                .HasMaxLength(200)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.PlanSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.ExecutionSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.FinalResultJson)
+                .HasColumnType("text")
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.ErrorMessage)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.RequiresHumanApproval)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.ApprovalStatus)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.CreatedAt)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.UpdatedAt)
+                .IsRequired();
+
+            entity.HasOne(workflow => workflow.MaintenanceRequest)
+                .WithMany()
+                .HasForeignKey(workflow => workflow.MaintenanceRequestId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(workflow => workflow.MaintenanceRequestId);
+        });
+
+        modelBuilder.Entity<MaintenanceCoordinationStep>(entity =>
+        {
+            entity.HasKey(step => step.Id);
+
+            entity.Property(step => step.WorkflowId)
+                .IsRequired();
+
+            entity.Property(step => step.StepName)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(step => step.StepOrder)
+                .IsRequired();
+
+            entity.Property(step => step.Status)
+                .IsRequired();
+
+            entity.Property(step => step.InputSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.OutputSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.ValidationSummary)
+                .HasMaxLength(4000)
                 .IsRequired(false);
 
             entity.Property(step => step.ErrorMessage)
