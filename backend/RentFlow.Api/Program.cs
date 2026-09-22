@@ -218,6 +218,42 @@ builder.Services.AddScoped<
     PaymentService>();
 
 // =========================================================
+// MAINTENANCE SERVICES
+// =========================================================
+
+builder.Services.AddScoped<
+    IMaintenanceRequestService,
+    MaintenanceRequestService>();
+
+builder.Services.AddScoped<
+    IMaintenanceAttachmentService,
+    MaintenanceAttachmentService>();
+
+builder.Services.AddScoped<
+    IMaintenanceRequestDataValidationTool,
+    MaintenanceRequestDataValidationTool>();
+
+builder.Services.AddScoped<
+    IMaintenanceCoordinationRuleTool,
+    MaintenanceCoordinationRuleTool>();
+
+builder.Services.AddScoped<
+    IMaintenanceCoordinationOrchestrator,
+    MaintenanceCoordinationOrchestrator>();
+
+builder.Services.AddScoped<
+    IMaintenanceCoordinationService,
+    MaintenanceCoordinationService>();
+
+builder.Services.AddHttpClient<
+    IMaintenanceCoordinationAgentClient,
+    MaintenanceCoordinationAgentClient>(
+        client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+
+// =========================================================
 // APPLICATION VALIDATION / AI
 // =========================================================
 
@@ -246,25 +282,42 @@ builder.Services.AddHttpClient<
     ApplicationValidationAgentClient>(
         client =>
         {
-            client.Timeout =
-                Timeout.InfiniteTimeSpan;
+            client.Timeout = Timeout.InfiniteTimeSpan;
         });
 
 // =========================================================
-// CLOUDFLARE R2 STORAGE
+// CORE SERVICES
 // =========================================================
+
+builder.Services.AddScoped<
+    IViewingService,
+    ViewingService>();
+
+builder.Services.AddScoped<
+    IAuthService,
+    AuthService>();
+
+builder.Services.AddScoped<
+    IJwtTokenService,
+    JwtTokenService>();
+
+builder.Services.AddScoped<
+    ICurrentUserService,
+    CurrentUserService>();
+
+builder.Services.AddScoped<
+    INotificationService,
+    NotificationService>();
+
+builder.Services.AddScoped<
+    IPasswordHasher<ApplicationUser>,
+    PasswordHasher<ApplicationUser>>();
 
 builder.Services.AddSingleton<
     IFileStorageService,
     CloudflareR2StorageService>();
 
-builder.Services.AddSingleton(
-    TimeProvider.System);
-
-// =========================================================
-// CONTROLLERS / SWAGGER
-// =========================================================
-
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
