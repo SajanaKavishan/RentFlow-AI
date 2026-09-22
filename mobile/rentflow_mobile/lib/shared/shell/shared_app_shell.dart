@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../features/auth/models/current_user.dart';
+import '../../features/maintenance/screens/assigned_work_screen.dart';
+import '../../features/maintenance/services/maintenance_api_service.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/notifications/services/notification_api_service.dart';
 import '../../features/rental_applications/screens/my_rental_applications_screen.dart';
@@ -26,6 +28,7 @@ class SharedAppShell extends StatefulWidget {
     this.viewingApiService,
     this.rentalApplicationApiService,
     this.notificationApiService,
+    this.maintenanceApiService,
     this.landlordPropertyId,
   });
 
@@ -38,6 +41,7 @@ class SharedAppShell extends StatefulWidget {
   final ViewingApiService? viewingApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
   final NotificationApiService? notificationApiService;
+  final MaintenanceApiService? maintenanceApiService;
   final String? landlordPropertyId;
 
   @override
@@ -313,6 +317,9 @@ class _SharedAppShellState extends State<SharedAppShell>
                   rentalApplicationApiService:
                       widget.rentalApplicationApiService,
                 )),
+    RoleDestinationId.assignedWork => AssignedWorkScreen(
+      maintenanceApiService: widget.maintenanceApiService,
+    ),
     _ => const SizedBox.shrink(),
   };
 
