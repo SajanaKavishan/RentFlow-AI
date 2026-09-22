@@ -552,6 +552,68 @@ public class MaintenanceRequestsController(
             result => Ok(result));
     }
 
+    [HttpPatch("{id:guid}/start-work")]
+    [ProducesResponseType<MaintenanceRequestResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceRequestResponseDto>> StartWork(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.MaintenanceTechnician], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            async () =>
+            {
+                var maintenanceRequest = await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                if (maintenanceRequest.TechnicianId != currentUserId)
+                {
+                    throw MaintenanceRequestServiceException.NotFound(
+                        $"Maintenance request '{id}' was not found.");
+                }
+
+                return await maintenanceRequestService.StartWorkAsync(id, currentUserId, cancellationToken);
+            },
+            result => Ok(result));
+    }
+
+    [HttpPatch("{id:guid}/complete-work")]
+    [ProducesResponseType<MaintenanceRequestResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceRequestResponseDto>> CompleteWork(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.MaintenanceTechnician], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            async () =>
+            {
+                var maintenanceRequest = await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                if (maintenanceRequest.TechnicianId != currentUserId)
+                {
+                    throw MaintenanceRequestServiceException.NotFound(
+                        $"Maintenance request '{id}' was not found.");
+                }
+
+                return await maintenanceRequestService.CompleteWorkAsync(id, currentUserId, cancellationToken);
+            },
+            result => Ok(result));
+    }
+
     [HttpGet("{id:guid}/estimates")]
     [ProducesResponseType<IReadOnlyList<RepairEstimateResponseDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

@@ -80,6 +80,16 @@ public interface IMaintenanceRequestService
         ReviewRepairEstimateDto request,
         CancellationToken cancellationToken = default);
 
+    Task<MaintenanceRequestResponseDto> StartWorkAsync(
+        Guid requestId,
+        Guid technicianId,
+        CancellationToken cancellationToken = default);
+
+    Task<MaintenanceRequestResponseDto> CompleteWorkAsync(
+        Guid requestId,
+        Guid technicianId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<RepairEstimateResponseDto>> GetEstimatesAsync(
         Guid requestId,
         CancellationToken cancellationToken = default);

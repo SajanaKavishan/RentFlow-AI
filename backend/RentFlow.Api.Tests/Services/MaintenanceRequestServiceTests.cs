@@ -542,6 +542,162 @@ public class MaintenanceRequestServiceTests
         Assert.Equal(MaintenanceRequestServiceError.Conflict, invalidReview.Error);
     }
 
+    [Fact]
+    public async Task StartWorkAsync_AllowsAssignedTechnicianToStartApprovedRequest()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.Approved);
+        await context.SaveChangesAsync();
+
+        var result = await new MaintenanceRequestService(context).StartWorkAsync(maintenanceRequest.Id, technicianId);
+
+        Assert.Equal(MaintenanceRequestStatus.InProgress, result.Status);
+        Assert.Equal(technicianId, result.TechnicianId);
+    }
+
+    [Fact]
+    public async Task StartWorkAsync_ChangesStatusToInProgress()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.Approved);
+        await context.SaveChangesAsync();
+
+        var result = await new MaintenanceRequestService(context).StartWorkAsync(maintenanceRequest.Id, technicianId);
+
+        Assert.Equal(MaintenanceRequestStatus.InProgress, result.Status);
+    }
+
+    [Fact]
+    public async Task StartWorkAsync_CreatesHistoryEntry()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.Approved);
+        await context.SaveChangesAsync();
+
+        await new MaintenanceRequestService(context).StartWorkAsync(maintenanceRequest.Id, technicianId);
+
+        var history = await context.MaintenanceStatusHistories.OrderBy(item => item.ChangedAt).LastAsync();
+        Assert.Equal(MaintenanceRequestStatus.Approved, history.FromStatus);
+        Assert.Equal(MaintenanceRequestStatus.InProgress, history.ToStatus);
+        Assert.Equal(technicianId, history.ChangedByUserId);
+    }
+
+    [Fact]
+    public async Task StartWorkAsync_RejectsUnauthorizedTechnician()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.Approved);
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            new MaintenanceRequestService(context).StartWorkAsync(maintenanceRequest.Id, Guid.NewGuid()));
+
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
+    }
+
+    [Fact]
+    public async Task StartWorkAsync_RejectsRequestOutsideApprovedState()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            new MaintenanceRequestService(context).StartWorkAsync(maintenanceRequest.Id, technicianId));
+
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
+    }
+
+    [Fact]
+    public async Task CompleteWorkAsync_AllowsAssignedTechnicianToCompleteInProgressRequest()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        await context.SaveChangesAsync();
+
+        var result = await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
+
+        Assert.Equal(MaintenanceRequestStatus.Completed, result.Status);
+        Assert.Equal(technicianId, result.TechnicianId);
+        Assert.NotNull(result.CompletedAt);
+    }
+
+    [Fact]
+    public async Task CompleteWorkAsync_ChangesStatusToCompleted()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        await context.SaveChangesAsync();
+
+        var result = await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
+
+        Assert.Equal(MaintenanceRequestStatus.Completed, result.Status);
+    }
+
+    [Fact]
+    public async Task CompleteWorkAsync_SetsCompletedAt()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        await context.SaveChangesAsync();
+
+        var result = await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
+
+        Assert.NotNull(result.CompletedAt);
+    }
+
+    [Fact]
+    public async Task CompleteWorkAsync_CreatesHistoryEntry()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        await context.SaveChangesAsync();
+
+        await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
+
+        var history = await context.MaintenanceStatusHistories.OrderBy(item => item.ChangedAt).LastAsync();
+        Assert.Equal(MaintenanceRequestStatus.InProgress, history.FromStatus);
+        Assert.Equal(MaintenanceRequestStatus.Completed, history.ToStatus);
+        Assert.Equal(technicianId, history.ChangedByUserId);
+    }
+
+    [Fact]
+    public async Task CompleteWorkAsync_RejectsRequestOutsideInProgressState()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.Approved);
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId));
+
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
+    }
+
+    [Fact]
+    public async Task CompleteWorkAsync_RejectsUnauthorizedTechnician()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, Guid.NewGuid()));
+
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
+    }
+
     private static SubmitRepairEstimateDto CreateEstimate() =>
         new() { LaborCost = 100m, PartsCost = 25m, AdditionalCost = 5m, Notes = "Replace worn fittings." };
 
@@ -604,6 +760,7 @@ public class MaintenanceRequestServiceTests
         ApplicationDbContext context,
         Guid? tenantId = null,
         Guid? propertyId = null,
+        Guid? technicianId = null,
         MaintenanceRequestStatus status = MaintenanceRequestStatus.Submitted)
     {
         var maintenanceRequest = new MaintenanceRequest
@@ -611,6 +768,7 @@ public class MaintenanceRequestServiceTests
             Id = Guid.NewGuid(),
             TenantId = tenantId ?? Guid.NewGuid(),
             PropertyId = propertyId ?? Guid.NewGuid(),
+            TechnicianId = technicianId,
             Title = "Leaking kitchen tap",
             Description = "Water is leaking from the kitchen tap.",
             Category = MaintenanceCategory.Plumbing,

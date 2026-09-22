@@ -366,6 +366,69 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             true,
             cancellationToken);
 
+    public async Task<MaintenanceRequestResponseDto> StartWorkAsync(
+        Guid requestId,
+        Guid technicianId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequestId(requestId);
+        ValidateTechnicianId(technicianId);
+
+        var maintenanceRequest = await GetTrackedRequestAsync(requestId, cancellationToken);
+        EnsureStatus(maintenanceRequest, "start work", MaintenanceRequestStatus.Approved);
+
+        if (maintenanceRequest.TechnicianId != technicianId)
+        {
+            throw MaintenanceRequestServiceException.Conflict(
+                "Only the assigned technician can start work on this maintenance request.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        maintenanceRequest.Status = MaintenanceRequestStatus.InProgress;
+        maintenanceRequest.UpdatedAt = now;
+        AddHistory(
+            maintenanceRequest,
+            MaintenanceRequestStatus.Approved,
+            MaintenanceRequestStatus.InProgress,
+            technicianId,
+            "Work started.");
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return MapToResponse(maintenanceRequest);
+    }
+
+    public async Task<MaintenanceRequestResponseDto> CompleteWorkAsync(
+        Guid requestId,
+        Guid technicianId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequestId(requestId);
+        ValidateTechnicianId(technicianId);
+
+        var maintenanceRequest = await GetTrackedRequestAsync(requestId, cancellationToken);
+        EnsureStatus(maintenanceRequest, "complete work", MaintenanceRequestStatus.InProgress);
+
+        if (maintenanceRequest.TechnicianId != technicianId)
+        {
+            throw MaintenanceRequestServiceException.Conflict(
+                "Only the assigned technician can complete work on this maintenance request.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        maintenanceRequest.Status = MaintenanceRequestStatus.Completed;
+        maintenanceRequest.CompletedAt = now;
+        maintenanceRequest.UpdatedAt = now;
+        AddHistory(
+            maintenanceRequest,
+            MaintenanceRequestStatus.InProgress,
+            MaintenanceRequestStatus.Completed,
+            technicianId,
+            "Work completed.");
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return MapToResponse(maintenanceRequest);
+    }
+
     public async Task<IReadOnlyList<RepairEstimateResponseDto>> GetEstimatesAsync(
         Guid requestId,
         CancellationToken cancellationToken = default)
