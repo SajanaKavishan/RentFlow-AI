@@ -17,6 +17,7 @@ public class MaintenanceRequestsController(
     IMaintenanceRequestService maintenanceRequestService,
     IMaintenanceAttachmentService maintenanceAttachmentService,
     IMaintenanceCoordinationService maintenanceCoordinationService,
+    IMaintenanceCoordinationOrchestrator maintenanceCoordinationOrchestrator,
     ICurrentUserService currentUserService,
     ILogger<MaintenanceRequestsController> logger) : ControllerBase
 {
@@ -87,6 +88,133 @@ public class MaintenanceRequestsController(
             {
                 await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
                 return await maintenanceCoordinationService.AnalyzeAsync(id, cancellationToken);
+            },
+            result => Ok(result));
+    }
+
+    [HttpPost("{id:guid}/coordination-workflows")]
+    [ProducesResponseType<MaintenanceCoordinationWorkflow>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceCoordinationWorkflow>> StartCoordinationWorkflow(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                return await maintenanceCoordinationOrchestrator.StartAnalysisAsync(id, cancellationToken);
+            },
+            result => CreatedAtAction(nameof(GetCoordinationWorkflow), new { id, workflowId = result.Id }, result));
+    }
+
+    [HttpGet("{id:guid}/coordination-workflows/{workflowId:guid}")]
+    [ProducesResponseType<MaintenanceCoordinationWorkflow>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceCoordinationWorkflow>> GetCoordinationWorkflow(
+        Guid id,
+        Guid workflowId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                var workflow = await maintenanceCoordinationOrchestrator.GetByIdAsync(workflowId, cancellationToken)
+                    ?? throw MaintenanceRequestServiceException.NotFound($"Maintenance coordination workflow '{workflowId}' was not found.");
+
+                if (workflow.MaintenanceRequestId != id)
+                {
+                    throw MaintenanceRequestServiceException.NotFound($"Maintenance coordination workflow '{workflowId}' was not found.");
+                }
+
+                return workflow;
+            },
+            result => Ok(result));
+    }
+
+    [HttpPatch("{id:guid}/coordination-workflows/{workflowId:guid}/approve")]
+    [ProducesResponseType<MaintenanceCoordinationWorkflow>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceCoordinationWorkflow>> ApproveCoordinationWorkflow(
+        Guid id,
+        Guid workflowId,
+        [FromBody] MaintenanceCoordinationDecisionDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                var workflow = await maintenanceCoordinationOrchestrator.GetByIdAsync(workflowId, cancellationToken)
+                    ?? throw MaintenanceRequestServiceException.NotFound($"Maintenance coordination workflow '{workflowId}' was not found.");
+
+                if (workflow.MaintenanceRequestId != id)
+                {
+                    throw MaintenanceRequestServiceException.NotFound($"Maintenance coordination workflow '{workflowId}' was not found.");
+                }
+
+                return await maintenanceCoordinationOrchestrator.ApproveAsync(workflowId, currentUserId, request.DecisionNotes, cancellationToken);
+            },
+            result => Ok(result));
+    }
+
+    [HttpPatch("{id:guid}/coordination-workflows/{workflowId:guid}/reject")]
+    [ProducesResponseType<MaintenanceCoordinationWorkflow>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceCoordinationWorkflow>> RejectCoordinationWorkflow(
+        Guid id,
+        Guid workflowId,
+        [FromBody] MaintenanceCoordinationDecisionDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out var currentUserId, out var authResult))
+        {
+            return authResult;
+        }
+
+        return await ExecuteAsync(
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                var workflow = await maintenanceCoordinationOrchestrator.GetByIdAsync(workflowId, cancellationToken)
+                    ?? throw MaintenanceRequestServiceException.NotFound($"Maintenance coordination workflow '{workflowId}' was not found.");
+
+                if (workflow.MaintenanceRequestId != id)
+                {
+                    throw MaintenanceRequestServiceException.NotFound($"Maintenance coordination workflow '{workflowId}' was not found.");
+                }
+
+                return await maintenanceCoordinationOrchestrator.RejectAsync(workflowId, currentUserId, request.DecisionNotes, cancellationToken);
             },
             result => Ok(result));
     }

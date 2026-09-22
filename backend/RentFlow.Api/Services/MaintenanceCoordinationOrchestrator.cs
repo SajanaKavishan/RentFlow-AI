@@ -107,12 +107,126 @@ public sealed class MaintenanceCoordinationOrchestrator(
 
         workflow.AgentVersion = agentResponse.Result.AgentVersion;
         workflow.FinalResultJson = JsonSerializer.Serialize(agentResponse.Result, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        workflow.Status = MaintenanceCoordinationWorkflowStatus.Completed;
+        workflow.Status = MaintenanceCoordinationWorkflowStatus.AwaitingHumanReview;
         workflow.UpdatedAt = timeProvider.GetUtcNow();
         workflow.CurrentStep = 3;
         workflow.RequiresHumanApproval = true;
         workflow.ApprovalStatus = MaintenanceCoordinationApprovalStatus.Pending;
-        workflow.ExecutionSummary = $"Completed deterministic validation and agent advisory review. Steps executed: {string.Join(", ", workflow.Steps.OrderBy(step => step.StepOrder).Select(step => step.StepName))}.";
+        workflow.ExecutionSummary = $"Completed deterministic validation and agent advisory review. Awaiting human approval. Steps executed: {string.Join(", ", workflow.Steps.OrderBy(step => step.StepOrder).Select(step => step.StepName))}.";
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return workflow;
+    }
+
+    public async Task<MaintenanceCoordinationWorkflow?> GetByIdAsync(
+        Guid workflowId,
+        CancellationToken cancellationToken = default)
+    {
+        if (workflowId == Guid.Empty)
+        {
+            throw MaintenanceRequestServiceException.Validation("A maintenance coordination workflow ID is required.");
+        }
+
+        return await dbContext.MaintenanceCoordinationWorkflows
+            .Include(item => item.Steps)
+            .SingleOrDefaultAsync(item => item.Id == workflowId, cancellationToken);
+    }
+
+    public async Task<MaintenanceCoordinationWorkflow> ApproveAsync(
+        Guid workflowId,
+        Guid reviewerUserId,
+        string? decisionNotes,
+        CancellationToken cancellationToken = default)
+    {
+        if (workflowId == Guid.Empty)
+        {
+            throw MaintenanceRequestServiceException.Validation("A maintenance coordination workflow ID is required.");
+        }
+
+        if (reviewerUserId == Guid.Empty)
+        {
+            throw MaintenanceRequestServiceException.Validation("A reviewer user ID is required.");
+        }
+
+        var workflow = await dbContext.MaintenanceCoordinationWorkflows
+            .Include(item => item.Steps)
+            .SingleOrDefaultAsync(item => item.Id == workflowId, cancellationToken)
+            ?? throw MaintenanceRequestServiceException.NotFound($"Maintenance coordination workflow '{workflowId}' was not found.");
+
+        if (workflow.Status != MaintenanceCoordinationWorkflowStatus.AwaitingHumanReview)
+        {
+            throw MaintenanceRequestServiceException.Conflict(
+                "This maintenance coordination workflow is not awaiting human approval.");
+        }
+
+        var decisionAt = timeProvider.GetUtcNow();
+        var safeDecisionNotes = string.IsNullOrWhiteSpace(decisionNotes) ? "Approved by the authorized reviewer." : decisionNotes.Trim();
+
+        workflow.RequiresHumanApproval = true;
+        workflow.ApprovalStatus = MaintenanceCoordinationApprovalStatus.Approved;
+        workflow.Status = MaintenanceCoordinationWorkflowStatus.Completed;
+        workflow.UpdatedAt = decisionAt;
+        workflow.ExecutionSummary = string.IsNullOrWhiteSpace(workflow.ExecutionSummary)
+            ? $"Approved by reviewer '{reviewerUserId}' at {decisionAt:O}."
+            : $"{workflow.ExecutionSummary} Approved by reviewer '{reviewerUserId}' at {decisionAt:O}.";
+        workflow.ErrorMessage = null;
+        workflow.FinalResultJson = AppendDecisionToResult(workflow.FinalResultJson, new
+        {
+            decision = "approved",
+            reviewerUserId,
+            decisionNotes = safeDecisionNotes,
+            decidedAt = decisionAt
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return workflow;
+    }
+
+    public async Task<MaintenanceCoordinationWorkflow> RejectAsync(
+        Guid workflowId,
+        Guid reviewerUserId,
+        string? decisionNotes,
+        CancellationToken cancellationToken = default)
+    {
+        if (workflowId == Guid.Empty)
+        {
+            throw MaintenanceRequestServiceException.Validation("A maintenance coordination workflow ID is required.");
+        }
+
+        if (reviewerUserId == Guid.Empty)
+        {
+            throw MaintenanceRequestServiceException.Validation("A reviewer user ID is required.");
+        }
+
+        var workflow = await dbContext.MaintenanceCoordinationWorkflows
+            .Include(item => item.Steps)
+            .SingleOrDefaultAsync(item => item.Id == workflowId, cancellationToken)
+            ?? throw MaintenanceRequestServiceException.NotFound($"Maintenance coordination workflow '{workflowId}' was not found.");
+
+        if (workflow.Status != MaintenanceCoordinationWorkflowStatus.AwaitingHumanReview)
+        {
+            throw MaintenanceRequestServiceException.Conflict(
+                "This maintenance coordination workflow is not awaiting human approval.");
+        }
+
+        var decisionAt = timeProvider.GetUtcNow();
+        var safeDecisionNotes = string.IsNullOrWhiteSpace(decisionNotes) ? "Rejected by the authorized reviewer." : decisionNotes.Trim();
+
+        workflow.RequiresHumanApproval = true;
+        workflow.ApprovalStatus = MaintenanceCoordinationApprovalStatus.Rejected;
+        workflow.Status = MaintenanceCoordinationWorkflowStatus.Failed;
+        workflow.UpdatedAt = decisionAt;
+        workflow.ErrorMessage = safeDecisionNotes;
+        workflow.ExecutionSummary = string.IsNullOrWhiteSpace(workflow.ExecutionSummary)
+            ? $"Rejected by reviewer '{reviewerUserId}' at {decisionAt:O}."
+            : $"{workflow.ExecutionSummary} Rejected by reviewer '{reviewerUserId}' at {decisionAt:O}.";
+        workflow.FinalResultJson = AppendDecisionToResult(workflow.FinalResultJson, new
+        {
+            decision = "rejected",
+            reviewerUserId,
+            decisionNotes = safeDecisionNotes,
+            decidedAt = decisionAt
+        });
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return workflow;
@@ -230,6 +344,25 @@ public sealed class MaintenanceCoordinationOrchestrator(
             MaintenanceCoordinationAgentResponse agent => $"Agent result valid; priority={agent.Result.RecommendedPriority}; nextAction={agent.Result.NextAction}; warnings={agent.Result.Warnings.Count}",
             _ => "Validation summary recorded."
         };
+    }
+
+    private static string AppendDecisionToResult(string? currentPayload, object decision)
+    {
+        if (string.IsNullOrWhiteSpace(currentPayload))
+        {
+            return JsonSerializer.Serialize(decision, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(currentPayload);
+            var root = JsonDocument.Parse(JsonSerializer.Serialize(new { decision = document.RootElement.Clone(), decisionDetails = decision }, new JsonSerializerOptions(JsonSerializerDefaults.Web))).RootElement;
+            return JsonSerializer.Serialize(root, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        catch (JsonException)
+        {
+            return JsonSerializer.Serialize(new { previousResult = currentPayload, decisionDetails = decision }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
     }
 
     private static string TruncateToLength(string value, int maxLength)

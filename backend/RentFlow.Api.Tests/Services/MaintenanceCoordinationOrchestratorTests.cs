@@ -23,7 +23,7 @@ public class MaintenanceCoordinationOrchestratorTests
         var orchestrator = CreateOrchestrator(context, new FakeAgentClient());
         var workflow = await orchestrator.StartAnalysisAsync(request.Id);
 
-        Assert.Equal(MaintenanceCoordinationWorkflowStatus.Completed, workflow.Status);
+        Assert.Equal(MaintenanceCoordinationWorkflowStatus.AwaitingHumanReview, workflow.Status);
         Assert.Equal(request.Id, workflow.MaintenanceRequestId);
         Assert.Equal("Review the maintenance request and recommend a safe advisory action without approving or changing status.", workflow.Objective);
         Assert.Equal(3, workflow.Steps.Count);
@@ -125,7 +125,7 @@ public class MaintenanceCoordinationOrchestratorTests
     }
 
     [Fact]
-    public async Task StartAnalysisAsync_SuccessfulWorkflowStoresFinalResultWithoutMutatingStatusOrApproval()
+    public async Task StartAnalysisAsync_SuccessfulWorkflowStopsAtAwaitingHumanReview()
     {
         await using var context = CreateContext();
         var request = CreateRequest();
@@ -136,13 +136,49 @@ public class MaintenanceCoordinationOrchestratorTests
         var orchestrator = CreateOrchestrator(context, agent);
         var workflow = await orchestrator.StartAnalysisAsync(request.Id);
 
-        Assert.Equal(MaintenanceCoordinationWorkflowStatus.Completed, workflow.Status);
+        Assert.Equal(MaintenanceCoordinationWorkflowStatus.AwaitingHumanReview, workflow.Status);
         Assert.Equal(MaintenanceCoordinationApprovalStatus.Pending, workflow.ApprovalStatus);
         Assert.Equal(MaintenanceRequestStatus.Submitted, request.Status);
         Assert.NotNull(workflow.FinalResultJson);
         Assert.Contains("Schedule technician review", workflow.FinalResultJson);
         Assert.DoesNotContain("Approved", workflow.FinalResultJson, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Rejected", workflow.FinalResultJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ApproveAsync_TransitionsWorkflowToApproved()
+    {
+        await using var context = CreateContext();
+        var request = CreateRequest();
+        context.MaintenanceRequests.Add(request);
+        await context.SaveChangesAsync();
+
+        var orchestrator = CreateOrchestrator(context, new FakeAgentClient());
+        var workflow = await orchestrator.StartAnalysisAsync(request.Id);
+
+        var approved = await orchestrator.ApproveAsync(workflow.Id, Guid.NewGuid(), "Approved after landlord review.");
+
+        Assert.Equal(MaintenanceCoordinationWorkflowStatus.Completed, approved.Status);
+        Assert.Equal(MaintenanceCoordinationApprovalStatus.Approved, approved.ApprovalStatus);
+        Assert.Equal("Approved after landlord review.", JsonDocument.Parse(approved.FinalResultJson!).RootElement.GetProperty("decisionDetails").GetProperty("decisionNotes").GetString());
+    }
+
+    [Fact]
+    public async Task RejectAsync_TransitionsWorkflowToRejected()
+    {
+        await using var context = CreateContext();
+        var request = CreateRequest();
+        context.MaintenanceRequests.Add(request);
+        await context.SaveChangesAsync();
+
+        var orchestrator = CreateOrchestrator(context, new FakeAgentClient());
+        var workflow = await orchestrator.StartAnalysisAsync(request.Id);
+
+        var rejected = await orchestrator.RejectAsync(workflow.Id, Guid.NewGuid(), "Request additional evidence.");
+
+        Assert.Equal(MaintenanceCoordinationWorkflowStatus.Failed, rejected.Status);
+        Assert.Equal(MaintenanceCoordinationApprovalStatus.Rejected, rejected.ApprovalStatus);
+        Assert.Equal("Request additional evidence.", JsonDocument.Parse(rejected.FinalResultJson!).RootElement.GetProperty("decisionDetails").GetProperty("decisionNotes").GetString());
     }
 
     private static ApplicationDbContext CreateContext() => new(new DbContextOptionsBuilder<ApplicationDbContext>()
