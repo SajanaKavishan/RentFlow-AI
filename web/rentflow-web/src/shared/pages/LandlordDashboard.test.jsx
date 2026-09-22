@@ -123,7 +123,7 @@ describe('landlord dashboard', () => {
     expect(within(applicationLink).getByText('3')).toHaveClass('shared-nav-link__pending')
     expect(within(nav).getByRole('link', { name: 'Viewing Requests, 2 pending' })).toBeInTheDocument()
     await userEvent.click(applicationLink)
-    expect(await screen.findByRole('heading', { name: 'Rental applications' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Rental Applications' })).toBeInTheDocument()
     expect(router.state.location.search).toBe(`?propertyId=${propertyId}`)
     expect(within(nav).getByRole('link', { name: 'Rental Applications' })).not.toHaveTextContent('3')
     expect(within(nav).getByRole('link', { name: 'Viewing Requests, 2 pending' })).toBeInTheDocument()
@@ -246,8 +246,8 @@ describe('landlord dashboard', () => {
 
   it.each([
     ['Viewing Requests', '/viewing-requests', 'Viewing requests'],
-    ['Rental Applications', '/rental-applications', 'Rental applications'],
-    ['AI Review', '/ai-review', 'Rental applications'],
+    ['Rental Applications', '/rental-applications', 'Rental Applications'],
+    ['AI Review', '/ai-review', 'Rental Applications'],
   ])('opens the existing %s screen with the selected property', async (label, path, heading) => {
     fetch.mockImplementation(() => Promise.resolve(json([])))
     const { router } = renderApp()

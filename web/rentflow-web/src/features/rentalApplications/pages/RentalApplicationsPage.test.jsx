@@ -91,11 +91,11 @@ describe('Landlord rental applications', () => {
       expect.any(Object),
     )
     expect(cards).toHaveLength(7)
+    expect(screen.getByRole('heading', { name: 'Rental Applications' }).parentElement).toHaveTextContent('7 total · 2 awaiting review')
     expect(within(cards[0]).getByLabelText('Application status: Submitted')).toBeInTheDocument()
     expect(within(cards[1]).getByLabelText('Application status: Under review')).toBeInTheDocument()
     expect(within(cards[2]).getByLabelText('Application status: Changes requested')).toBeInTheDocument()
-    expect(within(cards[2]).getByText('Tenant update required')).toBeInTheDocument()
-    expect(within(cards[2]).getByText('Upload a clearer identity document.')).toBeInTheDocument()
+    expect(within(cards[2]).queryByText('Tenant update required')).not.toBeInTheDocument()
 
     for (const label of ['Draft', 'Approved', 'Rejected', 'Withdrawn']) {
       expect(screen.getByLabelText(`Application status: ${label}`)).toBeInTheDocument()
@@ -103,9 +103,12 @@ describe('Landlord rental applications', () => {
 
     expect(within(cards[0]).getByText(tenantId)).toBeInTheDocument()
     expect(within(cards[0]).getByText(propertyId)).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Approve' })).toHaveLength(2)
-    expect(screen.getAllByRole('button', { name: 'Reject' })).toHaveLength(2)
-    expect(screen.getAllByRole('button', { name: 'Request changes' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'Start review' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Application validation' })).not.toBeInTheDocument()
+    await userEvent.click(within(cards[2]).getByRole('button', { name: 'Details' }))
+    expect(within(cards[2]).getByText('Tenant update required')).toBeInTheDocument()
+    expect(within(cards[2]).getByText('Upload a clearer identity document.')).toBeInTheDocument()
   })
 
   it('shows API-backed document details in a readable review section', async () => {
@@ -122,6 +125,7 @@ describe('Landlord rental applications', () => {
     mockApplicationApi([currentApplication], { documents: [document] })
 
     renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Details' }))
     await userEvent.click(
       await screen.findByRole('button', {
         name: `Review documents for application ${currentApplication.id}`,
@@ -197,10 +201,12 @@ describe('Landlord rental applications', () => {
     mockApplicationApi([application()], { validationRuns: [workflow] })
 
     renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'AI Validation' }))
 
     const aiReview = await screen.findByRole('region', {
       name: 'Application validation',
     })
+    expect(aiReview).toHaveFocus()
     expect(
       await within(aiReview).findByText('Awaiting human review'),
     ).toBeInTheDocument()
@@ -240,6 +246,66 @@ describe('Landlord rental applications', () => {
       await screen.findByRole('heading', { name: 'No rental applications yet' }),
     ).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('heading', { name: 'Rental Applications' }).parentElement).toHaveTextContent('0 total · 0 awaiting review')
+  })
+
+  it('combines client-side status and reference search without searching unrelated fields', async () => {
+    const secondTenantId = '99999999-9999-9999-9999-999999999999'
+    mockApplicationApi([
+      application({ id: 'first', tenantId, status: 1 }),
+      application({ id: 'second', tenantId: secondTenantId, status: 2, occupation: 'Architect' }),
+      application({ id: 'third', tenantId: secondTenantId, status: 4, occupation: 'Product designer' }),
+    ])
+    renderPage()
+    const list = await screen.findByRole('region', { name: 'Rental applications' })
+    const filters = screen.getByRole('group', { name: 'Filter applications by status' })
+    expect(within(list).getAllByRole('article')).toHaveLength(3)
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search tenant or property reference' }), '99999999')
+    expect(within(list).getAllByRole('article')).toHaveLength(2)
+    await userEvent.click(within(filters).getByRole('button', { name: 'Under review' }))
+    expect(within(list).getAllByRole('article')).toHaveLength(1)
+    expect(within(list).getByText('Architect')).toBeInTheDocument()
+    expect(within(filters).getByRole('button', { name: 'Under review' })).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search tenant or property reference' }))
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search tenant or property reference' }), 'Product designer')
+    expect(screen.getByRole('heading', { name: 'No matching applications' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(within(screen.getByRole('region', { name: 'Rental applications' })).getAllByRole('article')).toHaveLength(3)
+    expect(within(filters).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('heading', { name: 'Rental Applications' }).parentElement).toHaveTextContent('3 total · 2 awaiting review')
+  })
+
+  it('refreshes the scoped list and removes stale cards', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse([application()]))
+      .mockResolvedValueOnce(jsonResponse([]))
+    vi.stubGlobal('fetch', fetchMock)
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Rental applications' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    expect(await screen.findByRole('heading', { name: 'No rental applications yet' })).toBeInTheDocument()
+    expect(screen.queryByRole('article')).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    for (const [url] of fetchMock.mock.calls) expect(url).toContain(`/api/rental-applications/property/${propertyId}`)
+  })
+
+  it('starts review only for a submitted application through the existing transition', async () => {
+    const submitted = application()
+    const fetchMock = mockApplicationApi([submitted], { actionResponse: application({ status: 2 }) })
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Application marked as under review.')
+    expect(screen.getByLabelText('Application status: Under review')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start review' })).not.toBeInTheDocument()
+    const patchCall = fetchMock.mock.calls.find(([, request]) => request?.method === 'PATCH')
+    expect(patchCall[0]).toContain(`/api/rental-applications/${submitted.id}/review`)
+  })
+
+  it('rejects a response for another property without rendering its records', async () => {
+    mockApplicationApi([application({ propertyId: '99999999-9999-9999-9999-999999999999' })])
+    renderPage()
+    expect(await screen.findByRole('heading', { name: 'We could not load the applications' })).toBeInTheDocument()
+    expect(screen.queryByRole('article')).not.toBeInTheDocument()
   })
 
   it('keeps decision feedback and action availability aligned with API state', async () => {
@@ -248,6 +314,7 @@ describe('Landlord rental applications', () => {
     const fetchMock = mockApplicationApi([submitted], { actionResponse: approved })
 
     renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Details' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Approve' }))
     await userEvent.type(
       screen.getByLabelText('Response (optional)'),
@@ -256,7 +323,7 @@ describe('Landlord rental applications', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('Application approved.')
-    expect(screen.getByLabelText('Application status: Approved')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('Application status: Approved')).toHaveLength(2)
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
     const patchCall = fetchMock.mock.calls.find(([, request]) => request?.method === 'PATCH')
     expect(patchCall[0]).toContain(`/api/rental-applications/${submitted.id}/approve`)
@@ -275,6 +342,14 @@ describe('Landlord rental applications', () => {
       screen.getByRole('heading', { name: 'Select a property' }),
     ).toBeInTheDocument()
     expect(screen.getByText(/Property integration pending/)).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('treats an invalid property reference as unselected', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    renderPage('not-a-property-id')
+    expect(screen.getByRole('heading', { name: 'Select a property' })).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

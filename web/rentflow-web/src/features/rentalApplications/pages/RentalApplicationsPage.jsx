@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
-import RentalApplicationCard from '../components/RentalApplicationCard.jsx'
+import Icon from '../../../shared/ui/Icons.jsx'
+import { APPLICATION_STATUS_DETAILS } from '../components/applicationStatus.js'
+import RentalApplicationListCard from '../components/RentalApplicationListCard.jsx'
 import {
   approveApplication,
   getApplicationsByProperty,
@@ -12,6 +14,7 @@ import {
   requestChanges,
 } from '../services/rentalApplicationApiService.js'
 import '../rentalApplications.css'
+import './rental-application-management.css'
 
 const STATUS_PRIORITY = {
   [RENTAL_APPLICATION_STATUS.SUBMITTED]: 0,
@@ -35,6 +38,25 @@ function sortApplications(applications) {
   })
 }
 
+const FILTER_STATUSES = [
+  ['All', 'all'],
+  ...Object.entries(APPLICATION_STATUS_DETAILS)
+    .filter(([status]) => Number(status) !== RENTAL_APPLICATION_STATUS.DRAFT)
+    .map(([status, details]) => [details.label, status]),
+  [APPLICATION_STATUS_DETAILS[RENTAL_APPLICATION_STATUS.DRAFT].label, String(RENTAL_APPLICATION_STATUS.DRAFT)],
+]
+
+function verifyPropertyApplications(applications, propertyId) {
+  if (!Array.isArray(applications) || applications.some((application) =>
+    !application || typeof application.id !== 'string' || !application.id.trim()
+    || typeof application.tenantId !== 'string' || !application.tenantId.trim()
+    || typeof application.propertyId !== 'string'
+    || application.propertyId.toLowerCase() !== propertyId.toLowerCase()
+    || !Object.hasOwn(APPLICATION_STATUS_DETAILS, application.status)
+  )) throw new TypeError('Invalid property application response')
+  return sortApplications(applications)
+}
+
 function RentalApplicationsPage() {
   const { propertyId } = usePropertyContext()
   const [pageState, setPageState] = useState({
@@ -45,7 +67,10 @@ function RentalApplicationsPage() {
   })
   const [updatingId, setUpdatingId] = useState(null)
   const [actionError, setActionError] = useState({ id: null, message: '' })
-  const [notice, setNotice] = useState('')
+  const [notice, setNotice] = useState({ propertyId: null, message: '' })
+  const [reloadKey, setReloadKey] = useState(0)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const pageStatus = !propertyId
     ? 'property-required'
     : pageState.propertyId === propertyId
@@ -63,7 +88,7 @@ function RentalApplicationsPage() {
           setPageState({
             status: 'success',
             propertyId,
-            applications: sortApplications(applications),
+            applications: verifyPropertyApplications(applications, propertyId),
             error: '',
           })
         }
@@ -84,10 +109,10 @@ function RentalApplicationsPage() {
     return () => {
       isActive = false
     }
-  }, [propertyId])
+  }, [propertyId, reloadKey])
 
-  async function loadApplications() {
-    if (!propertyId) return
+  function loadApplications() {
+    if (!propertyId || pageStatus === 'loading') return
 
     setPageState((current) => ({
       ...current,
@@ -96,27 +121,8 @@ function RentalApplicationsPage() {
       error: '',
     }))
     setActionError({ id: null, message: '' })
-    setNotice('')
-
-    try {
-      const applications = await getApplicationsByProperty(propertyId)
-      setPageState({
-        status: 'success',
-        propertyId,
-        applications: sortApplications(applications),
-        error: '',
-      })
-    } catch (error) {
-      setPageState({
-        status: 'error',
-        propertyId,
-        applications: [],
-        error: safeErrorMessage(
-          error,
-          'Unable to load rental applications. Please try again.',
-        ),
-      })
-    }
+    setNotice({ propertyId: null, message: '' })
+    setReloadKey((value) => value + 1)
   }
 
   async function updateApplication(id, operation, successMessage) {
@@ -124,19 +130,19 @@ function RentalApplicationsPage() {
 
     setUpdatingId(id)
     setActionError({ id: null, message: '' })
-    setNotice('')
+    setNotice({ propertyId: null, message: '' })
 
     try {
       const updatedApplication = await operation()
       setPageState((current) => ({
         ...current,
-        applications: sortApplications(
+        applications: current.propertyId === propertyId ? sortApplications(
           current.applications.map((application) =>
             application.id === id ? updatedApplication : application,
           ),
-        ),
+        ) : current.applications,
       }))
-      setNotice(successMessage)
+      setNotice({ propertyId, message: successMessage })
       return true
     } catch (error) {
       setActionError({
@@ -184,27 +190,13 @@ function RentalApplicationsPage() {
     )
   }
 
-  const reviewCounts = pageState.applications.reduce(
-    (counts, application) => {
-      if (application.status === RENTAL_APPLICATION_STATUS.SUBMITTED) {
-        counts.submitted += 1
-      } else if (
-        application.status === RENTAL_APPLICATION_STATUS.UNDER_REVIEW
-      ) {
-        counts.underReview += 1
-      } else if (
-        application.status === RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED
-      ) {
-        counts.changesRequested += 1
-      }
-      return counts
-    },
-    { submitted: 0, underReview: 0, changesRequested: 0 },
-  )
-  const attentionCount =
-    reviewCounts.submitted +
-    reviewCounts.underReview +
-    reviewCounts.changesRequested
+  const applications = pageStatus === 'success' ? pageState.applications : []
+  const awaitingReview = applications.filter((application) =>
+    [RENTAL_APPLICATION_STATUS.SUBMITTED, RENTAL_APPLICATION_STATUS.UNDER_REVIEW].includes(application.status)).length
+  const query = search.trim().toLocaleLowerCase()
+  const visibleApplications = applications.filter((application) =>
+    (statusFilter === 'all' || application.status === Number(statusFilter))
+    && (!query || [application.tenantId, application.propertyId].some((value) => value.toLocaleLowerCase().includes(query))))
 
   return (
     <main
@@ -213,12 +205,10 @@ function RentalApplicationsPage() {
     >
       <header className="applications-page__header">
         <div>
-          <p className="applications-page__eyebrow">Landlord workspace</p>
-          <h1>Rental applications</h1>
-          <p>
-            Review tenant details, supporting documents, and validation findings
-            before making a landlord decision.
-          </p>
+          <h1>Rental Applications</h1>
+          {pageStatus === 'success' && <p className="applications-page__count">
+            {applications.length} total <span aria-hidden="true">&middot;</span> {awaitingReview} awaiting review
+          </p>}
         </div>
         <button
           type="button"
@@ -226,7 +216,7 @@ function RentalApplicationsPage() {
           onClick={loadApplications}
           disabled={!propertyId || pageStatus === 'loading'}
         >
-          Refresh
+          <Icon name="refresh" size={17} />Refresh
         </button>
       </header>
 
@@ -234,9 +224,9 @@ function RentalApplicationsPage() {
         <PropertySelectionState className="applications-state" />
       )}
 
-      {pageStatus === 'success' && notice && (
+      {pageStatus === 'success' && notice.propertyId === propertyId && notice.message && (
         <div className="applications-notice" role="status">
-          {notice}
+          {notice.message}
         </div>
       )}
 
@@ -271,9 +261,7 @@ function RentalApplicationsPage() {
       {pageStatus === 'success' &&
         pageState.applications.length === 0 && (
           <section className="applications-state">
-            <div className="applications-state__icon" aria-hidden="true">
-              ✓
-            </div>
+            <div className="applications-state__icon" aria-hidden="true"><Icon name="document" size={25} /></div>
             <h2>No rental applications yet</h2>
             <p>New tenant applications for this property will appear here.</p>
           </section>
@@ -282,54 +270,32 @@ function RentalApplicationsPage() {
       {pageStatus === 'success' &&
         pageState.applications.length > 0 && (
           <>
-            <section
-              className="applications-summary"
-              aria-label="Application review summary"
-            >
-              <div className="applications-summary__intro">
-                <p className="applications-page__eyebrow">Review queue</p>
-                <h2>Applications needing attention</h2>
-                <p>
-                  {attentionCount === 0
-                    ? 'No applications currently need action.'
-                    : `${attentionCount} ${attentionCount === 1 ? 'application needs' : 'applications need'} attention. Priority items are listed first.`}
-                </p>
+            <div className="applications-toolbar">
+              <label className="applications-toolbar__search">
+                <Icon name="search" size={19} />
+                <input type="search" aria-label="Search tenant or property reference" value={search} onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search tenant or property reference" />
+              </label>
+              <div className="applications-toolbar__filters" role="group" aria-label="Filter applications by status">
+                {FILTER_STATUSES.map(([label, value]) => <button key={value} type="button"
+                  className={`applications-toolbar__filter${statusFilter === value ? ' applications-toolbar__filter--active' : ''}`}
+                  aria-pressed={statusFilter === value} onClick={() => setStatusFilter(value)}>{label}</button>)}
               </div>
-              <dl className="applications-summary__counts">
-                <div className="applications-summary__count applications-summary__count--submitted">
-                  <dt>Submitted</dt>
-                  <dd>{reviewCounts.submitted}</dd>
-                </div>
-                <div className="applications-summary__count applications-summary__count--review">
-                  <dt>Under review</dt>
-                  <dd>{reviewCounts.underReview}</dd>
-                </div>
-                <div className="applications-summary__count applications-summary__count--changes">
-                  <dt>Changes requested</dt>
-                  <dd>{reviewCounts.changesRequested}</dd>
-                </div>
-              </dl>
-            </section>
+            </div>
 
-            <section
-              className="applications-list"
-              aria-label="Rental applications"
-            >
-              {pageState.applications.map((application) => (
-                <RentalApplicationCard
-                  key={application.id}
-                  application={application}
-                  isUpdating={updatingId === application.id}
-                  actionError={
-                    actionError.id === application.id ? actionError.message : ''
-                  }
-                  onReview={handleReview}
-                  onApprove={handleApprove}
-                  onReject={handleReject}
-                  onRequestChanges={handleRequestChanges}
-                />
-              ))}
-            </section>
+            {visibleApplications.length === 0 ? <section className="applications-state applications-state--filtered">
+              <Icon name="search" size={28} />
+              <h2>No matching applications</h2>
+              <p>Try a different tenant or property reference, or choose another status.</p>
+              <button type="button" className="application-button application-button--quiet"
+                onClick={() => { setSearch(''); setStatusFilter('all') }}>Clear filters</button>
+            </section> : <section className="applications-list" aria-label="Rental applications">
+              {visibleApplications.map((application) => <RentalApplicationListCard
+                key={application.id} application={application} isUpdating={updatingId === application.id}
+                actionError={actionError.id === application.id ? actionError.message : ''}
+                onReview={handleReview} onApprove={handleApprove} onReject={handleReject}
+                onRequestChanges={handleRequestChanges} />)}
+            </section>}
           </>
         )}
     </main>
