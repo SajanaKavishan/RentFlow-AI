@@ -108,7 +108,7 @@ describe('landlord dashboard', () => {
     const viewingLink = await within(nav).findByRole('link', { name: 'Viewing Requests, 2 pending' })
     expect(within(viewingLink).getByText('2')).toHaveClass('shared-nav-link__pending')
     await userEvent.click(viewingLink)
-    expect(await screen.findByRole('heading', { name: 'Viewing requests' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Viewing Requests' })).toBeInTheDocument()
     expect(router.state.location.search).toBe(`?propertyId=${propertyId}`)
     expect(within(nav).getByRole('link', { name: 'Viewing Requests' })).not.toHaveTextContent('2')
     await userEvent.click(within(nav).getByRole('link', { name: 'Dashboard' }))
@@ -245,9 +245,9 @@ describe('landlord dashboard', () => {
   })
 
   it.each([
-    ['Viewing Requests', '/viewing-requests', 'Viewing requests'],
+    ['Viewing Requests', '/viewing-requests', 'Viewing Requests'],
     ['Rental Applications', '/rental-applications', 'Rental Applications'],
-    ['AI Review', '/ai-review', 'Rental Applications'],
+    ['AI Review', '/ai-review', 'AI Review'],
   ])('opens the existing %s screen with the selected property', async (label, path, heading) => {
     fetch.mockImplementation(() => Promise.resolve(json([])))
     const { router } = renderApp()
@@ -264,7 +264,7 @@ describe('landlord dashboard', () => {
     const link = within(screen.getByRole('main')).getByRole('link', { name: 'Open Viewing Requests' })
     expect(link).toHaveAttribute('href', '/viewing-requests')
     await userEvent.click(link)
-    expect(screen.getByRole('heading', { name: 'Viewing requests' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Viewing Requests' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Select a property' })).toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
   })

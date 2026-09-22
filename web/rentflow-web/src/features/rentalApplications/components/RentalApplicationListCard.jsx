@@ -24,6 +24,8 @@ export default function RentalApplicationListCard({
   const [detailMode, setDetailMode] = useState(null)
   const detailRef = useRef(null)
   const isExpanded = detailMode !== null
+  const detailsPanelId = `application-details-${application.id}`
+  const validationPanelId = `application-validation-${application.id}`
 
   useEffect(() => {
     if (detailMode !== 'validation') return
@@ -56,18 +58,18 @@ export default function RentalApplicationListCard({
           onClick={() => onReview(application.id)} disabled={isUpdating}
         >{isUpdating ? 'Saving...' : 'Start review'}</button>}
         <button type="button" className="application-button application-button--quiet"
-          aria-expanded={isExpanded} aria-controls={`application-detail-${application.id}`}
-          onClick={() => setDetailMode(isExpanded ? null : 'details')}
-        ><Icon name="search" size={17} />{isExpanded ? 'Hide details' : 'Details'}</button>
+          aria-expanded={detailMode === 'details'} aria-controls={detailsPanelId}
+          onClick={() => setDetailMode(detailMode === 'details' ? null : 'details')}
+        ><Icon name="search" size={17} />{detailMode === 'details' ? 'Hide details' : 'Details'}</button>
         <button type="button" className="application-button application-button--quiet"
-          aria-expanded={isExpanded} aria-controls={`application-detail-${application.id}`}
+          aria-expanded={detailMode === 'validation'} aria-controls={validationPanelId}
           onClick={() => setDetailMode('validation')}
         ><Icon name="trend" size={17} />AI Validation</button>
       </div>
       {application.submittedAt && <p className="application-list-card__submitted">Submitted <time dateTime={application.submittedAt}>{displayDate(application.submittedAt)}</time></p>}
     </div>
     {actionError && <p className="application-list-card__error" role="alert">{actionError}</p>}
-    {isExpanded && <div ref={detailRef} id={`application-detail-${application.id}`} className="application-list-card__detail">
+    {isExpanded && <div ref={detailRef} id={detailMode === 'validation' ? validationPanelId : detailsPanelId} className="application-list-card__detail">
       <RentalApplicationCard application={application} isUpdating={isUpdating} actionError={actionError}
         onReview={onReview} onApprove={onApprove} onReject={onReject} onRequestChanges={onRequestChanges} />
     </div>}

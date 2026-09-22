@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import Icon from '../../../shared/ui/Icons.jsx'
@@ -59,6 +60,8 @@ function verifyPropertyApplications(applications, propertyId) {
 
 function RentalApplicationsPage() {
   const { propertyId } = usePropertyContext()
+  const { pathname } = useLocation()
+  const isAiReviewRoute = pathname === '/ai-review' || /\/ai-review\/?$/.test(pathname)
   const [pageState, setPageState] = useState({
     status: 'loading',
     propertyId: null,
@@ -205,9 +208,11 @@ function RentalApplicationsPage() {
     >
       <header className="applications-page__header">
         <div>
-          <h1>Rental Applications</h1>
+          <h1>{isAiReviewRoute ? 'AI Review' : 'Rental Applications'}</h1>
           <p className="applications-page__description">
-            Review tenant applications, supporting documents, and validation findings before making a decision.
+            {isAiReviewRoute
+              ? 'Review application validation findings and supporting documents before making a decision.'
+              : 'Track tenant applications, review documents and validation findings, and make the final landlord decision.'}
           </p>
           {pageStatus === 'success' && <p className="applications-page__count">
             {applications.length} total <span aria-hidden="true">&middot;</span> {awaitingReview} awaiting review

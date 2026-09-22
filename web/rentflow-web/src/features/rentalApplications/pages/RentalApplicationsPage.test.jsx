@@ -51,10 +51,11 @@ function mockApplicationApi(applications, options = {}) {
   return fetchMock
 }
 
-function renderPage(selectedPropertyId = propertyId) {
+function renderPage(selectedPropertyId = propertyId, route = 'rental-applications') {
+  const routePath = route.startsWith('/') ? route : `/${route}`
   const entry = selectedPropertyId
-    ? `/rental-applications?propertyId=${selectedPropertyId}`
-    : '/rental-applications'
+    ? `${routePath}?propertyId=${selectedPropertyId}`
+    : routePath
 
   return render(
     <MemoryRouter initialEntries={[entry]}>
@@ -225,6 +226,49 @@ describe('Landlord rental applications', () => {
     const decision = screen.getByRole('region', { name: 'Landlord decision' })
     expect(within(decision).getByRole('button', { name: 'Approve' })).toBeInTheDocument()
     expect(within(decision).getByRole('button', { name: 'Reject' })).toBeInTheDocument()
+  })
+
+  it('uses an AI Review heading only on the AI Review route', async () => {
+    mockApplicationApi([])
+    renderPage(propertyId, 'ai-review')
+    expect(await screen.findByRole('heading', { name: 'AI Review' })).toBeInTheDocument()
+    expect(screen.getByText('Review application validation findings and supporting documents before making a decision.')).toBeInTheDocument()
+
+    cleanup()
+    mockApplicationApi([])
+    renderPage(propertyId, `/properties/${propertyId}/ai-review`)
+    expect(await screen.findByRole('heading', { name: 'AI Review' })).toBeInTheDocument()
+
+    cleanup()
+    mockApplicationApi([])
+    renderPage()
+    expect(await screen.findByRole('heading', { name: 'Rental Applications' })).toBeInTheDocument()
+    expect(screen.getByText('Track tenant applications, review documents and validation findings, and make the final landlord decision.')).toBeInTheDocument()
+  })
+
+  it('keeps Details and AI Validation expansion state and targets independent', async () => {
+    mockApplicationApi([application()])
+    renderPage()
+    const details = await screen.findByRole('button', { name: 'Details' })
+    const validation = screen.getByRole('button', { name: 'AI Validation' })
+
+    expect(details).toHaveAttribute('aria-expanded', 'false')
+    expect(validation).toHaveAttribute('aria-expanded', 'false')
+    expect(details).toHaveAttribute('aria-controls', `application-details-${application().id}`)
+    expect(validation).toHaveAttribute('aria-controls', `application-validation-${application().id}`)
+
+    await userEvent.click(details)
+    expect(details).toHaveAttribute('aria-expanded', 'true')
+    expect(validation).toHaveAttribute('aria-expanded', 'false')
+    expect(document.getElementById(details.getAttribute('aria-controls'))).toBeInTheDocument()
+
+    await userEvent.click(validation)
+    expect(details).toHaveAttribute('aria-expanded', 'false')
+    expect(validation).toHaveAttribute('aria-expanded', 'true')
+    expect(document.getElementById(validation.getAttribute('aria-controls'))).toBeInTheDocument()
+
+    await userEvent.click(validation)
+    expect(validation).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('shows retryable page errors and a genuine empty state', async () => {

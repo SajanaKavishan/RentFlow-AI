@@ -175,11 +175,11 @@ describe('shared React shell', () => {
     expect(screen.getByRole('link', { name: 'Profile for Taylor Example' })).toHaveAttribute('href', `/profile?propertyId=${propertyId}`)
     if (typeof entry === 'string' && entry.startsWith('/properties/')) {
       expect(within(nav).getByRole('link', { name: 'Viewing Requests' })).toHaveAttribute('aria-current', 'page')
-      expect(screen.getByRole('banner')).toHaveTextContent('Viewing Requests')
+      expect(within(screen.getByRole('banner')).getByText('Viewings Management', { exact: true })).toBeInTheDocument()
     }
     await userEvent.click(within(nav).getByRole('link', { name: 'Rental Applications' }))
     expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
-    expect(within(screen.getByRole('banner')).getByText('Applications')).toBeInTheDocument()
+    expect(within(screen.getByRole('banner')).getByText('Applications Management', { exact: true })).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: 'AI Review' })).toHaveAttribute('href', `/ai-review?propertyId=${propertyId}`)
     await userEvent.click(within(nav).getByRole('link', { name: 'AI Review' }))
     expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
