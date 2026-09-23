@@ -20,7 +20,7 @@ public class RentalOfferServiceTests
 
         await context.SaveChangesAsync();
 
-        var service = new RentalOfferService(context);
+        var service = CreateService(context);
 
         var request = new CreateRentalOfferDto
         {
@@ -60,7 +60,7 @@ public class RentalOfferServiceTests
 
         await context.SaveChangesAsync();
 
-        var service = new RentalOfferService(context);
+        var service = CreateService(context);
 
         var request = new CreateRentalOfferDto
         {
@@ -96,7 +96,7 @@ public class RentalOfferServiceTests
         context.RentalApplications.Add(application);
         await context.SaveChangesAsync();
 
-        var service = new RentalOfferService(context);
+        var service = CreateService(context);
         var request = new CreateRentalOfferDto
         {
             RentalApplicationId = application.Id,
@@ -139,7 +139,7 @@ public class RentalOfferServiceTests
 
         await context.SaveChangesAsync();
 
-        var service = new RentalOfferService(context);
+        var service = CreateService(context);
 
         var request = new CreateRentalOfferDto
         {
@@ -173,7 +173,7 @@ public class RentalOfferServiceTests
 
         await context.SaveChangesAsync();
 
-        var service = new RentalOfferService(context);
+        var service = CreateService(context);
 
         var result = await service.AcceptAsync(
             offer.Id,
@@ -196,7 +196,7 @@ public class RentalOfferServiceTests
 
         await context.SaveChangesAsync();
 
-        var service = new RentalOfferService(context);
+        var service = CreateService(context);
 
         var exception = await Assert.ThrowsAsync<RentalOfferServiceException>(() =>
             service.AcceptAsync(
@@ -222,7 +222,7 @@ public class RentalOfferServiceTests
 
         await context.SaveChangesAsync();
 
-        var service = new RentalOfferService(context);
+        var service = CreateService(context);
 
         var exception = await Assert.ThrowsAsync<RentalOfferServiceException>(() =>
             service.AcceptAsync(
@@ -248,7 +248,7 @@ public class RentalOfferServiceTests
 
         await context.SaveChangesAsync();
 
-        var service = new RentalOfferService(context);
+        var service = CreateService(context);
 
         var result = await service.RejectAsync(
             offer.Id,
@@ -271,12 +271,140 @@ public class RentalOfferServiceTests
 
         await context.SaveChangesAsync();
 
-        var service = new RentalOfferService(context);
+        var service = CreateService(context);
 
         var result = await service.WithdrawAsync(offer.Id);
 
         Assert.Equal(RentalOfferStatus.Withdrawn, result.Status);
         Assert.NotNull(result.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ExpiresOldPendingOfferAndCreatesReplacement()
+    {
+        await using var context = CreateContext();
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        var application = AddRentalApplication(context, RentalApplicationStatus.Approved);
+        var oldOffer = AddRentalOffer(
+            context, application.TenantId, RentalOfferStatus.Pending, now.AddTicks(-1));
+        oldOffer.RentalApplicationId = application.Id;
+        oldOffer.PropertyId = application.PropertyId;
+        await context.SaveChangesAsync();
+
+        var result = await CreateService(context, now)
+            .CreateAsync(CreateOfferRequest(application.Id, now));
+
+        Assert.Equal(RentalOfferStatus.Pending, result.Status);
+        Assert.Equal(RentalOfferStatus.Expired, oldOffer.Status);
+        Assert.Equal(now, oldOffer.UpdatedAt);
+        Assert.Equal(2, await context.RentalOffers.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreateAsync_ExpiresOfferAtExactBoundaryAndAllowsReplacement()
+    {
+        await using var context = CreateContext();
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        var application = AddRentalApplication(context, RentalApplicationStatus.Approved);
+        var oldOffer = AddRentalOffer(
+            context, application.TenantId, RentalOfferStatus.Pending, now);
+        oldOffer.RentalApplicationId = application.Id;
+        oldOffer.PropertyId = application.PropertyId;
+        await context.SaveChangesAsync();
+
+        var result = await CreateService(context, now)
+            .CreateAsync(CreateOfferRequest(application.Id, now));
+
+        Assert.Equal(RentalOfferStatus.Pending, result.Status);
+        Assert.Equal(RentalOfferStatus.Expired, oldOffer.Status);
+    }
+
+    [Fact]
+    public async Task GetByTenantAsync_ExpiresOnlyOwnPendingOffersAndIsIdempotent()
+    {
+        await using var context = CreateContext();
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        var tenantId = Guid.NewGuid();
+        var expired = AddRentalOffer(context, tenantId, RentalOfferStatus.Pending, now);
+        var alreadyExpired = AddRentalOffer(context, tenantId, RentalOfferStatus.Expired, now);
+        var accepted = AddRentalOffer(context, tenantId, RentalOfferStatus.Accepted, now);
+        var rejected = AddRentalOffer(context, tenantId, RentalOfferStatus.Rejected, now);
+        var withdrawn = AddRentalOffer(context, tenantId, RentalOfferStatus.Withdrawn, now);
+        var otherTenant = AddRentalOffer(context, Guid.NewGuid(), RentalOfferStatus.Pending, now);
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context, now);
+        var first = await service.GetByTenantAsync(tenantId);
+        var updatedAt = expired.UpdatedAt;
+        var second = await service.GetByTenantAsync(tenantId);
+
+        Assert.Equal(RentalOfferStatus.Expired, first.Single(item => item.Id == expired.Id).Status);
+        Assert.Equal(RentalOfferStatus.Expired, second.Single(item => item.Id == expired.Id).Status);
+        Assert.Equal(now, updatedAt);
+        Assert.Equal(updatedAt, expired.UpdatedAt);
+        Assert.Equal(RentalOfferStatus.Expired, alreadyExpired.Status);
+        Assert.Equal(RentalOfferStatus.Accepted, accepted.Status);
+        Assert.Equal(RentalOfferStatus.Rejected, rejected.Status);
+        Assert.Equal(RentalOfferStatus.Withdrawn, withdrawn.Status);
+        Assert.Equal(RentalOfferStatus.Pending, otherTenant.Status);
+        Assert.DoesNotContain(first, item => item.Id == otherTenant.Id);
+    }
+
+    [Fact]
+    public async Task RefreshExpiredByIdAsync_ReturnsExpiredStatus()
+    {
+        await using var context = CreateContext();
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        var offer = AddRentalOffer(
+            context, Guid.NewGuid(), RentalOfferStatus.Pending, now.AddTicks(-1));
+        await context.SaveChangesAsync();
+
+        var refreshed = await CreateService(context, now).RefreshExpiredByIdAsync(offer.Id);
+
+        Assert.Equal(RentalOfferStatus.Expired, refreshed?.Status);
+        Assert.Equal(RentalOfferStatus.Expired, offer.Status);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AcceptOrRejectAsync_ExpiredOfferStillFails(bool accept)
+    {
+        await using var context = CreateContext();
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        var tenantId = Guid.NewGuid();
+        var offer = AddRentalOffer(context, tenantId, RentalOfferStatus.Pending, now);
+        await context.SaveChangesAsync();
+        var service = CreateService(context, now);
+
+        var exception = await Assert.ThrowsAsync<RentalOfferServiceException>(() => accept
+            ? service.AcceptAsync(offer.Id, tenantId)
+            : service.RejectAsync(offer.Id, tenantId));
+
+        Assert.Equal(RentalOfferServiceError.Conflict, exception.Error);
+        Assert.Equal(RentalOfferStatus.Expired, offer.Status);
+    }
+
+    private static RentalOfferService CreateService(
+        ApplicationDbContext context,
+        DateTimeOffset? now = null)
+        => new(context, new TestTimeProvider(now ?? DateTimeOffset.UtcNow));
+
+    private static CreateRentalOfferDto CreateOfferRequest(
+        Guid applicationId,
+        DateTimeOffset now) => new()
+    {
+        RentalApplicationId = applicationId,
+        MonthlyRent = 85000m,
+        SecurityDeposit = 170000m,
+        ProposedStartDate = DateOnly.FromDateTime(now.UtcDateTime.AddDays(30)),
+        ProposedEndDate = DateOnly.FromDateTime(now.UtcDateTime.AddMonths(12)),
+        ExpiresAt = now.AddDays(7)
+    };
+
+    private sealed class TestTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 
     private static ApplicationDbContext CreateContext()

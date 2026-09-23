@@ -318,6 +318,14 @@ public class RentalOffersControllerTests
                 ?? Task.FromResult<RentalOfferResponseDto?>(null);
         }
 
+        public Task<RentalOfferResponseDto?> RefreshExpiredByIdAsync(
+            Guid id,
+            CancellationToken cancellationToken = default)
+        {
+            return GetByIdHandler?.Invoke(id, cancellationToken)
+                ?? Task.FromResult<RentalOfferResponseDto?>(null);
+        }
+
         public Task<IReadOnlyList<RentalOfferResponseDto>> GetByTenantAsync(
             Guid tenantId,
             CancellationToken cancellationToken = default)

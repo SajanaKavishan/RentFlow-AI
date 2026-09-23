@@ -167,7 +167,11 @@ public class RentalOffersController(
                         $"Rental offer '{id}' was not found.");
                 }
 
-                return offer;
+                return await rentalOfferService.RefreshExpiredByIdAsync(
+                    id,
+                    cancellationToken)
+                    ?? throw RentalOfferServiceException.NotFound(
+                        $"Rental offer '{id}' was not found.");
             },
             result => Ok(result));
     }

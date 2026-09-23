@@ -768,7 +768,19 @@ public sealed class BusinessAuthorizationTests
             ProposedEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12)),
             ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
         };
-        await SeedAsync(factory, context => context.RentalOffers.Add(offer));
+        var expiredOffer = new RentalOffer
+        {
+            RentalApplicationId = application.Id,
+            TenantId = TenantA,
+            PropertyId = property.Id,
+            MonthlyRent = 85000m,
+            SecurityDeposit = 170000m,
+            ProposedStartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            ProposedEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12)),
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            Status = RentalOfferStatus.Pending
+        };
+        await SeedAsync(factory, context => context.RentalOffers.AddRange(offer, expiredOffer));
 
         using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
         using var otherTenant = AuthorizedClient(factory, TenantB, UserRole.Tenant);
@@ -796,6 +808,25 @@ public sealed class BusinessAuthorizationTests
         Assert.Equal(offer.Id,
             (await adminResponse.Content.ReadFromJsonAsync<RentalOfferResponseDto>())?.Id);
         Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+
+        using var unauthorizedExpiredRead = await otherTenant.GetAsync(
+            $"/api/rental-offers/{expiredOffer.Id}");
+        Assert.Equal(HttpStatusCode.NotFound, unauthorizedExpiredRead.StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var unchangedOffer = await context.RentalOffers
+                .AsNoTracking()
+                .SingleAsync(item => item.Id == expiredOffer.Id);
+            Assert.Equal(RentalOfferStatus.Pending, unchangedOffer.Status);
+        }
+
+        using var ownerExpiredRead = await tenant.GetAsync(
+            $"/api/rental-offers/{expiredOffer.Id}");
+        Assert.Equal(HttpStatusCode.OK, ownerExpiredRead.StatusCode);
+        Assert.Equal(RentalOfferStatus.Expired,
+            (await ownerExpiredRead.Content.ReadFromJsonAsync<RentalOfferResponseDto>())?.Status);
     }
 
     [Fact]
