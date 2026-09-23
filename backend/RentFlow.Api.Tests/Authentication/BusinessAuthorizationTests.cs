@@ -410,7 +410,7 @@ public sealed class BusinessAuthorizationTests
         var scheduleItem = new RentScheduleItem
         {
             LeaseAgreementId = lease.Id,
-            DueDate = lease.StartDate,
+            DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2)),
             Amount = lease.MonthlyRent
         };
         await SeedAsync(factory, context =>
@@ -427,24 +427,37 @@ public sealed class BusinessAuthorizationTests
         var itemRoute = $"/api/rent-schedules/{scheduleItem.Id}";
         var leaseRoute = $"/api/rent-schedules/lease/{lease.Id}";
 
-        using var tenantItem = await tenant.GetAsync(itemRoute);
         using var otherTenantItem = await otherTenant.GetAsync(itemRoute);
+        using var otherTenantLease = await otherTenant.GetAsync(leaseRoute);
+        Assert.Equal(HttpStatusCode.NotFound, otherTenantItem.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, otherTenantLease.StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var unchangedSchedule = await context.RentScheduleItems
+                .AsNoTracking()
+                .SingleAsync(item => item.Id == scheduleItem.Id);
+            Assert.Equal(RentScheduleStatus.Pending, unchangedSchedule.Status);
+        }
+
+        using var tenantItem = await tenant.GetAsync(itemRoute);
         using var landlordItem = await landlord.GetAsync(itemRoute);
         using var otherLandlordItem = await otherLandlord.GetAsync(itemRoute);
         using var adminItem = await admin.GetAsync(itemRoute);
         using var missingItem = await tenant.GetAsync($"/api/rent-schedules/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.OK, tenantItem.StatusCode);
-        Assert.Equal(scheduleItem.Id,
-            (await tenantItem.Content.ReadFromJsonAsync<RentScheduleItemResponseDto>())?.Id);
-        Assert.Equal(HttpStatusCode.NotFound, otherTenantItem.StatusCode);
+        var tenantItemResult = await tenantItem.Content
+            .ReadFromJsonAsync<RentScheduleItemResponseDto>();
+        Assert.Equal(scheduleItem.Id, tenantItemResult?.Id);
+        Assert.Equal(RentScheduleStatus.Overdue, tenantItemResult?.Status);
         Assert.Equal(HttpStatusCode.OK, landlordItem.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, otherLandlordItem.StatusCode);
         Assert.Equal(HttpStatusCode.OK, adminItem.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, missingItem.StatusCode);
 
         using var tenantLease = await tenant.GetAsync(leaseRoute);
-        using var otherTenantLease = await otherTenant.GetAsync(leaseRoute);
         using var landlordLease = await landlord.GetAsync(leaseRoute);
         using var otherLandlordLease = await otherLandlord.GetAsync(leaseRoute);
         using var adminLease = await admin.GetAsync(leaseRoute);
@@ -454,7 +467,6 @@ public sealed class BusinessAuthorizationTests
         Assert.Equal(HttpStatusCode.OK, tenantLease.StatusCode);
         Assert.Equal(scheduleItem.Id,
             (await tenantLease.Content.ReadFromJsonAsync<List<RentScheduleItemResponseDto>>())?.Single().Id);
-        Assert.Equal(HttpStatusCode.NotFound, otherTenantLease.StatusCode);
         Assert.Equal(HttpStatusCode.OK, landlordLease.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, otherLandlordLease.StatusCode);
         Assert.Equal(HttpStatusCode.OK, adminLease.StatusCode);

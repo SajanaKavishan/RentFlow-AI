@@ -10,13 +10,16 @@ public class RentScheduleService : IRentScheduleService
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly IPropertyAccessGuard _propertyAccessGuard;
+    private readonly TimeProvider _timeProvider;
 
     public RentScheduleService(
         ApplicationDbContext dbContext,
-        IPropertyAccessGuard propertyAccessGuard)
+        IPropertyAccessGuard propertyAccessGuard,
+        TimeProvider timeProvider)
     {
         _dbContext = dbContext;
         _propertyAccessGuard = propertyAccessGuard;
+        _timeProvider = timeProvider;
     }
 
     public async Task<bool> CanAccessLeaseAsync(
@@ -146,6 +149,10 @@ public class RentScheduleService : IRentScheduleService
         Guid leaseAgreementId,
         CancellationToken cancellationToken = default)
     {
+        await RefreshOverdueStatusesAsync(
+            _dbContext.RentScheduleItems.Where(item => item.LeaseAgreementId == leaseAgreementId),
+            cancellationToken);
+
         var scheduleItems = await _dbContext.RentScheduleItems
             .AsNoTracking()
             .Where(item => item.LeaseAgreementId == leaseAgreementId)
@@ -161,6 +168,10 @@ public class RentScheduleService : IRentScheduleService
         Guid tenantId,
         CancellationToken cancellationToken = default)
     {
+        await RefreshOverdueStatusesAsync(
+            _dbContext.RentScheduleItems.Where(item => item.LeaseAgreement.TenantId == tenantId),
+            cancellationToken);
+
         var scheduleItems = await _dbContext.RentScheduleItems
             .AsNoTracking()
             .Where(item => item.LeaseAgreement.TenantId == tenantId)
@@ -176,6 +187,10 @@ public class RentScheduleService : IRentScheduleService
         Guid id,
         CancellationToken cancellationToken = default)
     {
+        await RefreshOverdueStatusesAsync(
+            _dbContext.RentScheduleItems.Where(item => item.Id == id),
+            cancellationToken);
+
         var scheduleItem = await _dbContext.RentScheduleItems
             .AsNoTracking()
             .FirstOrDefaultAsync(
@@ -188,6 +203,42 @@ public class RentScheduleService : IRentScheduleService
         }
 
         return MapToResponseDto(scheduleItem);
+    }
+
+    private async Task RefreshOverdueStatusesAsync(
+        IQueryable<RentScheduleItem> scopedItems,
+        CancellationToken cancellationToken)
+    {
+        var utcNow = _timeProvider.GetUtcNow();
+        var utcToday = DateOnly.FromDateTime(utcNow.UtcDateTime);
+        var pendingPastDueItems = scopedItems
+            .Where(item =>
+                item.Status == RentScheduleStatus.Pending &&
+                item.DueDate < utcToday);
+
+        if (_dbContext.Database.IsRelational())
+        {
+            await pendingPastDueItems.ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(item => item.Status, RentScheduleStatus.Overdue)
+                    .SetProperty(item => item.UpdatedAt, utcNow),
+                cancellationToken);
+            return;
+        }
+
+        var overdueItems = await pendingPastDueItems
+            .ToListAsync(cancellationToken);
+
+        foreach (var item in overdueItems)
+        {
+            item.Status = RentScheduleStatus.Overdue;
+            item.UpdatedAt = utcNow;
+        }
+
+        if (overdueItems.Count > 0)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static RentScheduleItemResponseDto MapToResponseDto(

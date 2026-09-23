@@ -357,6 +357,23 @@ public class PaymentServiceTests
     }
 
     [Fact]
+    public async Task CompleteAsync_WithOverdueSchedule_PaysTheScheduleItem()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var schedule = await CreateRentScheduleItemAsync(dbContext, tenantId);
+        schedule.Status = RentScheduleStatus.Overdue;
+        var payment = CreatePayment(schedule, tenantId);
+        dbContext.Payments.Add(payment);
+        await dbContext.SaveChangesAsync();
+
+        var result = await new PaymentService(dbContext).CompleteAsync(payment.Id);
+
+        Assert.Equal(PaymentStatus.Completed, result.Status);
+        Assert.Equal(RentScheduleStatus.Paid, schedule.Status);
+    }
+
+    [Fact]
     public async Task FailAsync_WithPendingPayment_MarksPaymentAsFailed()
     {
         await using var dbContext = CreateDbContext();

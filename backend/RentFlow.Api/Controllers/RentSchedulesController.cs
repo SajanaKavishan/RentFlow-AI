@@ -110,11 +110,11 @@ public class RentSchedulesController : ControllerBase
     {
         return await ExecuteAsync(async () =>
         {
-            var scheduleItem = await _rentScheduleService.GetByIdAsync(
-                id,
-                cancellationToken);
-
-            if (scheduleItem is null)
+            if (!await _rentScheduleService.CanAccessScheduleItemAsync(
+                    id,
+                    _currentUserService.UserId,
+                    _currentUserService.Role,
+                    cancellationToken))
             {
                 return NotFound(new
                 {
@@ -122,11 +122,11 @@ public class RentSchedulesController : ControllerBase
                 });
             }
 
-            if (!await _rentScheduleService.CanAccessLeaseAsync(
-                    scheduleItem.LeaseAgreementId,
-                    _currentUserService.UserId,
-                    _currentUserService.Role,
-                    cancellationToken))
+            var scheduleItem = await _rentScheduleService.GetByIdAsync(
+                id,
+                cancellationToken);
+
+            if (scheduleItem is null)
             {
                 return NotFound(new
                 {

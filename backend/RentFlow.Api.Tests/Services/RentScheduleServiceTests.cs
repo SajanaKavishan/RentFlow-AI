@@ -29,7 +29,7 @@ public class RentScheduleServiceTests
 
         await dbContext.SaveChangesAsync();
 
-        var service = new RentScheduleService(dbContext, new PropertyAccessGuard(dbContext));
+        var service = CreateService(dbContext);
 
         var result = await service.GenerateForLeaseAsync(
             leaseAgreement.Id);
@@ -79,7 +79,7 @@ public class RentScheduleServiceTests
 
         await dbContext.SaveChangesAsync();
 
-        var service = new RentScheduleService(dbContext, new PropertyAccessGuard(dbContext));
+        var service = CreateService(dbContext);
 
         var exception = await Assert.ThrowsAsync<RentScheduleServiceException>(
             () => service.GenerateForLeaseAsync(leaseAgreement.Id));
@@ -124,7 +124,7 @@ public class RentScheduleServiceTests
 
         await dbContext.SaveChangesAsync();
 
-        var service = new RentScheduleService(dbContext, new PropertyAccessGuard(dbContext));
+        var service = CreateService(dbContext);
 
         var exception = await Assert.ThrowsAsync<RentScheduleServiceException>(
             () => service.GenerateForLeaseAsync(leaseAgreement.Id));
@@ -199,7 +199,7 @@ public class RentScheduleServiceTests
 
         await dbContext.SaveChangesAsync();
 
-        var service = new RentScheduleService(dbContext, new PropertyAccessGuard(dbContext));
+        var service = CreateService(dbContext);
 
         var result = await service.GetByTenantAsync(tenantId);
 
@@ -244,7 +244,7 @@ public class RentScheduleServiceTests
 
         await dbContext.SaveChangesAsync();
 
-        var service = new RentScheduleService(dbContext, new PropertyAccessGuard(dbContext));
+        var service = CreateService(dbContext);
 
         var result = await service.GetByIdAsync(scheduleItem.Id);
 
@@ -254,6 +254,129 @@ public class RentScheduleServiceTests
         Assert.Equal(85000m, result.Amount);
         Assert.Equal(RentScheduleStatus.Pending, result.Status);
     }
+
+    [Fact]
+    public async Task GetByIdAsync_WhenPendingItemWasDueYesterday_MarksItOverdue()
+    {
+        await using var dbContext = CreateDbContext();
+        var item = await CreateScheduleItemAsync(
+            dbContext,
+            Guid.NewGuid(),
+            TestToday.AddDays(-1),
+            RentScheduleStatus.Pending);
+        var timeProvider = new TestTimeProvider(TestUtcNow);
+        var service = new RentScheduleService(
+            dbContext,
+            new PropertyAccessGuard(dbContext),
+            timeProvider);
+
+        var result = await service.GetByIdAsync(item.Id);
+
+        Assert.NotNull(result);
+        Assert.Equal(RentScheduleStatus.Overdue, result!.Status);
+        Assert.Equal(TestUtcNow, item.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task GetByTenantAsync_DueTodayAndFutureItemsRemainPending()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var dueToday = await CreateScheduleItemAsync(
+            dbContext, tenantId, TestToday, RentScheduleStatus.Pending);
+        var dueTomorrow = await CreateScheduleItemAsync(
+            dbContext, tenantId, TestToday.AddDays(1), RentScheduleStatus.Pending);
+        var service = new RentScheduleService(
+            dbContext,
+            new PropertyAccessGuard(dbContext),
+            new TestTimeProvider(TestUtcNow));
+
+        var result = await service.GetByTenantAsync(tenantId);
+
+        Assert.All(result, item =>
+            Assert.Equal(RentScheduleStatus.Pending, item.Status));
+        Assert.Equal(RentScheduleStatus.Pending, dueToday.Status);
+        Assert.Equal(RentScheduleStatus.Pending, dueTomorrow.Status);
+        Assert.Null(dueToday.UpdatedAt);
+        Assert.Null(dueTomorrow.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task GetByTenantAsync_PaidAndAlreadyOverduePastItemsKeepTheirStatuses()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var paid = await CreateScheduleItemAsync(
+            dbContext, tenantId, TestToday.AddDays(-2), RentScheduleStatus.Paid);
+        var overdue = await CreateScheduleItemAsync(
+            dbContext, tenantId, TestToday.AddDays(-1), RentScheduleStatus.Overdue);
+        var paidUpdatedAt = paid.UpdatedAt;
+        var overdueUpdatedAt = overdue.UpdatedAt;
+        var service = new RentScheduleService(
+            dbContext,
+            new PropertyAccessGuard(dbContext),
+            new TestTimeProvider(TestUtcNow));
+
+        var result = await service.GetByTenantAsync(tenantId);
+
+        Assert.Contains(
+            result,
+            item => item.Id == paid.Id && item.Status == RentScheduleStatus.Paid);
+        Assert.Contains(
+            result,
+            item => item.Id == overdue.Id && item.Status == RentScheduleStatus.Overdue);
+        Assert.Equal(paidUpdatedAt, paid.UpdatedAt);
+        Assert.Equal(overdueUpdatedAt, overdue.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ReprocessingOverdueItemDoesNotChangeItAgain()
+    {
+        await using var dbContext = CreateDbContext();
+        var item = await CreateScheduleItemAsync(
+            dbContext,
+            Guid.NewGuid(),
+            TestToday.AddDays(-1),
+            RentScheduleStatus.Pending);
+        var timeProvider = new TestTimeProvider(TestUtcNow);
+        var service = new RentScheduleService(
+            dbContext,
+            new PropertyAccessGuard(dbContext),
+            timeProvider);
+
+        await service.GetByIdAsync(item.Id);
+        var firstUpdatedAt = item.UpdatedAt;
+        timeProvider.SetUtcNow(TestUtcNow.AddDays(1));
+        await service.GetByIdAsync(item.Id);
+
+        Assert.Equal(RentScheduleStatus.Overdue, item.Status);
+        Assert.Equal(firstUpdatedAt, item.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task GetByTenantAsync_RefreshesOnlyThatTenantsSchedules()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var otherTenantId = Guid.NewGuid();
+        var tenantItem = await CreateScheduleItemAsync(
+            dbContext, tenantId, TestToday.AddDays(-1), RentScheduleStatus.Pending);
+        var otherTenantItem = await CreateScheduleItemAsync(
+            dbContext, otherTenantId, TestToday.AddDays(-1), RentScheduleStatus.Pending);
+        var service = new RentScheduleService(
+            dbContext,
+            new PropertyAccessGuard(dbContext),
+            new TestTimeProvider(TestUtcNow));
+
+        var result = await service.GetByTenantAsync(tenantId);
+
+        Assert.Single(result);
+        Assert.Equal(tenantItem.Id, result[0].Id);
+        Assert.Equal(RentScheduleStatus.Overdue, tenantItem.Status);
+        Assert.Equal(RentScheduleStatus.Pending, otherTenantItem.Status);
+        Assert.Null(otherTenantItem.UpdatedAt);
+    }
+
     private static ApplicationDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -261,5 +384,57 @@ public class RentScheduleServiceTests
             .Options;
 
         return new ApplicationDbContext(options);
+    }
+
+    private static RentScheduleService CreateService(ApplicationDbContext dbContext) =>
+        new(
+            dbContext,
+            new PropertyAccessGuard(dbContext),
+            new TestTimeProvider(new DateTimeOffset(2026, 9, 15, 12, 0, 0, TimeSpan.Zero)));
+
+    private static async Task<RentScheduleItem> CreateScheduleItemAsync(
+        ApplicationDbContext dbContext,
+        Guid tenantId,
+        DateOnly dueDate,
+        RentScheduleStatus status)
+    {
+        var lease = new LeaseAgreement
+        {
+            RentalOfferId = Guid.NewGuid(),
+            TenantId = tenantId,
+            PropertyId = Guid.NewGuid(),
+            MonthlyRent = 85000m,
+            SecurityDeposit = 170000m,
+            StartDate = dueDate,
+            EndDate = dueDate.AddMonths(12),
+            Status = LeaseAgreementStatus.Active
+        };
+        dbContext.LeaseAgreements.Add(lease);
+        await dbContext.SaveChangesAsync();
+
+        var item = new RentScheduleItem
+        {
+            LeaseAgreementId = lease.Id,
+            DueDate = dueDate,
+            Amount = lease.MonthlyRent,
+            Status = status
+        };
+        dbContext.RentScheduleItems.Add(item);
+        await dbContext.SaveChangesAsync();
+        return item;
+    }
+
+    private static readonly DateTimeOffset TestUtcNow =
+        new(2026, 10, 15, 12, 0, 0, TimeSpan.Zero);
+
+    private static readonly DateOnly TestToday = new(2026, 10, 15);
+
+    private sealed class TestTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        private DateTimeOffset _utcNow = utcNow;
+
+        public override DateTimeOffset GetUtcNow() => _utcNow;
+
+        public void SetUtcNow(DateTimeOffset utcNow) => _utcNow = utcNow;
     }
 }
