@@ -73,6 +73,17 @@ public class RentalOfferService : IRentalOfferService
                 "A pending rental offer already exists for this rental application.");
         }
 
+        var propertyExists = await _dbContext.Properties
+            .AnyAsync(
+                property => property.Id == rentalApplication.PropertyId,
+                cancellationToken);
+
+        if (!propertyExists)
+        {
+            throw RentalOfferServiceException.NotFound(
+                "Property was not found.");
+        }
+
         var rentalOffer = new RentalOffer
         {
             RentalApplicationId = rentalApplication.Id,

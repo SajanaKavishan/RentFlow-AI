@@ -80,6 +80,41 @@ public class RentalOfferServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_RejectsApprovedApplication_WhenPropertyDoesNotExist()
+    {
+        await using var context = CreateContext();
+        var application = new RentalApplication
+        {
+            TenantId = Guid.NewGuid(),
+            PropertyId = Guid.NewGuid(),
+            MoveInDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            MonthlyIncome = 250000m,
+            Occupation = "Software Engineer",
+            NumberOfOccupants = 2,
+            Status = RentalApplicationStatus.Approved
+        };
+        context.RentalApplications.Add(application);
+        await context.SaveChangesAsync();
+
+        var service = new RentalOfferService(context);
+        var request = new CreateRentalOfferDto
+        {
+            RentalApplicationId = application.Id,
+            MonthlyRent = 85000m,
+            SecurityDeposit = 170000m,
+            ProposedStartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            ProposedEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12)),
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
+        };
+
+        var exception = await Assert.ThrowsAsync<RentalOfferServiceException>(() =>
+            service.CreateAsync(request));
+
+        Assert.Equal(RentalOfferServiceError.NotFound, exception.Error);
+        Assert.Empty(context.RentalOffers);
+    }
+
+    [Fact]
     public async Task CreateAsync_RejectsDuplicatePendingOffer_ForSameApplication()
     {
         await using var context = CreateContext();
@@ -257,11 +292,25 @@ public class RentalOfferServiceTests
         ApplicationDbContext context,
         RentalApplicationStatus status)
     {
+        var propertyId = Guid.NewGuid();
+        context.Properties.Add(new Property
+        {
+            Id = propertyId,
+            LandlordId = Guid.NewGuid(),
+            Title = "Test Property",
+            Description = "Test description",
+            Address = "123 Test Street",
+            City = "Colombo",
+            MonthlyRent = 75000m,
+            Bedrooms = 2,
+            Bathrooms = 1
+        });
+
         var application = new RentalApplication
         {
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
-            PropertyId = Guid.NewGuid(),
+            PropertyId = propertyId,
             MoveInDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
             MonthlyIncome = 250000m,
             Occupation = "Software Engineer",
