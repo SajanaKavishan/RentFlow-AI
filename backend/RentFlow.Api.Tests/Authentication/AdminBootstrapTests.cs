@@ -95,7 +95,7 @@ public sealed class AdminBootstrapTests
         Assert.DoesNotContain(ValidPassword, admin.PasswordHash, StringComparison.Ordinal);
         Assert.NotEqual(
             PasswordVerificationResult.Failed,
-            hasher.VerifyHashedPassword(admin, admin.PasswordHash, ValidPassword));
+            hasher.VerifyHashedPassword(admin, admin.PasswordHash!, ValidPassword));
     }
 
     [Fact]
@@ -174,7 +174,10 @@ public sealed class AdminBootstrapTests
         Assert.DoesNotContain("admin@example.com", console.Output, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("hash", console.Output, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("token", console.Output, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(context.Users.Single().PasswordHash, console.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            context.Users.Single().PasswordHash!,
+            console.Output,
+            StringComparison.Ordinal);
     }
 
     [Fact]

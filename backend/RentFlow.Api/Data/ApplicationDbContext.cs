@@ -11,6 +11,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<AdminBootstrapRecord> AdminBootstrapRecords =>
         Set<AdminBootstrapRecord>();
 
+    public DbSet<TechnicianPasswordSetupToken> TechnicianPasswordSetupTokens =>
+        Set<TechnicianPasswordSetupToken>();
+
     public DbSet<Property> Properties => Set<Property>();
 
     public DbSet<PropertyAmenity> PropertyAmenities => Set<PropertyAmenity>();
@@ -80,7 +83,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.Property(user => user.PasswordHash)
                 .HasMaxLength(512)
-                .IsRequired();
+                .IsRequired(false);
 
             entity.Property(user => user.Role)
                 .HasConversion<string>()
@@ -117,6 +120,41 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne<ApplicationUser>()
                 .WithOne()
                 .HasForeignKey<AdminBootstrapRecord>(record => record.AdminUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TechnicianPasswordSetupToken>(entity =>
+        {
+            entity.HasKey(token => token.Id);
+
+            entity.Property(token => token.TokenDigest)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            entity.Property(token => token.CreatedAt)
+                .IsRequired();
+
+            entity.Property(token => token.ExpiresAt)
+                .IsRequired();
+
+            entity.Property(token => token.ConsumedAt)
+                .IsRequired(false)
+                .IsConcurrencyToken();
+
+            entity.HasIndex(token => token.TokenDigest)
+                .IsUnique();
+
+            entity.HasIndex(token => token.UserId)
+                .IsUnique();
+
+            entity.HasOne<ApplicationUser>()
+                .WithOne()
+                .HasForeignKey<TechnicianPasswordSetupToken>(token => token.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(token => token.CreatedByAdminId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

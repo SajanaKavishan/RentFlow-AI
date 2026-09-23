@@ -82,7 +82,7 @@ public sealed class AuthEndpointsTests
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<ApplicationUser>>();
         Assert.NotEqual(
             PasswordVerificationResult.Failed,
-            hasher.VerifyHashedPassword(user, user.PasswordHash, ValidPassword));
+            hasher.VerifyHashedPassword(user, user.PasswordHash!, ValidPassword));
     }
 
     [Fact]

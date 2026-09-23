@@ -76,14 +76,15 @@ public sealed class AuthService(
             candidate => candidate.NormalizedEmail == normalizedEmail,
             cancellationToken);
 
-        if (user is null || !user.IsActive)
+        var passwordHash = user?.PasswordHash;
+        if (user is null || !user.IsActive || string.IsNullOrEmpty(passwordHash))
         {
             throw AuthServiceException.InvalidCredentials();
         }
 
         var verification = passwordHasher.VerifyHashedPassword(
             user,
-            user.PasswordHash,
+            passwordHash,
             request.Password);
         if (verification == PasswordVerificationResult.Failed)
         {

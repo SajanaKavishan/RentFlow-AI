@@ -57,7 +57,6 @@ namespace RentFlow.Api.Data.Migrations
                         .HasColumnType("character varying(320)");
                     b.Property<string>("PasswordHash")
                         .HasMaxLength(512)
-                        .IsRequired()
                         .HasColumnType("character varying(512)");
                     b.Property<string>("PhoneNumber")
                         .HasMaxLength(32)
@@ -125,6 +124,22 @@ namespace RentFlow.Api.Data.Migrations
                     b.HasKey("Id");
                     b.HasIndex("PropertyId");
                     b.ToTable("PropertyImages");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.TechnicianPasswordSetupToken", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<DateTimeOffset?>("ConsumedAt").IsConcurrencyToken().HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("CreatedByAdminId").HasColumnType("uuid");
+                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
+                    b.Property<string>("TokenDigest").HasMaxLength(64).IsRequired().HasColumnType("character varying(64)");
+                    b.Property<Guid>("UserId").HasColumnType("uuid");
+                    b.HasKey("Id");
+                    b.HasIndex("CreatedByAdminId");
+                    b.HasIndex("TokenDigest").IsUnique();
+                    b.HasIndex("UserId").IsUnique();
+                    b.ToTable("TechnicianPasswordSetupTokens");
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.ViewingRequest", b =>
@@ -627,6 +642,21 @@ namespace RentFlow.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("MaintenanceRequest");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.TechnicianPasswordSetupToken", b =>
+                {
+                    b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
+                        .WithOne()
+                        .HasForeignKey("RentFlow.Api.Models.TechnicianPasswordSetupToken", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.ApplicationValidationWorkflow", b =>
