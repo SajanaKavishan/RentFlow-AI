@@ -10,14 +10,16 @@ function validPropertyId(value) {
   return PROPERTY_ID_PATTERN.test(propertyId) ? propertyId : null
 }
 
+export function propertyIdFromLocation(location, routePropertyId) {
+  const scopedRouteId = /^\/properties\/([^/]+)\/(?:viewing-requests|rental-applications|ai-review)\/?$/.exec(location.pathname)?.[1]
+  const queryPropertyId = new URLSearchParams(location.search).get('propertyId')
+  return [routePropertyId, scopedRouteId, queryPropertyId, location.state?.propertyId]
+    .map(validPropertyId)
+    .find(Boolean) ?? null
+}
+
 export default function usePropertyContext() {
   const { propertyId: routePropertyId } = useParams()
   const location = useLocation()
-  const queryPropertyId = new URLSearchParams(location.search).get('propertyId')
-  const navigationPropertyId = location.state?.propertyId
-  const propertyId = [routePropertyId, queryPropertyId, navigationPropertyId]
-    .map(validPropertyId)
-    .find(Boolean) ?? null
-
-  return { propertyId }
+  return { propertyId: propertyIdFromLocation(location, routePropertyId) }
 }

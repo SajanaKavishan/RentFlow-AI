@@ -33,6 +33,10 @@ export function getViewingsByProperty(propertyId) {
   return request(`/api/viewings/property/${encodeURIComponent(propertyId)}`)
 }
 
+export function getMyViewings() {
+  return request('/api/viewings')
+}
+
 export function getViewingById(id) {
   return request(`/api/viewings/${encodeURIComponent(id)}`)
 }

@@ -586,7 +586,7 @@ function ApplicationValidationSection({
     state.runs[0]
 
   return (
-    <section className="application-validation" aria-label="Application validation">
+    <section className="application-validation" aria-label="Application validation" tabIndex={-1}>
       <div className="application-validation__header">
         <div>
           <p className="application-validation__eyebrow">AI review workspace</p>

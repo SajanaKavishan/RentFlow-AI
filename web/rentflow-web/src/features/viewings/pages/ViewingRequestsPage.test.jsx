@@ -59,6 +59,12 @@ afterEach(() => {
 })
 
 describe('Landlord viewing requests', () => {
+  it('uses the page title without a redundant workspace eyebrow', () => {
+    renderPage(null)
+    expect(screen.getByRole('heading', { name: 'Viewing Requests' })).toBeInTheDocument()
+    expect(screen.queryByText('Landlord workspace')).not.toBeInTheDocument()
+  })
+
   it('prioritizes pending requests and shows real references and messages', async () => {
     vi.stubGlobal(
       'fetch',
@@ -122,7 +128,7 @@ describe('Landlord viewing requests', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Viewing request approved.',
     )
-    expect(screen.getByText('Approved')).toBeInTheDocument()
+    expect(within(screen.getByRole('article')).getByText('Approved')).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Approve request' }),
     ).not.toBeInTheDocument()
@@ -172,7 +178,7 @@ describe('Landlord viewing requests', () => {
     expect(
       await screen.findByText('Only pending viewings can be rejected.'),
     ).toBeInTheDocument()
-    expect(screen.getByText('Pending')).toBeInTheDocument()
+    expect(within(screen.getByRole('article')).getByText('Pending')).toBeInTheDocument()
     expect(screen.queryByText('Viewing request rejected.')).not.toBeInTheDocument()
   })
 
@@ -201,6 +207,23 @@ describe('Landlord viewing requests', () => {
       await screen.findByRole('heading', { name: 'No viewing requests yet' }),
     ).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('combines search and status filters over returned request data', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse([approvedViewing, pendingViewing])),
+    )
+
+    renderPage()
+    await screen.findAllByRole('article')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Approved' }))
+    expect(screen.getAllByRole('article')).toHaveLength(1)
+    expect(screen.getByText('The storage space will be available to inspect.')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search viewing requests' }), tenantId)
+    expect(screen.getByText('No matching viewing requests')).toBeInTheDocument()
   })
 
   it('requires a property selection without calling the API with a fallback ID', () => {

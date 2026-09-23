@@ -14,6 +14,10 @@ function parseViewingDate(value) {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
+function displayValue(...values) {
+  return values.find((value) => typeof value === 'string' && value.trim())?.trim() || null
+}
+
 function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) {
   const [action, setAction] = useState(null)
   const [response, setResponse] = useState('')
@@ -23,6 +27,11 @@ function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) 
   const requestedDate = parseViewingDate(viewing.requestedDateTime)
   const tenantMessage = viewing.tenantMessage?.trim()
   const landlordResponse = viewing.landlordResponse?.trim()
+  const tenantName = displayValue(viewing.tenantName, viewing.tenant?.name)
+  const tenantEmail = displayValue(viewing.tenantEmail, viewing.tenant?.email)
+  const propertyName = displayValue(viewing.propertyName, viewing.property?.name)
+  const propertyLocation = displayValue(viewing.propertyLocation, viewing.property?.location)
+  const createdDate = parseViewingDate(viewing.createdAt)
 
   function openAction(nextAction) {
     setAction(nextAction)
@@ -95,17 +104,27 @@ function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) 
 
         <dl className="viewing-card__references">
           <div>
-            <dt>Tenant reference</dt>
-            <dd title={viewing.tenantId}>{viewing.tenantId || 'Unavailable'}</dd>
+            <dt>Tenant</dt>
+            <dd title={tenantEmail || viewing.tenantId}>
+              {tenantName || tenantEmail || viewing.tenantId || 'Unavailable'}
+              {tenantName && tenantEmail && <small>{tenantEmail}</small>}
+            </dd>
           </div>
           <div>
-            <dt>Property reference</dt>
-            <dd title={viewing.propertyId}>
-              {viewing.propertyId || 'Unavailable'}
+            <dt>Property</dt>
+            <dd title={propertyLocation || viewing.propertyId}>
+              {propertyName || propertyLocation || viewing.propertyId || 'Unavailable'}
+              {propertyName && propertyLocation && <small>{propertyLocation}</small>}
             </dd>
           </div>
         </dl>
       </div>
+
+      {createdDate && (
+        <p className="viewing-card__created">
+          Requested on <time dateTime={viewing.createdAt}>{viewingDateFormatter.format(createdDate)}</time>
+        </p>
+      )}
 
       <div className="viewing-card__conversation">
         <div className="viewing-card__message">

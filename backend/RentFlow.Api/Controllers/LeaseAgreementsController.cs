@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RentFlow.Api.DTOs.LeaseAgreements;
+using RentFlow.Api.Models;
 using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
 
@@ -13,13 +14,16 @@ public class LeaseAgreementsController : ControllerBase
 {
     private readonly ILeaseAgreementService _leaseAgreementService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IPropertyAccessGuard _propertyAccessGuard;
 
     public LeaseAgreementsController(
         ILeaseAgreementService leaseAgreementService,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IPropertyAccessGuard propertyAccessGuard)
     {
         _leaseAgreementService = leaseAgreementService;
         _currentUserService = currentUserService;
+        _propertyAccessGuard = propertyAccessGuard;
     }
 
     [HttpPost]
@@ -30,6 +34,16 @@ public class LeaseAgreementsController : ControllerBase
     {
         return await ExecuteAsync(async () =>
         {
+            if (_currentUserService.Role == UserRole.Landlord
+                && !await _propertyAccessGuard.CanAccessRentalOfferAsync(
+                    GetRequiredUserId(),
+                    dto.RentalOfferId,
+                    cancellationToken))
+            {
+                throw LeaseAgreementServiceException.NotFound(
+                    "Rental offer was not found.");
+            }
+
             var lease = await _leaseAgreementService.CreateAsync(
                 dto,
                 cancellationToken);
@@ -78,7 +92,13 @@ public class LeaseAgreementsController : ControllerBase
                 id,
                 cancellationToken);
 
-            if (lease is null)
+            if (lease is null
+                || _currentUserService.Role == UserRole.Tenant
+                    && lease.TenantId != _currentUserService.UserId
+                || _currentUserService.Role == UserRole.Landlord
+                    && (_currentUserService.UserId is not Guid landlordId
+                        || !await _propertyAccessGuard.CanAccessPropertyAsync(
+                            landlordId, lease.PropertyId, cancellationToken)))
             {
                 return NotFound(new
                 {
@@ -98,6 +118,8 @@ public class LeaseAgreementsController : ControllerBase
     {
         return await ExecuteAsync(async () =>
         {
+            await EnsureLandlordCanAccessLeaseAsync(id, cancellationToken);
+
             var lease = await _leaseAgreementService.ActivateAsync(
                 id,
                 cancellationToken);
@@ -114,6 +136,8 @@ public class LeaseAgreementsController : ControllerBase
     {
         return await ExecuteAsync(async () =>
         {
+            await EnsureLandlordCanAccessLeaseAsync(id, cancellationToken);
+
             var lease = await _leaseAgreementService.TerminateAsync(
                 id,
                 cancellationToken);
@@ -130,6 +154,8 @@ public class LeaseAgreementsController : ControllerBase
     {
         return await ExecuteAsync(async () =>
         {
+            await EnsureLandlordCanAccessLeaseAsync(id, cancellationToken);
+
             var lease = await _leaseAgreementService.CompleteAsync(
                 id,
                 cancellationToken);
@@ -137,6 +163,33 @@ public class LeaseAgreementsController : ControllerBase
             return Ok(lease);
         });
     }
+
+    private async Task EnsureLandlordCanAccessLeaseAsync(
+        Guid leaseId,
+        CancellationToken cancellationToken)
+    {
+        if (_currentUserService.Role != UserRole.Landlord)
+        {
+            return;
+        }
+
+        var lease = await _leaseAgreementService.GetByIdAsync(
+            leaseId,
+            cancellationToken);
+
+        if (lease is null
+            || _currentUserService.UserId is not Guid landlordId
+            || !await _propertyAccessGuard.CanAccessPropertyAsync(
+                landlordId, lease.PropertyId, cancellationToken))
+        {
+            throw LeaseAgreementServiceException.NotFound(
+                "Lease agreement was not found.");
+        }
+    }
+
+    private Guid GetRequiredUserId() => _currentUserService.UserId
+        ?? throw new InvalidOperationException(
+            "The authenticated JWT has no valid user ID.");
 
     private async Task<IActionResult> ExecuteAsync(
         Func<Task<IActionResult>> action)

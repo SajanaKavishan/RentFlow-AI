@@ -1,11 +1,17 @@
-"""Internal-only application-validation API routes."""
+"""Internal-only analysis API routes."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
 from app.graph.workflow import build_application_validation_graph
+from app.graph.maintenance_workflow import build_maintenance_coordination_graph
 from app.schemas.analysis import FinalAgentSummary
+from app.schemas.maintenance import (
+    MaintenanceCoordinationRequest,
+    MaintenanceCoordinationResponse,
+    MaintenanceCoordinationSummary,
+)
 from app.schemas.requests import ApplicationValidationRequest
 from app.schemas.responses import AnalysisResponse, ExecutionMetadata
 
@@ -67,4 +73,38 @@ async def analyze_application_validation(
         application_id=payload.application_id,
         result=final_summary,
         execution_metadata=ExecutionMetadata(executed_steps=result["execution_steps"]),
+    )
+
+
+@router.post(
+    "/internal/maintenance-coordination/analyze",
+    response_model=MaintenanceCoordinationResponse,
+    response_model_by_alias=True,
+)
+async def analyze_maintenance_coordination(
+    payload: MaintenanceCoordinationRequest,
+    request: Request,
+) -> MaintenanceCoordinationResponse:
+    settings = request.app.state.settings
+    graph = build_maintenance_coordination_graph(
+        request.app.state.model_provider,
+        timeout_seconds=settings.ai_timeout_seconds,
+        agent_version=settings.agent_version,
+    )
+    result = await graph.ainvoke(
+        {
+            "maintenance_request": payload.model_dump(mode="json", by_alias=True),
+            "plan": None,
+            "issue_assessment": None,
+            "urgency_assessment": None,
+            "information_review": None,
+            "coordination_recommendation": None,
+            "final_summary": None,
+            "execution_steps": [],
+        }
+    )
+    return MaintenanceCoordinationResponse(
+        maintenance_request_id=payload.maintenance_request_id,
+        result=MaintenanceCoordinationSummary.model_validate(result["final_summary"]),
+        execution_metadata={"executedSteps": result["execution_steps"]},
     )

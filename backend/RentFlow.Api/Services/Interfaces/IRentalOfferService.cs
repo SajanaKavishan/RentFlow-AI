@@ -12,6 +12,10 @@ public interface IRentalOfferService
         Guid id,
         CancellationToken cancellationToken = default);
 
+    Task<RentalOfferResponseDto?> RefreshExpiredByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<RentalOfferResponseDto>> GetByTenantAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default);
