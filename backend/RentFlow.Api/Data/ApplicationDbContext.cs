@@ -676,6 +676,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(payment => payment.RentScheduleItemId);
+            entity.HasIndex(payment => payment.RentScheduleItemId, "IX_Payments_RentScheduleItemId_Completed")
+                .IsUnique()
+                .HasFilter("\"Status\" = 1");
             entity.HasIndex(payment => payment.TenantId);
             entity.HasIndex(payment => payment.Status);
             entity.HasIndex(payment => payment.TransactionReference);
