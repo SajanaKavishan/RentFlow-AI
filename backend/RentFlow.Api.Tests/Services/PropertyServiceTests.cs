@@ -218,6 +218,59 @@ public class PropertyServiceTests
     }
 
     [Fact]
+    public async Task DeleteAsync_ReturnsFalseAndSkipsImageCleanup_WhenReferencedByRentalOffer()
+    {
+        await using var context = CreateContext();
+        var imageService = new FakePropertyImageService();
+        var property = AddProperty(context);
+        context.RentalOffers.Add(new RentalOffer
+        {
+            RentalApplicationId = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            PropertyId = property.Id,
+            MonthlyRent = 85000m,
+            SecurityDeposit = 170000m,
+            ProposedStartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            ProposedEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12)),
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
+        });
+        await context.SaveChangesAsync();
+
+        var service = new PropertyService(context, imageService);
+        var result = await service.DeleteAsync(property.Id, property.LandlordId);
+
+        Assert.False(result);
+        Assert.True(await context.Properties.AnyAsync(item => item.Id == property.Id));
+        Assert.Null(imageService.DeletedPropertyId);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ReturnsFalseAndSkipsImageCleanup_WhenReferencedByLeaseAgreement()
+    {
+        await using var context = CreateContext();
+        var imageService = new FakePropertyImageService();
+        var property = AddProperty(context);
+        context.LeaseAgreements.Add(new LeaseAgreement
+        {
+            RentalOfferId = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            PropertyId = property.Id,
+            MonthlyRent = 85000m,
+            SecurityDeposit = 170000m,
+            StartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            EndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12))
+        });
+        await context.SaveChangesAsync();
+
+        var service = new PropertyService(context, imageService);
+        var result = await service.DeleteAsync(property.Id, property.LandlordId);
+
+        Assert.False(result);
+        Assert.True(await context.Properties.AnyAsync(item => item.Id == property.Id));
+        Assert.Null(imageService.DeletedPropertyId);
+    }
+
+    [Fact]
     public async Task DeleteAsync_ReturnsFalse_WhenLandlordDoesNotOwnProperty()
     {
         await using var context = CreateContext();

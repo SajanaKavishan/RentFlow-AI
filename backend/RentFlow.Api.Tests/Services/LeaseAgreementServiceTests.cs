@@ -22,6 +22,8 @@ public class LeaseAgreementServiceTests
             Status = RentalApplicationStatus.Approved
         };
 
+        dbContext.Properties.Add(CreateProperty(rentalApplication.PropertyId));
+
         dbContext.RentalApplications.Add(rentalApplication);
 
         var rentalOffer = new RentalOffer
@@ -179,6 +181,36 @@ public class LeaseAgreementServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_WithAcceptedOfferAndMissingProperty_ThrowsNotFound()
+    {
+        await using var dbContext = CreateDbContext();
+        var rentalOffer = new RentalOffer
+        {
+            RentalApplicationId = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            PropertyId = Guid.NewGuid(),
+            MonthlyRent = 85000m,
+            SecurityDeposit = 170000m,
+            ProposedStartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)),
+            ProposedEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(5),
+            Status = RentalOfferStatus.Accepted
+        };
+        dbContext.RentalOffers.Add(rentalOffer);
+        await dbContext.SaveChangesAsync();
+
+        var service = new LeaseAgreementService(dbContext);
+        var exception = await Assert.ThrowsAsync<LeaseAgreementServiceException>(
+            () => service.CreateAsync(new CreateLeaseAgreementDto
+            {
+                RentalOfferId = rentalOffer.Id
+            }));
+
+        Assert.Equal(LeaseAgreementServiceError.NotFound, exception.Error);
+        Assert.Empty(dbContext.LeaseAgreements);
+    }
+
+    [Fact]
     public async Task ActivateAsync_WithPendingLease_ChangesStatusToActive()
     {
         await using var dbContext = CreateDbContext();
@@ -300,4 +332,17 @@ public class LeaseAgreementServiceTests
 
         return new ApplicationDbContext(options);
     }
+
+    private static Property CreateProperty(Guid id) => new()
+    {
+        Id = id,
+        LandlordId = Guid.NewGuid(),
+        Title = "Test Property",
+        Description = "Test description",
+        Address = "123 Test Street",
+        City = "Colombo",
+        MonthlyRent = 75000m,
+        Bedrooms = 2,
+        Bathrooms = 1
+    };
 }

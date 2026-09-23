@@ -9,10 +9,12 @@ namespace RentFlow.Api.Services;
 public class RentalOfferService : IRentalOfferService
 {
     private readonly ApplicationDbContext _dbContext;
+    private readonly TimeProvider _timeProvider;
 
-    public RentalOfferService(ApplicationDbContext dbContext)
+    public RentalOfferService(ApplicationDbContext dbContext, TimeProvider timeProvider)
     {
         _dbContext = dbContext;
+        _timeProvider = timeProvider;
     }
 
     public async Task<RentalOfferResponseDto> CreateAsync(
@@ -37,7 +39,8 @@ public class RentalOfferService : IRentalOfferService
                 "Proposed end date must be after the proposed start date.");
         }
 
-        if (dto.ExpiresAt <= DateTimeOffset.UtcNow)
+        var now = _timeProvider.GetUtcNow();
+        if (dto.ExpiresAt <= now)
         {
             throw RentalOfferServiceException.Validation(
                 "Offer expiry date must be in the future.");
@@ -60,6 +63,11 @@ public class RentalOfferService : IRentalOfferService
                 "A rental offer can only be created for an approved rental application.");
         }
 
+        await ExpirePendingOffersAsync(
+            _dbContext.RentalOffers.Where(
+                offer => offer.RentalApplicationId == rentalApplication.Id),
+            cancellationToken);
+
         var hasActiveOffer = await _dbContext.RentalOffers
             .AnyAsync(
                 offer =>
@@ -71,6 +79,17 @@ public class RentalOfferService : IRentalOfferService
         {
             throw RentalOfferServiceException.Conflict(
                 "A pending rental offer already exists for this rental application.");
+        }
+
+        var propertyExists = await _dbContext.Properties
+            .AnyAsync(
+                property => property.Id == rentalApplication.PropertyId,
+                cancellationToken);
+
+        if (!propertyExists)
+        {
+            throw RentalOfferServiceException.NotFound(
+                "Property was not found.");
         }
 
         var rentalOffer = new RentalOffer
@@ -85,7 +104,7 @@ public class RentalOfferService : IRentalOfferService
             ExpiresAt = dto.ExpiresAt,
             LandlordNote = dto.LandlordNote,
             Status = RentalOfferStatus.Pending,
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = now
         };
 
         _dbContext.RentalOffers.Add(rentalOffer);
@@ -113,13 +132,28 @@ public class RentalOfferService : IRentalOfferService
         return MapToResponseDto(rentalOffer);
     }
 
+    public async Task<RentalOfferResponseDto?> RefreshExpiredByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        await ExpirePendingOffersAsync(
+            _dbContext.RentalOffers.Where(offer => offer.Id == id),
+            cancellationToken);
+
+        return await GetByIdAsync(id, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<RentalOfferResponseDto>> GetByTenantAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default)
     {
-        var rentalOffers = await _dbContext.RentalOffers
+        var tenantOffers = _dbContext.RentalOffers
+            .Where(offer => offer.TenantId == tenantId);
+
+        await ExpirePendingOffersAsync(tenantOffers, cancellationToken);
+
+        var rentalOffers = await tenantOffers
             .AsNoTracking()
-            .Where(offer => offer.TenantId == tenantId)
             .OrderByDescending(offer => offer.CreatedAt)
             .ToListAsync(cancellationToken);
 
@@ -156,10 +190,11 @@ public class RentalOfferService : IRentalOfferService
                 "Only pending rental offers can be accepted.");
         }
 
-        if (rentalOffer.ExpiresAt <= DateTimeOffset.UtcNow)
+        var now = _timeProvider.GetUtcNow();
+        if (rentalOffer.ExpiresAt <= now)
         {
             rentalOffer.Status = RentalOfferStatus.Expired;
-            rentalOffer.UpdatedAt = DateTimeOffset.UtcNow;
+            rentalOffer.UpdatedAt = now;
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -168,7 +203,7 @@ public class RentalOfferService : IRentalOfferService
         }
 
         rentalOffer.Status = RentalOfferStatus.Accepted;
-        rentalOffer.UpdatedAt = DateTimeOffset.UtcNow;
+        rentalOffer.UpdatedAt = now;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -203,10 +238,11 @@ public class RentalOfferService : IRentalOfferService
                 "Only pending rental offers can be rejected.");
         }
 
-        if (rentalOffer.ExpiresAt <= DateTimeOffset.UtcNow)
+        var now = _timeProvider.GetUtcNow();
+        if (rentalOffer.ExpiresAt <= now)
         {
             rentalOffer.Status = RentalOfferStatus.Expired;
-            rentalOffer.UpdatedAt = DateTimeOffset.UtcNow;
+            rentalOffer.UpdatedAt = now;
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -215,7 +251,7 @@ public class RentalOfferService : IRentalOfferService
         }
 
         rentalOffer.Status = RentalOfferStatus.Rejected;
-        rentalOffer.UpdatedAt = DateTimeOffset.UtcNow;
+        rentalOffer.UpdatedAt = now;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -244,7 +280,7 @@ public class RentalOfferService : IRentalOfferService
         }
 
         rentalOffer.Status = RentalOfferStatus.Withdrawn;
-        rentalOffer.UpdatedAt = DateTimeOffset.UtcNow;
+        rentalOffer.UpdatedAt = _timeProvider.GetUtcNow();
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -269,5 +305,30 @@ public class RentalOfferService : IRentalOfferService
             CreatedAt = offer.CreatedAt,
             UpdatedAt = offer.UpdatedAt
         };
+    }
+
+    private async Task ExpirePendingOffersAsync(
+        IQueryable<RentalOffer> scope,
+        CancellationToken cancellationToken)
+    {
+        var now = _timeProvider.GetUtcNow();
+        var expiredOffers = await scope
+            .Where(offer =>
+                offer.Status == RentalOfferStatus.Pending &&
+                offer.ExpiresAt <= now)
+            .ToListAsync(cancellationToken);
+
+        if (expiredOffers.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var offer in expiredOffers)
+        {
+            offer.Status = RentalOfferStatus.Expired;
+            offer.UpdatedAt = now;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }

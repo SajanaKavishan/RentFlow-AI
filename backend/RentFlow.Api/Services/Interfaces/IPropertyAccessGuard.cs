@@ -20,6 +20,11 @@ public interface IPropertyAccessGuard
         Guid applicationId,
         CancellationToken cancellationToken = default);
 
+    Task<bool> CanAccessRentalOfferAsync(
+        Guid landlordId,
+        Guid rentalOfferId,
+        CancellationToken cancellationToken = default);
+
     Task<bool> CanAccessDocumentAsync(
         Guid landlordId,
         Guid documentId,

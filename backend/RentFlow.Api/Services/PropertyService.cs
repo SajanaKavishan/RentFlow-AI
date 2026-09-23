@@ -151,6 +151,16 @@ public class PropertyService : IPropertyService
             return false;
         }
 
+        var hasRentalOffer = await _dbContext.RentalOffers
+            .AnyAsync(offer => offer.PropertyId == id);
+        var hasLeaseAgreement = await _dbContext.LeaseAgreements
+            .AnyAsync(lease => lease.PropertyId == id);
+
+        if (hasRentalOffer || hasLeaseAgreement)
+        {
+            return false;
+        }
+
         // Delete all property images from R2 and remove
         // their database metadata before deleting the property.
         await _propertyImageService.DeleteAllForPropertyAsync(
