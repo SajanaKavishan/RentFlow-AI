@@ -377,6 +377,98 @@ public class RentScheduleServiceTests
         Assert.Null(otherTenantItem.UpdatedAt);
     }
 
+    [Fact]
+    public async Task GetOutstandingByTenantAsync_MixedScheduleIncludesOnlyPendingAndOverdueAmounts()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var pending = await CreateScheduleItemAsync(
+            dbContext, tenantId, TestToday.AddDays(1), RentScheduleStatus.Pending, 100.25m);
+        var overdue = await CreateScheduleItemAsync(
+            dbContext, tenantId, TestToday.AddDays(-1), RentScheduleStatus.Overdue, 200.50m);
+        var paid = await CreateScheduleItemAsync(
+            dbContext, tenantId, TestToday.AddDays(-2), RentScheduleStatus.Paid, 300.75m);
+        var summary = await CreateService(dbContext).GetOutstandingByTenantAsync(tenantId);
+
+        Assert.Equal(100.25m, summary.TotalPending);
+        Assert.Equal(200.50m, summary.TotalOverdue);
+        Assert.Equal(300.75m, summary.TotalOutstanding);
+        Assert.Equal(2, summary.Items.Count);
+        Assert.Contains(summary.Items, item => item.Id == pending.Id);
+        Assert.Contains(summary.Items, item => item.Id == overdue.Id);
+        Assert.DoesNotContain(summary.Items, item => item.Id == paid.Id);
+    }
+
+    [Fact]
+    public async Task GetOutstandingByTenantAsync_WithNoUnpaidItemsReturnsZeroTotalsAndNoItems()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        await CreateScheduleItemAsync(
+            dbContext, tenantId, TestToday.AddDays(-1), RentScheduleStatus.Paid, 300m);
+
+        var summary = await CreateService(dbContext).GetOutstandingByTenantAsync(tenantId);
+
+        Assert.Equal(0m, summary.TotalPending);
+        Assert.Equal(0m, summary.TotalOverdue);
+        Assert.Equal(0m, summary.TotalOutstanding);
+        Assert.Empty(summary.Items);
+    }
+
+    [Fact]
+    public async Task GetOutstandingByTenantAsync_PaymentAttemptsDoNotReduceScheduleBalance()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var item = await CreateScheduleItemAsync(
+            dbContext, tenantId, TestToday.AddDays(1), RentScheduleStatus.Pending, 100m);
+        dbContext.Payments.AddRange(
+            new Payment
+            {
+                RentScheduleItemId = item.Id,
+                TenantId = tenantId,
+                Amount = 100m,
+                PaymentMethod = "BankTransfer",
+                Status = PaymentStatus.Pending
+            },
+            new Payment
+            {
+                RentScheduleItemId = item.Id,
+                TenantId = tenantId,
+                Amount = 100m,
+                PaymentMethod = "BankTransfer",
+                Status = PaymentStatus.Failed
+            });
+        await dbContext.SaveChangesAsync();
+
+        var summary = await CreateService(dbContext).GetOutstandingByTenantAsync(tenantId);
+
+        Assert.Equal(100m, summary.TotalPending);
+        Assert.Equal(0m, summary.TotalOverdue);
+        Assert.Equal(100m, summary.TotalOutstanding);
+        Assert.Single(summary.Items);
+    }
+
+    [Fact]
+    public async Task GetOutstandingByTenantAsync_RefreshesPastDuePendingBeforeCalculatingTotals()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var item = await CreateScheduleItemAsync(
+            dbContext, tenantId, TestToday.AddDays(-1), RentScheduleStatus.Pending, 45.67m);
+
+        var summary = await new RentScheduleService(
+            dbContext,
+            new PropertyAccessGuard(dbContext),
+            new TestTimeProvider(TestUtcNow))
+            .GetOutstandingByTenantAsync(tenantId);
+
+        Assert.Equal(RentScheduleStatus.Overdue, item.Status);
+        Assert.Equal(0m, summary.TotalPending);
+        Assert.Equal(45.67m, summary.TotalOverdue);
+        Assert.Equal(45.67m, summary.TotalOutstanding);
+    }
+
     private static ApplicationDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -396,14 +488,15 @@ public class RentScheduleServiceTests
         ApplicationDbContext dbContext,
         Guid tenantId,
         DateOnly dueDate,
-        RentScheduleStatus status)
+        RentScheduleStatus status,
+        decimal amount = 85000m)
     {
         var lease = new LeaseAgreement
         {
             RentalOfferId = Guid.NewGuid(),
             TenantId = tenantId,
             PropertyId = Guid.NewGuid(),
-            MonthlyRent = 85000m,
+            MonthlyRent = amount,
             SecurityDeposit = 170000m,
             StartDate = dueDate,
             EndDate = dueDate.AddMonths(12),
@@ -416,7 +509,7 @@ public class RentScheduleServiceTests
         {
             LeaseAgreementId = lease.Id,
             DueDate = dueDate,
-            Amount = lease.MonthlyRent,
+            Amount = amount,
             Status = status
         };
         dbContext.RentScheduleItems.Add(item);

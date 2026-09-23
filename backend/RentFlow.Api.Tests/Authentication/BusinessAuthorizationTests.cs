@@ -474,6 +474,85 @@ public sealed class BusinessAuthorizationTests
     }
 
     [Fact]
+    public async Task RentSchedule_OutstandingSummaries_EnforceAccessBeforeRefresh()
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+        var ownedLease = CreateLeaseAgreement(ownedProperty.Id, LeaseAgreementStatus.Active);
+        var otherLease = CreateLeaseAgreement(otherProperty.Id, LeaseAgreementStatus.Active);
+        otherLease.TenantId = TenantB;
+        var ownedItem = new RentScheduleItem
+        {
+            LeaseAgreementId = ownedLease.Id,
+            DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2)),
+            Amount = 100.25m,
+            Status = RentScheduleStatus.Pending
+        };
+        var otherItem = new RentScheduleItem
+        {
+            LeaseAgreementId = otherLease.Id,
+            DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2)),
+            Amount = 200.50m,
+            Status = RentScheduleStatus.Pending
+        };
+        await SeedAsync(factory, context =>
+        {
+            context.LeaseAgreements.AddRange(ownedLease, otherLease);
+            context.RentScheduleItems.AddRange(ownedItem, otherItem);
+        });
+
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordB, UserRole.Landlord);
+        using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
+
+        using var inaccessibleTenantLease = await tenant.GetAsync(
+            $"/api/rent-schedules/lease/{otherLease.Id}/outstanding");
+        Assert.Equal(HttpStatusCode.NotFound, inaccessibleTenantLease.StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var unchangedItem = await context.RentScheduleItems
+                .AsNoTracking()
+                .SingleAsync(item => item.Id == otherItem.Id);
+            Assert.Equal(RentScheduleStatus.Pending, unchangedItem.Status);
+        }
+
+        using var tenantMine = await tenant.GetAsync("/api/rent-schedules/outstanding/mine");
+        using var tenantOwnedLease = await tenant.GetAsync(
+            $"/api/rent-schedules/lease/{ownedLease.Id}/outstanding");
+        using var landlordOwnedLease = await landlord.GetAsync(
+            $"/api/rent-schedules/lease/{ownedLease.Id}/outstanding");
+        using var differentLandlord = await otherLandlord.GetAsync(
+            $"/api/rent-schedules/lease/{ownedLease.Id}/outstanding");
+        using var adminOwnedLease = await admin.GetAsync(
+            $"/api/rent-schedules/lease/{ownedLease.Id}/outstanding");
+
+        Assert.Equal(HttpStatusCode.OK, tenantMine.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, tenantOwnedLease.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, landlordOwnedLease.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, differentLandlord.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, adminOwnedLease.StatusCode);
+
+        var tenantSummary = await tenantMine.Content
+            .ReadFromJsonAsync<RentScheduleOutstandingSummaryDto>();
+        Assert.Equal(100.25m, tenantSummary?.TotalOutstanding);
+        Assert.Single(tenantSummary!.Items);
+        Assert.Equal(ownedItem.Id, tenantSummary.Items[0].Id);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var stillUnchanged = await context.RentScheduleItems
+                .AsNoTracking()
+                .SingleAsync(item => item.Id == otherItem.Id);
+            Assert.Equal(RentScheduleStatus.Pending, stillUnchanged.Status);
+        }
+    }
+
+    [Fact]
     public async Task RentSchedule_Generate_RequiresPropertyAccessAndPreservesGenerationRules()
     {
         using var factory = new AuthApiFactory();

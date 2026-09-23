@@ -205,6 +205,53 @@ public class RentScheduleService : IRentScheduleService
         return MapToResponseDto(scheduleItem);
     }
 
+    public async Task<RentScheduleOutstandingSummaryDto> GetOutstandingByLeaseAsync(
+        Guid leaseAgreementId,
+        CancellationToken cancellationToken = default)
+    {
+        var scopedItems = _dbContext.RentScheduleItems
+            .Where(item => item.LeaseAgreementId == leaseAgreementId);
+        await RefreshOverdueStatusesAsync(scopedItems, cancellationToken);
+        return await BuildOutstandingSummaryAsync(scopedItems, cancellationToken);
+    }
+
+    public async Task<RentScheduleOutstandingSummaryDto> GetOutstandingByTenantAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        var scopedItems = _dbContext.RentScheduleItems
+            .Where(item => item.LeaseAgreement.TenantId == tenantId);
+        await RefreshOverdueStatusesAsync(scopedItems, cancellationToken);
+        return await BuildOutstandingSummaryAsync(scopedItems, cancellationToken);
+    }
+
+    private async Task<RentScheduleOutstandingSummaryDto> BuildOutstandingSummaryAsync(
+        IQueryable<RentScheduleItem> scopedItems,
+        CancellationToken cancellationToken)
+    {
+        var unpaidItems = await scopedItems
+            .AsNoTracking()
+            .Where(item =>
+                item.Status == RentScheduleStatus.Pending ||
+                item.Status == RentScheduleStatus.Overdue)
+            .OrderBy(item => item.DueDate)
+            .ToListAsync(cancellationToken);
+        var totalPending = unpaidItems
+            .Where(item => item.Status == RentScheduleStatus.Pending)
+            .Sum(item => item.Amount);
+        var totalOverdue = unpaidItems
+            .Where(item => item.Status == RentScheduleStatus.Overdue)
+            .Sum(item => item.Amount);
+
+        return new RentScheduleOutstandingSummaryDto
+        {
+            TotalPending = totalPending,
+            TotalOverdue = totalOverdue,
+            TotalOutstanding = totalPending + totalOverdue,
+            Items = unpaidItems.Select(MapToResponseDto).ToList()
+        };
+    }
+
     private async Task RefreshOverdueStatusesAsync(
         IQueryable<RentScheduleItem> scopedItems,
         CancellationToken cancellationToken)

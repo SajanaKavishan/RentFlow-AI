@@ -77,6 +77,59 @@ public class RentSchedulesController : ControllerBase
         });
     }
 
+    [HttpGet("lease/{leaseAgreementId:guid}/outstanding")]
+    [Authorize(Roles = "Tenant,Landlord,Admin")]
+    public async Task<IActionResult> GetOutstandingByLease(
+        Guid leaseAgreementId,
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            if (!await _rentScheduleService.CanAccessLeaseAsync(
+                    leaseAgreementId,
+                    _currentUserService.UserId,
+                    _currentUserService.Role,
+                    cancellationToken))
+            {
+                return NotFound(new
+                {
+                    message = "Lease agreement was not found."
+                });
+            }
+
+            var summary = await _rentScheduleService.GetOutstandingByLeaseAsync(
+                leaseAgreementId,
+                cancellationToken);
+
+            return Ok(summary);
+        });
+    }
+
+    [HttpGet("outstanding/mine")]
+    [Authorize(Roles = "Tenant")]
+    public async Task<IActionResult> GetMyOutstanding(
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var tenantId = _currentUserService.UserId;
+
+            if (tenantId is null)
+            {
+                return Unauthorized(new
+                {
+                    message = "Authenticated user ID was not found."
+                });
+            }
+
+            var summary = await _rentScheduleService.GetOutstandingByTenantAsync(
+                tenantId.Value,
+                cancellationToken);
+
+            return Ok(summary);
+        });
+    }
+
     [HttpGet("mine")]
     [Authorize(Roles = "Tenant")]
     public async Task<IActionResult> GetMine(

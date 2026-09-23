@@ -29,6 +29,14 @@ public interface IRentScheduleService
         Guid tenantId,
         CancellationToken cancellationToken = default);
 
+    Task<RentScheduleOutstandingSummaryDto> GetOutstandingByLeaseAsync(
+        Guid leaseAgreementId,
+        CancellationToken cancellationToken = default);
+
+    Task<RentScheduleOutstandingSummaryDto> GetOutstandingByTenantAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default);
+
     Task<RentScheduleItemResponseDto?> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default);

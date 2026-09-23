@@ -245,6 +245,16 @@ public class RentSchedulesControllerTests
                 GetByTenantResult ?? Array.Empty<RentScheduleItemResponseDto>());
         }
 
+        public Task<RentScheduleOutstandingSummaryDto> GetOutstandingByLeaseAsync(
+            Guid leaseAgreementId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new RentScheduleOutstandingSummaryDto());
+
+        public Task<RentScheduleOutstandingSummaryDto> GetOutstandingByTenantAsync(
+            Guid tenantId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new RentScheduleOutstandingSummaryDto());
+
         public Task<RentScheduleItemResponseDto?> GetByIdAsync(
             Guid id,
             CancellationToken cancellationToken = default)
