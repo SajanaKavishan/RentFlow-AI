@@ -175,7 +175,7 @@ describe('tenant dashboard', () => {
 
   it.each(['Landlord', 'Admin', 'MaintenanceTechnician'])('does not call tenant APIs for %s', (role) => {
     renderApp({ ...tenant, role })
-    expect(screen.getByRole('heading', { name: 'Welcome, Amara Silva' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: role === 'Admin' ? 'System Overview' : 'Welcome, Amara Silva' })).toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
   })
 
