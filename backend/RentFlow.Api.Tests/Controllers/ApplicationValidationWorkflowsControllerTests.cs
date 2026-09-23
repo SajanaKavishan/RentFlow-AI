@@ -222,6 +222,9 @@ public class ApplicationValidationWorkflowsControllerTests
         public Task<bool> CanAccessApplicationAsync(Guid landlordId, Guid applicationId,
             CancellationToken cancellationToken = default) => Task.FromResult(true);
 
+        public Task<bool> CanAccessRentalOfferAsync(Guid landlordId, Guid rentalOfferId,
+            CancellationToken cancellationToken = default) => Task.FromResult(true);
+
         public Task<bool> CanAccessDocumentAsync(Guid landlordId, Guid documentId,
             CancellationToken cancellationToken = default) => Task.FromResult(true);
 

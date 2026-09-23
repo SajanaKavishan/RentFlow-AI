@@ -53,6 +53,17 @@ public class LeaseAgreementService : ILeaseAgreementService
                 "The rental offer has an invalid lease period.");
         }
 
+        var propertyExists = await _dbContext.Properties
+            .AnyAsync(
+                property => property.Id == rentalOffer.PropertyId,
+                cancellationToken);
+
+        if (!propertyExists)
+        {
+            throw LeaseAgreementServiceException.NotFound(
+                "Property was not found.");
+        }
+
         var leaseAgreement = new LeaseAgreement
         {
             RentalOfferId = rentalOffer.Id,

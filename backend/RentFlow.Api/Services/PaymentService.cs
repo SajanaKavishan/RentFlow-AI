@@ -138,6 +138,30 @@ public class PaymentService : IPaymentService
                 "Only pending payments can be completed.");
         }
 
+        if (payment.RentScheduleItem.Status == RentScheduleStatus.Paid)
+        {
+            throw PaymentServiceException.Conflict(
+                "This rent schedule item has already been paid.");
+        }
+
+        var completedPaymentExists = await _dbContext.Payments
+            .AnyAsync(
+                existingPayment =>
+                    existingPayment.RentScheduleItemId == payment.RentScheduleItemId &&
+                    existingPayment.Status == PaymentStatus.Completed,
+                cancellationToken);
+
+        if (completedPaymentExists)
+        {
+            throw PaymentServiceException.Conflict(
+                "A completed payment already exists for this rent schedule item.");
+        }
+
+        var previousPaidAt = payment.PaidAt;
+        var previousPaymentUpdatedAt = payment.UpdatedAt;
+        var previousScheduleStatus = payment.RentScheduleItem.Status;
+        var previousScheduleUpdatedAt = payment.RentScheduleItem.UpdatedAt;
+
         payment.Status = PaymentStatus.Completed;
         payment.PaidAt = DateTimeOffset.UtcNow;
         payment.UpdatedAt = DateTimeOffset.UtcNow;
@@ -145,7 +169,44 @@ public class PaymentService : IPaymentService
         payment.RentScheduleItem.Status = RentScheduleStatus.Paid;
         payment.RentScheduleItem.UpdatedAt = DateTimeOffset.UtcNow;
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            var anotherCompletionWon = await _dbContext.Payments
+                .AsNoTracking()
+                .AnyAsync(
+                    existingPayment =>
+                        existingPayment.RentScheduleItemId == payment.RentScheduleItemId &&
+                        existingPayment.Status == PaymentStatus.Completed &&
+                        existingPayment.Id != payment.Id,
+                    cancellationToken);
+
+            if (anotherCompletionWon)
+            {
+                payment.Status = PaymentStatus.Pending;
+                payment.PaidAt = previousPaidAt;
+                payment.UpdatedAt = previousPaymentUpdatedAt;
+                payment.RentScheduleItem.Status = previousScheduleStatus;
+                payment.RentScheduleItem.UpdatedAt = previousScheduleUpdatedAt;
+                _dbContext.Entry(payment).Property(entity => entity.Status).IsModified = false;
+                _dbContext.Entry(payment).Property(entity => entity.PaidAt).IsModified = false;
+                _dbContext.Entry(payment).Property(entity => entity.UpdatedAt).IsModified = false;
+                _dbContext.Entry(payment.RentScheduleItem)
+                    .Property(entity => entity.Status)
+                    .IsModified = false;
+                _dbContext.Entry(payment.RentScheduleItem)
+                    .Property(entity => entity.UpdatedAt)
+                    .IsModified = false;
+
+                throw PaymentServiceException.Conflict(
+                    "A completed payment already exists for this rent schedule item.");
+            }
+
+            throw;
+        }
 
         return MapToResponseDto(payment);
     }

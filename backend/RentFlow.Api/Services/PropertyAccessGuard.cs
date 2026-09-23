@@ -67,6 +67,26 @@ public sealed class PropertyAccessGuard(ApplicationDbContext dbContext) : IPrope
                 cancellationToken);
     }
 
+    public Task<bool> CanAccessRentalOfferAsync(
+        Guid landlordId,
+        Guid rentalOfferId,
+        CancellationToken cancellationToken = default)
+    {
+        if (landlordId == Guid.Empty || rentalOfferId == Guid.Empty)
+        {
+            return Task.FromResult(false);
+        }
+
+        return dbContext.RentalOffers
+            .AsNoTracking()
+            .AnyAsync(
+                offer => offer.Id == rentalOfferId
+                    && dbContext.Properties.Any(property =>
+                        property.Id == offer.PropertyId
+                        && property.LandlordId == landlordId),
+                cancellationToken);
+    }
+
     public Task<bool> CanAccessDocumentAsync(
         Guid landlordId,
         Guid documentId,

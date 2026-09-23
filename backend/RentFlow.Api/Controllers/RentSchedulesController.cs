@@ -29,6 +29,18 @@ public class RentSchedulesController : ControllerBase
     {
         return await ExecuteAsync(async () =>
         {
+            if (!await _rentScheduleService.CanAccessLeaseAsync(
+                    leaseAgreementId,
+                    _currentUserService.UserId,
+                    _currentUserService.Role,
+                    cancellationToken))
+            {
+                return NotFound(new
+                {
+                    message = "Lease agreement was not found."
+                });
+            }
+
             var scheduleItems = await _rentScheduleService.GenerateForLeaseAsync(
                 leaseAgreementId,
                 cancellationToken);
@@ -45,11 +57,76 @@ public class RentSchedulesController : ControllerBase
     {
         return await ExecuteAsync(async () =>
         {
+            if (!await _rentScheduleService.CanAccessLeaseAsync(
+                    leaseAgreementId,
+                    _currentUserService.UserId,
+                    _currentUserService.Role,
+                    cancellationToken))
+            {
+                return NotFound(new
+                {
+                    message = "Lease agreement was not found."
+                });
+            }
+
             var scheduleItems = await _rentScheduleService.GetByLeaseAsync(
                 leaseAgreementId,
                 cancellationToken);
 
             return Ok(scheduleItems);
+        });
+    }
+
+    [HttpGet("lease/{leaseAgreementId:guid}/outstanding")]
+    [Authorize(Roles = "Tenant,Landlord,Admin")]
+    public async Task<IActionResult> GetOutstandingByLease(
+        Guid leaseAgreementId,
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            if (!await _rentScheduleService.CanAccessLeaseAsync(
+                    leaseAgreementId,
+                    _currentUserService.UserId,
+                    _currentUserService.Role,
+                    cancellationToken))
+            {
+                return NotFound(new
+                {
+                    message = "Lease agreement was not found."
+                });
+            }
+
+            var summary = await _rentScheduleService.GetOutstandingByLeaseAsync(
+                leaseAgreementId,
+                cancellationToken);
+
+            return Ok(summary);
+        });
+    }
+
+    [HttpGet("outstanding/mine")]
+    [Authorize(Roles = "Tenant")]
+    public async Task<IActionResult> GetMyOutstanding(
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var tenantId = _currentUserService.UserId;
+
+            if (tenantId is null)
+            {
+                return Unauthorized(new
+                {
+                    message = "Authenticated user ID was not found."
+                });
+            }
+
+            var summary = await _rentScheduleService.GetOutstandingByTenantAsync(
+                tenantId.Value,
+                cancellationToken);
+
+            return Ok(summary);
         });
     }
 
@@ -86,6 +163,18 @@ public class RentSchedulesController : ControllerBase
     {
         return await ExecuteAsync(async () =>
         {
+            if (!await _rentScheduleService.CanAccessScheduleItemAsync(
+                    id,
+                    _currentUserService.UserId,
+                    _currentUserService.Role,
+                    cancellationToken))
+            {
+                return NotFound(new
+                {
+                    message = "Rent schedule item was not found."
+                });
+            }
+
             var scheduleItem = await _rentScheduleService.GetByIdAsync(
                 id,
                 cancellationToken);

@@ -191,6 +191,24 @@ public class RentSchedulesControllerTests
 
     private sealed class StubRentScheduleService : IRentScheduleService
     {
+        public Task<bool> CanAccessLeaseAsync(
+            Guid leaseAgreementId,
+            Guid? userId,
+            UserRole? role,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> CanAccessScheduleItemAsync(
+            Guid scheduleItemId,
+            Guid? userId,
+            UserRole? role,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(true);
+        }
+
         public IReadOnlyList<RentScheduleItemResponseDto>? GenerateResult { get; set; }
 
         public IReadOnlyList<RentScheduleItemResponseDto>? GetByTenantResult { get; set; }
@@ -226,6 +244,16 @@ public class RentSchedulesControllerTests
             return Task.FromResult(
                 GetByTenantResult ?? Array.Empty<RentScheduleItemResponseDto>());
         }
+
+        public Task<RentScheduleOutstandingSummaryDto> GetOutstandingByLeaseAsync(
+            Guid leaseAgreementId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new RentScheduleOutstandingSummaryDto());
+
+        public Task<RentScheduleOutstandingSummaryDto> GetOutstandingByTenantAsync(
+            Guid tenantId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new RentScheduleOutstandingSummaryDto());
 
         public Task<RentScheduleItemResponseDto?> GetByIdAsync(
             Guid id,
