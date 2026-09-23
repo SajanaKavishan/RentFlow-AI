@@ -40,6 +40,10 @@
 .auth-password button:hover { color: var(--olive-900); background: var(--olive-50); }
 .auth-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
 .auth-error { margin: 0 0 20px; padding: 13px 16px; border: 1px solid var(--danger); border-radius: var(--radius-sm); color: var(--danger); background: var(--danger-bg); font-size: .86rem; overflow-wrap: anywhere; }
+.auth-success { margin: 20px 0 0; padding: 13px 16px; border: 1px solid var(--olive-100); border-radius: var(--radius-sm); color: var(--olive-900); background: var(--olive-50); font-size: .86rem; line-height: 1.55; }
+.auth-setup-missing { margin-top: 28px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--cream-50); }
+.auth-setup-missing h2 { margin: 0 0 8px; color: var(--ink); font-size: 1.05rem; }
+.auth-setup-missing p { margin: 0 0 18px; color: var(--muted); font-size: .83rem; line-height: 1.65; }
 .auth-submit { width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 12px; border: 0; border-radius: var(--radius-sm); color: var(--surface); background: var(--olive-900); font-size: .9rem; font-weight: 800; transition: background-color 160ms ease, transform 160ms ease; }
 .auth-submit:hover:not(:disabled) { background: var(--olive-hover); transform: translateY(-1px); }
 .auth-submit:disabled { opacity: .65; }

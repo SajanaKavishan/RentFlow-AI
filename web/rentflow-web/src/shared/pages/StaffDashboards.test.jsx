@@ -57,9 +57,10 @@ describe('Technician and Admin dashboards', () => {
 
     const users = within(main).getByRole('region', { name: 'Users' })
     const system = within(main).getByRole('region', { name: 'AI / System Overview' })
-    expect(users).toHaveTextContent('Authorized user-management API and owning module')
+    expect(users).toHaveTextContent('Technician setup available')
+    expect(users).toHaveTextContent('Complete user-directory and account-management APIs')
     expect(system).toHaveTextContent('System-overview API contract and owning module')
-    expect(within(users).getByRole('link', { name: /View integration status/ })).toHaveAttribute('href', '/modules/users')
+    expect(within(users).getByRole('link', { name: 'Add Technician' })).toHaveAttribute('href', '/modules/users')
     expect(within(system).getByRole('link', { name: /View integration status/ })).toHaveAttribute('href', '/modules/ai-system-overview')
     expect(await within(main).findByRole('heading', { name: '3 unread notifications' })).toBeInTheDocument()
     expect(within(main).getAllByRole('link', { name: /Notifications|Open notifications|Review notifications/ }).every((link) => link.getAttribute('href') === '/notifications')).toBe(true)
@@ -81,14 +82,14 @@ describe('Technician and Admin dashboards', () => {
   })
 
   it.each([
-    ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work'],
-    ['Admin', 'Users', 'Users'],
-    ['Admin', 'AI / System Overview', 'AI & System Overview'],
-  ])('opens the explicit integration status for %s %s', async (role, label, pageTitle) => {
+    ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work', /View integration status/],
+    ['Admin', 'Users', 'Users', /Add Technician/],
+    ['Admin', 'AI / System Overview', 'AI & System Overview', /View integration status/],
+  ])('opens the explicit workspace for %s %s', async (role, label, pageTitle, linkName) => {
     renderDashboard(role)
     const main = screen.getByRole('main')
     const region = within(main).getByRole('region', { name: label })
-    await userEvent.click(within(region).getByRole('link', { name: /View integration status/ }))
+    await userEvent.click(within(region).getByRole('link', { name: linkName }))
     expect(screen.getByRole('heading', { name: pageTitle })).toBeInTheDocument()
     expect(screen.getByText('Integration pending')).toBeInTheDocument()
   })

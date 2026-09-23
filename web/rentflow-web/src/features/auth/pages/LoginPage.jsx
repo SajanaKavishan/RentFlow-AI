@@ -35,6 +35,7 @@ export default function LoginPage() {
   return <main className="auth-page"><AuthVisual /><section className="auth-content"><div className="auth-card" aria-labelledby="login-title">
     <p className="auth-eyebrow">Welcome back</p><h1 id="login-title">Sign in to RentFlow</h1>
     <p className="auth-intro">Enter your details to continue your rental journey.</p>
+    {location.state?.passwordSetupComplete && <div className="auth-success" role="status">Your Technician account is active. Sign in with your new password.</div>}
     <form onSubmit={handleSubmit} noValidate>
       <label htmlFor="email">Email</label><input id="email" type="email" autoComplete="email" placeholder="you@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={isSubmitting} />
       <label htmlFor="password">Password</label><div className="auth-password"><input id="password" type={passwordVisible ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} disabled={isSubmitting} /><button type="button" aria-label={passwordVisible ? 'Hide password' : 'Show password'} aria-pressed={passwordVisible} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? 'eyeOff' : 'eye'} /></button></div>
