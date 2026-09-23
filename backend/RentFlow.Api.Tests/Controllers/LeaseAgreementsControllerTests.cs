@@ -369,6 +369,10 @@ public class LeaseAgreementsControllerTests
             Guid landlordId, Guid applicationId, CancellationToken cancellationToken = default)
             => Task.FromResult(false);
 
+        public Task<bool> CanAccessRentalOfferAsync(
+            Guid landlordId, Guid rentalOfferId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
         public Task<bool> CanAccessDocumentAsync(
             Guid landlordId, Guid documentId, CancellationToken cancellationToken = default)
             => Task.FromResult(false);

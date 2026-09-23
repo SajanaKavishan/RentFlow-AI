@@ -462,6 +462,53 @@ public sealed class BusinessAuthorizationTests
     }
 
     [Fact]
+    public async Task RentSchedule_Generate_RequiresPropertyAccessAndPreservesGenerationRules()
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+        var ownedLease = CreateLeaseAgreement(ownedProperty.Id, LeaseAgreementStatus.Active);
+        var inaccessibleLease = CreateLeaseAgreement(otherProperty.Id, LeaseAgreementStatus.Active);
+        var adminLease = CreateLeaseAgreement(otherProperty.Id, LeaseAgreementStatus.Active);
+        var inactiveLease = CreateLeaseAgreement(ownedProperty.Id, LeaseAgreementStatus.Pending);
+        await SeedAsync(factory, context =>
+        {
+            context.LeaseAgreements.AddRange(ownedLease, inaccessibleLease, adminLease, inactiveLease);
+        });
+
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
+
+        using var ownedResponse = await landlord.PostAsync(
+            $"/api/rent-schedules/lease/{ownedLease.Id}/generate", null);
+        using var duplicateResponse = await landlord.PostAsync(
+            $"/api/rent-schedules/lease/{ownedLease.Id}/generate", null);
+        using var inaccessibleResponse = await otherLandlord.PostAsync(
+            $"/api/rent-schedules/lease/{inaccessibleLease.Id}/generate", null);
+        using var adminResponse = await admin.PostAsync(
+            $"/api/rent-schedules/lease/{adminLease.Id}/generate", null);
+        using var missingResponse = await landlord.PostAsync(
+            $"/api/rent-schedules/lease/{Guid.NewGuid()}/generate", null);
+        using var inactiveResponse = await landlord.PostAsync(
+            $"/api/rent-schedules/lease/{inactiveLease.Id}/generate", null);
+
+        Assert.Equal(HttpStatusCode.OK, ownedResponse.StatusCode);
+        Assert.NotEmpty(await ownedResponse.Content.ReadFromJsonAsync<List<RentScheduleItemResponseDto>>() ?? []);
+        Assert.Equal(HttpStatusCode.Conflict, duplicateResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, inaccessibleResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, inactiveResponse.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Empty(await context.RentScheduleItems
+            .Where(item => item.LeaseAgreementId == inaccessibleLease.Id)
+            .ToListAsync());
+    }
+
+    [Fact]
     public async Task Payment_GetById_EnforcesTenantAndPropertyOwnership()
     {
         using var factory = new AuthApiFactory();
@@ -524,6 +571,94 @@ public sealed class BusinessAuthorizationTests
         Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
     }
 
+    [Theory]
+    [InlineData("complete")]
+    [InlineData("fail")]
+    public async Task Payment_StateChanges_RequirePropertyAccessAndPreserveLifecycle(string action)
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+
+        (LeaseAgreement Lease, RentScheduleItem Schedule, Payment Payment) CreatePayment(
+            Guid propertyId,
+            PaymentStatus status = PaymentStatus.Pending)
+        {
+            var lease = CreateLeaseAgreement(propertyId, LeaseAgreementStatus.Active);
+            var schedule = new RentScheduleItem
+            {
+                LeaseAgreementId = lease.Id,
+                DueDate = lease.StartDate,
+                Amount = lease.MonthlyRent
+            };
+            var payment = new Payment
+            {
+                RentScheduleItemId = schedule.Id,
+                TenantId = TenantA,
+                Amount = schedule.Amount,
+                PaymentMethod = "BankTransfer",
+                Status = status
+            };
+            return (lease, schedule, payment);
+        }
+
+        var owned = CreatePayment(ownedProperty.Id);
+        var inaccessible = CreatePayment(otherProperty.Id);
+        var adminPayment = CreatePayment(otherProperty.Id);
+        var conflicting = CreatePayment(
+            ownedProperty.Id,
+            action == "complete" ? PaymentStatus.Completed : PaymentStatus.Failed);
+        await SeedAsync(factory, context =>
+        {
+            context.LeaseAgreements.AddRange(
+                owned.Lease, inaccessible.Lease, adminPayment.Lease, conflicting.Lease);
+            context.RentScheduleItems.AddRange(
+                owned.Schedule, inaccessible.Schedule, adminPayment.Schedule, conflicting.Schedule);
+            context.Payments.AddRange(
+                owned.Payment, inaccessible.Payment, adminPayment.Payment, conflicting.Payment);
+        });
+
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordB, UserRole.Landlord);
+        using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
+        var route = (Guid paymentId) => $"/api/payments/{paymentId}/{action}";
+
+        using var ownedResponse = await landlord.PatchAsync(route(owned.Payment.Id), null);
+        using var inaccessibleResponse = await otherLandlord.PatchAsync(
+            route(owned.Payment.Id), null);
+        using var propertyDeniedResponse = await landlord.PatchAsync(
+            route(inaccessible.Payment.Id), null);
+        using var adminResponse = await admin.PatchAsync(route(adminPayment.Payment.Id), null);
+        using var missingResponse = await landlord.PatchAsync(route(Guid.NewGuid()), null);
+        using var conflictResponse = await landlord.PatchAsync(route(conflicting.Payment.Id), null);
+
+        Assert.Equal(HttpStatusCode.OK, ownedResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, inaccessibleResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, propertyDeniedResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, conflictResponse.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var unchangedPayment = await context.Payments.SingleAsync(
+            item => item.Id == inaccessible.Payment.Id);
+        var unchangedSchedule = await context.RentScheduleItems.SingleAsync(
+            item => item.Id == inaccessible.Schedule.Id);
+        Assert.Equal(PaymentStatus.Pending, unchangedPayment.Status);
+        Assert.Equal(RentScheduleStatus.Pending, unchangedSchedule.Status);
+
+        var ownedPayment = await context.Payments.SingleAsync(item => item.Id == owned.Payment.Id);
+        var ownedSchedule = await context.RentScheduleItems.SingleAsync(
+            item => item.Id == owned.Schedule.Id);
+        Assert.Equal(
+            action == "complete" ? PaymentStatus.Completed : PaymentStatus.Failed,
+            ownedPayment.Status);
+        Assert.Equal(
+            action == "complete" ? RentScheduleStatus.Paid : RentScheduleStatus.Pending,
+            ownedSchedule.Status);
+    }
+
     [Fact]
     public async Task RentalOffer_GetById_EnforcesTenantAndPropertyOwnership()
     {
@@ -571,6 +706,235 @@ public sealed class BusinessAuthorizationTests
             (await adminResponse.Content.ReadFromJsonAsync<RentalOfferResponseDto>())?.Id);
         Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
     }
+
+    [Fact]
+    public async Task RentalOffer_Create_RequiresLandlordPropertyAccessAndPreservesValidation()
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+        var ownedApplication = await SeedApplicationAsync(
+            factory, TenantA, RentalApplicationStatus.Approved, ownedProperty.Id);
+        var inaccessibleApplication = await SeedApplicationAsync(
+            factory, TenantB, RentalApplicationStatus.Approved, ownedProperty.Id);
+        var adminApplication = await SeedApplicationAsync(
+            factory, TenantB, RentalApplicationStatus.Approved, otherProperty.Id);
+        var missingPropertyApplication = await SeedApplicationAsync(
+            factory, TenantA, RentalApplicationStatus.Approved, Guid.NewGuid());
+        var underReviewApplication = await SeedApplicationAsync(
+            factory, TenantA, RentalApplicationStatus.UnderReview, ownedProperty.Id);
+
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordB, UserRole.Landlord);
+        using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
+
+        using var ownedResponse = await landlord.PostAsJsonAsync(
+            "/api/rental-offers", RentalOfferBody(ownedApplication.Id));
+        using var inaccessibleResponse = await otherLandlord.PostAsJsonAsync(
+            "/api/rental-offers", RentalOfferBody(inaccessibleApplication.Id));
+        using var adminResponse = await admin.PostAsJsonAsync(
+            "/api/rental-offers", RentalOfferBody(adminApplication.Id));
+        using var missingResponse = await landlord.PostAsJsonAsync(
+            "/api/rental-offers", RentalOfferBody(Guid.NewGuid()));
+        using var missingPropertyResponse = await landlord.PostAsJsonAsync(
+            "/api/rental-offers", RentalOfferBody(missingPropertyApplication.Id));
+        using var validationResponse = await landlord.PostAsJsonAsync(
+            "/api/rental-offers", RentalOfferBody(underReviewApplication.Id));
+
+        Assert.Equal(HttpStatusCode.Created, ownedResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, inaccessibleResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, adminResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingPropertyResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, validationResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task RentalOffer_Withdraw_RequiresLandlordPropertyAccessAndPreservesLifecycle()
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+        var ownedOffer = CreateRentalOffer(TenantA, ownedProperty.Id);
+        var inaccessibleOffer = CreateRentalOffer(TenantB, otherProperty.Id);
+        var adminOffer = CreateRentalOffer(TenantB, otherProperty.Id);
+        var conflictingOffer = CreateRentalOffer(
+            TenantA, ownedProperty.Id, RentalOfferStatus.Accepted);
+        await SeedAsync(factory, context =>
+        {
+            context.RentalOffers.AddRange(
+                ownedOffer, inaccessibleOffer, adminOffer, conflictingOffer);
+        });
+
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
+
+        using var ownedResponse = await landlord.PatchAsync(
+            $"/api/rental-offers/{ownedOffer.Id}/withdraw", null);
+        using var inaccessibleResponse = await otherLandlord.PatchAsync(
+            $"/api/rental-offers/{inaccessibleOffer.Id}/withdraw", null);
+        using var adminResponse = await admin.PatchAsync(
+            $"/api/rental-offers/{adminOffer.Id}/withdraw", null);
+        using var missingResponse = await landlord.PatchAsync(
+            $"/api/rental-offers/{Guid.NewGuid()}/withdraw", null);
+        using var conflictResponse = await landlord.PatchAsync(
+            $"/api/rental-offers/{conflictingOffer.Id}/withdraw", null);
+
+        Assert.Equal(HttpStatusCode.OK, ownedResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, inaccessibleResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, conflictResponse.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Equal(RentalOfferStatus.Withdrawn,
+            (await context.RentalOffers.SingleAsync(item => item.Id == ownedOffer.Id)).Status);
+        Assert.Equal(RentalOfferStatus.Pending,
+            (await context.RentalOffers.SingleAsync(item => item.Id == inaccessibleOffer.Id)).Status);
+    }
+
+    [Fact]
+    public async Task LeaseAgreement_Create_RequiresAccessToAcceptedOfferProperty()
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+        var ownedOffer = CreateRentalOffer(TenantA, ownedProperty.Id, RentalOfferStatus.Accepted);
+        var inaccessibleOffer = CreateRentalOffer(TenantB, ownedProperty.Id, RentalOfferStatus.Accepted);
+        var adminOffer = CreateRentalOffer(TenantB, otherProperty.Id, RentalOfferStatus.Accepted);
+        var missingPropertyOffer = CreateRentalOffer(
+            TenantA, Guid.NewGuid(), RentalOfferStatus.Accepted);
+        var pendingOffer = CreateRentalOffer(TenantA, ownedProperty.Id);
+        await SeedAsync(factory, context =>
+        {
+            context.RentalOffers.AddRange(
+                ownedOffer, inaccessibleOffer, adminOffer, missingPropertyOffer, pendingOffer);
+        });
+
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordB, UserRole.Landlord);
+        using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
+
+        using var ownedResponse = await landlord.PostAsJsonAsync(
+            "/api/lease-agreements", new { rentalOfferId = ownedOffer.Id });
+        using var inaccessibleResponse = await otherLandlord.PostAsJsonAsync(
+            "/api/lease-agreements", new { rentalOfferId = inaccessibleOffer.Id });
+        using var adminResponse = await admin.PostAsJsonAsync(
+            "/api/lease-agreements", new { rentalOfferId = adminOffer.Id });
+        using var missingResponse = await landlord.PostAsJsonAsync(
+            "/api/lease-agreements", new { rentalOfferId = Guid.NewGuid() });
+        using var missingPropertyResponse = await landlord.PostAsJsonAsync(
+            "/api/lease-agreements", new { rentalOfferId = missingPropertyOffer.Id });
+        using var validationResponse = await landlord.PostAsJsonAsync(
+            "/api/lease-agreements", new { rentalOfferId = pendingOffer.Id });
+
+        Assert.Equal(HttpStatusCode.Created, ownedResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, inaccessibleResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, adminResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingPropertyResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, validationResponse.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("activate", LeaseAgreementStatus.Pending, LeaseAgreementStatus.Active)]
+    [InlineData("terminate", LeaseAgreementStatus.Active, LeaseAgreementStatus.Pending)]
+    [InlineData("complete", LeaseAgreementStatus.Active, LeaseAgreementStatus.Pending)]
+    public async Task LeaseAgreement_StateChanges_RequirePropertyAccessAndPreserveLifecycle(
+        string action,
+        LeaseAgreementStatus initialStatus,
+        LeaseAgreementStatus conflictingStatus)
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+        var ownedLease = CreateLeaseAgreement(ownedProperty.Id, initialStatus);
+        var inaccessibleLease = CreateLeaseAgreement(otherProperty.Id, initialStatus);
+        var adminLease = CreateLeaseAgreement(otherProperty.Id, initialStatus);
+        var conflictingLease = CreateLeaseAgreement(ownedProperty.Id, conflictingStatus);
+        await SeedAsync(factory, context =>
+        {
+            context.LeaseAgreements.AddRange(
+                ownedLease, inaccessibleLease, adminLease, conflictingLease);
+        });
+
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
+
+        using var ownedResponse = await CallLeaseActionAsync(landlord, action, ownedLease.Id);
+        using var inaccessibleResponse = await CallLeaseActionAsync(
+            otherLandlord, action, inaccessibleLease.Id);
+        using var adminResponse = await CallLeaseActionAsync(admin, action, adminLease.Id);
+        using var missingResponse = await CallLeaseActionAsync(landlord, action, Guid.NewGuid());
+        using var conflictResponse = await CallLeaseActionAsync(
+            landlord, action, conflictingLease.Id);
+
+        Assert.Equal(HttpStatusCode.OK, ownedResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, inaccessibleResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, conflictResponse.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Equal(initialStatus,
+            (await context.LeaseAgreements.SingleAsync(item => item.Id == inaccessibleLease.Id)).Status);
+    }
+
+    private static LeaseAgreement CreateLeaseAgreement(
+        Guid propertyId,
+        LeaseAgreementStatus status) => new()
+    {
+        RentalOfferId = Guid.NewGuid(),
+        TenantId = TenantA,
+        PropertyId = propertyId,
+        MonthlyRent = 85000m,
+        SecurityDeposit = 170000m,
+        StartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+        EndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12)),
+        Status = status
+    };
+
+    private static Task<HttpResponseMessage> CallLeaseActionAsync(
+        HttpClient client,
+        string action,
+        Guid leaseId) => action switch
+    {
+        "activate" => client.PatchAsync($"/api/lease-agreements/{leaseId}/activate", null),
+        "terminate" => client.PatchAsync($"/api/lease-agreements/{leaseId}/terminate", null),
+        "complete" => client.PatchAsync($"/api/lease-agreements/{leaseId}/complete", null),
+        _ => throw new ArgumentOutOfRangeException(nameof(action))
+    };
+
+    private static object RentalOfferBody(Guid rentalApplicationId) => new
+    {
+        rentalApplicationId,
+        monthlyRent = 85000m,
+        securityDeposit = 170000m,
+        proposedStartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+        proposedEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12)),
+        expiresAt = DateTimeOffset.UtcNow.AddDays(7),
+        landlordNote = "Authorization test offer."
+    };
+
+    private static RentalOffer CreateRentalOffer(
+        Guid tenantId,
+        Guid propertyId,
+        RentalOfferStatus status = RentalOfferStatus.Pending) => new()
+    {
+        RentalApplicationId = Guid.NewGuid(),
+        TenantId = tenantId,
+        PropertyId = propertyId,
+        MonthlyRent = 85000m,
+        SecurityDeposit = 170000m,
+        ProposedStartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+        ProposedEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12)),
+        ExpiresAt = DateTimeOffset.UtcNow.AddDays(7),
+        Status = status
+    };
 
     [Fact]
     public async Task LeaseAgreement_GetById_EnforcesTenantAndPropertyOwnership()

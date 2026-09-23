@@ -174,6 +174,7 @@ public class PaymentsControllerTests
 
         var paymentService = new StubPaymentService
         {
+            GetByIdResult = expectedPayment,
             CompleteResult = expectedPayment
         };
 
@@ -208,6 +209,7 @@ public class PaymentsControllerTests
 
         var paymentService = new StubPaymentService
         {
+            GetByIdResult = expectedPayment,
             FailResult = expectedPayment
         };
 

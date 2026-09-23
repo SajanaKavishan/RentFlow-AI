@@ -124,6 +124,14 @@ public class PaymentsController : ControllerBase
     {
         return await ExecuteAsync(async () =>
         {
+            if (!await CanAccessPaymentAsync(id, cancellationToken))
+            {
+                return NotFound(new
+                {
+                    message = "Payment was not found."
+                });
+            }
+
             var payment = await _paymentService.CompleteAsync(
                 id,
                 cancellationToken);
@@ -140,12 +148,34 @@ public class PaymentsController : ControllerBase
     {
         return await ExecuteAsync(async () =>
         {
+            if (!await CanAccessPaymentAsync(id, cancellationToken))
+            {
+                return NotFound(new
+                {
+                    message = "Payment was not found."
+                });
+            }
+
             var payment = await _paymentService.FailAsync(
                 id,
                 cancellationToken);
 
             return Ok(payment);
         });
+    }
+
+    private async Task<bool> CanAccessPaymentAsync(
+        Guid paymentId,
+        CancellationToken cancellationToken)
+    {
+        var payment = await _paymentService.GetByIdAsync(paymentId, cancellationToken);
+
+        return payment is not null
+            && await _rentScheduleService.CanAccessScheduleItemAsync(
+                payment.RentScheduleItemId,
+                _currentUserService.UserId,
+                _currentUserService.Role,
+                cancellationToken);
     }
 
     private async Task<IActionResult> ExecuteAsync(

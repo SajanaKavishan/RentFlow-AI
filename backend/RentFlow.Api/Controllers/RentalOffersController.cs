@@ -30,9 +30,22 @@ public class RentalOffersController(
         CancellationToken cancellationToken)
     {
         return ExecuteAsync(
-            async () => await rentalOfferService.CreateAsync(
-                dto,
-                cancellationToken),
+            async () =>
+            {
+                if (currentUser.Role == UserRole.Landlord
+                    && !await propertyAccessGuard.CanAccessApplicationAsync(
+                        GetRequiredUserId(),
+                        dto.RentalApplicationId,
+                        cancellationToken))
+                {
+                    throw RentalOfferServiceException.NotFound(
+                        $"Rental application '{dto.RentalApplicationId}' was not found.");
+                }
+
+                return await rentalOfferService.CreateAsync(
+                    dto,
+                    cancellationToken);
+            },
             result => CreatedAtAction(
                 nameof(GetById),
                 new { id = result.Id },
@@ -102,9 +115,29 @@ public class RentalOffersController(
         CancellationToken cancellationToken)
     {
         return ExecuteAsync(
-            async () => await rentalOfferService.WithdrawAsync(
-                id,
-                cancellationToken),
+            async () =>
+            {
+                if (currentUser.Role == UserRole.Landlord)
+                {
+                    var offer = await rentalOfferService.GetByIdAsync(
+                        id,
+                        cancellationToken);
+
+                    if (offer is null
+                        || !await propertyAccessGuard.CanAccessPropertyAsync(
+                            GetRequiredUserId(),
+                            offer.PropertyId,
+                            cancellationToken))
+                    {
+                        throw RentalOfferServiceException.NotFound(
+                            $"Rental offer '{id}' was not found.");
+                    }
+                }
+
+                return await rentalOfferService.WithdrawAsync(
+                    id,
+                    cancellationToken);
+            },
             result => Ok(result));
     }
 
