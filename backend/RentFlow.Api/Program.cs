@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using RentFlow.Api.Configuration;
+using RentFlow.Api.Commands;
 using RentFlow.Api.Data;
 using RentFlow.Api.Models;
 using RentFlow.Api.Services;
@@ -162,6 +163,10 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IPasswordHasher<ApplicationUser>,
     PasswordHasher<ApplicationUser>>();
+
+builder.Services.AddScoped<AdminBootstrapService>();
+builder.Services.AddScoped<AdminBootstrapCommand>();
+builder.Services.AddSingleton<IAdminBootstrapConsole, SystemAdminBootstrapConsole>();
 
 builder.Services.AddHttpContextAccessor();
 
@@ -379,6 +384,14 @@ if (builder.Environment.IsDevelopment())
 // =========================================================
 
 var app = builder.Build();
+
+if (AdminBootstrapCommand.IsRequested(args))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var command = scope.ServiceProvider.GetRequiredService<AdminBootstrapCommand>();
+    Environment.ExitCode = await command.ExecuteAsync(args);
+    return;
+}
 
 if (app.Environment.IsDevelopment())
 {

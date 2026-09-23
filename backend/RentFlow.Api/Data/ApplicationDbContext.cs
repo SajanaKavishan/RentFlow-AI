@@ -8,6 +8,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 {
     public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
 
+    public DbSet<AdminBootstrapRecord> AdminBootstrapRecords =>
+        Set<AdminBootstrapRecord>();
+
     public DbSet<Property> Properties => Set<Property>();
 
     public DbSet<PropertyAmenity> PropertyAmenities => Set<PropertyAmenity>();
@@ -92,6 +95,29 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(user => user.NormalizedEmail)
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<AdminBootstrapRecord>(entity =>
+        {
+            entity.HasKey(record => record.Id);
+
+            entity.Property(record => record.Id)
+                .ValueGeneratedNever();
+
+            entity.Property(record => record.AdminUserId)
+                .IsRequired();
+
+            entity.Property(record => record.CompletedAt)
+                .IsRequired();
+
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_AdminBootstrapRecords_Singleton",
+                $"\"Id\" = {AdminBootstrapRecord.SingletonId}"));
+
+            entity.HasOne<ApplicationUser>()
+                .WithOne()
+                .HasForeignKey<AdminBootstrapRecord>(record => record.AdminUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // =========================================================

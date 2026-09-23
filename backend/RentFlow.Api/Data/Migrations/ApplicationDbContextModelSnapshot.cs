@@ -21,6 +21,23 @@ namespace RentFlow.Api.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("RentFlow.Api.Models.AdminBootstrapRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+                    b.Property<Guid>("AdminUserId")
+                        .HasColumnType("uuid");
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("AdminUserId")
+                        .IsUnique();
+                    b.ToTable("AdminBootstrapRecords", t =>
+                        {
+                            t.HasCheckConstraint("CK_AdminBootstrapRecords_Singleton", "\"Id\" = 1");
+                        });
+                });
+
             modelBuilder.Entity("RentFlow.Api.Models.ApplicationUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -517,6 +534,15 @@ namespace RentFlow.Api.Data.Migrations
                     b.HasKey("Id");
                     b.HasIndex("WorkflowId", "StepOrder").IsUnique();
                     b.ToTable("MaintenanceCoordinationSteps");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.AdminBootstrapRecord", b =>
+                {
+                    b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
+                        .WithOne()
+                        .HasForeignKey("RentFlow.Api.Models.AdminBootstrapRecord", "AdminUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.ApplicationDocument", b =>

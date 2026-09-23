@@ -24,10 +24,10 @@ public sealed class AuthService(
                 "Public registration is limited to Tenant and Landlord roles.");
         }
 
-        var passwordErrors = PasswordPolicy.Validate(request.Password);
-        if (passwordErrors.Count > 0)
+        var validationErrors = RegistrationInputValidator.Validate(request);
+        if (validationErrors.Count > 0)
         {
-            throw AuthServiceException.Validation(string.Join(' ', passwordErrors));
+            throw AuthServiceException.Validation(string.Join(' ', validationErrors));
         }
 
         var normalizedEmail = NormalizeEmail(request.Email);
