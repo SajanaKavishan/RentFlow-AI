@@ -12,6 +12,7 @@ import AppShell from './shared/layout/AppShell.jsx'
 import DashboardPage from './shared/pages/DashboardPage.jsx'
 import TechnicianAssignedWorkPage from './shared/pages/TechnicianAssignedWorkPage.jsx'
 import AdminUsersPage from './shared/pages/AdminUsersPage.jsx'
+import AdminSystemOverviewPage from './shared/pages/AdminSystemOverviewPage.jsx'
 import ProfilePage from './shared/pages/ProfilePage.jsx'
 import NotificationsPage from './features/notifications/NotificationsPage.jsx'
 import NotificationResourcePage from './features/notifications/NotificationResourcePage.jsx'
@@ -44,6 +45,7 @@ export default function App() {
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} />}>
           <Route path="/modules/users" element={<AdminUsersPage />} />
+          <Route path="/modules/ai-system-overview" element={<AdminSystemOverviewPage />} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
           <Route path="/viewing-requests" element={<ViewingRequestsPage />} />

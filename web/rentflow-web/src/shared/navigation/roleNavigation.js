@@ -60,9 +60,9 @@ export const NAV_ITEMS = Object.freeze([
     description: 'The Admin Users workspace is available while its authorized directory contract awaits integration.',
   },
   {
-    id: 'ai-system-overview', label: 'AI / System Overview', path: '/modules/ai-system-overview', roles: [A], available: false,
+    id: 'ai-system-overview', label: 'AI / System Overview', path: '/modules/ai-system-overview', roles: [A], available: true,
     owner: 'Administration',
-    description: 'System-wide AI monitoring will appear here when an admin data source is available.',
+    description: 'The Admin overview workspace is available while its aggregate reporting contract awaits integration.',
   },
   { id: 'profile', label: 'Profile', path: '/profile', roles: ALL, available: true },
 ])

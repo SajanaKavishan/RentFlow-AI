@@ -68,7 +68,7 @@ describe('Technician and Admin dashboards', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
     expect(within(nav).getByRole('link', { name: 'Users' })).not.toHaveTextContent('Soon')
-    expect(within(nav).getByRole('link', { name: /AI \/ System Overview/ })).toHaveTextContent('Soon')
+    expect(within(nav).getByRole('link', { name: 'AI / System Overview' })).not.toHaveTextContent('Soon')
     expect(within(nav).queryByRole('link', { name: /Assigned Work/ })).not.toBeInTheDocument()
   })
 
@@ -81,15 +81,15 @@ describe('Technician and Admin dashboards', () => {
   })
 
   it.each([
-    ['MaintenanceTechnician', 'Assigned Work'],
-    ['Admin', 'Users'],
-    ['Admin', 'AI / System Overview'],
-  ])('opens the explicit integration status for %s %s', async (role, label) => {
+    ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work'],
+    ['Admin', 'Users', 'Users'],
+    ['Admin', 'AI / System Overview', 'AI & System Overview'],
+  ])('opens the explicit integration status for %s %s', async (role, label, pageTitle) => {
     renderDashboard(role)
     const main = screen.getByRole('main')
     const region = within(main).getByRole('region', { name: label })
     await userEvent.click(within(region).getByRole('link', { name: /View integration status/ }))
-    expect(screen.getByRole('heading', { name: label })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: pageTitle })).toBeInTheDocument()
     expect(screen.getByText('Integration pending')).toBeInTheDocument()
   })
 
