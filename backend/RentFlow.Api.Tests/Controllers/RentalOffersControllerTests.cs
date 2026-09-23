@@ -62,7 +62,7 @@ public class RentalOffersControllerTests
 
         var controller = CreateController(
             service,
-            new StubCurrentUserService());
+            new StubCurrentUserService { UserId = offer.TenantId });
 
         var response = await controller.GetById(
             offer.Id,
@@ -209,6 +209,7 @@ public class RentalOffersControllerTests
         return new RentalOffersController(
             rentalOfferService,
             currentUser,
+            new StubPropertyAccessGuard(),
             NullLogger<RentalOffersController>.Instance)
         {
             ControllerContext = new ControllerContext
@@ -247,6 +248,29 @@ public class RentalOffersControllerTests
         public Guid? UserId { get; init; } = Guid.NewGuid();
 
         public UserRole? Role { get; init; } = UserRole.Tenant;
+    }
+
+    private sealed class StubPropertyAccessGuard : IPropertyAccessGuard
+    {
+        public Task<bool> CanAccessPropertyAsync(
+            Guid landlordId, Guid propertyId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<bool> CanAccessViewingAsync(
+            Guid landlordId, Guid viewingId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<bool> CanAccessApplicationAsync(
+            Guid landlordId, Guid applicationId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<bool> CanAccessDocumentAsync(
+            Guid landlordId, Guid documentId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<bool> CanAccessWorkflowAsync(
+            Guid landlordId, Guid workflowId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
     }
 
     private sealed class StubRentalOfferService : IRentalOfferService

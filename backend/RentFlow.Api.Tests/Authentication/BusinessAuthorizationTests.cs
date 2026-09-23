@@ -9,6 +9,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using RentFlow.Api.Data;
+using RentFlow.Api.DTOs.LeaseAgreements;
+using RentFlow.Api.DTOs.Payments;
+using RentFlow.Api.DTOs.RentalOffers;
+using RentFlow.Api.DTOs.RentSchedules;
 using RentFlow.Api.Models;
 using Xunit;
 
@@ -386,6 +390,231 @@ public sealed class BusinessAuthorizationTests
         Assert.Equal(HttpStatusCode.OK, resubmit.StatusCode);
         Assert.Equal((int)RentalApplicationStatus.Submitted,
             landlordRefresh.EnumerateArray().Single().GetProperty("status").GetInt32());
+    }
+
+    [Fact]
+    public async Task RentSchedule_GetByIdAndLease_EnforceTenantAndPropertyOwnership()
+    {
+        using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        var lease = new LeaseAgreement
+        {
+            RentalOfferId = Guid.NewGuid(),
+            TenantId = TenantA,
+            PropertyId = property.Id,
+            MonthlyRent = 85000m,
+            SecurityDeposit = 170000m,
+            StartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            EndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12))
+        };
+        var scheduleItem = new RentScheduleItem
+        {
+            LeaseAgreementId = lease.Id,
+            DueDate = lease.StartDate,
+            Amount = lease.MonthlyRent
+        };
+        await SeedAsync(factory, context =>
+        {
+            context.LeaseAgreements.Add(lease);
+            context.RentScheduleItems.Add(scheduleItem);
+        });
+
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+        using var otherTenant = AuthorizedClient(factory, TenantB, UserRole.Tenant);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordB, UserRole.Landlord);
+        using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
+        var itemRoute = $"/api/rent-schedules/{scheduleItem.Id}";
+        var leaseRoute = $"/api/rent-schedules/lease/{lease.Id}";
+
+        using var tenantItem = await tenant.GetAsync(itemRoute);
+        using var otherTenantItem = await otherTenant.GetAsync(itemRoute);
+        using var landlordItem = await landlord.GetAsync(itemRoute);
+        using var otherLandlordItem = await otherLandlord.GetAsync(itemRoute);
+        using var adminItem = await admin.GetAsync(itemRoute);
+        using var missingItem = await tenant.GetAsync($"/api/rent-schedules/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.OK, tenantItem.StatusCode);
+        Assert.Equal(scheduleItem.Id,
+            (await tenantItem.Content.ReadFromJsonAsync<RentScheduleItemResponseDto>())?.Id);
+        Assert.Equal(HttpStatusCode.NotFound, otherTenantItem.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, landlordItem.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, otherLandlordItem.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, adminItem.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingItem.StatusCode);
+
+        using var tenantLease = await tenant.GetAsync(leaseRoute);
+        using var otherTenantLease = await otherTenant.GetAsync(leaseRoute);
+        using var landlordLease = await landlord.GetAsync(leaseRoute);
+        using var otherLandlordLease = await otherLandlord.GetAsync(leaseRoute);
+        using var adminLease = await admin.GetAsync(leaseRoute);
+        using var missingLease = await tenant.GetAsync(
+            $"/api/rent-schedules/lease/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.OK, tenantLease.StatusCode);
+        Assert.Equal(scheduleItem.Id,
+            (await tenantLease.Content.ReadFromJsonAsync<List<RentScheduleItemResponseDto>>())?.Single().Id);
+        Assert.Equal(HttpStatusCode.NotFound, otherTenantLease.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, landlordLease.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, otherLandlordLease.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, adminLease.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingLease.StatusCode);
+    }
+
+    [Fact]
+    public async Task Payment_GetById_EnforcesTenantAndPropertyOwnership()
+    {
+        using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        var lease = new LeaseAgreement
+        {
+            RentalOfferId = Guid.NewGuid(),
+            TenantId = TenantA,
+            PropertyId = property.Id,
+            MonthlyRent = 85000m,
+            SecurityDeposit = 170000m,
+            StartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            EndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12))
+        };
+        var scheduleItem = new RentScheduleItem
+        {
+            LeaseAgreementId = lease.Id,
+            DueDate = lease.StartDate,
+            Amount = lease.MonthlyRent
+        };
+        var payment = new Payment
+        {
+            RentScheduleItemId = scheduleItem.Id,
+            TenantId = TenantA,
+            Amount = scheduleItem.Amount,
+            PaymentMethod = "BankTransfer"
+        };
+        await SeedAsync(factory, context =>
+        {
+            context.LeaseAgreements.Add(lease);
+            context.RentScheduleItems.Add(scheduleItem);
+            context.Payments.Add(payment);
+        });
+
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+        using var otherTenant = AuthorizedClient(factory, TenantB, UserRole.Tenant);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordB, UserRole.Landlord);
+        using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
+        var route = $"/api/payments/{payment.Id}";
+
+        using var tenantResponse = await tenant.GetAsync(route);
+        using var otherTenantResponse = await otherTenant.GetAsync(route);
+        using var landlordResponse = await landlord.GetAsync(route);
+        using var otherLandlordResponse = await otherLandlord.GetAsync(route);
+        using var adminResponse = await admin.GetAsync(route);
+        using var missingResponse = await tenant.GetAsync($"/api/payments/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.OK, tenantResponse.StatusCode);
+        Assert.Equal(payment.Id,
+            (await tenantResponse.Content.ReadFromJsonAsync<PaymentResponseDto>())?.Id);
+        Assert.Equal(HttpStatusCode.NotFound, otherTenantResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, landlordResponse.StatusCode);
+        Assert.Equal(payment.Id,
+            (await landlordResponse.Content.ReadFromJsonAsync<PaymentResponseDto>())?.Id);
+        Assert.Equal(HttpStatusCode.NotFound, otherLandlordResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+        Assert.Equal(payment.Id,
+            (await adminResponse.Content.ReadFromJsonAsync<PaymentResponseDto>())?.Id);
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task RentalOffer_GetById_EnforcesTenantAndPropertyOwnership()
+    {
+        using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        var application = await SeedApplicationAsync(
+            factory, TenantA, RentalApplicationStatus.Approved, property.Id);
+        var offer = new RentalOffer
+        {
+            RentalApplicationId = application.Id,
+            TenantId = TenantA,
+            PropertyId = property.Id,
+            MonthlyRent = 85000m,
+            SecurityDeposit = 170000m,
+            ProposedStartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            ProposedEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12)),
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
+        };
+        await SeedAsync(factory, context => context.RentalOffers.Add(offer));
+
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+        using var otherTenant = AuthorizedClient(factory, TenantB, UserRole.Tenant);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordB, UserRole.Landlord);
+        using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
+        var route = $"/api/rental-offers/{offer.Id}";
+
+        using var tenantResponse = await tenant.GetAsync(route);
+        using var otherTenantResponse = await otherTenant.GetAsync(route);
+        using var landlordResponse = await landlord.GetAsync(route);
+        using var otherLandlordResponse = await otherLandlord.GetAsync(route);
+        using var adminResponse = await admin.GetAsync(route);
+        using var missingResponse = await tenant.GetAsync($"/api/rental-offers/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.OK, tenantResponse.StatusCode);
+        Assert.Equal(offer.Id,
+            (await tenantResponse.Content.ReadFromJsonAsync<RentalOfferResponseDto>())?.Id);
+        Assert.Equal(HttpStatusCode.NotFound, otherTenantResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, landlordResponse.StatusCode);
+        Assert.Equal(offer.Id,
+            (await landlordResponse.Content.ReadFromJsonAsync<RentalOfferResponseDto>())?.Id);
+        Assert.Equal(HttpStatusCode.NotFound, otherLandlordResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+        Assert.Equal(offer.Id,
+            (await adminResponse.Content.ReadFromJsonAsync<RentalOfferResponseDto>())?.Id);
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task LeaseAgreement_GetById_EnforcesTenantAndPropertyOwnership()
+    {
+        using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        var lease = new LeaseAgreement
+        {
+            RentalOfferId = Guid.NewGuid(),
+            TenantId = TenantA,
+            PropertyId = property.Id,
+            MonthlyRent = 85000m,
+            SecurityDeposit = 170000m,
+            StartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            EndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12))
+        };
+        await SeedAsync(factory, context => context.LeaseAgreements.Add(lease));
+
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+        using var otherTenant = AuthorizedClient(factory, TenantB, UserRole.Tenant);
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordB, UserRole.Landlord);
+        using var admin = AuthorizedClient(factory, Guid.NewGuid(), UserRole.Admin);
+        var route = $"/api/lease-agreements/{lease.Id}";
+
+        using var tenantResponse = await tenant.GetAsync(route);
+        using var otherTenantResponse = await otherTenant.GetAsync(route);
+        using var landlordResponse = await landlord.GetAsync(route);
+        using var otherLandlordResponse = await otherLandlord.GetAsync(route);
+        using var adminResponse = await admin.GetAsync(route);
+        using var missingResponse = await tenant.GetAsync($"/api/lease-agreements/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.OK, tenantResponse.StatusCode);
+        Assert.Equal(lease.Id,
+            (await tenantResponse.Content.ReadFromJsonAsync<LeaseAgreementResponseDto>())?.Id);
+        Assert.Equal(HttpStatusCode.NotFound, otherTenantResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, landlordResponse.StatusCode);
+        Assert.Equal(lease.Id,
+            (await landlordResponse.Content.ReadFromJsonAsync<LeaseAgreementResponseDto>())?.Id);
+        Assert.Equal(HttpStatusCode.NotFound, otherLandlordResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+        Assert.Equal(lease.Id,
+            (await adminResponse.Content.ReadFromJsonAsync<LeaseAgreementResponseDto>())?.Id);
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
     }
 
     [Fact]

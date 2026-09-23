@@ -9,10 +9,66 @@ namespace RentFlow.Api.Services;
 public class RentScheduleService : IRentScheduleService
 {
     private readonly ApplicationDbContext _dbContext;
+    private readonly IPropertyAccessGuard _propertyAccessGuard;
 
-    public RentScheduleService(ApplicationDbContext dbContext)
+    public RentScheduleService(
+        ApplicationDbContext dbContext,
+        IPropertyAccessGuard propertyAccessGuard)
     {
         _dbContext = dbContext;
+        _propertyAccessGuard = propertyAccessGuard;
+    }
+
+    public async Task<bool> CanAccessLeaseAsync(
+        Guid leaseAgreementId,
+        Guid? userId,
+        UserRole? role,
+        CancellationToken cancellationToken = default)
+    {
+        if (leaseAgreementId == Guid.Empty || userId is null)
+        {
+            return false;
+        }
+
+        var lease = await _dbContext.LeaseAgreements
+            .AsNoTracking()
+            .Where(item => item.Id == leaseAgreementId)
+            .Select(item => new { item.TenantId, item.PropertyId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (lease is null)
+        {
+            return false;
+        }
+
+        return role switch
+        {
+            UserRole.Tenant => lease.TenantId == userId.Value,
+            UserRole.Landlord => await _propertyAccessGuard.CanAccessPropertyAsync(
+                userId.Value, lease.PropertyId, cancellationToken),
+            UserRole.Admin => true,
+            _ => false
+        };
+    }
+
+    public async Task<bool> CanAccessScheduleItemAsync(
+        Guid scheduleItemId,
+        Guid? userId,
+        UserRole? role,
+        CancellationToken cancellationToken = default)
+    {
+        var leaseAgreementId = await _dbContext.RentScheduleItems
+            .AsNoTracking()
+            .Where(item => item.Id == scheduleItemId)
+            .Select(item => (Guid?)item.LeaseAgreementId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return leaseAgreementId is not null
+            && await CanAccessLeaseAsync(
+                leaseAgreementId.Value,
+                userId,
+                role,
+                cancellationToken);
     }
 
     public async Task<IReadOnlyList<RentScheduleItemResponseDto>> GenerateForLeaseAsync(

@@ -13,13 +13,16 @@ public class PaymentsController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IRentScheduleService _rentScheduleService;
 
     public PaymentsController(
         IPaymentService paymentService,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IRentScheduleService rentScheduleService)
     {
         _paymentService = paymentService;
         _currentUserService = currentUserService;
+        _rentScheduleService = rentScheduleService;
     }
 
     [HttpPost]
@@ -90,6 +93,18 @@ public class PaymentsController : ControllerBase
                 cancellationToken);
 
             if (payment is null)
+            {
+                return NotFound(new
+                {
+                    message = "Payment was not found."
+                });
+            }
+
+            if (!await _rentScheduleService.CanAccessScheduleItemAsync(
+                    payment.RentScheduleItemId,
+                    _currentUserService.UserId,
+                    _currentUserService.Role,
+                    cancellationToken))
             {
                 return NotFound(new
                 {

@@ -45,6 +45,18 @@ public class RentSchedulesController : ControllerBase
     {
         return await ExecuteAsync(async () =>
         {
+            if (!await _rentScheduleService.CanAccessLeaseAsync(
+                    leaseAgreementId,
+                    _currentUserService.UserId,
+                    _currentUserService.Role,
+                    cancellationToken))
+            {
+                return NotFound(new
+                {
+                    message = "Lease agreement was not found."
+                });
+            }
+
             var scheduleItems = await _rentScheduleService.GetByLeaseAsync(
                 leaseAgreementId,
                 cancellationToken);
@@ -91,6 +103,18 @@ public class RentSchedulesController : ControllerBase
                 cancellationToken);
 
             if (scheduleItem is null)
+            {
+                return NotFound(new
+                {
+                    message = "Rent schedule item was not found."
+                });
+            }
+
+            if (!await _rentScheduleService.CanAccessLeaseAsync(
+                    scheduleItem.LeaseAgreementId,
+                    _currentUserService.UserId,
+                    _currentUserService.Role,
+                    cancellationToken))
             {
                 return NotFound(new
                 {

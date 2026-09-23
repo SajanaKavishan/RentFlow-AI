@@ -36,7 +36,8 @@ public class LeaseAgreementsControllerTests
 
         var controller = new LeaseAgreementsController(
             leaseAgreementService,
-            currentUserService);
+            currentUserService,
+            new StubPropertyAccessGuard());
 
         var dto = new CreateLeaseAgreementDto
         {
@@ -67,11 +68,10 @@ public class LeaseAgreementsControllerTests
             GetByIdResult = expectedLease
         };
 
-        var currentUserService = new StubCurrentUserService();
-
         var controller = new LeaseAgreementsController(
             leaseAgreementService,
-            currentUserService);
+            new StubCurrentUserService { UserIdValue = expectedLease.TenantId },
+            new StubPropertyAccessGuard());
 
         var result = await controller.GetById(
             expectedLease.Id,
@@ -94,7 +94,8 @@ public class LeaseAgreementsControllerTests
 
         var controller = new LeaseAgreementsController(
             leaseAgreementService,
-            currentUserService);
+            currentUserService,
+            new StubPropertyAccessGuard());
 
         var result = await controller.GetById(
             Guid.NewGuid(),
@@ -137,7 +138,8 @@ public class LeaseAgreementsControllerTests
 
         var controller = new LeaseAgreementsController(
             leaseAgreementService,
-            currentUserService);
+            currentUserService,
+            new StubPropertyAccessGuard());
 
         var result = await controller.GetMine(
             CancellationToken.None);
@@ -163,7 +165,8 @@ public class LeaseAgreementsControllerTests
 
         var controller = new LeaseAgreementsController(
             leaseAgreementService,
-            currentUserService);
+            currentUserService,
+            new StubPropertyAccessGuard());
 
         var result = await controller.Activate(
             expectedLease.Id,
@@ -189,7 +192,8 @@ public class LeaseAgreementsControllerTests
 
         var controller = new LeaseAgreementsController(
             leaseAgreementService,
-            currentUserService);
+            currentUserService,
+            new StubPropertyAccessGuard());
 
         var result = await controller.Terminate(
             expectedLease.Id,
@@ -215,7 +219,8 @@ public class LeaseAgreementsControllerTests
 
         var controller = new LeaseAgreementsController(
             leaseAgreementService,
-            currentUserService);
+            currentUserService,
+            new StubPropertyAccessGuard());
 
         var result = await controller.Complete(
             expectedLease.Id,
@@ -239,7 +244,8 @@ public class LeaseAgreementsControllerTests
 
         var controller = new LeaseAgreementsController(
             leaseAgreementService,
-            currentUserService);
+            currentUserService,
+            new StubPropertyAccessGuard());
 
         var result = await controller.Activate(
             Guid.NewGuid(),
@@ -344,6 +350,31 @@ public class LeaseAgreementsControllerTests
 
         public Guid? UserId => UserIdValue;
 
-        public UserRole? Role => UserRole.Tenant;
+        public UserRole? Role => RoleValue;
+
+        public UserRole? RoleValue { get; set; } = UserRole.Tenant;
+    }
+
+    private sealed class StubPropertyAccessGuard : IPropertyAccessGuard
+    {
+        public Task<bool> CanAccessPropertyAsync(
+            Guid landlordId, Guid propertyId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<bool> CanAccessViewingAsync(
+            Guid landlordId, Guid viewingId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<bool> CanAccessApplicationAsync(
+            Guid landlordId, Guid applicationId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<bool> CanAccessDocumentAsync(
+            Guid landlordId, Guid documentId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<bool> CanAccessWorkflowAsync(
+            Guid landlordId, Guid workflowId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
     }
 }

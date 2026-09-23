@@ -191,6 +191,24 @@ public class RentSchedulesControllerTests
 
     private sealed class StubRentScheduleService : IRentScheduleService
     {
+        public Task<bool> CanAccessLeaseAsync(
+            Guid leaseAgreementId,
+            Guid? userId,
+            UserRole? role,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> CanAccessScheduleItemAsync(
+            Guid scheduleItemId,
+            Guid? userId,
+            UserRole? role,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(true);
+        }
+
         public IReadOnlyList<RentScheduleItemResponseDto>? GenerateResult { get; set; }
 
         public IReadOnlyList<RentScheduleItemResponseDto>? GetByTenantResult { get; set; }

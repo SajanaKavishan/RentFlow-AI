@@ -29,7 +29,7 @@ public class RentScheduleServiceTests
 
         await dbContext.SaveChangesAsync();
 
-        var service = new RentScheduleService(dbContext);
+        var service = new RentScheduleService(dbContext, new PropertyAccessGuard(dbContext));
 
         var result = await service.GenerateForLeaseAsync(
             leaseAgreement.Id);
@@ -79,7 +79,7 @@ public class RentScheduleServiceTests
 
         await dbContext.SaveChangesAsync();
 
-        var service = new RentScheduleService(dbContext);
+        var service = new RentScheduleService(dbContext, new PropertyAccessGuard(dbContext));
 
         var exception = await Assert.ThrowsAsync<RentScheduleServiceException>(
             () => service.GenerateForLeaseAsync(leaseAgreement.Id));
@@ -124,7 +124,7 @@ public class RentScheduleServiceTests
 
         await dbContext.SaveChangesAsync();
 
-        var service = new RentScheduleService(dbContext);
+        var service = new RentScheduleService(dbContext, new PropertyAccessGuard(dbContext));
 
         var exception = await Assert.ThrowsAsync<RentScheduleServiceException>(
             () => service.GenerateForLeaseAsync(leaseAgreement.Id));
@@ -199,7 +199,7 @@ public class RentScheduleServiceTests
 
         await dbContext.SaveChangesAsync();
 
-        var service = new RentScheduleService(dbContext);
+        var service = new RentScheduleService(dbContext, new PropertyAccessGuard(dbContext));
 
         var result = await service.GetByTenantAsync(tenantId);
 
@@ -244,7 +244,7 @@ public class RentScheduleServiceTests
 
         await dbContext.SaveChangesAsync();
 
-        var service = new RentScheduleService(dbContext);
+        var service = new RentScheduleService(dbContext, new PropertyAccessGuard(dbContext));
 
         var result = await service.GetByIdAsync(scheduleItem.Id);
 

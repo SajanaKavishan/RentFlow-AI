@@ -16,6 +16,7 @@ namespace RentFlow.Api.Controllers;
 public class RentalOffersController(
     IRentalOfferService rentalOfferService,
     ICurrentUserService currentUser,
+    IPropertyAccessGuard propertyAccessGuard,
     ILogger<RentalOffersController> logger) : ControllerBase
 {
     [HttpPost]
@@ -122,9 +123,18 @@ public class RentalOffersController(
                     id,
                     cancellationToken);
 
-                return offer
-                    ?? throw RentalOfferServiceException.NotFound(
+                if (offer is null
+                    || currentUser.Role == UserRole.Tenant
+                        && offer.TenantId != GetRequiredUserId()
+                    || currentUser.Role == UserRole.Landlord
+                        && !await propertyAccessGuard.CanAccessPropertyAsync(
+                            GetRequiredUserId(), offer.PropertyId, cancellationToken))
+                {
+                    throw RentalOfferServiceException.NotFound(
                         $"Rental offer '{id}' was not found.");
+                }
+
+                return offer;
             },
             result => Ok(result));
     }

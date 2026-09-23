@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using RentFlow.Api.Controllers;
 using RentFlow.Api.DTOs.Payments;
+using RentFlow.Api.DTOs.RentSchedules;
 using RentFlow.Api.Models;
+using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
 using Xunit;
 
@@ -36,9 +38,7 @@ public class PaymentsControllerTests
             UserIdValue = tenantId
         };
 
-        var controller = new PaymentsController(
-            paymentService,
-            currentUserService);
+        var controller = CreateController(paymentService, currentUserService);
 
         var dto = new CreatePaymentDto
         {
@@ -92,9 +92,7 @@ public class PaymentsControllerTests
             UserIdValue = tenantId
         };
 
-        var controller = new PaymentsController(
-            paymentService,
-            currentUserService);
+        var controller = CreateController(paymentService, currentUserService);
 
         var result = await controller.GetMine(
             CancellationToken.None);
@@ -127,9 +125,7 @@ public class PaymentsControllerTests
 
         var currentUserService = new StubCurrentUserService();
 
-        var controller = new PaymentsController(
-            paymentService,
-            currentUserService);
+        var controller = CreateController(paymentService, currentUserService);
 
         var result = await controller.GetById(
             expectedPayment.Id,
@@ -150,9 +146,7 @@ public class PaymentsControllerTests
 
         var currentUserService = new StubCurrentUserService();
 
-        var controller = new PaymentsController(
-            paymentService,
-            currentUserService);
+        var controller = CreateController(paymentService, currentUserService);
 
         var result = await controller.GetById(
             Guid.NewGuid(),
@@ -185,9 +179,7 @@ public class PaymentsControllerTests
 
         var currentUserService = new StubCurrentUserService();
 
-        var controller = new PaymentsController(
-            paymentService,
-            currentUserService);
+        var controller = CreateController(paymentService, currentUserService);
 
         var result = await controller.Complete(
             expectedPayment.Id,
@@ -221,9 +213,7 @@ public class PaymentsControllerTests
 
         var currentUserService = new StubCurrentUserService();
 
-        var controller = new PaymentsController(
-            paymentService,
-            currentUserService);
+        var controller = CreateController(paymentService, currentUserService);
 
         var result = await controller.Fail(
             expectedPayment.Id,
@@ -232,6 +222,16 @@ public class PaymentsControllerTests
         var okResult = Assert.IsType<OkObjectResult>(result);
 
         Assert.Equal(expectedPayment, okResult.Value);
+    }
+
+    private static PaymentsController CreateController(
+        IPaymentService paymentService,
+        ICurrentUserService currentUserService)
+    {
+        return new PaymentsController(
+            paymentService,
+            currentUserService,
+            new StubRentScheduleService());
     }
 
     private sealed class StubPaymentService : IPaymentService
@@ -288,6 +288,46 @@ public class PaymentsControllerTests
         {
             return Task.FromResult(FailResult!);
         }
+    }
+
+    private sealed class StubRentScheduleService : IRentScheduleService
+    {
+        public Task<bool> CanAccessLeaseAsync(
+            Guid leaseAgreementId,
+            Guid? userId,
+            UserRole? role,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
+
+        public Task<bool> CanAccessScheduleItemAsync(
+            Guid scheduleItemId,
+            Guid? userId,
+            UserRole? role,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
+
+        public Task<IReadOnlyList<RentScheduleItemResponseDto>> GenerateForLeaseAsync(
+            Guid leaseAgreementId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<RentScheduleItemResponseDto>>(
+                Array.Empty<RentScheduleItemResponseDto>());
+
+        public Task<IReadOnlyList<RentScheduleItemResponseDto>> GetByLeaseAsync(
+            Guid leaseAgreementId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<RentScheduleItemResponseDto>>(
+                Array.Empty<RentScheduleItemResponseDto>());
+
+        public Task<IReadOnlyList<RentScheduleItemResponseDto>> GetByTenantAsync(
+            Guid tenantId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<RentScheduleItemResponseDto>>(
+                Array.Empty<RentScheduleItemResponseDto>());
+
+        public Task<RentScheduleItemResponseDto?> GetByIdAsync(
+            Guid id,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<RentScheduleItemResponseDto?>(null);
     }
 
     private sealed class StubCurrentUserService : ICurrentUserService
