@@ -1,0 +1,92 @@
+.role-dashboard { width: min(100% - 64px, 1240px); padding-top: 34px; }
+.role-dashboard .shared-card { box-shadow: 0 2px 7px rgb(48 60 31 / 8%); }
+.role-dashboard__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; margin-bottom: 34px; }
+.role-dashboard__header > div:first-child { min-width: 0; max-width: 720px; }
+.role-dashboard__header h1 { margin: 6px 0 10px; color: var(--ink); font-size: clamp(1.85rem, 3vw, 2.55rem); line-height: 1.2; letter-spacing: -.045em; overflow-wrap: anywhere; }
+.role-dashboard__header p:not(.role-dashboard__eyebrow) { margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.75; }
+.role-dashboard__eyebrow { margin: 0; color: var(--olive-700); font-size: .7rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.role-dashboard__header-actions { flex: none; display: flex; align-items: center; gap: 10px; }
+.role-dashboard__icon { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 14px; color: var(--olive-900); background: var(--olive-100); }
+.role-dashboard__icon--notifications { color: #6550d9; background: #eef0ff; }
+.role-dashboard__icon--work { width: 54px; height: 54px; color: #946310; background: #fff8e6; }
+.role-dashboard__icon--small { width: 40px; height: 40px; border-radius: 12px; }
+.role-dashboard__section-heading { display: flex; align-items: center; gap: 14px; }
+.role-dashboard__section-heading > div { min-width: 0; }
+.role-dashboard__section-heading h2, .role-dashboard__section-title h2 { margin: 4px 0 0; color: var(--ink); font-size: 1.25rem; letter-spacing: -.03em; }
+.role-dashboard__section-heading .shared-status { margin-left: auto; }
+.role-dashboard__section-title { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 16px; }
+.role-dashboard__section-title > p { max-width: 420px; margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.6; text-align: right; }
+.role-dashboard__text-link { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--olive-900); font-size: .8rem; font-weight: 800; text-decoration: underline; text-underline-offset: 4px; }
+.role-dashboard-notifications { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 14px; }
+.role-dashboard-notifications__copy { min-width: 0; }
+.role-dashboard-notifications h2 { margin: 5px 0 7px; font-size: 1.06rem; line-height: 1.35; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.role-dashboard-notifications p:not(.role-dashboard__eyebrow) { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.65; }
+.role-dashboard-notifications .shared-button { grid-column: 1 / -1; margin-top: 6px; }
+.technician-dashboard__workspace { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, .8fr); gap: 22px; align-items: stretch; }
+.technician-work { display: flex; flex-direction: column; min-height: 390px; padding: 30px; }
+.technician-work__intro { max-width: 660px; margin: 28px 0 20px; color: var(--muted); font-size: .92rem; line-height: 1.75; }
+.technician-work__dependency { display: flex; align-items: flex-start; gap: 12px; padding: 17px; border: 1px solid var(--olive-100); border-radius: var(--radius-sm); color: var(--olive-900); background: var(--olive-50); }
+.technician-work__dependency svg { flex: none; margin-top: 2px; }
+.technician-work__dependency strong { display: block; margin-bottom: 4px; font-size: .84rem; }
+.technician-work__dependency p { margin: 0; color: var(--olive-700); font-size: .78rem; line-height: 1.65; }
+.technician-work__status { align-self: flex-start; margin-top: auto; }
+.technician-dashboard__side { display: grid; grid-template-rows: auto 1fr; gap: 22px; }
+.role-dashboard-account { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.role-dashboard-account h2 { margin: 5px 0 7px; font-size: 1.06rem; }
+.role-dashboard-account p:not(.role-dashboard__eyebrow) { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.65; }
+.role-dashboard-account .role-dashboard__text-link { margin-top: auto; }
+.technician-readiness { margin-top: 32px; }
+.technician-readiness__list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: 0 2px 7px rgb(48 60 31 / 8%); overflow: hidden; }
+.technician-readiness__list > div { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 20px; }
+.technician-readiness__list > div + div { border-left: 1px solid var(--border); }
+.technician-readiness__list > div > svg { color: var(--olive-700); }
+.technician-readiness__list span { min-width: 0; }
+.technician-readiness__list strong, .technician-readiness__list small { display: block; overflow-wrap: anywhere; }
+.technician-readiness__list strong { font-size: .86rem; }
+.technician-readiness__list small { margin-top: 4px; color: var(--muted); font-size: .7rem; line-height: 1.45; }
+.technician-readiness__list .shared-status { grid-column: 2; justify-self: start; }
+.admin-dashboard__header { padding: 26px 28px; border: 1px solid var(--olive-100); border-radius: var(--radius-card); background: linear-gradient(115deg, var(--olive-50), var(--cream-50)); }
+.admin-dashboard__header .shared-button { flex: none; }
+.admin-dashboard__layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(310px, .75fr); gap: 24px; align-items: start; }
+.admin-management__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.admin-management-card { display: flex; flex-direction: column; min-height: 330px; padding: 26px; }
+.admin-management-card__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.admin-management-card h3 { margin: 26px 0 9px; font-size: 1.15rem; letter-spacing: -.03em; }
+.admin-management-card > p { margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.7; }
+.admin-management-card__dependency { display: grid; gap: 5px; margin: 22px 0 10px; padding: 14px; border-radius: var(--radius-sm); background: var(--cream-50); }
+.admin-management-card__dependency strong { color: var(--olive-900); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+.admin-management-card__dependency span { color: var(--muted); font-size: .76rem; line-height: 1.55; }
+.admin-management-card .role-dashboard__text-link { align-self: flex-start; margin-top: auto; }
+.admin-dashboard__shared { display: grid; gap: 18px; }
+.admin-available { padding: 0; overflow: hidden; }
+.admin-available > div { padding: 22px; }
+.admin-available h2 { margin: 5px 0 0; font-size: 1.06rem; }
+.admin-available > a { display: flex; align-items: center; gap: 12px; padding: 17px 20px; border-top: 1px solid var(--border); color: var(--ink); text-decoration: none; }
+.admin-available > a > span:nth-child(2) { flex: 1; min-width: 0; }
+.admin-available > a > svg { flex: none; color: var(--olive-700); }
+.admin-available strong, .admin-available small { display: block; }
+.admin-available strong { font-size: .86rem; }
+.admin-available small { margin-top: 4px; color: var(--muted); font-size: .72rem; line-height: 1.45; }
+.admin-available > a:hover { background: var(--cream-50); }
+@media (max-width: 1050px) {
+  .role-dashboard { width: calc(100% - 48px); }
+  .technician-dashboard__workspace, .admin-dashboard__layout { grid-template-columns: minmax(0, 1fr); }
+  .technician-dashboard__side { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto; }
+}
+@media (max-width: 700px) {
+  .role-dashboard { width: calc(100% - 32px); padding-top: 28px; }
+  .role-dashboard__header, .admin-dashboard__header { flex-direction: column; padding: 0; border: 0; background: transparent; }
+  .role-dashboard__header-actions { width: 100%; flex-wrap: wrap; }
+  .role-dashboard__header-actions .shared-button { flex: 1; }
+  .admin-dashboard__header .shared-button { width: 100%; }
+  .role-dashboard__section-title { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .role-dashboard__section-title > p { text-align: left; }
+  .technician-work { min-height: 0; padding: 22px; }
+  .technician-dashboard__side, .admin-management__grid, .technician-readiness__list { grid-template-columns: minmax(0, 1fr); }
+  .technician-readiness__list > div + div { border-top: 1px solid var(--border); border-left: 0; }
+}
+@media (max-width: 430px) {
+  .role-dashboard__section-heading { align-items: flex-start; flex-wrap: wrap; }
+  .role-dashboard__section-heading .shared-status { margin-left: 68px; }
+  .admin-management-card { min-height: 0; padding: 22px; }
+}

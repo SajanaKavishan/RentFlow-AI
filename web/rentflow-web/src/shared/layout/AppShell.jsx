@@ -44,6 +44,9 @@ export default function AppShell() {
   const location = useLocation()
   const [countResult, setCountResult] = useState(null)
   const unreadCount = countResult?.userId === user.id ? countResult.count : null
+  const notificationCountStatus = countResult?.userId !== user.id
+    ? 'loading'
+    : Number.isInteger(unreadCount) ? 'ready' : 'unavailable'
   const countRequest = useRef(0)
   const refreshCount = useCallback(() => {
     const request = ++countRequest.current
@@ -174,7 +177,7 @@ export default function AppShell() {
         <Link className="shared-topbar__notifications" to="/notifications" onClick={closeMenu} aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'} aria-current={activePath === '/notifications' ? 'page' : undefined}><Icon name="bell" size={21} />{unreadCount > 0 && <span className="shared-topbar__notification-count" aria-hidden="true">{unreadCount}</span>}</Link>
         <Link className="shared-topbar__account" to={scopedPath('/profile')} title={user.email} onClick={closeMenu} aria-label={`Profile for ${user.fullName}`}><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span></span><span className="shared-avatar" aria-hidden="true">{initialsForName(user.fullName)}</span></Link>
       </header>
-      <NotificationCountContext.Provider value={{ refreshCount }}><PendingViewingsContext.Provider value={publishPendingViewings}><PendingApplicationsContext.Provider value={publishPendingApplications}><div className="shared-shell__content"><Outlet key={user.id} /></div></PendingApplicationsContext.Provider></PendingViewingsContext.Provider></NotificationCountContext.Provider>
+      <NotificationCountContext.Provider value={{ refreshCount, unreadCount, countStatus: notificationCountStatus }}><PendingViewingsContext.Provider value={publishPendingViewings}><PendingApplicationsContext.Provider value={publishPendingApplications}><div className="shared-shell__content"><Outlet key={user.id} /></div></PendingApplicationsContext.Provider></PendingViewingsContext.Provider></NotificationCountContext.Provider>
     </div>
   </div>
 }
