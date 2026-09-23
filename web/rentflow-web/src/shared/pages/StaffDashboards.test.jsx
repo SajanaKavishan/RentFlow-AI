@@ -115,13 +115,23 @@ describe('Technician and Admin dashboards', () => {
   })
 
   it('opens the working Technician provisioning page from Admin Quick Access', async () => {
+    fetch.mockImplementation((input) => {
+      const path = new URL(input, 'http://localhost').pathname
+      return Promise.resolve(path === '/api/admin/users'
+        ? json({
+          items: [],
+          pagination: { page: 1, pageSize: 8, totalCount: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
+        })
+        : json({ unreadCount: 3 }))
+    })
     renderDashboard('Admin')
     const quickAccess = within(screen.getByRole('main')).getByRole('navigation', { name: 'Admin quick access' })
     await userEvent.click(within(quickAccess).getByRole('link', { name: 'Manage Users / Add Technician' }))
     expect(screen.getByRole('heading', { name: 'Users' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Add Technician' })).toBeInTheDocument()
     expect(screen.getByLabelText('Full name')).toHaveFocus()
-    expect(screen.getByText('Integration pending')).toBeInTheDocument()
+    expect(await screen.findByText('No users match these filters')).toBeInTheDocument()
+    expect(screen.getByText('Directory available')).toBeInTheDocument()
   })
 
   it('keeps Notifications and Profile reachable from both dedicated dashboards', async () => {

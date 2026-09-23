@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../core/api/apiClient.js'
+import { useAuth } from '../../features/auth/useAuth.js'
+import {
+  ADMIN_USER_ROLES,
+  ADMIN_USERS_PAGE_SIZE,
+  getAdminUsers,
+} from '../../features/adminUsers/adminUsersApi.js'
 import { createMaintenanceTechnician } from '../../features/staffProvisioning/staffProvisioningApi.js'
 import { StatusBadge } from '../ui/States.jsx'
 import Icon from '../ui/Icons.jsx'
@@ -29,7 +35,29 @@ function errorMessageFor(error) {
   return error.message
 }
 
+function directoryErrorFor(error) {
+  if (error instanceof ApiError && error.statusCode === 401) {
+    return 'Your Admin session is no longer valid. Sign in again to view the user directory.'
+  }
+  if (error instanceof ApiError && error.statusCode === 403) {
+    return 'Your account is no longer authorized to view the user directory.'
+  }
+  if (error instanceof ApiError) return error.message
+  return 'The user directory could not be loaded.'
+}
+
+function roleLabel(role) {
+  return role === 'MaintenanceTechnician' ? 'Maintenance Technician' : role
+}
+
+function joinedDate(createdAt) {
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric', month: 'short', day: 'numeric',
+  }).format(new Date(createdAt))
+}
+
 export default function AdminUsersPage() {
+  const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const [isPanelOpen, setIsPanelOpen] = useState(() => searchParams.get('action') === 'add-technician')
   const [form, setForm] = useState(initialForm)
@@ -37,12 +65,29 @@ export default function AdminUsersPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [provisioned, setProvisioned] = useState(null)
   const [copyStatus, setCopyStatus] = useState('')
+  const [searchDraft, setSearchDraft] = useState('')
+  const [directoryQuery, setDirectoryQuery] = useState({ search: '', role: '', active: '' })
+  const [directoryPage, setDirectoryPage] = useState(1)
+  const [directoryRefresh, setDirectoryRefresh] = useState(0)
+  const [directoryState, setDirectoryState] = useState({ requestKey: '', status: 'loading', data: null, error: null })
   const addButtonRef = useRef(null)
   const dialogRef = useRef(null)
   const fullNameRef = useRef(null)
   const successHeadingRef = useRef(null)
+  const directoryRequest = useRef(0)
 
   const hasDraft = Object.values(form).some((value) => value.trim())
+  const directoryRequestKey = JSON.stringify([
+    user.id,
+    directoryPage,
+    directoryQuery.search,
+    directoryQuery.role,
+    directoryQuery.active,
+    directoryRefresh,
+  ])
+  const visibleDirectoryState = directoryState.requestKey === directoryRequestKey
+    ? directoryState
+    : { status: 'loading', data: null, error: null }
 
   useEffect(() => {
     if (isPanelOpen) (provisioned ? successHeadingRef : fullNameRef).current?.focus()
@@ -54,6 +99,38 @@ export default function AdminUsersPage() {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = previousOverflow }
   }, [isPanelOpen])
+
+  useEffect(() => {
+    const request = ++directoryRequest.current
+    const controller = new AbortController()
+    getAdminUsers({
+      page: directoryPage,
+      pageSize: ADMIN_USERS_PAGE_SIZE,
+      search: directoryQuery.search,
+      role: directoryQuery.role,
+      isActive: directoryQuery.active === '' ? undefined : directoryQuery.active === 'true',
+      signal: controller.signal,
+    }).then((data) => {
+      if (request === directoryRequest.current) {
+        setDirectoryState({ requestKey: directoryRequestKey, status: 'ready', data, error: null })
+      }
+    }).catch((caught) => {
+      if (request === directoryRequest.current) {
+        setDirectoryState({ requestKey: directoryRequestKey, status: 'error', data: null, error: caught })
+      }
+    })
+    return () => {
+      controller.abort()
+    }
+  }, [
+    user.id,
+    directoryPage,
+    directoryQuery.search,
+    directoryQuery.role,
+    directoryQuery.active,
+    directoryRefresh,
+    directoryRequestKey,
+  ])
 
   const update = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }))
@@ -127,6 +204,7 @@ export default function AdminUsersPage() {
         setupLink,
       })
       setForm(initialForm)
+      setDirectoryRefresh((current) => current + 1)
     } catch (caught) {
       setError(errorMessageFor(caught))
     } finally {
@@ -149,11 +227,30 @@ export default function AdminUsersPage() {
     setCopyStatus('')
   }
 
+  function submitDirectorySearch(event) {
+    event.preventDefault()
+    setDirectoryPage(1)
+    setDirectoryQuery((current) => ({ ...current, search: searchDraft.trim() }))
+  }
+
+  function updateDirectoryFilter(field) {
+    return (event) => {
+      setDirectoryPage(1)
+      setDirectoryQuery((current) => ({ ...current, [field]: event.target.value }))
+    }
+  }
+
+  function clearDirectoryFilters() {
+    setSearchDraft('')
+    setDirectoryPage(1)
+    setDirectoryQuery({ search: '', role: '', active: '' })
+  }
+
   return <main className="shared-page admin-users-page">
     <header className="admin-users-page__header">
       <div>
         <h1>Users</h1>
-        <p>Manage Technician access and review user-directory availability.</p>
+        <p>Manage the user directory and securely provision Maintenance Technicians.</p>
       </div>
       <button
         ref={addButtonRef}
@@ -221,17 +318,94 @@ export default function AdminUsersPage() {
         <div>
           <p className="admin-users-page__eyebrow">User management</p>
           <h2 id="admin-user-directory-title">User directory</h2>
+          <p>{visibleDirectoryState.status === 'ready'
+            ? `${visibleDirectoryState.data.pagination.totalCount} ${visibleDirectoryState.data.pagination.totalCount === 1 ? 'user' : 'users'} in the current results`
+            : 'Authorized RentFlow accounts'}</p>
         </div>
-        <span className="admin-users-directory__scope"><Icon name="user" size={17} />Admin-only workspace</span>
+        <StatusBadge tone={visibleDirectoryState.status === 'error' ? 'warning' : 'success'}>
+          {visibleDirectoryState.status === 'error' ? 'Directory unavailable' : 'Directory available'}
+        </StatusBadge>
       </div>
-      <div className="admin-users-directory__pending" role="status">
-        <span className="admin-users-page__icon"><Icon name="user" size={30} /></span>
-        <StatusBadge tone="warning">Integration pending</StatusBadge>
-        <h3>User directory awaiting secure integration</h3>
-        <p>The backend does not currently expose an Admin-authorized endpoint for listing RentFlow users.</p>
-        <p>No user records, totals, roles, joined dates, account statuses, search controls, or account-changing actions are shown without that contract.</p>
-        <div className="admin-users-directory__note"><Icon name="info" size={18} /><span>The existing <code>/api/auth/me</code> endpoint identifies only the signed-in account and cannot supply a user directory.</span></div>
+
+      <div className="admin-users-directory__controls">
+        <form className="admin-users-directory__search" role="search" aria-label="Search user directory" onSubmit={submitDirectorySearch}>
+          <Icon name="search" size={19} />
+          <label className="admin-users-visually-hidden" htmlFor="adminUserSearch">Search users by name or email</label>
+          <input
+            id="adminUserSearch"
+            type="search"
+            maxLength="320"
+            placeholder="Search by name or email..."
+            value={searchDraft}
+            onChange={(event) => setSearchDraft(event.target.value)}
+          />
+          <button type="submit">Search</button>
+        </form>
+        <label className="admin-users-directory__filter">
+          <span className="admin-users-visually-hidden">Filter users by role</span>
+          <select aria-label="Filter users by role" value={directoryQuery.role} onChange={updateDirectoryFilter('role')}>
+            <option value="">All roles</option>
+            {ADMIN_USER_ROLES.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
+          </select>
+        </label>
+        <label className="admin-users-directory__filter">
+          <span className="admin-users-visually-hidden">Filter users by active status</span>
+          <select aria-label="Filter users by active status" value={directoryQuery.active} onChange={updateDirectoryFilter('active')}>
+            <option value="">All statuses</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+        </label>
       </div>
+
+      {visibleDirectoryState.status === 'loading' && <div className="admin-users-directory__state" role="status">
+        <span className="shared-spinner" aria-hidden="true" />
+        <h3>Loading user directory</h3>
+        <p>Retrieving authorized user records.</p>
+      </div>}
+
+      {visibleDirectoryState.status === 'error' && <div className="admin-users-directory__state admin-users-directory__state--error" role="alert">
+        <span className="admin-users-page__icon"><Icon name="alert" size={28} /></span>
+        <h3>{visibleDirectoryState.error instanceof ApiError && [401, 403].includes(visibleDirectoryState.error.statusCode)
+          ? 'Directory access unavailable'
+          : 'User directory unavailable'}</h3>
+        <p>{directoryErrorFor(visibleDirectoryState.error)}</p>
+        {!(visibleDirectoryState.error instanceof ApiError && [401, 403].includes(visibleDirectoryState.error.statusCode))
+          && <button className="shared-button" type="button" onClick={() => setDirectoryRefresh((current) => current + 1)}>Try again</button>}
+      </div>}
+
+      {visibleDirectoryState.status === 'ready' && visibleDirectoryState.data.items.length === 0 && <div className="admin-users-directory__state">
+        <span className="admin-users-page__icon"><Icon name="search" size={28} /></span>
+        <h3>No users match these filters</h3>
+        <p>Try a different name, email, role, or active-status filter.</p>
+        {(directoryQuery.search || directoryQuery.role || directoryQuery.active)
+          && <button className="shared-button shared-button--quiet" type="button" onClick={clearDirectoryFilters}>Clear filters</button>}
+      </div>}
+
+      {visibleDirectoryState.status === 'ready' && visibleDirectoryState.data.items.length > 0 && <>
+        <div className="admin-users-directory__table-wrap">
+          <table className="admin-users-directory__table">
+            <caption className="admin-users-visually-hidden">Admin-authorized RentFlow user directory</caption>
+            <thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Joined</th><th scope="col">Status</th></tr></thead>
+            <tbody>{visibleDirectoryState.data.items.map((directoryUser) => <tr key={directoryUser.id}>
+              <td data-label="User"><div className="admin-users-directory__identity"><span aria-hidden="true">{directoryUser.fullName.trim().charAt(0).toUpperCase()}</span><div><strong>{directoryUser.fullName}</strong><small>{directoryUser.email}</small></div></div></td>
+              <td data-label="Role"><span className={`admin-users-directory__role admin-users-directory__role--${directoryUser.role.toLowerCase()}`}>{roleLabel(directoryUser.role)}</span></td>
+              <td data-label="Joined"><time dateTime={directoryUser.createdAt}>{joinedDate(directoryUser.createdAt)}</time></td>
+              <td data-label="Status"><span className={`admin-users-directory__status admin-users-directory__status--${directoryUser.isActive ? 'active' : 'inactive'}`}><span aria-hidden="true" />{directoryUser.isActive ? 'Active' : 'Inactive'}</span></td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        <nav className="admin-users-directory__pagination" aria-label="User directory pagination">
+          <p>Showing {(visibleDirectoryState.data.pagination.page - 1) * visibleDirectoryState.data.pagination.pageSize + 1}-{Math.min(visibleDirectoryState.data.pagination.page * visibleDirectoryState.data.pagination.pageSize, visibleDirectoryState.data.pagination.totalCount)} of {visibleDirectoryState.data.pagination.totalCount}</p>
+          <div>
+            <button className="shared-button shared-button--quiet" type="button" disabled={!visibleDirectoryState.data.pagination.hasPreviousPage} onClick={() => setDirectoryPage((current) => current - 1)}>Previous</button>
+            <span>Page {visibleDirectoryState.data.pagination.page} of {visibleDirectoryState.data.pagination.totalPages}</span>
+            <button className="shared-button shared-button--quiet" type="button" disabled={!visibleDirectoryState.data.pagination.hasNextPage} onClick={() => setDirectoryPage((current) => current + 1)}>Next</button>
+          </div>
+        </nav>
+      </>}
+
+      <div className="admin-users-directory__note"><Icon name="info" size={18} /><span>User directory access and Technician provisioning are available. Deactivation, role editing, deletion, and other account-changing operations are not supported.</span></div>
     </section>
   </main>
 }
