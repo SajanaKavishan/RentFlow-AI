@@ -58,6 +58,71 @@ public class RentScheduleServiceTests
             savedItems.Last().DueDate);
     }
 
+    [Theory]
+    [InlineData("2025-01-31", "2025-03-31", "2025-01-31,2025-02-28,2025-03-31")]
+    [InlineData("2024-01-31", "2024-03-31", "2024-01-31,2024-02-29,2024-03-31")]
+    [InlineData("2025-01-30", "2025-03-30", "2025-01-30,2025-02-28,2025-03-30")]
+    [InlineData("2024-01-30", "2024-03-30", "2024-01-30,2024-02-29,2024-03-30")]
+    [InlineData("2025-01-28", "2025-03-28", "2025-01-28,2025-02-28,2025-03-28")]
+    [InlineData("2025-01-15", "2025-03-15", "2025-01-15,2025-02-15,2025-03-15")]
+    public async Task GenerateForLeaseAsync_AnchorsEachDueDateToOriginalStartDay(
+        string startDate,
+        string endDate,
+        string expectedDates)
+    {
+        await using var dbContext = CreateDbContext();
+        var leaseAgreement = CreateActiveLease(
+            DateOnly.Parse(startDate), DateOnly.Parse(endDate));
+        dbContext.LeaseAgreements.Add(leaseAgreement);
+        await dbContext.SaveChangesAsync();
+
+        var result = await CreateService(dbContext)
+            .GenerateForLeaseAsync(leaseAgreement.Id);
+
+        var expected = expectedDates.Split(',').Select(DateOnly.Parse).ToArray();
+        Assert.Equal(expected, result.Select(item => item.DueDate));
+        Assert.All(result, item =>
+        {
+            Assert.Equal(leaseAgreement.MonthlyRent, item.Amount);
+            Assert.Equal(RentScheduleStatus.Pending, item.Status);
+        });
+    }
+
+    [Fact]
+    public async Task GenerateForLeaseAsync_IncludesDueDateEqualToEndDateAndExcludesFollowingMonth()
+    {
+        await using var dbContext = CreateDbContext();
+        var leaseAgreement = CreateActiveLease(
+            new DateOnly(2025, 1, 31),
+            new DateOnly(2025, 2, 28));
+        dbContext.LeaseAgreements.Add(leaseAgreement);
+        await dbContext.SaveChangesAsync();
+
+        var result = await CreateService(dbContext)
+            .GenerateForLeaseAsync(leaseAgreement.Id);
+
+        Assert.Equal(
+            new[] { new DateOnly(2025, 1, 31), new DateOnly(2025, 2, 28) },
+            result.Select(item => item.DueDate));
+    }
+
+    [Fact]
+    public async Task GenerateForLeaseAsync_ShortLeaseCreatesOnlyInstallmentWithinLease()
+    {
+        await using var dbContext = CreateDbContext();
+        var leaseAgreement = CreateActiveLease(
+            new DateOnly(2025, 1, 31),
+            new DateOnly(2025, 2, 1));
+        dbContext.LeaseAgreements.Add(leaseAgreement);
+        await dbContext.SaveChangesAsync();
+
+        var result = await CreateService(dbContext)
+            .GenerateForLeaseAsync(leaseAgreement.Id);
+
+        Assert.Single(result);
+        Assert.Equal(new DateOnly(2025, 1, 31), result[0].DueDate);
+    }
+
     [Fact]
     public async Task GenerateForLeaseAsync_WithNonActiveLease_ThrowsConflict()
     {
@@ -477,6 +542,18 @@ public class RentScheduleServiceTests
 
         return new ApplicationDbContext(options);
     }
+
+    private static LeaseAgreement CreateActiveLease(DateOnly startDate, DateOnly endDate) => new()
+    {
+        RentalOfferId = Guid.NewGuid(),
+        TenantId = Guid.NewGuid(),
+        PropertyId = Guid.NewGuid(),
+        MonthlyRent = 85000m,
+        SecurityDeposit = 170000m,
+        StartDate = startDate,
+        EndDate = endDate,
+        Status = LeaseAgreementStatus.Active
+    };
 
     private static RentScheduleService CreateService(ApplicationDbContext dbContext) =>
         new(

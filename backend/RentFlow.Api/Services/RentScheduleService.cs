@@ -120,10 +120,16 @@ public class RentScheduleService : IRentScheduleService
 
         var scheduleItems = new List<RentScheduleItem>();
 
-        var dueDate = leaseAgreement.StartDate;
+        var monthOffset = 0;
 
-        while (dueDate <= leaseAgreement.EndDate)
+        while (true)
         {
+            var dueDate = leaseAgreement.StartDate.AddMonths(monthOffset);
+            if (dueDate > leaseAgreement.EndDate)
+            {
+                break;
+            }
+
             scheduleItems.Add(new RentScheduleItem
             {
                 LeaseAgreementId = leaseAgreement.Id,
@@ -133,7 +139,13 @@ public class RentScheduleService : IRentScheduleService
                 CreatedAt = DateTimeOffset.UtcNow
             });
 
-            dueDate = dueDate.AddMonths(1);
+            if (dueDate.Year == leaseAgreement.EndDate.Year
+                && dueDate.Month == leaseAgreement.EndDate.Month)
+            {
+                break;
+            }
+
+            monthOffset++;
         }
 
         _dbContext.RentScheduleItems.AddRange(scheduleItems);
