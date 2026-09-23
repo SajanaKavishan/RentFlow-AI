@@ -15,20 +15,26 @@ export const NAV_ITEMS = Object.freeze([
     description: 'Property discovery and management will appear here after the property module is integrated.',
   },
   {
-    id: 'my-viewings', label: 'My Viewings', path: '/modules/my-viewings', roles: [T], available: false,
-    owner: 'Viewing integration',
-    description: 'Tenant viewing management is currently available in the RentFlow mobile app.',
+    id: 'my-viewings', label: 'My Viewings', path: '/modules/my-viewings', roles: [T], available: true,
   },
   {
-    id: 'my-applications', label: 'My Applications', path: '/modules/my-applications', roles: [T], available: false,
-    owner: 'Application integration',
-    description: 'Tenant applications and documents are currently available in the RentFlow mobile app.',
+    id: 'my-applications', label: 'My Applications', path: '/modules/my-applications', roles: [T], available: true,
   },
   { id: 'viewing-requests', label: 'Viewing Requests', path: '/viewing-requests', roles: [L], available: true },
   { id: 'rental-applications', label: 'Rental Applications', path: '/rental-applications', roles: [L], available: true },
   {
     id: 'ai-review', label: 'AI Review', path: '/ai-review', roles: [L], available: true,
     note: 'Application validation and document review',
+  },
+  {
+    id: 'lease-payments', label: 'Lease & Payments', path: '/modules/lease-payments', roles: [T], available: false,
+    owner: 'Lease and payment management',
+    description: 'Your lease details and payment schedule will appear here when these features are available.',
+  },
+  {
+    id: 'tenant-maintenance', label: 'Maintenance', path: '/modules/maintenance', roles: [T], available: false,
+    owner: 'Maintenance',
+    description: 'Maintenance requests and updates will appear here when this feature is available.',
   },
   {
     id: 'pricing-lease', label: 'Pricing / Lease', path: '/modules/pricing-lease', roles: [L], available: false,
@@ -44,19 +50,19 @@ export const NAV_ITEMS = Object.freeze([
     owner: 'Maintenance', description: 'Maintenance management will be connected when that module is merged.',
   },
   {
-    id: 'assigned-work', label: 'Assigned Work', path: '/modules/assigned-work', roles: [M], available: false,
+    id: 'assigned-work', label: 'Assigned Work', path: '/modules/assigned-work', roles: [M], available: true,
     owner: 'Maintenance',
-    description: 'Assigned maintenance work will appear here after the maintenance module is integrated.',
+    description: 'The Technician work area is available while its assigned-work collection awaits Maintenance integration.',
   },
   {
-    id: 'users', label: 'Users', path: '/modules/users', roles: [A], available: false,
+    id: 'users', label: 'Users', path: '/modules/users', roles: [A], available: true,
     owner: 'Administration',
-    description: 'User management is not part of the shared application shell and has not been integrated yet.',
+    description: 'The Admin Users workspace is available while its authorized directory contract awaits integration.',
   },
   {
-    id: 'ai-system-overview', label: 'AI / System Overview', path: '/modules/ai-system-overview', roles: [A], available: false,
+    id: 'ai-system-overview', label: 'AI / System Overview', path: '/modules/ai-system-overview', roles: [A], available: true,
     owner: 'Administration',
-    description: 'System-wide AI monitoring will appear here when an admin data source is available.',
+    description: 'The Admin overview workspace is available while its aggregate reporting contract awaits integration.',
   },
   { id: 'profile', label: 'Profile', path: '/profile', roles: ALL, available: true },
 ])

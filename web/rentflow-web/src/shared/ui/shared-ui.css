@@ -44,28 +44,11 @@
 .shared-module-card h3 { margin: 0 32px 6px 0; font-size: 1.01rem; letter-spacing: -.025em; overflow-wrap: anywhere; }
 .shared-module-card p { margin: 0 32px 0 0; color: var(--muted); font-size: .79rem; line-height: 1.5; overflow-wrap: anywhere; }
 .shared-module-card__arrow { position: absolute; right: 24px; bottom: 24px; color: var(--olive-700); }
-.shared-page--profile { max-width: 830px; }
-.shared-profile-card { padding: 0; overflow: hidden; }
-.shared-profile-card__heading { min-width: 0; display: flex; align-items: center; gap: 20px; padding: 28px 32px; border-bottom: 1px solid var(--border); background: var(--cream-50); }
-.shared-profile-card__heading > div { min-width: 0; }
-.shared-profile-avatar { flex: none; width: 68px; height: 68px; display: grid; place-items: center; border-radius: 50%; color: var(--olive-900); background: var(--olive-100); font-size: 1.25rem; font-weight: 800; }
-.shared-profile-card__heading h2 { margin: 0; font-size: 1.14rem; overflow-wrap: anywhere; }
-.shared-profile-card__heading p { margin: 5px 0 0; color: var(--muted); font-size: .79rem; overflow-wrap: anywhere; }
-.shared-profile-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; margin: 0; padding: 32px; }
-.shared-profile-list div { min-width: 0; }
-.shared-profile-list dt { margin-bottom: 8px; color: var(--muted); font-size: .73rem; font-weight: 700; }
-.shared-profile-list dd { margin: 0; font-size: .87rem; font-weight: 700; overflow-wrap: anywhere; }
-.shared-profile-card__footer { padding: 20px 32px; border-top: 1px solid var(--border); }
 @keyframes shared-spin { to { transform: rotate(360deg); } }
 @media (max-width: 620px) {
   .shared-page { width: min(100% - 32px, 1120px); padding-top: 36px; }
   .shared-page-header { margin-bottom: 32px; }
   .shared-card { padding: 20px; }
   .shared-dashboard-section { margin-top: 36px; }
-  .shared-profile-card { padding: 0; }
-  .shared-profile-card__heading { padding: 24px 20px; gap: 14px; }
-  .shared-profile-avatar { width: 54px; height: 54px; }
-  .shared-profile-list { grid-template-columns: 1fr; gap: 22px; padding: 24px 20px; }
-  .shared-profile-card__footer { padding: 20px; }
 }
 @media (prefers-reduced-motion: reduce) { .shared-spinner { animation-duration: 1.8s; } .shared-button, .shared-module-card { transition: none; } }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import ViewingCard from '../components/ViewingCard.jsx'
@@ -26,6 +26,28 @@ function prioritizePending(viewings) {
     .map(({ viewing }) => viewing)
 }
 
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: VIEWING_STATUS.PENDING, label: 'Pending' },
+  { value: VIEWING_STATUS.APPROVED, label: 'Approved' },
+  { value: VIEWING_STATUS.REJECTED, label: 'Rejected' },
+  { value: VIEWING_STATUS.CANCELLED, label: 'Cancelled' },
+  { value: VIEWING_STATUS.COMPLETED, label: 'Completed' },
+]
+
+function optionalSearchFields(viewing) {
+  return [
+    viewing.tenantName,
+    viewing.tenantEmail,
+    viewing.propertyName,
+    viewing.propertyLocation,
+    viewing.tenantId,
+    viewing.propertyId,
+    viewing.tenantMessage,
+    viewing.landlordResponse,
+  ].filter((value) => typeof value === 'string')
+}
+
 function ViewingRequestsPage() {
   const { propertyId } = usePropertyContext()
   const [pageState, setPageState] = useState({
@@ -37,10 +59,21 @@ function ViewingRequestsPage() {
   const [updatingId, setUpdatingId] = useState(null)
   const [actionError, setActionError] = useState({ id: null, message: '' })
   const [notice, setNotice] = useState('')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const pendingCount = pageState.viewings.filter(
     (viewing) => viewing.status === VIEWING_STATUS.PENDING,
   ).length
   const orderedViewings = prioritizePending(pageState.viewings)
+  const filteredViewings = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase()
+    return orderedViewings.filter((viewing) => {
+      const matchesStatus = statusFilter === 'all' || viewing.status === statusFilter
+      const matchesSearch = !normalizedSearch || optionalSearchFields(viewing)
+        .some((value) => value.toLowerCase().includes(normalizedSearch))
+      return matchesStatus && matchesSearch
+    })
+  }, [orderedViewings, search, statusFilter])
   const pageStatus = !propertyId
     ? 'property-required'
     : pageState.propertyId === propertyId
@@ -157,8 +190,7 @@ function ViewingRequestsPage() {
     >
       <header className="viewings-page__header">
         <div>
-          <p className="viewings-page__eyebrow">Landlord workspace</p>
-          <h1>Viewing requests</h1>
+          <h1>Viewing Requests</h1>
           <p>
             Review requested appointments and respond to tenants interested in
             your property.
@@ -258,10 +290,35 @@ function ViewingRequestsPage() {
                 <p className="viewings-page__eyebrow">Request queue</p>
                 <h2 id="viewings-results-title">All viewing requests</h2>
               </div>
-              <p>Pending requests are shown first.</p>
+              <p>{filteredViewings.length} of {pageState.viewings.length} requests shown</p>
+            </div>
+            <div className="viewings-filters" aria-label="Filter viewing requests">
+              <label className="viewings-filters__search">
+                <span className="sr-only">Search viewing requests</span>
+                <span aria-hidden="true">⌕</span>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search requests"
+                />
+              </label>
+              <div className="viewings-filters__statuses" role="group" aria-label="Request status">
+                {STATUS_FILTERS.map((filter) => (
+                  <button
+                    key={filter.label}
+                    type="button"
+                    className={`viewings-filter${statusFilter === filter.value ? ' viewings-filter--active' : ''}`}
+                    aria-pressed={statusFilter === filter.value}
+                    onClick={() => setStatusFilter(filter.value)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="viewings-list">
-              {orderedViewings.map((viewing) => (
+              {filteredViewings.map((viewing) => (
                 <ViewingCard
                   key={viewing.id}
                   viewing={viewing}
@@ -274,6 +331,12 @@ function ViewingRequestsPage() {
                 />
               ))}
             </div>
+            {filteredViewings.length === 0 && (
+              <div className="viewings-filter-empty" role="status">
+                <h3>No matching viewing requests</h3>
+                <p>Try a different search or status filter.</p>
+              </div>
+            )}
           </section>
         </>
       )}

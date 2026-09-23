@@ -4,7 +4,7 @@ import { navigationItemForPath } from '../navigation/roleNavigation.js'
 import Icon from './Icons.jsx'
 import './shared-ui.css'
 
-export function PageHeader({ eyebrow, title, children }) { return <header className="shared-page-header"><p>{eyebrow}</p><h1>{title}</h1>{children && <div className="shared-page-header__intro">{children}</div>}</header> }
+export function PageHeader({ eyebrow, title, children }) { return <header className="shared-page-header">{eyebrow && <p>{eyebrow}</p>}<h1>{title}</h1>{children && <div className="shared-page-header__intro">{children}</div>}</header> }
 export function AppCard({ children, className = '' }) { return <section className={`shared-card ${className}`.trim()}>{children}</section> }
 export function StatusBadge({ tone = 'neutral', children }) { return <span className={`shared-status shared-status--${tone}`}>{children}</span> }
 export function LoadingState({ title = 'Loading' }) { return <main className="shared-state" role="status"><span className="shared-spinner" aria-hidden="true" /><h1>{title}</h1><p>Please wait a moment.</p></main> }
