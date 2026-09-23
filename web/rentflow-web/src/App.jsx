@@ -10,6 +10,8 @@ import ViewingRequestsPage from './features/viewings/pages/ViewingRequestsPage.j
 import MyViewingsPage from './features/viewings/pages/MyViewingsPage.jsx'
 import AppShell from './shared/layout/AppShell.jsx'
 import DashboardPage from './shared/pages/DashboardPage.jsx'
+import TechnicianAssignedWorkPage from './shared/pages/TechnicianAssignedWorkPage.jsx'
+import AdminUsersPage from './shared/pages/AdminUsersPage.jsx'
 import ProfilePage from './shared/pages/ProfilePage.jsx'
 import NotificationsPage from './features/notifications/NotificationsPage.jsx'
 import NotificationResourcePage from './features/notifications/NotificationResourcePage.jsx'
@@ -36,6 +38,12 @@ export default function App() {
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT]} />}>
           <Route path="/modules/my-viewings" element={<MyViewingsPage />} />
           <Route path="/modules/my-applications" element={<MyApplicationsPage />} />
+        </Route>
+        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.MAINTENANCE_TECHNICIAN]} />}>
+          <Route path="/modules/assigned-work" element={<TechnicianAssignedWorkPage />} />
+        </Route>
+        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} />}>
+          <Route path="/modules/users" element={<AdminUsersPage />} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
           <Route path="/viewing-requests" element={<ViewingRequestsPage />} />

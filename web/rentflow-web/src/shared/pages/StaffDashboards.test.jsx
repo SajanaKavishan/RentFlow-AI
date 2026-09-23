@@ -44,7 +44,7 @@ describe('Technician and Admin dashboards', () => {
     expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer staff-token')
 
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
-    expect(within(nav).getByRole('link', { name: /Assigned Work/ })).toHaveTextContent('Soon')
+    expect(within(nav).getByRole('link', { name: 'Assigned Work' })).not.toHaveTextContent('Soon')
     expect(within(nav).queryByRole('link', { name: /Users/ })).not.toBeInTheDocument()
   })
 
@@ -67,7 +67,7 @@ describe('Technician and Admin dashboards', () => {
     expect(main).not.toHaveTextContent(/active users|system health|AI requests|maintenance jobs/i)
 
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
-    expect(within(nav).getByRole('link', { name: /Users/ })).toHaveTextContent('Soon')
+    expect(within(nav).getByRole('link', { name: 'Users' })).not.toHaveTextContent('Soon')
     expect(within(nav).getByRole('link', { name: /AI \/ System Overview/ })).toHaveTextContent('Soon')
     expect(within(nav).queryByRole('link', { name: /Assigned Work/ })).not.toBeInTheDocument()
   })

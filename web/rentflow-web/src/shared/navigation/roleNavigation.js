@@ -50,14 +50,14 @@ export const NAV_ITEMS = Object.freeze([
     owner: 'Maintenance', description: 'Maintenance management will be connected when that module is merged.',
   },
   {
-    id: 'assigned-work', label: 'Assigned Work', path: '/modules/assigned-work', roles: [M], available: false,
+    id: 'assigned-work', label: 'Assigned Work', path: '/modules/assigned-work', roles: [M], available: true,
     owner: 'Maintenance',
-    description: 'Assigned maintenance work will appear here after the maintenance module is integrated.',
+    description: 'The Technician work area is available while its assigned-work collection awaits Maintenance integration.',
   },
   {
-    id: 'users', label: 'Users', path: '/modules/users', roles: [A], available: false,
+    id: 'users', label: 'Users', path: '/modules/users', roles: [A], available: true,
     owner: 'Administration',
-    description: 'User management is not part of the shared application shell and has not been integrated yet.',
+    description: 'The Admin Users workspace is available while its authorized directory contract awaits integration.',
   },
   {
     id: 'ai-system-overview', label: 'AI / System Overview', path: '/modules/ai-system-overview', roles: [A], available: false,
