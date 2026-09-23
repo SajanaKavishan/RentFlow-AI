@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'features/properties/services/property_api_service.dart';
 import 'core/auth/token_storage.dart';
 import 'core/network/api_client.dart';
 import 'features/auth/controllers/auth_controller.dart';
@@ -94,6 +94,9 @@ class _MyAppState extends State<MyApp> {
       notificationApiService: apiClient == null
           ? null
           : NotificationApiService(apiClient),
+            propertyApiService: apiClient == null
+    ? null
+    : PropertyApiService(apiClient),
     );
   }
 }

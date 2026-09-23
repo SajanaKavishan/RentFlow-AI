@@ -65,7 +65,7 @@ List<RoleDestination> destinationsFor(UserRole role) => switch (role) {
       id: RoleDestinationId.properties,
       label: 'Properties',
       icon: Icons.home_work_outlined,
-      experience: DestinationExperience.unavailable,
+      experience: DestinationExperience.feature,
       owner: 'Property management',
       explanation:
           'Property discovery will appear here after the property module is integrated.',
