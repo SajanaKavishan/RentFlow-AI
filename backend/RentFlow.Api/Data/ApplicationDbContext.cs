@@ -36,6 +36,18 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<Notification> Notifications => Set<Notification>();
 
+    public DbSet<MaintenanceCoordinationWorkflow> MaintenanceCoordinationWorkflows => Set<MaintenanceCoordinationWorkflow>();
+
+    public DbSet<MaintenanceCoordinationStep> MaintenanceCoordinationSteps => Set<MaintenanceCoordinationStep>();
+
+    public DbSet<MaintenanceRequest> MaintenanceRequests => Set<MaintenanceRequest>();
+
+    public DbSet<MaintenanceStatusHistory> MaintenanceStatusHistories => Set<MaintenanceStatusHistory>();
+
+    public DbSet<RepairEstimate> RepairEstimates => Set<RepairEstimate>();
+
+    public DbSet<MaintenanceAttachment> MaintenanceAttachments => Set<MaintenanceAttachment>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -682,6 +694,298 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(payment => payment.TenantId);
             entity.HasIndex(payment => payment.Status);
             entity.HasIndex(payment => payment.TransactionReference);
+        });
+
+        modelBuilder.Entity<MaintenanceCoordinationWorkflow>(entity =>
+        {
+            entity.HasKey(workflow => workflow.Id);
+
+            entity.Property(workflow => workflow.MaintenanceRequestId)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.Objective)
+                .HasMaxLength(2000)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.Status)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.CurrentStep)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.AgentVersion)
+                .HasMaxLength(200)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.PlanSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.ExecutionSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.FinalResultJson)
+                .HasColumnType("text")
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.ErrorMessage)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.RequiresHumanApproval)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.ApprovalStatus)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.CreatedAt)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.UpdatedAt)
+                .IsRequired();
+
+            entity.HasOne(workflow => workflow.MaintenanceRequest)
+                .WithMany()
+                .HasForeignKey(workflow => workflow.MaintenanceRequestId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(workflow => workflow.MaintenanceRequestId);
+        });
+
+        modelBuilder.Entity<MaintenanceCoordinationStep>(entity =>
+        {
+            entity.HasKey(step => step.Id);
+
+            entity.Property(step => step.WorkflowId)
+                .IsRequired();
+
+            entity.Property(step => step.StepName)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(step => step.StepOrder)
+                .IsRequired();
+
+            entity.Property(step => step.Status)
+                .IsRequired();
+
+            entity.Property(step => step.InputSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.OutputSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.ValidationSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.ErrorMessage)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.StartedAt)
+                .IsRequired(false);
+
+            entity.Property(step => step.CompletedAt)
+                .IsRequired(false);
+
+            entity.HasOne(step => step.Workflow)
+                .WithMany(workflow => workflow.Steps)
+                .HasForeignKey(step => step.WorkflowId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(step => new { step.WorkflowId, step.StepOrder })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<MaintenanceRequest>(entity =>
+        {
+            entity.HasKey(request => request.Id);
+
+            entity.Property(request => request.PropertyId)
+                .IsRequired();
+
+            entity.Property(request => request.TenantId)
+                .IsRequired();
+
+            entity.Property(request => request.TechnicianId)
+                .IsRequired(false);
+
+            entity.Property(request => request.Title)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(request => request.Description)
+                .HasMaxLength(4000)
+                .IsRequired();
+
+            entity.Property(request => request.Category)
+                .IsRequired();
+
+            entity.Property(request => request.Priority)
+                .IsRequired();
+
+            entity.Property(request => request.Status)
+                .IsRequired();
+
+            entity.Property(request => request.TenantAccessNotes)
+                .HasMaxLength(1000)
+                .IsRequired(false);
+
+            entity.Property(request => request.TriageNotes)
+                .HasMaxLength(2000)
+                .IsRequired(false);
+
+            entity.Property(request => request.AssignmentNotes)
+                .HasMaxLength(2000)
+                .IsRequired(false);
+
+            entity.Property(request => request.CancellationReason)
+                .HasMaxLength(2000)
+                .IsRequired(false);
+
+            entity.Property(request => request.CompletedAt)
+                .IsRequired(false);
+
+            entity.Property(request => request.CreatedAt)
+                .IsRequired();
+
+            entity.Property(request => request.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasIndex(request => request.PropertyId);
+            entity.HasIndex(request => request.TenantId);
+            entity.HasIndex(request => request.TechnicianId);
+            entity.HasIndex(request => request.Status);
+            entity.HasIndex(request => new { request.PropertyId, request.Status });
+            entity.HasIndex(request => new { request.TenantId, request.CreatedAt });
+            entity.HasIndex(request => new { request.TechnicianId, request.Status });
+            entity.HasIndex(request => new { request.Priority, request.Status });
+        });
+
+        modelBuilder.Entity<MaintenanceStatusHistory>(entity =>
+        {
+            entity.HasKey(history => history.Id);
+
+            entity.Property(history => history.MaintenanceRequestId)
+                .IsRequired();
+
+            entity.Property(history => history.FromStatus)
+                .IsRequired(false);
+
+            entity.Property(history => history.ToStatus)
+                .IsRequired();
+
+            entity.Property(history => history.ChangedByUserId)
+                .IsRequired(false);
+
+            entity.Property(history => history.ChangedAt)
+                .IsRequired();
+
+            entity.Property(history => history.Notes)
+                .HasMaxLength(2000)
+                .IsRequired(false);
+
+            entity.HasOne(history => history.MaintenanceRequest)
+                .WithMany()
+                .HasForeignKey(history => history.MaintenanceRequestId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(history => history.MaintenanceRequestId);
+            entity.HasIndex(history => new { history.MaintenanceRequestId, history.ChangedAt });
+        });
+
+        modelBuilder.Entity<RepairEstimate>(entity =>
+        {
+            entity.HasKey(estimate => estimate.Id);
+
+            entity.Property(estimate => estimate.MaintenanceRequestId)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.TechnicianId)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.VersionNumber)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.LaborCost)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.PartsCost)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.AdditionalCost)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.TotalCost)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.Notes)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(estimate => estimate.Status)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.CreatedAt)
+                .IsRequired();
+
+            entity.Property(estimate => estimate.UpdatedAt)
+                .IsRequired(false);
+
+            entity.Property(estimate => estimate.SubmittedAt)
+                .IsRequired(false);
+
+            entity.Property(estimate => estimate.ReviewedAt)
+                .IsRequired(false);
+
+            entity.Property(estimate => estimate.ReviewNotes)
+                .HasMaxLength(2000)
+                .IsRequired(false);
+
+            entity.Property(estimate => estimate.ReviewedByUserId)
+                .IsRequired(false);
+
+            entity.HasOne(estimate => estimate.MaintenanceRequest)
+                .WithMany()
+                .HasForeignKey(estimate => estimate.MaintenanceRequestId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(estimate => estimate.MaintenanceRequestId);
+            entity.HasIndex(estimate => new { estimate.MaintenanceRequestId, estimate.CreatedAt });
+            entity.HasIndex(estimate => new { estimate.MaintenanceRequestId, estimate.Status });
+            entity.HasIndex(estimate => new { estimate.MaintenanceRequestId, estimate.VersionNumber })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<MaintenanceAttachment>(entity =>
+        {
+            entity.HasKey(attachment => attachment.Id);
+
+            entity.Property(attachment => attachment.MaintenanceRequestId).IsRequired();
+            entity.Property(attachment => attachment.StorageKey).HasMaxLength(512).IsRequired();
+            entity.Property(attachment => attachment.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(attachment => attachment.ContentType).HasMaxLength(255).IsRequired();
+            entity.Property(attachment => attachment.FileSize).IsRequired();
+            entity.Property(attachment => attachment.AttachmentType).HasMaxLength(100).IsRequired(false);
+            entity.Property(attachment => attachment.UploadedByUserId).IsRequired();
+            entity.Property(attachment => attachment.CreatedAt).IsRequired();
+
+            entity.HasOne<MaintenanceRequest>()
+                .WithMany()
+                .HasForeignKey(attachment => attachment.MaintenanceRequestId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(attachment => attachment.MaintenanceRequestId);
+            entity.HasIndex(attachment => new { attachment.MaintenanceRequestId, attachment.CreatedAt });
+            entity.HasIndex(attachment => attachment.UploadedByUserId);
         });
     }
 }
