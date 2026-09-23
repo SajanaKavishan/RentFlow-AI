@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,20 +19,26 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { 'Content-Type': 'application/json' },
 })
 
-function renderRoute(role = 'Admin') {
+function renderRoute(role = 'Admin', initialEntry = '/modules/users') {
   const session = { user: account(role), isAuthenticated: true, isLoading: false, logout: vi.fn() }
-  return render(<MemoryRouter initialEntries={['/modules/users']}><AuthContext.Provider value={session}><App /></AuthContext.Provider></MemoryRouter>)
+  return render(<MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={session}><App /></AuthContext.Provider></MemoryRouter>)
+}
+
+async function openForm() {
+  await userEvent.click(screen.getByRole('button', { name: 'Add Technician' }))
 }
 
 async function fillForm() {
+  if (!screen.queryByLabelText('Full name')) await openForm()
   await userEvent.type(screen.getByLabelText('Full name'), 'Taylor Technician')
   await userEvent.type(screen.getByLabelText('Email'), 'tech@example.com')
   await userEvent.type(screen.getByLabelText('Phone number'), '+94770000001')
 }
 
 beforeEach(() => {
-  tokenStorage.setToken('admin-token')
   localStorage.clear()
+  sessionStorage.clear()
+  tokenStorage.setToken('admin-token')
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
   vi.stubGlobal('fetch', vi.fn())
   Object.defineProperty(navigator, 'clipboard', {
@@ -44,22 +50,80 @@ afterEach(() => {
   cleanup()
   tokenStorage.clearToken()
   localStorage.clear()
+  sessionStorage.clear()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
   delete navigator.clipboard
 })
 
 describe('Admin Users page', () => {
-  it('shows real Technician creation and honest directory limitations', () => {
+  it('keeps the real directory limitation primary without invented data or controls', () => {
     renderRoute()
     const main = screen.getByRole('main')
     expect(within(main).getByRole('heading', { name: 'Users', level: 1 })).toBeInTheDocument()
-    expect(within(main).getByRole('region', { name: 'Add Technician' })).toHaveTextContent('Creation available')
+    const addButton = within(main).getByRole('button', { name: 'Add Technician' })
+    expect(addButton).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('dialog', { name: 'Add Technician' })).not.toBeInTheDocument()
+
     const directory = within(main).getByRole('region', { name: 'User directory' })
     expect(directory).toHaveTextContent('Integration pending')
-    expect(directory).toHaveTextContent('Technician creation is available')
-    expect(directory).toHaveTextContent('does not expose an Admin-authorized user directory')
-    expect(directory).toHaveTextContent('No user list, account counts')
+    expect(directory).toHaveTextContent('does not currently expose an Admin-authorized endpoint')
+    expect(directory).toHaveTextContent('No user records, totals, roles, joined dates, account statuses, search controls, or account-changing actions')
+    expect(within(main).queryByRole('searchbox')).not.toBeInTheDocument()
+    expect(within(main).queryByRole('table')).not.toBeInTheDocument()
+    expect(main).not.toHaveTextContent(/8 total|7 active|deactivate|edit role|delete user/i)
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('reveals the existing provisioning form and moves focus to its first field', async () => {
+    renderRoute()
+    const addButton = screen.getByRole('button', { name: 'Add Technician' })
+    await userEvent.click(addButton)
+
+    expect(addButton).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('dialog', { name: 'Add Technician' })).toHaveAttribute('aria-modal', 'true')
+    expect(screen.getByLabelText('Full name')).toHaveFocus()
+    expect(document.body.style.overflow).toBe('hidden')
+    expect(screen.getByLabelText('Email')).toHaveAttribute('type', 'email')
+    expect(screen.getByLabelText('Phone number')).toHaveAttribute('type', 'tel')
+  })
+
+  it('traps keyboard focus and closes an empty popup with Escape', async () => {
+    renderRoute()
+    await openForm()
+    const submit = screen.getByRole('button', { name: 'Create pending Technician' })
+    submit.focus()
+
+    await userEvent.tab()
+    expect(screen.getByRole('button', { name: 'Close Add Technician panel' })).toHaveFocus()
+    await userEvent.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog', { name: 'Add Technician' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add Technician' })).toHaveFocus()
+    expect(document.body.style.overflow).toBe('')
+  })
+
+  it('opens and focuses the provisioning form from the Admin dashboard action URL', () => {
+    renderRoute('Admin', '/modules/users?action=add-technician')
+
+    expect(screen.getByRole('button', { name: 'Add Technician' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('dialog', { name: 'Add Technician' })).toHaveAttribute('aria-modal', 'true')
+    expect(screen.getByLabelText('Full name')).toHaveFocus()
+  })
+
+  it('confirms before discarding an unsent form and restores trigger focus after closing', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    renderRoute()
+    await openForm()
+    await userEvent.type(screen.getByLabelText('Full name'), 'Taylor')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(window.confirm).toHaveBeenCalledWith('Discard the unsent Technician details?')
+    expect(screen.getByLabelText('Full name')).toHaveValue('Taylor')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Add Technician' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add Technician' })).toHaveFocus()
   })
 
   it('submits the backend contract and displays a copyable one-time setup link', async () => {
@@ -78,7 +142,8 @@ describe('Admin Users page', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Create pending Technician' }))
 
-    expect(await screen.findByRole('heading', { name: 'Securely deliver the setup link' })).toBeInTheDocument()
+    const successHeading = await screen.findByRole('heading', { name: 'Securely deliver the setup link' })
+    expect(successHeading).toHaveFocus()
     const [url, options] = fetch.mock.calls[0]
     expect(new URL(url, 'http://localhost').pathname).toBe('/api/admin/maintenance-technicians')
     expect(options.method).toBe('POST')
@@ -97,14 +162,21 @@ describe('Admin Users page', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Copy link' }))
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(setupLink.value)
-    expect(await screen.findByRole('status')).toHaveTextContent('Setup link copied')
+    expect(await screen.findByText(/Setup link copied/)).toHaveAttribute('role', 'status')
+
+    const confirmClose = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await userEvent.click(screen.getByRole('button', { name: 'Close Add Technician panel' }))
+    expect(confirmClose).toHaveBeenCalledWith(expect.stringContaining('clear the one-time setup link'))
+    expect(screen.getByLabelText('One-time password-setup link')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear setup link' }))
     expect(screen.queryByLabelText('One-time password-setup link')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Full name')).toHaveFocus()
   })
 
   it('shows client validation and duplicate-email API errors', async () => {
     renderRoute()
+    await openForm()
     await userEvent.click(screen.getByRole('button', { name: 'Create pending Technician' }))
     expect(screen.getByRole('alert')).toHaveTextContent('full name')
     expect(fetch).not.toHaveBeenCalled()
@@ -134,35 +206,34 @@ describe('Admin Users page', () => {
     renderRoute()
     await fillForm()
     await userEvent.click(screen.getByRole('button', { name: 'Create pending Technician' }))
-    const button = screen.getByRole('button', { name: 'Creating pending account…' })
-    expect(button).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Creating pending account...' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Close Add Technician panel' })).toBeDisabled()
     resolveRequest(json({
       id: '22222222-2222-2222-2222-222222222222', fullName: 'Taylor Technician',
       email: 'tech@example.com', phoneNumber: '+94770000001', role: 'MaintenanceTechnician',
       isActive: false, passwordSetupToken: setupToken,
       passwordSetupExpiresAt: '2026-09-23T16:00:00Z',
     }, 201))
-    await waitFor(() => expect(
-      screen.getByRole('button', { name: 'Create pending Technician' }),
-    ).toBeEnabled())
+    expect(await screen.findByRole('heading', { name: 'Securely deliver the setup link' })).toBeInTheDocument()
   })
 
-  it('keeps Users active and preserves real shared navigation', () => {
+  it('keeps Users active and preserves shared navigation and account actions', () => {
     renderRoute()
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
     const usersLink = within(nav).getByRole('link', { name: 'Users' })
     expect(usersLink).toHaveAttribute('href', '/modules/users')
     expect(usersLink).toHaveAttribute('aria-current', 'page')
     expect(usersLink).not.toHaveTextContent('Soon')
-    const main = screen.getByRole('main')
-    expect(within(main).getByRole('link', { name: 'Back to dashboard' })).toHaveAttribute('href', '/dashboard')
-    expect(within(main).getByRole('link', { name: /Profile/ })).toHaveAttribute('href', '/profile')
+    expect(screen.getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/notifications')
+    expect(within(nav).getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile')
+    expect(within(nav).getByRole('button', { name: 'Logout' })).toBeInTheDocument()
   })
 
   it.each(['Tenant', 'Landlord', 'MaintenanceTechnician'])('blocks %s from the Admin Users route', (role) => {
     renderRoute(role)
     expect(screen.getByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Add Technician' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add Technician' })).not.toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
   })
 })

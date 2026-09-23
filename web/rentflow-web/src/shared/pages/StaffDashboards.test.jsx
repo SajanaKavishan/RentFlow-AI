@@ -77,8 +77,8 @@ describe('Technician and Admin dashboards', () => {
     expect([activity, distribution, workflows, health].every((panel) => panel.textContent.includes('Integration pending'))).toBe(true)
 
     const quickAccess = within(main).getByRole('navigation', { name: 'Admin quick access' })
-    expect(within(main).getByRole('link', { name: 'Add Technician' })).toHaveAttribute('href', '/modules/users')
-    expect(within(quickAccess).getByRole('link', { name: 'Manage Users / Add Technician' })).toHaveAttribute('href', '/modules/users')
+    expect(within(main).getByRole('link', { name: 'Add Technician' })).toHaveAttribute('href', '/modules/users?action=add-technician')
+    expect(within(quickAccess).getByRole('link', { name: 'Manage Users / Add Technician' })).toHaveAttribute('href', '/modules/users?action=add-technician')
     expect(within(quickAccess).getByRole('link', { name: 'Open notifications from Quick Access' })).toHaveAttribute('href', '/notifications')
     expect(within(quickAccess).getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile')
     expect(within(quickAccess).getByRole('link', { name: 'AI / System Overview' })).toHaveAttribute('href', '/modules/ai-system-overview')
@@ -120,6 +120,7 @@ describe('Technician and Admin dashboards', () => {
     await userEvent.click(within(quickAccess).getByRole('link', { name: 'Manage Users / Add Technician' }))
     expect(screen.getByRole('heading', { name: 'Users' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Add Technician' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Full name')).toHaveFocus()
     expect(screen.getByText('Integration pending')).toBeInTheDocument()
   })
 

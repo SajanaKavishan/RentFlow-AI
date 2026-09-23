@@ -83,7 +83,7 @@ export default function AdminDashboard() {
         <h1>System Overview</h1>
         <p className="admin-overview__as-of">Overview status as of {currentDay}.</p>
       </div>
-      <Link className="shared-button" to="/modules/users"><Icon name="user" size={18} />Add Technician</Link>
+      <Link className="shared-button" to="/modules/users?action=add-technician"><Icon name="user" size={18} />Add Technician</Link>
     </header>
 
     <section className="admin-overview__summary" aria-label="System summary">
@@ -114,7 +114,7 @@ export default function AdminDashboard() {
             <h2 id="admin-quick-access-title">Quick Access</h2>
           </div>
           <nav aria-label="Admin quick access">
-            <Link to="/modules/users" aria-label="Manage Users / Add Technician">
+            <Link to="/modules/users?action=add-technician" aria-label="Manage Users / Add Technician">
               <span className="admin-overview__icon admin-overview__icon--small"><Icon name="user" size={19} /></span>
               <span><strong>Manage Users / Add Technician</strong><small>Technician creation is available; the full directory is pending.</small></span>
               <Icon name="arrow" size={17} />
