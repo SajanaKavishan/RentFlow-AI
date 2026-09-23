@@ -386,6 +386,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(offer => offer.RentalApplicationId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne<Property>()
+                .WithMany()
+                .HasForeignKey(offer => offer.PropertyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasIndex(offer => offer.RentalApplicationId);
             entity.HasIndex(offer => offer.TenantId);
             entity.HasIndex(offer => offer.PropertyId);
@@ -434,6 +439,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne(lease => lease.RentalOffer)
                 .WithMany()
                 .HasForeignKey(lease => lease.RentalOfferId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<Property>()
+                .WithMany()
+                .HasForeignKey(lease => lease.PropertyId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(lease => lease.RentalOfferId)
