@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs;
+using RentFlow.Api.DTOs.PropertyMatching;
 using RentFlow.Api.Models;
 using RentFlow.Api.Services.Interfaces;
 
@@ -15,15 +16,18 @@ public class PropertiesController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IPropertyService _propertyService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IPropertyMatchingOrchestrator _propertyMatchingOrchestrator;
 
     public PropertiesController(
         ApplicationDbContext context,
         IPropertyService propertyService,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IPropertyMatchingOrchestrator propertyMatchingOrchestrator)
     {
         _context = context;
         _propertyService = propertyService;
         _currentUserService = currentUserService;
+        _propertyMatchingOrchestrator = propertyMatchingOrchestrator;
     }
 
     // =========================================================
@@ -49,8 +53,6 @@ public class PropertiesController : ControllerBase
             .Include(property => property.Amenities)
             .AsQueryable();
 
-        // General text/location search.
-        // Searches title, description, address and city.
         if (!string.IsNullOrWhiteSpace(search))
         {
             var searchTerm = search.Trim().ToLower();
@@ -62,7 +64,6 @@ public class PropertiesController : ControllerBase
                 property.City.ToLower().Contains(searchTerm));
         }
 
-        // Exact city filter.
         if (!string.IsNullOrWhiteSpace(city))
         {
             var cityFilter = city.Trim().ToLower();
@@ -71,42 +72,36 @@ public class PropertiesController : ControllerBase
                 property.City.ToLower() == cityFilter);
         }
 
-        // Minimum monthly rent.
         if (minRent.HasValue)
         {
             query = query.Where(property =>
                 property.MonthlyRent >= minRent.Value);
         }
 
-        // Maximum monthly rent.
         if (maxRent.HasValue)
         {
             query = query.Where(property =>
                 property.MonthlyRent <= maxRent.Value);
         }
 
-        // Exact bedroom count.
         if (bedrooms.HasValue)
         {
             query = query.Where(property =>
                 property.Bedrooms == bedrooms.Value);
         }
 
-        // Exact bathroom count.
         if (bathrooms.HasValue)
         {
             query = query.Where(property =>
                 property.Bathrooms == bathrooms.Value);
         }
 
-        // Availability filter.
         if (isAvailable.HasValue)
         {
             query = query.Where(property =>
                 property.IsAvailable == isAvailable.Value);
         }
 
-        // Amenity filter.
         if (!string.IsNullOrWhiteSpace(amenity))
         {
             var amenityFilter = amenity.Trim().ToLower();
@@ -117,6 +112,38 @@ public class PropertiesController : ControllerBase
         }
 
         var properties = await query
+            .OrderByDescending(property => property.CreatedAt)
+            .ToListAsync();
+
+        var result = properties
+            .Select(MapToResponseDto)
+            .ToList();
+
+        return Ok(result);
+    }
+
+    // =========================================================
+    // GET /api/properties/mine
+    // Logged-in landlord's own properties only
+    // =========================================================
+
+    [HttpGet("mine")]
+    [Authorize(Roles = nameof(UserRole.Landlord))]
+    public async Task<ActionResult<IEnumerable<PropertyResponseDto>>>
+        GetMyProperties()
+    {
+        var landlordId = GetCurrentLandlordId();
+
+        if (landlordId is null)
+        {
+            return Forbid();
+        }
+
+        var properties = await _context.Properties
+            .AsNoTracking()
+            .Include(property => property.Amenities)
+            .Where(property =>
+                property.LandlordId == landlordId.Value)
             .OrderByDescending(property => property.CreatedAt)
             .ToListAsync();
 
@@ -146,6 +173,26 @@ public class PropertiesController : ControllerBase
         }
 
         return Ok(property);
+    }
+
+    // =========================================================
+    // POST /api/properties/match
+    // AI-assisted property matching
+    // =========================================================
+
+    [HttpPost("match")]
+    [AllowAnonymous]
+    public async Task<ActionResult<PropertyMatchingResponse>>
+        MatchProperties(
+            [FromBody] PropertyMatchingRequest request,
+            CancellationToken cancellationToken)
+    {
+        var result =
+            await _propertyMatchingOrchestrator.MatchAsync(
+                request,
+                cancellationToken);
+
+        return Ok(result);
     }
 
     // =========================================================

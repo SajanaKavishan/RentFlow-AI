@@ -166,7 +166,7 @@ builder.Services.AddScoped<
 builder.Services.AddHttpContextAccessor();
 
 // =========================================================
-// PROPERTY MANAGEMENT
+// PROPERTY MANAGEMENT / PROPERTY MATCHING AI
 // =========================================================
 
 builder.Services.AddScoped<
@@ -180,6 +180,22 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IPropertyImageService,
     PropertyImageService>();
+
+builder.Services.AddScoped<
+    IPropertyMatchingRuleTool,
+    PropertyMatchingRuleTool>();
+
+builder.Services.AddScoped<
+    IPropertyMatchingOrchestrator,
+    PropertyMatchingOrchestrator>();
+
+builder.Services.AddHttpClient<
+    IPropertyMatchingAgentClient,
+    PropertyMatchingAgentClient>(
+        client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
 
 // =========================================================
 // RENTAL APPLICATION SERVICES
@@ -318,6 +334,7 @@ builder.Services.AddSingleton<
     CloudflareR2StorageService>();
 
 builder.Services.AddSingleton(TimeProvider.System);
+
 builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
@@ -366,8 +383,9 @@ if (builder.Environment.IsDevelopment())
             policy =>
             {
                 policy
-                    .WithOrigins(
-                        "http://localhost:5173")
+                   .WithOrigins(
+                     "http://localhost:5173",
+                     "http://localhost:5174")
                     .AllowAnyHeader()
                     .AllowAnyMethod();
             });
