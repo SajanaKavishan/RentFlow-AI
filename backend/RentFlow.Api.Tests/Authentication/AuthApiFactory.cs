@@ -16,6 +16,12 @@ namespace RentFlow.Api.Tests.Authentication;
 internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"AuthApiTests-{Guid.NewGuid()}";
+    private readonly TimeProvider? _timeProvider;
+
+    public AuthApiFactory(TimeProvider? timeProvider = null)
+    {
+        _timeProvider = timeProvider;
+    }
 
     public RecordingFileStorageService FileStorage { get; } = new();
 
@@ -33,6 +39,7 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["Jwt:Audience"] = "RentFlow.TestClients",
                 ["Jwt:SigningKey"] = "test-only-signing-key-that-is-at-least-32-bytes-long",
                 ["Jwt:ExpiryMinutes"] = "15",
+                ["StaffProvisioning:SetupTokenLifetimeMinutes"] = "60",
                 ["CloudflareR2:AccountId"] = "test-account",
                 ["CloudflareR2:AccessKeyId"] = "test-access-key",
                 ["CloudflareR2:SecretAccessKey"] = "test-secret-key",
@@ -55,6 +62,11 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName));
             services.AddDataProtection().UseEphemeralDataProtectionProvider();
+            if (_timeProvider is not null)
+            {
+                services.RemoveAll<TimeProvider>();
+                services.AddSingleton(_timeProvider);
+            }
             services.RemoveAll<IFileStorageService>();
             services.AddSingleton<IFileStorageService>(FileStorage);
             services.RemoveAll<IApplicationValidationOrchestrator>();
@@ -72,16 +84,28 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 
 internal sealed class RecordingFileStorageService : IFileStorageService
 {
+    private readonly Dictionary<string, byte[]> _objects = new(StringComparer.Ordinal);
+
     public int DownloadUrlCalls { get; private set; }
 
-    public Task UploadAsync(Stream content, string storageKey, string contentType,
-        CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public async Task UploadAsync(Stream content, string storageKey, string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        await using var buffer = new MemoryStream();
+        await content.CopyToAsync(buffer, cancellationToken);
+        _objects[storageKey] = buffer.ToArray();
+    }
 
     public Task DeleteAsync(string storageKey,
-        CancellationToken cancellationToken = default) => Task.CompletedTask;
+        CancellationToken cancellationToken = default)
+    {
+        _objects.Remove(storageKey);
+        return Task.CompletedTask;
+    }
 
     public Task<byte[]> DownloadBytesAsync(string storageKey, long maximumBytes,
-        CancellationToken cancellationToken = default) => Task.FromResult(Array.Empty<byte>());
+        CancellationToken cancellationToken = default) => Task.FromResult(
+            _objects.TryGetValue(storageKey, out var content) ? content : Array.Empty<byte>());
 
     public Task<string> GenerateDownloadUrlAsync(string storageKey, string originalFileName,
         string contentType, TimeSpan lifetime)

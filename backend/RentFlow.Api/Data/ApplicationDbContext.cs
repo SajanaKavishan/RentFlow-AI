@@ -8,6 +8,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 {
     public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
 
+    public DbSet<UserProfileImage> UserProfileImages => Set<UserProfileImage>();
+
+    public DbSet<AdminBootstrapRecord> AdminBootstrapRecords =>
+        Set<AdminBootstrapRecord>();
+
+    public DbSet<TechnicianPasswordSetupToken> TechnicianPasswordSetupTokens =>
+        Set<TechnicianPasswordSetupToken>();
+
     public DbSet<Property> Properties => Set<Property>();
 
     public DbSet<PropertyAmenity> PropertyAmenities => Set<PropertyAmenity>();
@@ -77,7 +85,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.Property(user => user.PasswordHash)
                 .HasMaxLength(512)
-                .IsRequired();
+                .IsRequired(false);
 
             entity.Property(user => user.Role)
                 .HasConversion<string>()
@@ -92,6 +100,88 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(user => user.NormalizedEmail)
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<UserProfileImage>(entity =>
+        {
+            entity.HasKey(image => image.UserId);
+
+            entity.Property(image => image.StorageKey)
+                .HasMaxLength(512)
+                .IsRequired();
+
+            entity.Property(image => image.ContentType)
+                .HasMaxLength(32)
+                .IsRequired();
+
+            entity.Property(image => image.FileSizeBytes)
+                .IsRequired();
+
+            entity.Property(image => image.UpdatedAt)
+                .IsRequired();
+
+            entity.HasOne(image => image.User)
+                .WithOne(user => user.ProfileImage)
+                .HasForeignKey<UserProfileImage>(image => image.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AdminBootstrapRecord>(entity =>
+        {
+            entity.HasKey(record => record.Id);
+
+            entity.Property(record => record.Id)
+                .ValueGeneratedNever();
+
+            entity.Property(record => record.AdminUserId)
+                .IsRequired();
+
+            entity.Property(record => record.CompletedAt)
+                .IsRequired();
+
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_AdminBootstrapRecords_Singleton",
+                $"\"Id\" = {AdminBootstrapRecord.SingletonId}"));
+
+            entity.HasOne<ApplicationUser>()
+                .WithOne()
+                .HasForeignKey<AdminBootstrapRecord>(record => record.AdminUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TechnicianPasswordSetupToken>(entity =>
+        {
+            entity.HasKey(token => token.Id);
+
+            entity.Property(token => token.TokenDigest)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            entity.Property(token => token.CreatedAt)
+                .IsRequired();
+
+            entity.Property(token => token.ExpiresAt)
+                .IsRequired();
+
+            entity.Property(token => token.ConsumedAt)
+                .IsRequired(false)
+                .IsConcurrencyToken();
+
+            entity.HasIndex(token => token.TokenDigest)
+                .IsUnique();
+
+            entity.HasIndex(token => token.UserId)
+                .IsUnique();
+
+            entity.HasOne<ApplicationUser>()
+                .WithOne()
+                .HasForeignKey<TechnicianPasswordSetupToken>(token => token.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(token => token.CreatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // =========================================================

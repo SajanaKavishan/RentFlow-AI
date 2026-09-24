@@ -18,12 +18,14 @@ import NotificationsPage from './features/notifications/NotificationsPage.jsx'
 import NotificationResourcePage from './features/notifications/NotificationResourcePage.jsx'
 import { NotFoundState, UnauthorizedState, UnavailableState } from './shared/ui/States.jsx'
 import LandingPage from './features/landing/pages/LandingPage.jsx'
+import PasswordSetupPage from './features/staffProvisioning/PasswordSetupPage.jsx'
 
 export default function App() {
   return <Routes>
     <Route path="/" element={<LandingPage />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/register" element={<RegisterPage />} />
+    <Route path="/setup-password" element={<PasswordSetupPage />} />
     <Route element={<ProtectedRoute />}>
       <Route element={<AppShell />}>
         <Route path="/dashboard" element={<DashboardPage />} />
