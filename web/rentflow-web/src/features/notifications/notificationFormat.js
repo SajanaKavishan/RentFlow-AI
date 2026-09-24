@@ -4,4 +4,3 @@ export function notificationTime(value) {
     dateStyle: 'medium', timeStyle: 'short',
   }).format(date)
 }
-

@@ -14,4 +14,3 @@ const labels = new Map(SUPPORTED_NOTIFICATION_TYPES.map((type) => [type.value, t
 export function notificationTypeLabel(eventType) {
   return labels.get(eventType) || 'Account update'
 }
-
