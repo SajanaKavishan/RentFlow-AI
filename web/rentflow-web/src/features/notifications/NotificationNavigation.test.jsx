@@ -14,6 +14,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 const notification = (type, id, isRead = true) => ({
   id: notificationId, title: 'An update', message: 'Open the related record.',
   createdAt: '2026-09-20T10:00:00Z', isRead, readAt: isRead ? '2026-09-20T11:00:00Z' : null,
+  eventType: type === 'ViewingRequest' ? 'viewing.approved' : 'rental_application.approved',
   relatedResourceType: type, relatedResourceId: id,
 })
 const page = (item) => ({ items: [item], pagination: {

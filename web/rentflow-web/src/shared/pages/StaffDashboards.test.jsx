@@ -116,14 +116,14 @@ describe('Technician and Admin dashboards', () => {
 
   it.each([
     ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work', /View integration status/],
-    ['Admin', 'AI Workflows', 'AI & System Overview', /View integration details/],
+    ['Admin', 'AI Workflows', 'AI / System Overview', /View integration details/],
   ])('opens the explicit workspace for %s %s', async (role, label, pageTitle, linkName) => {
     renderDashboard(role)
     const main = screen.getByRole('main')
     const region = within(main).getByRole('region', { name: label })
     await userEvent.click(within(region).getByRole('link', { name: linkName }))
     expect(screen.getByRole('heading', { name: pageTitle })).toBeInTheDocument()
-    expect(screen.getByText('Integration pending')).toBeInTheDocument()
+    expect(screen.getAllByText('Integration pending').length).toBeGreaterThan(0)
   })
 
   it('opens the working Technician provisioning page from Admin Quick Access', async () => {

@@ -7,8 +7,8 @@ import { AuthContext } from '../auth/useAuth.js'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 
 const user = { id: 'session-user', fullName: 'Taylor Example', email: 'taylor@example.com', role: 'Tenant' }
-const first = { id: '11111111-1111-1111-1111-111111111111', title: 'Viewing confirmed', message: 'Your viewing is confirmed for Tuesday.', createdAt: '2026-09-20T10:00:00Z', isRead: false, readAt: null }
-const second = { id: '22222222-2222-2222-2222-222222222222', title: 'Application updated', message: 'Your application was updated.', createdAt: '2026-09-19T10:00:00Z', isRead: true, readAt: '2026-09-19T11:00:00Z' }
+const first = { id: '11111111-1111-1111-1111-111111111111', eventType: 'viewing.approved', relatedResourceType: 'ViewingRequest', relatedResourceId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', title: 'Viewing confirmed', message: 'Your viewing is confirmed for Tuesday.', createdAt: '2026-09-20T10:00:00Z', isRead: false, readAt: null }
+const second = { id: '22222222-2222-2222-2222-222222222222', eventType: 'rental_application.approved', relatedResourceType: 'RentalApplication', relatedResourceId: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', title: 'Application updated', message: 'Your application was updated.', createdAt: '2026-09-19T10:00:00Z', isRead: true, readAt: '2026-09-19T11:00:00Z' }
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const page = (items = [first, second], number = 1, totalPages = 1) => ({ items, pagination: { page: number, pageSize: 20, totalCount: items.length, totalPages, hasNextPage: number < totalPages, hasPreviousPage: number > 1 } })
 
@@ -27,14 +27,14 @@ afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals() })
 describe('shared notifications UI', () => {
   it.each(['Tenant', 'Landlord', 'MaintenanceTechnician', 'Admin'])('shows the bell and real count for %s', async (role) => {
     renderApp(role)
-    const bell = screen.getByRole('link', { name: /^Notifications/ })
-    expect(bell).toHaveAttribute('href', '/notifications')
+    const bell = screen.getByRole('link', { name: /^Notifications(?:, \d+ unread)?$/ })
     await waitFor(() => expect(bell).toHaveAccessibleName('Notifications, 1 unread'))
     expect(within(bell).getByText('1')).toBeInTheDocument()
     expect(await screen.findByText(first.title)).toBeInTheDocument()
     expect(screen.getByText(first.message)).toBeInTheDocument()
-    expect(screen.getAllByText('Unread')).toHaveLength(1)
-    expect(screen.getAllByText('Read')).toHaveLength(1)
+    const list = screen.getByRole('region', { name: 'Notification list' })
+    expect(within(list).getAllByText('Unread')).toHaveLength(1)
+    expect(within(list).getAllByText('Read')).toHaveLength(1)
     expect(screen.getByText(first.message).closest('button').querySelector('time')).toHaveAttribute('dateTime', first.createdAt)
   })
 
@@ -54,10 +54,11 @@ describe('shared notifications UI', () => {
     let countRequests = 0
     fetch.mockImplementation((url) => Promise.resolve(json(url.includes('unread-count')
       ? { unreadCount: ++countRequests } : page())))
-    renderApp('Admin', '/dashboard')
-    const bell = screen.getByRole('link', { name: /^Notifications/ })
+    renderApp('Admin', '/profile')
+    const bell = screen.getByRole('link', { name: /^Notifications(?:, \d+ unread)?$/ })
     await waitFor(() => expect(bell).toHaveAccessibleName('Notifications, 1 unread'))
     await userEvent.click(bell)
+    await userEvent.click(await screen.findByRole('link', { name: /See all notifications/ }))
     await waitFor(() => expect(bell).toHaveAccessibleName('Notifications, 2 unread'))
     await userEvent.click(screen.getByRole('link', { name: 'Dashboard' }))
     await waitFor(() => expect(bell).toHaveAccessibleName('Notifications, 3 unread'))
@@ -83,7 +84,7 @@ describe('shared notifications UI', () => {
       return Promise.resolve(json(url.includes('unread-count') ? { unreadCount: fetch.mock.calls.some(([, opts]) => opts?.method === 'PATCH') ? 0 : 1 } : page()))
     })
     renderApp()
-    const bell = screen.getByRole('link', { name: /^Notifications/ })
+    const bell = screen.getByRole('link', { name: /^Notifications(?:, \d+ unread)?$/ })
     await waitFor(() => expect(bell).toHaveAccessibleName('Notifications, 1 unread'))
     const unread = await screen.findByRole('button', { name: /Viewing confirmed/ })
     await userEvent.click(unread)
@@ -108,7 +109,7 @@ describe('shared notifications UI', () => {
     })
     renderApp()
     const unread = await screen.findByRole('button', { name: /Viewing confirmed/ })
-    await waitFor(() => expect(screen.getByRole('link', { name: /^Notifications/ })).toHaveAccessibleName('Notifications, 1 unread'))
+    await waitFor(() => expect(screen.getByRole('link', { name: /^Notifications(?:, \d+ unread)?$/ })).toHaveAccessibleName('Notifications, 1 unread'))
     await userEvent.click(unread)
     expect(await screen.findByRole('alert')).toHaveTextContent('Notification could not be marked as read.')
     expect(unread).toHaveTextContent('Unread')
@@ -130,6 +131,30 @@ describe('shared notifications UI', () => {
     await act(async () => { failPatch(json({ message: 'Unavailable' }, 503)) })
     expect(screen.queryByText('Notification could not be marked as read.')).not.toBeInTheDocument()
     expect(unread).toHaveTextContent('Unread')
+  })
+
+  it('filters the current page by read state and supported notification type', async () => {
+    renderApp()
+    await screen.findByRole('button', { name: /Viewing confirmed/ })
+    expect(screen.getByText('Filters apply to the 2 notifications loaded on this page.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Unread' }))
+    expect(screen.getByRole('button', { name: /Viewing confirmed/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Application updated/ })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Read' }))
+    expect(screen.queryByRole('button', { name: /Viewing confirmed/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Application updated/ })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'All' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Notification type' }), 'viewing.approved')
+    expect(screen.getByRole('button', { name: /Viewing confirmed/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Application updated/ })).not.toBeInTheDocument()
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Notification type' }), 'viewing.rejected')
+    expect(screen.getByRole('heading', { name: 'No matching notifications on this page' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(screen.getByRole('button', { name: /Application updated/ })).toBeInTheDocument()
   })
 
   it('handles loading, error, retry, empty, refresh and pagination', async () => {

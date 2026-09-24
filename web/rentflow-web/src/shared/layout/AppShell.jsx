@@ -9,6 +9,7 @@ import { USER_ROLES } from '../../features/auth/authModel.js'
 import { propertyIdFromLocation } from '../property/usePropertyContext.js'
 import { getUnreadCount } from '../../features/notifications/notificationsApi.js'
 import { NotificationCountContext } from '../../features/notifications/NotificationCountContext.js'
+import NotificationPopover from '../../features/notifications/NotificationPopover.jsx'
 import { PendingViewingsContext } from './PendingViewingsContext.js'
 import { PendingApplicationsContext } from './PendingApplicationsContext.js'
 import { getViewingsByProperty, VIEWING_STATUS } from '../../features/viewings/services/viewingApiService.js'
@@ -195,8 +196,8 @@ export default function AppShell() {
     <div className="shared-shell__body">
       <header className="shared-topbar">
         <button ref={menuRef} type="button" className="shared-menu-button" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="shared-navigation" onClick={() => setMenu({ path: location.pathname, open: !menuOpen })}><Icon name={menuOpen ? 'close' : 'menu'} size={22} /></button>
-        <div className="shared-topbar__title"><strong>{current}</strong></div>
-        <Link className="shared-topbar__notifications" to="/notifications" onClick={closeMenu} aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'} aria-current={activePath === '/notifications' ? 'page' : undefined}><Icon name="bell" size={21} />{unreadCount > 0 && <span className="shared-topbar__notification-count" aria-hidden="true">{unreadCount}</span>}</Link>
+        {activePath !== '/notifications' && <div className="shared-topbar__title"><strong>{current}</strong></div>}
+        <NotificationPopover key={user.id} userId={user.id} unreadCount={unreadCount} refreshCount={refreshCount} onOpen={() => { closeMenu(); setAccountMenu({ path: location.pathname, open: false }) }} />
         <button ref={accountButtonRef} className="shared-topbar__account" type="button" title={user.email} aria-label={`Profile for ${user.fullName}`} aria-haspopup="dialog" aria-expanded={accountOpen} onClick={() => { closeMenu(); setAccountMenu({ path: location.pathname, open: !accountOpen }) }}><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span></span><ProfileAvatar user={user} className="shared-avatar" /></button>
         {accountOpen && <section ref={accountPopupRef} className="shared-account-popup" role="dialog" aria-label="Account menu">
           <div className="shared-account-popup__identity">

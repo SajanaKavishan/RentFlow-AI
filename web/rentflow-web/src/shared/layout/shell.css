@@ -27,8 +27,9 @@
 .shared-topbar__notifications { position: relative; flex: none; width: 44px; height: 44px; display: grid; place-items: center; margin-left: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--olive-900); background: var(--cream-50); text-decoration: none; }
 .shared-topbar__notifications:hover, .shared-topbar__notifications[aria-current="page"] { background: var(--olive-50); }
 .shared-topbar__notification-count { position: absolute; top: -7px; right: -8px; min-width: 20px; height: 20px; display: grid; place-items: center; padding: 0 4px; border: 2px solid var(--surface); border-radius: 999px; color: var(--surface); background: var(--olive-900); font-size: .61rem; font-weight: 800; line-height: 1; }
+.notification-popover { position: relative; flex: none; margin-left: auto; }
 .shared-topbar__account { min-width: 0; display: flex; align-items: center; gap: 12px; margin-left: auto; padding: 0; border: 0; color: var(--ink); background: transparent; text-decoration: none; font-size: .82rem; font-weight: 700; cursor: pointer; }
-.shared-topbar__notifications + .shared-topbar__account { margin-left: 0; }
+.notification-popover + .shared-topbar__account { margin-left: 0; }
 .shared-topbar__name { max-width: min(20vw, 240px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .shared-topbar__identity { min-width: 0; display: grid; gap: 3px; }
 .shared-avatar { position: relative; flex: 0 0 40px; width: 40px; min-width: 40px; max-width: 40px; height: 40px; min-height: 40px; max-height: 40px; aspect-ratio: 1; display: grid; place-items: center; border: 2px solid var(--olive-100); border-radius: 50%; color: var(--olive-100); background: var(--olive-900); font-size: .78rem; font-weight: 800; line-height: 1; overflow: hidden; }

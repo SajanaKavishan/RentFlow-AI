@@ -27,50 +27,55 @@ beforeEach(() => {
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals() })
 
 describe('Admin AI and System Overview page', () => {
-  it('renders an accessible integration workspace without requesting or inventing system data', () => {
+  it('renders the two requested pending integration sections without inventing system data', () => {
     renderRoute()
     const main = screen.getByRole('main')
-    expect(within(main).getByRole('heading', { name: 'AI & System Overview', level: 1 })).toBeInTheDocument()
-    expect(within(main).getByText('Administration workspace')).toBeInTheDocument()
-    const overview = within(main).getByRole('region', { name: 'Overview workspace' })
-    expect(overview).toHaveTextContent('Integration pending')
-    expect(overview).toHaveTextContent('Aggregate Admin reporting required')
-    expect(overview).toHaveTextContent('does not currently expose an Admin-authorized aggregate')
-    expect(overview).toHaveTextContent('require a known rental application or workflow ID')
-    expect(overview).toHaveTextContent('No scores, outcomes, usage metrics, health statuses, charts, activity records or totals')
+    expect(within(main).getByRole('heading', { name: 'AI / System Overview', level: 1 })).toBeInTheDocument()
+    expect(within(main).getByText('Platform administration')).toBeInTheDocument()
+    expect(within(main).getByText(/Monitor AI workflows and system reporting/)).toBeInTheDocument()
+
+    const workflows = within(main).getByRole('region', { name: 'AI Workflows' })
+    expect(workflows).toHaveTextContent('Integration pending')
+    expect(workflows).toHaveTextContent('Admin-authorized aggregate API')
+    expect(workflows).toHaveTextContent('Aggregate workflow reporting')
+    expect(workflows).toHaveTextContent('No validation outcomes, workflow totals or activity records')
+
+    const health = within(main).getByRole('region', { name: 'System Health' })
+    expect(health).toHaveTextContent('Integration pending')
+    expect(health).toHaveTextContent('supported monitoring API')
+    expect(health).toHaveTextContent('No service statuses, uptime or latency measurements are inferred')
+    expect(within(main).getAllByRole('status')).toHaveLength(2)
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('keeps the route active and preserves real Admin navigation and account actions', () => {
+  it('omits the removed Figma cards and keeps the overview limited to its two sections', () => {
+    renderRoute()
+    const main = screen.getByRole('main')
+    expect(within(main).getAllByRole('region')).toHaveLength(2)
+    expect(main).not.toHaveTextContent('Design principle')
+    expect(main).not.toHaveTextContent('Admin essentials')
+    expect(main).not.toHaveTextContent('Available now')
+    expect(main).not.toHaveTextContent(/AI score|validation result|workflow count|activity log/i)
+  })
+
+  it('keeps the route active and preserves the shared Admin navigation and account actions', () => {
     renderRoute()
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
     const overviewLink = within(nav).getByRole('link', { name: 'AI / System Overview' })
     expect(overviewLink).toHaveAttribute('href', '/modules/ai-system-overview')
     expect(overviewLink).toHaveAttribute('aria-current', 'page')
     expect(overviewLink).not.toHaveTextContent('Soon')
+    expect(within(nav).getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/dashboard')
     expect(within(nav).getByRole('link', { name: 'Users' })).toHaveAttribute('href', '/modules/users')
     expect(within(nav).getByRole('button', { name: 'Logout' })).toBeInTheDocument()
-
-    const main = screen.getByRole('main')
-    expect(within(main).getByRole('link', { name: 'Back to dashboard' })).toHaveAttribute('href', '/dashboard')
-    expect(within(main).getAllByRole('link', { name: /notification/i }).every((link) => link.getAttribute('href') === '/notifications')).toBe(true)
-    expect(within(main).getByRole('link', { name: /Profile/ })).toHaveAttribute('href', '/profile')
-  })
-
-  it('shows only the applicable pending state and identifies the scoped APIs that cannot back the overview', () => {
-    renderRoute()
-    const main = screen.getByRole('main')
-    expect(within(main).getByRole('status')).toHaveTextContent('Integration pending')
-    expect(main).toHaveTextContent('/api/rental-applications/{applicationId}/validation-runs')
-    expect(main).toHaveTextContent('/api/application-validation-workflows/{workflowId}')
-    expect(within(main).queryByRole('button')).not.toBeInTheDocument()
-    expect(main).not.toHaveTextContent(/loading overview|no activity|could not load|try again/i)
+    expect(screen.getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/notifications')
+    expect(screen.getByRole('button', { name: 'Profile for Sam Perera' })).toBeInTheDocument()
   })
 
   it.each(['Tenant', 'Landlord', 'MaintenanceTechnician'])('blocks %s from the Admin overview route', (role) => {
     renderRoute(role)
     expect(screen.getByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'AI & System Overview' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'AI / System Overview' })).not.toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
   })
 })
