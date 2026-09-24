@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 using RentFlow.Api.Commands;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.Auth;
@@ -55,7 +56,9 @@ public sealed class AdminBootstrapTests
             context,
             hasher,
             new StubJwtTokenService(),
-            TimeProvider.System);
+            new RecordingFileStorageService(),
+            TimeProvider.System,
+            NullLogger<AuthService>.Instance);
         var login = await authService.LoginAsync(new LoginRequestDto
         {
             Email = "admin@example.com",

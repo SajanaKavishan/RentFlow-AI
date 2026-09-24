@@ -15,4 +15,19 @@ public interface IAuthService
     Task<UserProfileDto?> GetUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default);
+
+    Task<UserProfileDto?> UpdateProfileAsync(
+        Guid userId,
+        UpdateProfileRequestDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<UserProfileDto?> UploadProfileImageAsync(
+        Guid userId,
+        byte[] content,
+        string contentType,
+        CancellationToken cancellationToken = default);
+
+    Task<UserProfileImageContentDto?> GetProfileImageAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
 }

@@ -84,16 +84,28 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 
 internal sealed class RecordingFileStorageService : IFileStorageService
 {
+    private readonly Dictionary<string, byte[]> _objects = new(StringComparer.Ordinal);
+
     public int DownloadUrlCalls { get; private set; }
 
-    public Task UploadAsync(Stream content, string storageKey, string contentType,
-        CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public async Task UploadAsync(Stream content, string storageKey, string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        await using var buffer = new MemoryStream();
+        await content.CopyToAsync(buffer, cancellationToken);
+        _objects[storageKey] = buffer.ToArray();
+    }
 
     public Task DeleteAsync(string storageKey,
-        CancellationToken cancellationToken = default) => Task.CompletedTask;
+        CancellationToken cancellationToken = default)
+    {
+        _objects.Remove(storageKey);
+        return Task.CompletedTask;
+    }
 
     public Task<byte[]> DownloadBytesAsync(string storageKey, long maximumBytes,
-        CancellationToken cancellationToken = default) => Task.FromResult(Array.Empty<byte>());
+        CancellationToken cancellationToken = default) => Task.FromResult(
+            _objects.TryGetValue(storageKey, out var content) ? content : Array.Empty<byte>());
 
     public Task<string> GenerateDownloadUrlAsync(string storageKey, string originalFileName,
         string contentType, TimeSpan lifetime)

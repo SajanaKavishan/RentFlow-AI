@@ -8,6 +8,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 {
     public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
 
+    public DbSet<UserProfileImage> UserProfileImages => Set<UserProfileImage>();
+
     public DbSet<AdminBootstrapRecord> AdminBootstrapRecords =>
         Set<AdminBootstrapRecord>();
 
@@ -98,6 +100,30 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(user => user.NormalizedEmail)
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<UserProfileImage>(entity =>
+        {
+            entity.HasKey(image => image.UserId);
+
+            entity.Property(image => image.StorageKey)
+                .HasMaxLength(512)
+                .IsRequired();
+
+            entity.Property(image => image.ContentType)
+                .HasMaxLength(32)
+                .IsRequired();
+
+            entity.Property(image => image.FileSizeBytes)
+                .IsRequired();
+
+            entity.Property(image => image.UpdatedAt)
+                .IsRequired();
+
+            entity.HasOne(image => image.User)
+                .WithOne(user => user.ProfileImage)
+                .HasForeignKey<UserProfileImage>(image => image.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AdminBootstrapRecord>(entity =>

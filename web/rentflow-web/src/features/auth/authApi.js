@@ -29,3 +29,27 @@ export async function getCurrentUser() {
     errorMessage: 'Your session is no longer valid.',
   }))
 }
+
+export async function updateProfile(details) {
+  return parseCurrentUser(await apiRequest('/api/auth/profile', {
+    method: 'PUT', body: JSON.stringify(details),
+    errorMessage: 'Your profile could not be updated.',
+  }))
+}
+
+export async function uploadProfileImage(file) {
+  const body = new FormData()
+  body.append('file', file)
+  return parseCurrentUser(await apiRequest('/api/auth/profile-image', {
+    method: 'POST', body,
+    errorMessage: 'Your profile image could not be uploaded.',
+  }))
+}
+
+export async function getProfileImage() {
+  const response = await apiRequest('/api/auth/profile-image', {
+    parse: 'response',
+    errorMessage: 'Your profile image could not be loaded.',
+  })
+  return response.blob()
+}

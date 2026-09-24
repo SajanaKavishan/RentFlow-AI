@@ -362,7 +362,8 @@ describe('Admin Users access and shell', () => {
     expect(usersLink).toHaveAttribute('href', '/modules/users')
     expect(usersLink).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/notifications')
-    expect(within(nav).getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile')
+    expect(within(nav).queryByRole('link', { name: 'Profile' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Profile for Sam Perera' })).toBeInTheDocument()
     expect(within(nav).getByRole('button', { name: 'Logout' })).toBeInTheDocument()
   })
 

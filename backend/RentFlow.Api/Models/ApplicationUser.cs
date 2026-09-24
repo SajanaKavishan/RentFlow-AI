@@ -21,4 +21,6 @@ public sealed class ApplicationUser
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    public UserProfileImage? ProfileImage { get; set; }
 }

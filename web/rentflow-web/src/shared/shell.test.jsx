@@ -47,10 +47,10 @@ describe('shared React shell', () => {
   })
 
   it.each([
-    ['Tenant', ['Dashboard', 'Properties', 'My Viewings', 'My Applications', 'Lease & Payments', 'Maintenance', 'Profile']],
-    ['Landlord', ['Dashboard', 'Properties', 'Viewing Requests', 'Rental Applications', 'AI Review', 'Pricing / Lease', 'Payments', 'Maintenance', 'Profile']],
-    ['MaintenanceTechnician', ['Dashboard', 'Assigned Work', 'Profile']],
-    ['Admin', ['Dashboard', 'Users', 'AI / System Overview', 'Profile']],
+    ['Tenant', ['Dashboard', 'Properties', 'My Viewings', 'My Applications', 'Lease & Payments', 'Maintenance']],
+    ['Landlord', ['Dashboard', 'Properties', 'Viewing Requests', 'Rental Applications', 'AI Review', 'Pricing / Lease', 'Payments', 'Maintenance']],
+    ['MaintenanceTechnician', ['Dashboard', 'Assigned Work']],
+    ['Admin', ['Dashboard', 'Users', 'AI / System Overview']],
   ])('renders the exact navigation map for %s', async (role, expectedLabels) => {
     renderApp(role)
     const nav = await screen.findByRole('navigation', { name: 'Primary navigation' })
@@ -84,6 +84,24 @@ describe('shared React shell', () => {
     expect(tokenStorage.getToken()).toBeNull()
   })
 
+  it('opens the account popup from the top-right control and keeps Profile out of the sidebar', async () => {
+    renderApp('Admin')
+    const account = await screen.findByRole('button', { name: 'Profile for Taylor Example' })
+    const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
+    expect(within(nav).queryByRole('link', { name: 'Profile' })).not.toBeInTheDocument()
+    await userEvent.click(account)
+    const popup = screen.getByRole('dialog', { name: 'Account menu' })
+    expect(account).toHaveAttribute('aria-expanded', 'true')
+    expect(popup).toHaveTextContent('Taylor Example')
+    expect(popup).toHaveTextContent('taylor@example.com')
+    expect(popup).toHaveTextContent('Admin')
+    expect(within(popup).getByRole('link', { name: 'View full profile' })).toHaveAttribute('href', '/profile')
+    expect(within(popup).queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Account menu' })).not.toBeInTheDocument()
+    expect(account).toHaveFocus()
+  })
+
   it('renders Not Found for unknown authenticated routes', async () => {
     renderApp('Landlord', '/not-a-page')
     expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument()
@@ -101,12 +119,12 @@ describe('shared React shell', () => {
     expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveFocus()
   })
 
-  it('closes the drawer when a route is selected and keeps profile and logout available', async () => {
+  it('closes the drawer when a route is selected and keeps logout available', async () => {
     renderApp('Landlord')
     await screen.findByRole('heading', { name: 'Welcome, Taylor Example' })
     await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
-    expect(within(nav).getByRole('link', { name: 'Profile' })).toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: 'Profile' })).not.toBeInTheDocument()
     expect(within(nav).getByRole('button', { name: 'Logout' })).toBeInTheDocument()
     await userEvent.click(within(nav).getByRole('link', { name: 'Viewing Requests' }))
     expect(await screen.findByRole('heading', { name: 'Viewing requests workflow' })).toBeInTheDocument()
@@ -172,7 +190,9 @@ describe('shared React shell', () => {
       expect(within(nav).getByRole('link', { name })).toHaveAttribute('href', `${path}?propertyId=${propertyId}`)
     }
     expect(screen.getByRole('link', { name: 'RentFlow dashboard' })).toHaveAttribute('href', `/dashboard?propertyId=${propertyId}`)
-    expect(screen.getByRole('link', { name: 'Profile for Taylor Example' })).toHaveAttribute('href', `/profile?propertyId=${propertyId}`)
+    const account = screen.getByRole('button', { name: 'Profile for Taylor Example' })
+    await userEvent.click(account)
+    expect(within(screen.getByRole('dialog', { name: 'Account menu' })).getByRole('link', { name: 'View full profile' })).toHaveAttribute('href', `/profile?propertyId=${propertyId}`)
     if (typeof entry === 'string' && entry.startsWith('/properties/')) {
       expect(within(nav).getByRole('link', { name: 'Viewing Requests' })).toHaveAttribute('aria-current', 'page')
       expect(within(screen.getByRole('banner')).getByText('Viewings Management', { exact: true })).toBeInTheDocument()
