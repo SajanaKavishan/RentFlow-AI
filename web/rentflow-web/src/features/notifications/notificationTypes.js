@@ -7,6 +7,7 @@ export const SUPPORTED_NOTIFICATION_TYPES = Object.freeze([
   { value: 'rental_application.approved', label: 'Application approved' },
   { value: 'rental_application.rejected', label: 'Application rejected' },
   { value: 'rental_application.changes_requested', label: 'Application changes requested' },
+  { value: 'maintenance_technician.activated', label: 'Technician activation' },
 ])
 
 const labels = new Map(SUPPORTED_NOTIFICATION_TYPES.map((type) => [type.value, type.label]))

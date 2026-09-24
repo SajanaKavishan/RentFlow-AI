@@ -235,7 +235,7 @@ export default function AdminDashboard({ user }) {
           <nav aria-label="Admin quick access">
             <Link to="/modules/users?action=add-technician" aria-label="Manage Users / Add Technician">
               <span className="admin-overview__icon admin-overview__icon--small"><Icon name="user" size={19} /></span>
-              <span><strong>Manage Users</strong><small>Technician creation is available; the full directory is pending.</small></span>
+              <span><strong>Manage Users</strong><small>User directory and Technician creation are available.</small></span>
               <Icon name="arrow" size={17} />
             </Link>
             <Link to="/notifications" aria-label="Open notifications from Quick Access">
@@ -245,7 +245,7 @@ export default function AdminDashboard({ user }) {
             </Link>
             <Link to="/profile" aria-label="Profile">
               <span className="admin-overview__icon admin-overview__icon--small"><Icon name="user" size={19} /></span>
-              <span><strong>Profile</strong><small>View account details and sign out.</small></span>
+              <span><strong>Profile</strong><small>View and edit your account details.</small></span>
               <Icon name="arrow" size={17} />
             </Link>
             <Link to="/modules/ai-system-overview" aria-label="AI / System Overview">

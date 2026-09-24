@@ -164,7 +164,7 @@ export default function AppShell() {
     }
   }, [accountOpen, location.pathname])
   const items = navigationForRole(user.role)
-  const current = (activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : activePath === '/viewing-requests' ? 'Viewings Management' : activePath === '/rental-applications' ? 'Applications Management' : items.find((item) => item.path === activePath)?.label)
+  const current = (activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : activePath === '/modules/users' ? 'User Management' : activePath === '/viewing-requests' ? 'Viewings Management' : activePath === '/rental-applications' ? 'Applications Management' : items.find((item) => item.path === activePath)?.label)
     || (location.pathname === '/unauthorized' ? 'Access restricted' : 'RentFlow AI')
   const closeMenu = () => { setMenu({ path: location.pathname, open: false }); if (menuOpen) menuRef.current?.focus() }
   const navLink = (item) => {

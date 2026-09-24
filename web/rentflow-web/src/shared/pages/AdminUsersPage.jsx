@@ -369,7 +369,6 @@ export default function AdminUsersPage() {
     <section className="shared-card admin-users-directory" aria-labelledby="admin-user-directory-title">
       <div className="admin-users-directory__heading">
         <div>
-          <p className="admin-users-page__eyebrow">User management</p>
           <h2 id="admin-user-directory-title">User directory</h2>
           <p>{visibleDirectoryState.status === 'ready'
             ? `${visibleDirectoryState.data.pagination.totalCount} ${visibleDirectoryState.data.pagination.totalCount === 1 ? 'user' : 'users'} in the current results`

@@ -133,6 +133,15 @@ afterEach(() => {
 })
 
 describe('Admin Users directory', () => {
+  it('labels the Users workspace as User Management in the top bar', () => {
+    renderRoute()
+    const topbar = document.querySelector('.shared-topbar')
+    expect(within(topbar).getByText('User Management', { exact: true })).toBeInTheDocument()
+    expect(within(topbar).queryByText('Users', { exact: true })).not.toBeInTheDocument()
+    expect(within(screen.getByRole('main')).getByRole('heading', { name: 'Users', level: 1 })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Users' })).toHaveAttribute('aria-current', 'page')
+  })
+
   it('renders only real API fields and the filtered total without unsupported actions', async () => {
     renderRoute()
     const main = screen.getByRole('main')

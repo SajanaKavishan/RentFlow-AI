@@ -91,8 +91,11 @@ describe('Technician and Admin dashboards', () => {
     const quickAccess = within(main).getByRole('navigation', { name: 'Admin quick access' })
     expect(within(main).queryByRole('link', { name: 'Add Technician' })).not.toBeInTheDocument()
     expect(within(quickAccess).getByRole('link', { name: 'Manage Users / Add Technician' })).toHaveAttribute('href', '/modules/users?action=add-technician')
+    expect(within(quickAccess).getByRole('link', { name: 'Manage Users / Add Technician' })).toHaveTextContent('User directory and Technician creation are available.')
     expect(within(quickAccess).getByRole('link', { name: 'Open notifications from Quick Access' })).toHaveAttribute('href', '/notifications')
     expect(within(quickAccess).getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile')
+    expect(within(quickAccess).getByRole('link', { name: 'Profile' })).toHaveTextContent('View and edit your account details.')
+    expect(quickAccess).not.toHaveTextContent(/full directory is pending|sign out/i)
     expect(within(quickAccess).getByRole('link', { name: 'AI / System Overview' })).toHaveAttribute('href', '/modules/ai-system-overview')
     expect(await within(quickAccess).findByText('3 unread notifications')).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledTimes(1)
@@ -116,7 +119,7 @@ describe('Technician and Admin dashboards', () => {
 
   it.each([
     ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work', /View integration status/],
-    ['Admin', 'AI Workflows', 'AI / System Overview', /View integration details/],
+    ['Admin', 'AI Workflows', 'AI / System Monitoring Platform', /View integration details/],
   ])('opens the explicit workspace for %s %s', async (role, label, pageTitle, linkName) => {
     renderDashboard(role)
     const main = screen.getByRole('main')

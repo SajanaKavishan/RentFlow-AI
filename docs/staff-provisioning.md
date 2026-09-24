@@ -1,6 +1,6 @@
 # Maintenance Technician provisioning
 
-Stage 2 adds an Admin-only backend workflow for creating a pending Maintenance Technician and letting that Technician set their initial password through a single-use token. It does not add a public staff registration path or any web/mobile UI.
+The staff-provisioning workflow lets an Admin create a pending Maintenance Technician and lets that Technician set their initial password through a single-use token. The web Admin Users page and public password-setup page integrate these endpoints. It does not add a public staff registration path or a Flutter workflow.
 
 ## Security model
 
@@ -84,13 +84,15 @@ From the repository root:
    dotnet run --project backend/RentFlow.Api
    ```
 
-3. Sign in as the previously bootstrapped Admin through `POST /api/auth/login`. Keep the returned JWT only in a temporary process variable or an API client with secret masking.
+3. Start the web app from `web/rentflow-web` with `npm run dev`, open `http://localhost:5173/login`, and sign in as the previously bootstrapped Admin.
 
-4. Call `POST /api/admin/maintenance-technicians` with the three profile fields above. Copy the returned setup token directly into an approved secure channel; do not log or persist it.
+4. Open **Users**, select **Add Technician**, and submit the full name, email, and phone number. The page calls `POST /api/admin/maintenance-technicians` and displays the one-time setup link only after a confirmed successful response. Copy the link directly into an approved secure channel; do not log or persist it.
 
-5. Have the Technician call `POST /api/auth/maintenance-technicians/activate` before `passwordSetupExpiresAt`, entering the token and a password that satisfies the existing policy.
+5. Have the Technician open the setup link before `passwordSetupExpiresAt`. The web app reads the token from the URL fragment, removes it from browser history, and submits the chosen policy-valid password to `POST /api/auth/maintenance-technicians/activate`.
 
-6. Verify the Technician can sign in through `POST /api/auth/login` and receives the existing `MaintenanceTechnician` role contract.
+6. After API-confirmed activation, use the existing login page to verify that the Technician can sign in and receives the existing `MaintenanceTechnician` role contract. The activation page does not automatically create a session.
+
+7. The provisioning Admin receives a recipient-scoped `maintenance_technician.activated` notification after successful activation. The notification contains no setup token, password, password hash, JWT, or setup link.
 
 There is intentionally no public resend, token lookup, password-reset, or recovery endpoint in this stage. If a token expires before use, an authorized database operator must remove the unused pending local Technician and its token before an Admin provisions it again. Do not delete an active account for this purpose.
 

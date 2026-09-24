@@ -30,8 +30,7 @@ describe('Admin AI and System Overview page', () => {
   it('renders the two requested pending integration sections without inventing system data', () => {
     renderRoute()
     const main = screen.getByRole('main')
-    expect(within(main).getByRole('heading', { name: 'AI / System Overview', level: 1 })).toBeInTheDocument()
-    expect(within(main).getByText('Platform administration')).toBeInTheDocument()
+    expect(within(main).getByRole('heading', { name: 'AI / System Monitoring Platform', level: 1 })).toBeInTheDocument()
     expect(within(main).getByText(/Monitor AI workflows and system reporting/)).toBeInTheDocument()
 
     const workflows = within(main).getByRole('region', { name: 'AI Workflows' })
@@ -75,7 +74,7 @@ describe('Admin AI and System Overview page', () => {
   it.each(['Tenant', 'Landlord', 'MaintenanceTechnician'])('blocks %s from the Admin overview route', (role) => {
     renderRoute(role)
     expect(screen.getByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'AI / System Overview' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'AI / System Monitoring Platform' })).not.toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
   })
 })

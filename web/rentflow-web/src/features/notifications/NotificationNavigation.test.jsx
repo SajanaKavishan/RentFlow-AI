@@ -133,11 +133,40 @@ describe('notification resource navigation', () => {
   })
 
   it('keeps unsupported resources in the inbox without guessing from the message', async () => {
-    mockEndpoints(notification('UnknownResource', applicationId))
+    const item = notification('UnknownResource', applicationId)
+    mockEndpoints(item)
     renderInbox('Tenant')
     await userEvent.click(await screen.findByRole('button', { name: /An update/ }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('no supported destination')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getAllByText(item.message)).toHaveLength(1)
+    expect(document.querySelector('.notifications-detail')).not.toBeInTheDocument()
     expect(fetch.mock.calls.some(([url]) => new URL(url, 'http://localhost').pathname === `/api/rental-applications/${applicationId}`)).toBe(false)
+  })
+
+  it('shows and marks a Technician activation notification without attempting resource navigation', async () => {
+    const item = {
+      ...notification('UnknownResource', applicationId, false),
+      eventType: 'maintenance_technician.activated',
+      relatedResourceType: 'MaintenanceTechnician',
+      title: 'Technician account activated',
+      message: 'The Maintenance Technician account you provisioned is now active.',
+    }
+    mockEndpoints(item)
+    renderInbox('Admin')
+
+    const notificationItem = await screen.findByRole('button', { name: /Technician account activated/ })
+    expect(notificationItem).toHaveTextContent('Technician activation')
+    expect(screen.getAllByText(item.message)).toHaveLength(1)
+    notificationItem.focus()
+    await userEvent.keyboard('{Enter}')
+
+    await waitFor(() => expect(notificationItem).toHaveTextContent('Read'))
+    expect(screen.getAllByText(item.message)).toHaveLength(1)
+    expect(document.querySelector('.notifications-detail')).not.toBeInTheDocument()
+    expect(fetch.mock.calls.filter(([, options]) => options?.method === 'PATCH')).toHaveLength(1)
+    expect(fetch.mock.calls.some(([url]) => /\/api\/(admin|rental-applications|viewings)/.test(new URL(url, 'http://localhost').pathname))).toBe(false)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument()
   })
 
   it('does not open another record when the authorized response ID differs', async () => {
