@@ -3,8 +3,10 @@ export default function PropertySelectionState({ className }) {
     <section className={className} role="status">
       <h2>Select a property</h2>
       <p>
-        Property integration pending. Open this workspace from a property to
-        view its landlord activity.
+        Property integration pending: Property Management must provide an
+        authenticated list of your properties and a landlord property
+        workspace before this workspace can open with a verified property
+        selection.
       </p>
     </section>
   )

@@ -69,6 +69,22 @@ describe('shared React shell', () => {
     expect(screen.getByText('Owning area: Property management')).toBeInTheDocument()
   })
 
+  it('keeps landlord property selection unavailable without inventing property context', async () => {
+    renderApp('Landlord', '/viewing-requests')
+    expect(await screen.findByRole('heading', { name: 'Viewing requests workflow' })).toBeInTheDocument()
+
+    const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
+    const propertiesLink = within(nav).getByText('Properties').closest('a')
+    const viewingsLink = within(nav).getByRole('link', { name: 'Viewing Requests' })
+
+    expect(propertiesLink).toHaveAttribute('href', '/modules/properties')
+    expect(within(propertiesLink).getByText('Soon')).toBeInTheDocument()
+    expect(viewingsLink).toHaveAttribute('href', '/viewing-requests')
+    expect(fetch.mock.calls.some(([url]) =>
+      new URL(url).pathname.startsWith('/api/properties') ||
+      new URL(url).pathname.startsWith('/api/viewings'))).toBe(false)
+  })
+
   it('keeps landlord AI review on the real rental application workflow', async () => {
     renderApp('Landlord', '/ai-review')
     expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
