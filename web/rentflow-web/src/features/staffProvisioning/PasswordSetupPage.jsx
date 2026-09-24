@@ -37,6 +37,7 @@ export default function PasswordSetupPage() {
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [passwordVisible, setPasswordVisible] = useState(false)
+  const [passwordConfirmationVisible, setPasswordConfirmationVisible] = useState(false)
 
   useLayoutEffect(() => {
     if (location.hash) {
@@ -100,9 +101,9 @@ export default function PasswordSetupPage() {
       <Link className="shared-button" to="/login">Return to sign in</Link>
     </div> : <form onSubmit={handleSubmit} noValidate>
       <label htmlFor="setupPassword">Password</label>
-      <div className="auth-password"><input id="setupPassword" type={passwordVisible ? 'text' : 'password'} autoComplete="new-password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} disabled={isSubmitting} /><button type="button" aria-label={passwordVisible ? 'Hide passwords' : 'Show passwords'} aria-pressed={passwordVisible} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? 'eyeOff' : 'eye'} /></button></div>
+      <div className="auth-password"><input id="setupPassword" type={passwordVisible ? 'text' : 'password'} autoComplete="new-password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} disabled={isSubmitting} /><button type="button" aria-label={passwordVisible ? 'Hide password' : 'Show password'} aria-pressed={passwordVisible} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? 'eyeOff' : 'eye'} /></button></div>
       <label htmlFor="setupPasswordConfirmation">Confirm password</label>
-      <input id="setupPasswordConfirmation" type={passwordVisible ? 'text' : 'password'} autoComplete="new-password" value={form.passwordConfirmation} onChange={(event) => setForm((current) => ({ ...current, passwordConfirmation: event.target.value }))} disabled={isSubmitting} />
+      <div className="auth-password"><input id="setupPasswordConfirmation" type={passwordConfirmationVisible ? 'text' : 'password'} autoComplete="new-password" value={form.passwordConfirmation} onChange={(event) => setForm((current) => ({ ...current, passwordConfirmation: event.target.value }))} disabled={isSubmitting} /><button type="button" aria-label={passwordConfirmationVisible ? 'Hide confirm password' : 'Show confirm password'} aria-pressed={passwordConfirmationVisible} onClick={() => setPasswordConfirmationVisible((visible) => !visible)}><Icon name={passwordConfirmationVisible ? 'eyeOff' : 'eye'} /></button></div>
       {error && <div className="auth-error" role="alert">{error}</div>}
       <button className="auth-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Activating account…' : 'Activate account'}</button>
     </form>}

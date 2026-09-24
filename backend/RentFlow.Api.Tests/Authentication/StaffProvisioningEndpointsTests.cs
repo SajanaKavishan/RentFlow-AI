@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using RentFlow.Api.Data;
+using RentFlow.Api.DTOs.Notifications;
 using RentFlow.Api.Models;
 using RentFlow.Api.Services;
 using Xunit;
@@ -147,6 +148,79 @@ public sealed class StaffProvisioningEndpointsTests
                 technician,
                 technician.PasswordHash!,
                 TechnicianPassword));
+        Assert.Single(await context.Notifications.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Activation_NotifiesOnlyProvisioningAdminWithoutAuthenticationSecrets()
+    {
+        using var factory = new AuthApiFactory();
+        var provisioningAdmin = await SeedUserAndLoginAsync(
+            factory,
+            "provisioning-admin@example.com",
+            UserRole.Admin);
+        var otherAdmin = await SeedUserAndLoginAsync(
+            factory,
+            "other-admin@example.com",
+            UserRole.Admin);
+        using var provisioningAdminClient = AuthorizedClient(
+            factory,
+            provisioningAdmin.Token);
+        using var createResponse = await CreateTechnicianAsync(provisioningAdminClient);
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        using var createBody = JsonDocument.Parse(
+            await createResponse.Content.ReadAsStringAsync());
+        var setupToken = createBody.RootElement
+            .GetProperty("passwordSetupToken")
+            .GetString()!;
+        var technicianId = createBody.RootElement.GetProperty("id").GetGuid();
+        using var anonymous = factory.CreateHttpsClient();
+
+        var activation = await ActivateAsync(
+            anonymous,
+            setupToken,
+            TechnicianPassword);
+
+        Assert.Equal(HttpStatusCode.NoContent, activation.StatusCode);
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var notification = await context.Notifications.SingleAsync();
+        var technician = await context.Users.SingleAsync(
+            user => user.Id == technicianId);
+        Assert.Equal(provisioningAdmin.UserId, notification.RecipientId);
+        Assert.NotEqual(otherAdmin.UserId, notification.RecipientId);
+        Assert.Equal("maintenance_technician.activated", notification.EventType);
+        Assert.Equal("MaintenanceTechnician", notification.RelatedResourceType);
+        Assert.Equal(technicianId, notification.RelatedResourceId);
+        Assert.Equal("Technician account activated", notification.Title);
+        Assert.Equal(
+            "The Maintenance Technician account you provisioned is now active.",
+            notification.Message);
+        Assert.Null(notification.ReadAt);
+
+        var notificationText = string.Join(
+            ' ',
+            notification.EventType,
+            notification.RelatedResourceType,
+            notification.Title,
+            notification.Message);
+        Assert.DoesNotContain(setupToken, notificationText, StringComparison.Ordinal);
+        Assert.DoesNotContain(TechnicianPassword, notificationText, StringComparison.Ordinal);
+        Assert.DoesNotContain(technician.PasswordHash!, notificationText, StringComparison.Ordinal);
+        Assert.DoesNotContain("http", notificationText, StringComparison.OrdinalIgnoreCase);
+
+        var provisioningAdminPage = await provisioningAdminClient
+            .GetFromJsonAsync<NotificationPageResponseDto>("/api/notifications");
+        Assert.NotNull(provisioningAdminPage);
+        var delivered = Assert.Single(provisioningAdminPage!.Items);
+        Assert.Equal(notification.Id, delivered.Id);
+        Assert.Equal("maintenance_technician.activated", delivered.EventType);
+
+        using var otherAdminClient = AuthorizedClient(factory, otherAdmin.Token);
+        var otherAdminPage = await otherAdminClient
+            .GetFromJsonAsync<NotificationPageResponseDto>("/api/notifications");
+        Assert.NotNull(otherAdminPage);
+        Assert.Empty(otherAdminPage!.Items);
     }
 
     [Fact]
@@ -164,6 +238,7 @@ public sealed class StaffProvisioningEndpointsTests
         Assert.Null((await context.TechnicianPasswordSetupTokens.SingleAsync()).ConsumedAt);
         Assert.False((await context.Users.SingleAsync(
             user => user.Role == UserRole.MaintenanceTechnician)).IsActive);
+        Assert.Empty(await context.Notifications.ToListAsync());
     }
 
     [Fact]
@@ -183,6 +258,7 @@ public sealed class StaffProvisioningEndpointsTests
         Assert.Null((await context.TechnicianPasswordSetupTokens.SingleAsync()).ConsumedAt);
         Assert.False((await context.Users.SingleAsync(
             user => user.Role == UserRole.MaintenanceTechnician)).IsActive);
+        Assert.Empty(await context.Notifications.ToListAsync());
     }
 
     [Fact]
@@ -225,6 +301,11 @@ public sealed class StaffProvisioningEndpointsTests
         Assert.Single(
             responses,
             response => response.StatusCode == HttpStatusCode.BadRequest);
+
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var notification = await context.Notifications.SingleAsync();
+        Assert.Equal("maintenance_technician.activated", notification.EventType);
     }
 
     [Fact]

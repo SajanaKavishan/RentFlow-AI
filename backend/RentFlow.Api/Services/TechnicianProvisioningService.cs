@@ -154,9 +154,23 @@ public sealed class TechnicianProvisioningService(
         user.UpdatedAt = now;
         setupToken.ConsumedAt = now;
 
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
+            dbContext.Notifications.Add(
+                NotificationEventFactory.ForMaintenanceTechnicianActivation(
+                    user,
+                    setupToken.CreatedByAdminId,
+                    now));
+            await dbContext.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
         }
         catch (DbUpdateConcurrencyException)
         {

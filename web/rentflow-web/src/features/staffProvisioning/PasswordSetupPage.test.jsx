@@ -56,6 +56,28 @@ describe('Technician password setup', () => {
     expect(JSON.stringify({ ...localStorage })).not.toContain(setupToken)
   })
 
+  it('shows and hides the password fields independently', async () => {
+    renderSetup()
+    const password = screen.getByLabelText('Password', { exact: true })
+    const confirmation = screen.getByLabelText('Confirm password')
+
+    expect(password).toHaveAttribute('type', 'password')
+    expect(confirmation).toHaveAttribute('type', 'password')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show password' }))
+    expect(password).toHaveAttribute('type', 'text')
+    expect(confirmation).toHaveAttribute('type', 'password')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show confirm password' }))
+    expect(password).toHaveAttribute('type', 'text')
+    expect(confirmation).toHaveAttribute('type', 'text')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide password' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Hide confirm password' }))
+    expect(password).toHaveAttribute('type', 'password')
+    expect(confirmation).toHaveAttribute('type', 'password')
+  })
+
   it('submits the actual activation contract without authentication and routes to normal login', async () => {
     fetch.mockResolvedValue(new Response(null, { status: 204 }))
     renderSetup()

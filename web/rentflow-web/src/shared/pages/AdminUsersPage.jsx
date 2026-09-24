@@ -65,6 +65,7 @@ export default function AdminUsersPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [provisioned, setProvisioned] = useState(null)
   const [copyStatus, setCopyStatus] = useState('')
+  const [closeConfirmation, setCloseConfirmation] = useState(null)
   const [searchDraft, setSearchDraft] = useState('')
   const [directoryQuery, setDirectoryQuery] = useState({ search: '', role: '', active: '' })
   const [directoryPage, setDirectoryPage] = useState(1)
@@ -74,6 +75,9 @@ export default function AdminUsersPage() {
   const dialogRef = useRef(null)
   const fullNameRef = useRef(null)
   const successHeadingRef = useRef(null)
+  const closeTriggerRef = useRef(null)
+  const confirmationRef = useRef(null)
+  const confirmationCancelRef = useRef(null)
   const directoryRequest = useRef(0)
 
   const hasDraft = Object.values(form).some((value) => value.trim())
@@ -92,6 +96,10 @@ export default function AdminUsersPage() {
   useEffect(() => {
     if (isPanelOpen) (provisioned ? successHeadingRef : fullNameRef).current?.focus()
   }, [isPanelOpen, provisioned])
+
+  useEffect(() => {
+    if (closeConfirmation) confirmationCancelRef.current?.focus()
+  }, [closeConfirmation])
 
   useEffect(() => {
     if (!isPanelOpen) return undefined
@@ -142,16 +150,45 @@ export default function AdminUsersPage() {
     if (isPanelOpen) (provisioned ? successHeadingRef : fullNameRef).current?.focus()
   }
 
-  function closePanel() {
-    if (isSubmitting) return
-    if (provisioned && !window.confirm('Close this panel and clear the one-time setup link? Make sure it has been delivered securely first.')) return
-    if (!provisioned && hasDraft && !window.confirm('Discard the unsent Technician details?')) return
+  function finishClosingPanel() {
+    setCloseConfirmation(null)
     setIsPanelOpen(false)
     setForm(initialForm)
     setError('')
     setProvisioned(null)
     setCopyStatus('')
     addButtonRef.current?.focus()
+  }
+
+  function closePanel() {
+    if (isSubmitting || closeConfirmation) return
+    if (provisioned || (!provisioned && hasDraft)) {
+      closeTriggerRef.current = document.activeElement
+      setCloseConfirmation(provisioned ? 'setup-link' : 'draft')
+      return
+    }
+    finishClosingPanel()
+  }
+
+  function cancelCloseConfirmation() {
+    setCloseConfirmation(null)
+    closeTriggerRef.current?.focus()
+  }
+
+  function handleConfirmationKeyDown(event) {
+    event.stopPropagation()
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      cancelCloseConfirmation()
+      return
+    }
+    if (event.key !== 'Tab') return
+    const focusable = Array.from(confirmationRef.current?.querySelectorAll('button:not([disabled])') || [])
+    if (!focusable.length) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
   }
 
   function handlePanelKeyDown(event) {
@@ -271,6 +308,7 @@ export default function AdminUsersPage() {
         aria-modal="true"
         aria-labelledby="add-technician-title"
         aria-describedby="add-technician-description"
+        aria-hidden={closeConfirmation ? 'true' : undefined}
         onKeyDown={handlePanelKeyDown}
       >
       <div className="admin-users-provisioning__heading">
@@ -311,6 +349,21 @@ export default function AdminUsersPage() {
         </div>
       </form>}
       </section>
+      {closeConfirmation && <div className="admin-users-confirmation-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) cancelCloseConfirmation() }}>
+        <section ref={confirmationRef} className="admin-users-confirmation" role="dialog" aria-modal="true" aria-labelledby="admin-close-confirmation-title" aria-describedby="admin-close-confirmation-description" onKeyDown={handleConfirmationKeyDown}>
+          <span className="admin-users-confirmation__icon" aria-hidden="true"><Icon name="alert" size={22} /></span>
+          <div className="admin-users-confirmation__copy">
+            <h3 id="admin-close-confirmation-title">{closeConfirmation === 'setup-link' ? 'Clear the setup link?' : 'Discard Technician details?'}</h3>
+            <p id="admin-close-confirmation-description">{closeConfirmation === 'setup-link'
+              ? 'Closing this panel permanently clears the one-time setup link. Confirm only after it has been delivered securely.'
+              : 'The Technician details entered in this form have not been submitted and will be discarded.'}</p>
+          </div>
+          <div className="admin-users-confirmation__actions">
+            <button ref={confirmationCancelRef} className="shared-button shared-button--outline" type="button" onClick={cancelCloseConfirmation}>Keep panel open</button>
+            <button className="shared-button admin-users-confirmation__confirm" type="button" onClick={finishClosingPanel}>{closeConfirmation === 'setup-link' ? 'Clear link and close' : 'Discard and close'}</button>
+          </div>
+        </section>
+      </div>}
     </div>}
 
     <section className="shared-card admin-users-directory" aria-labelledby="admin-user-directory-title">

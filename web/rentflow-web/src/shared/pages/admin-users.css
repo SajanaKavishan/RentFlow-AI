@@ -24,6 +24,16 @@
 .admin-users-form .shared-notice { margin-bottom: 18px; }
 .admin-users-form__actions { display: flex; justify-content: flex-end; gap: 10px; }
 
+.admin-users-confirmation-backdrop { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: 24px; background: rgb(32 33 29 / 42%); backdrop-filter: blur(3px); }
+.admin-users-confirmation { width: min(100%, 500px); display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 16px; padding: 24px; border: 1px solid var(--olive-100); border-radius: 20px; color: var(--ink); background: var(--surface); box-shadow: 0 24px 70px rgb(32 33 29 / 28%); }
+.admin-users-confirmation__icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; color: var(--olive-900); background: var(--olive-100); }
+.admin-users-confirmation__copy { min-width: 0; }
+.admin-users-confirmation__copy h3 { margin: 1px 0 7px; font-size: 1.08rem; letter-spacing: -.025em; }
+.admin-users-confirmation__copy p { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.6; }
+.admin-users-confirmation__actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; padding-top: 6px; }
+.admin-users-confirmation__confirm { background: var(--olive-900); }
+.admin-users-confirmation__confirm:hover:not(:disabled) { background: var(--olive-hover); }
+
 .admin-users-success { margin-top: 22px; padding: 22px; border: 1px solid var(--olive-100); border-radius: var(--radius-card); background: var(--olive-50); }
 .admin-users-success__heading { display: flex; align-items: start; justify-content: space-between; gap: 18px; }
 .admin-users-success h3 { margin: 10px 0 0; color: var(--ink); font-size: 1.08rem; }
@@ -107,6 +117,10 @@
   .admin-users-provisioning__heading { gap: 14px; }
   .admin-users-form__actions { flex-direction: column-reverse; }
   .admin-users-form__actions .shared-button { width: 100%; }
+  .admin-users-confirmation-backdrop { align-items: end; padding: 12px; }
+  .admin-users-confirmation { width: 100%; padding: 20px 18px; border-radius: 18px 18px 12px 12px; }
+  .admin-users-confirmation__actions { flex-direction: column-reverse; }
+  .admin-users-confirmation__actions .shared-button { width: 100%; }
   .admin-users-success { padding: 18px; }
   .admin-users-success__heading { flex-direction: column; }
   .admin-users-success dl { grid-template-columns: minmax(0, 1fr); }

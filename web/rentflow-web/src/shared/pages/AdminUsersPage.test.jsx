@@ -275,15 +275,20 @@ describe('Admin Technician provisioning from Users', () => {
   })
 
   it('opens from the dashboard action URL and confirms before discarding a draft', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     renderRoute('Admin', '/modules/users?action=add-technician')
     expect(screen.getByLabelText('Full name')).toHaveFocus()
     await userEvent.type(screen.getByLabelText('Full name'), 'Taylor')
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(window.confirm).toHaveBeenCalledWith('Discard the unsent Technician details?')
+    const confirmation = screen.getByRole('dialog', { name: 'Discard Technician details?' })
+    expect(within(confirmation).getByText(/have not been submitted and will be discarded/)).toBeInTheDocument()
+    expect(within(confirmation).getByRole('button', { name: 'Keep panel open' })).toHaveFocus()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Keep panel open' }))
     expect(screen.getByLabelText('Full name')).toHaveValue('Taylor')
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Discard Technician details?' })).getByRole('button', { name: 'Discard and close' }))
     expect(screen.queryByRole('dialog', { name: 'Add Technician' })).not.toBeInTheDocument()
   })
 
@@ -319,9 +324,12 @@ describe('Admin Technician provisioning from Users', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(setupLink.value)
     expect(await screen.findByText(/Setup link copied/)).toHaveAttribute('role', 'status')
 
-    const confirmClose = vi.spyOn(window, 'confirm').mockReturnValue(false)
     await userEvent.click(screen.getByRole('button', { name: 'Close Add Technician panel' }))
-    expect(confirmClose).toHaveBeenCalledWith(expect.stringContaining('clear the one-time setup link'))
+    const confirmation = screen.getByRole('dialog', { name: 'Clear the setup link?' })
+    expect(within(confirmation).getByText(/permanently clears the one-time setup link/)).toBeInTheDocument()
+    expect(within(confirmation).getByRole('button', { name: 'Keep panel open' })).toHaveFocus()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Keep panel open' }))
+    expect(setupLink).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Clear setup link' }))
     expect(screen.queryByLabelText('One-time password-setup link')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Full name')).toHaveFocus()
