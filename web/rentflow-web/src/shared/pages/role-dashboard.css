@@ -56,8 +56,13 @@
 .admin-summary-card { min-width: 0; padding: 19px; transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
 .admin-summary-card__heading { display: flex; align-items: center; gap: 11px; }
 .admin-summary-card h2 { margin: 0; color: var(--ink); font-size: .9rem; letter-spacing: -.02em; }
+.admin-summary-card__value { display: block; margin-top: 14px; color: var(--ink); font-size: 1.85rem; line-height: 1.1; letter-spacing: -.045em; }
 .admin-summary-card .shared-status { margin-top: 18px; }
 .admin-summary-card > p { margin: 9px 0 0; color: var(--muted); font-size: .7rem; line-height: 1.45; }
+.admin-summary-card__state { margin: 16px 0 0; color: var(--muted); font-size: .7rem; line-height: 1.45; }
+.admin-summary-card__state p { margin: 0; }
+.admin-summary-card__state .shared-button { min-height: 32px; margin-top: 10px; padding: 6px 10px; font-size: .67rem; }
+.admin-summary-card__state--error { color: var(--danger); }
 @media (hover: hover) {
   .admin-summary-card:hover { transform: translateY(-3px); border-color: var(--olive-200); box-shadow: 0 10px 24px rgb(48 60 31 / 13%); }
 }
@@ -81,16 +86,35 @@
 .admin-overview-panel__dependency span { min-width: 0; overflow-wrap: anywhere; }
 .admin-overview-panel__dependency strong { display: block; margin-bottom: 2px; color: var(--olive-900); font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; }
 .admin-overview-panel .role-dashboard__text-link { margin-top: 10px; }
-.admin-quick-access { padding: 0; overflow: hidden; }
-.admin-quick-access__heading { padding: 20px 21px 17px; }
-.admin-quick-access h2 { margin: 4px 0 0; font-size: 1.04rem; letter-spacing: -.025em; }
-.admin-quick-access nav > a { display: flex; align-items: center; gap: 11px; padding: 14px 18px; border-top: 1px solid var(--border); color: var(--ink); text-decoration: none; }
+.admin-user-distribution__state { margin: 18px 0 0; color: var(--muted); font-size: .78rem; line-height: 1.6; }
+.admin-user-distribution__state p { margin: 0; }
+.admin-user-distribution__state .shared-button { margin-top: 12px; }
+.admin-user-distribution__state--error { color: var(--danger); }
+.admin-user-distribution__list { display: grid; gap: 16px; margin: 20px 0 0; }
+.admin-user-distribution__row { min-width: 0; }
+.admin-user-distribution__label { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.admin-user-distribution__label dt { color: var(--ink); font-size: .76rem; font-weight: 700; }
+.admin-user-distribution__label dd { margin: 0; color: var(--olive-900); font-size: .82rem; font-weight: 800; }
+.admin-user-distribution__bar { height: 7px; margin-top: 7px; border-radius: 999px; background: var(--olive-100); overflow: hidden; }
+.admin-user-distribution__bar span { display: block; height: 100%; border-radius: inherit; background: var(--olive-700); }
+.admin-quick-access { padding: 22px 20px 19px; border-color: var(--olive-900); color: #f7f4e9; background: var(--olive-900); overflow: hidden; }
+.admin-quick-access__heading { padding: 0 0 9px; }
+.admin-quick-access__heading .role-dashboard__eyebrow { display: none; }
+.admin-quick-access h2 { margin: 0; color: #f7f4e9; font-size: .82rem; letter-spacing: .11em; text-transform: uppercase; }
+.admin-quick-access nav { display: grid; }
+.admin-quick-access nav > a { display: flex; align-items: center; gap: 18px; min-height: 47px; padding: 10px 11px; border-radius: 9px; color: #f7f4e9; text-decoration: none; transition: background-color .18s ease, padding .18s ease; }
+.admin-quick-access nav > a > .admin-overview__icon { display: none; }
 .admin-quick-access nav > a > span:nth-child(2) { flex: 1; min-width: 0; }
-.admin-quick-access nav > a > svg { flex: none; color: var(--olive-700); }
-.admin-quick-access strong, .admin-quick-access small { display: block; overflow-wrap: anywhere; }
-.admin-quick-access strong { font-size: .8rem; line-height: 1.35; }
-.admin-quick-access small { margin-top: 3px; color: var(--muted); font-size: .68rem; line-height: 1.45; }
-.admin-quick-access nav > a:hover { background: var(--cream-50); }
+.admin-quick-access nav > a > svg { flex: none; color: #d8ddca; transition: transform .18s ease; }
+.admin-quick-access strong { display: block; font-size: .91rem; line-height: 1.35; overflow-wrap: anywhere; }
+.admin-quick-access small { display: none; }
+@media (hover: hover) {
+  .admin-quick-access nav > a:hover { padding-right: 8px; background: rgb(255 255 255 / 8%); }
+  .admin-quick-access nav > a:hover > svg { transform: translateX(3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-quick-access nav > a, .admin-quick-access nav > a > svg { transition: none; }
+}
 @media (max-width: 1050px) {
   .role-dashboard { width: calc(100% - 48px); }
   .technician-dashboard__workspace, .admin-overview__workspace { grid-template-columns: minmax(0, 1fr); }

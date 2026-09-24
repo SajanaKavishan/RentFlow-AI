@@ -6,6 +6,14 @@ import App from '../../App.jsx'
 import { AuthContext } from '../../features/auth/useAuth.js'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 
+vi.mock('../../features/adminUsers/adminUsersApi.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getAdminUserTotal: vi.fn().mockResolvedValue(47),
+  getAdminUserRoleTotals: vi.fn().mockResolvedValue({
+    Tenant: 24, Landlord: 12, MaintenanceTechnician: 7, Admin: 4,
+  }),
+}))
+
 const account = (role) => ({
   id: '11111111-1111-1111-1111-111111111111', fullName: 'Sam Perera',
   email: 'sam@example.com', phoneNumber: '+94 77 123 4567', role,
@@ -59,25 +67,29 @@ describe('Technician and Admin dashboards', () => {
     expect(within(main).queryByText(/Signed in as/)).not.toBeInTheDocument()
 
     const summary = within(main).getByRole('region', { name: 'System summary' })
-    for (const title of ['Total Users', 'Properties', 'Active Applications', 'Monthly Volume']) {
+    const totalUsers = within(summary).getByRole('region', { name: 'Total Users' })
+    expect(await within(totalUsers).findByText('47')).toBeInTheDocument()
+    expect(totalUsers).not.toHaveTextContent('Integration pending')
+    for (const title of ['Properties', 'Active Applications', 'Monthly Volume']) {
       const card = within(summary).getByRole('region', { name: title })
       expect(card).toHaveTextContent('Integration pending')
       expect(card).toHaveTextContent('Admin')
     }
-    expect(summary).not.toHaveTextContent(/\b\d+(?:[.,]\d+)*\b|[$%]/)
 
     const activity = within(main).getByRole('region', { name: 'Platform Activity' })
     const distribution = within(main).getByRole('region', { name: 'User Distribution' })
     const workflows = within(main).getByRole('region', { name: 'AI Workflows' })
     const health = within(main).getByRole('region', { name: 'System Health' })
     expect(activity).toHaveTextContent('Admin activity-feed contract')
-    expect(distribution).toHaveTextContent('Admin user-distribution aggregate')
+    expect(distribution).toHaveTextContent('Counts include active and inactive accounts')
+    expect(distribution).toHaveTextContent('Technicians7')
     expect(workflows).toHaveTextContent('Admin AI reporting aggregate')
     expect(health).toHaveTextContent('Admin service-health contract')
-    expect([activity, distribution, workflows, health].every((panel) => panel.textContent.includes('Integration pending'))).toBe(true)
+    expect([activity, workflows, health].every((panel) => panel.textContent.includes('Integration pending'))).toBe(true)
+    expect(distribution).not.toHaveTextContent('Integration pending')
 
     const quickAccess = within(main).getByRole('navigation', { name: 'Admin quick access' })
-    expect(within(main).getByRole('link', { name: 'Add Technician' })).toHaveAttribute('href', '/modules/users?action=add-technician')
+    expect(within(main).queryByRole('link', { name: 'Add Technician' })).not.toBeInTheDocument()
     expect(within(quickAccess).getByRole('link', { name: 'Manage Users / Add Technician' })).toHaveAttribute('href', '/modules/users?action=add-technician')
     expect(within(quickAccess).getByRole('link', { name: 'Open notifications from Quick Access' })).toHaveAttribute('href', '/notifications')
     expect(within(quickAccess).getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile')

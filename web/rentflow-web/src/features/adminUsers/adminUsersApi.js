@@ -9,6 +9,13 @@ export const ADMIN_USER_ROLES = Object.freeze([
 
 export const ADMIN_USERS_PAGE_SIZE = 8
 
+export const ADMIN_USER_DISTRIBUTION_ROLES = Object.freeze([
+  'Tenant',
+  'Landlord',
+  'MaintenanceTechnician',
+  'Admin',
+])
+
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function invalidResponse() {
@@ -72,4 +79,17 @@ export async function getAdminUsers({
     networkErrorMessage: 'Unable to connect to the user directory. Please try again.',
   })
   return parsePage(response, page, pageSize)
+}
+
+export async function getAdminUserTotal({ signal } = {}) {
+  const { pagination } = await getAdminUsers({ page: 1, pageSize: 1, signal })
+  return pagination.totalCount
+}
+
+export async function getAdminUserRoleTotals({ signal } = {}) {
+  const totals = await Promise.all(ADMIN_USER_DISTRIBUTION_ROLES.map(async (role) => {
+    const { pagination } = await getAdminUsers({ page: 1, pageSize: 1, role, signal })
+    return [role, pagination.totalCount]
+  }))
+  return Object.fromEntries(totals)
 }

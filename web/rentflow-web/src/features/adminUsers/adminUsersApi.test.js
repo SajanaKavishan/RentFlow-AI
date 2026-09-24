@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
-import { getAdminUsers } from './adminUsersApi.js'
+import {
+  ADMIN_USER_DISTRIBUTION_ROLES,
+  getAdminUserRoleTotals,
+  getAdminUsers,
+  getAdminUserTotal,
+} from './adminUsersApi.js'
 
 const user = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -71,6 +76,54 @@ describe('Admin user directory API', () => {
 
     const url = new URL(fetch.mock.calls[0][0], 'http://localhost')
     expect(url.search).toBe('?page=1&pageSize=8')
+  })
+
+  it('reads the total user count from an unfiltered one-row directory page', async () => {
+    fetch.mockResolvedValue(json({
+      items: [user],
+      pagination: {
+        page: 1, pageSize: 1, totalCount: 47, totalPages: 47,
+        hasNextPage: true, hasPreviousPage: false,
+      },
+    }))
+
+    await expect(getAdminUserTotal()).resolves.toBe(47)
+
+    const [requestUrl, options] = fetch.mock.calls[0]
+    const url = new URL(requestUrl, 'http://localhost')
+    expect(url.pathname).toBe('/api/admin/users')
+    expect(url.search).toBe('?page=1&pageSize=1')
+    expect(options.headers.Authorization).toBe('Bearer admin-token')
+  })
+
+  it('reads each role total from authenticated minimal filtered pages', async () => {
+    const totals = { Tenant: 12, Landlord: 5, MaintenanceTechnician: 3, Admin: 2 }
+    fetch.mockImplementation((requestUrl) => {
+      const url = new URL(requestUrl, 'http://localhost')
+      const role = url.searchParams.get('role')
+      return Promise.resolve(json({
+        items: [{ ...user, role }],
+        pagination: {
+          page: 1, pageSize: 1, totalCount: totals[role], totalPages: totals[role],
+          hasNextPage: totals[role] > 1, hasPreviousPage: false,
+        },
+      }))
+    })
+
+    await expect(getAdminUserRoleTotals()).resolves.toEqual(totals)
+    expect(fetch).toHaveBeenCalledTimes(4)
+
+    const requestedRoles = fetch.mock.calls.map(([requestUrl, options]) => {
+      const url = new URL(requestUrl, 'http://localhost')
+      expect(url.pathname).toBe('/api/admin/users')
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        page: '1', pageSize: '1', role: url.searchParams.get('role'),
+      })
+      expect(url.searchParams.has('isActive')).toBe(false)
+      expect(options.headers.Authorization).toBe('Bearer admin-token')
+      return url.searchParams.get('role')
+    })
+    expect(requestedRoles).toEqual(ADMIN_USER_DISTRIBUTION_ROLES)
   })
 
   it('keeps unexpected authentication fields out of the parsed directory data', async () => {
