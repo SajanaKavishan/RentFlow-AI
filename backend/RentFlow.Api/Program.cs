@@ -1,11 +1,18 @@
 using System.Text;
 using System.Security.Claims;
+using System.Threading.RateLimiting;
+
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+
 using RentFlow.Api.Configuration;
+using RentFlow.Api.Commands;
+using RentFlow.Api.Authorization;
 using RentFlow.Api.Data;
 using RentFlow.Api.Models;
 using RentFlow.Api.Services;
@@ -62,6 +69,12 @@ builder.Services.AddOptions<JwtOptions>()
             Encoding.UTF8.GetByteCount(options.SigningKey) >= 32,
         "Jwt:SigningKey must be at least 32 bytes. " +
         "Configure it with user-secrets or an environment variable.")
+    .ValidateOnStart();
+
+builder.Services.AddOptions<StaffProvisioningOptions>()
+    .Bind(builder.Configuration.GetSection(
+        StaffProvisioningOptions.SectionName))
+    .ValidateDataAnnotations()
     .ValidateOnStart();
 
 // =========================================================
@@ -133,7 +146,37 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(
+        AuthorizationPolicies.ActiveAdmin,
+        policy =>
+        {
+            policy.RequireAuthenticatedUser();
+            policy.RequireRole(nameof(UserRole.Admin));
+            policy.AddRequirements(
+                new ActiveAdminRequirement());
+        });
+});
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode =
+        StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy(
+        "technician-activation",
+        context => RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
 
 // =========================================================
 // CORE SERVICES
@@ -162,6 +205,19 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IPasswordHasher<ApplicationUser>,
     PasswordHasher<ApplicationUser>>();
+
+builder.Services.AddScoped<AdminBootstrapService>();
+builder.Services.AddScoped<AdminBootstrapCommand>();
+
+builder.Services.AddSingleton<
+    IAdminBootstrapConsole,
+    SystemAdminBootstrapConsole>();
+
+builder.Services.AddScoped<TechnicianProvisioningService>();
+
+builder.Services.AddScoped<
+    IAuthorizationHandler,
+    ActiveAdminAuthorizationHandler>();
 
 builder.Services.AddHttpContextAccessor();
 
@@ -383,9 +439,22 @@ if (builder.Environment.IsDevelopment())
             policy =>
             {
                 policy
-                   .WithOrigins(
-                     "http://localhost:5173",
-                     "http://localhost:5174")
+                    .SetIsOriginAllowed(origin =>
+                    {
+                        if (!Uri.TryCreate(
+                                origin,
+                                UriKind.Absolute,
+                                out var uri))
+                        {
+                            return false;
+                        }
+
+                        return
+                            (uri.Host == "localhost"
+                                || uri.Host == "127.0.0.1")
+                            && (uri.Scheme == "http"
+                                || uri.Scheme == "https");
+                    })
                     .AllowAnyHeader()
                     .AllowAnyMethod();
             });
@@ -397,6 +466,21 @@ if (builder.Environment.IsDevelopment())
 // =========================================================
 
 var app = builder.Build();
+
+if (AdminBootstrapCommand.IsRequested(args))
+{
+    await using var scope =
+        app.Services.CreateAsyncScope();
+
+    var command =
+        scope.ServiceProvider
+            .GetRequiredService<AdminBootstrapCommand>();
+
+    Environment.ExitCode =
+        await command.ExecuteAsync(args);
+
+    return;
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -413,6 +497,8 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+app.UseRateLimiter();
 
 app.MapControllers();
 

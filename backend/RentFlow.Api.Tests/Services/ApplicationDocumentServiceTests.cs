@@ -12,15 +12,32 @@ namespace RentFlow.Api.Tests.Services;
 
 public class ApplicationDocumentServiceTests
 {
-    private static readonly Guid TenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-    private static readonly Guid OtherTenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-    private static readonly Guid ApplicationId = Guid.Parse("33333333-3333-3333-3333-333333333333");
-    private static readonly Guid OtherApplicationId = Guid.Parse("44444444-4444-4444-4444-444444444444");
-    private static readonly Guid DocumentId = Guid.Parse("55555555-5555-5555-5555-555555555555");
-    private static readonly Guid OtherDocumentId = Guid.Parse("66666666-6666-6666-6666-666666666666");
-    private static readonly Guid PropertyId = Guid.Parse("77777777-7777-7777-7777-777777777777");
-    private static readonly DateTimeOffset CreatedAt = new(2026, 8, 18, 9, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset UploadedAt = new(2026, 8, 18, 10, 0, 0, TimeSpan.Zero);
+    private static readonly Guid TenantId =
+        Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+    private static readonly Guid OtherTenantId =
+        Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+    private static readonly Guid ApplicationId =
+        Guid.Parse("33333333-3333-3333-3333-333333333333");
+
+    private static readonly Guid OtherApplicationId =
+        Guid.Parse("44444444-4444-4444-4444-444444444444");
+
+    private static readonly Guid DocumentId =
+        Guid.Parse("55555555-5555-5555-5555-555555555555");
+
+    private static readonly Guid OtherDocumentId =
+        Guid.Parse("66666666-6666-6666-6666-666666666666");
+
+    private static readonly Guid PropertyId =
+        Guid.Parse("77777777-7777-7777-7777-777777777777");
+
+    private static readonly DateTimeOffset CreatedAt =
+        new(2026, 8, 18, 9, 0, 0, TimeSpan.Zero);
+
+    private static readonly DateTimeOffset UploadedAt =
+        new(2026, 8, 18, 10, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task UploadAsync_SucceedsForOwnerWithDraftApplication()
@@ -28,6 +45,7 @@ public class ApplicationDocumentServiceTests
         await using var context = CreateContext();
         AddApplication(context, RentalApplicationStatus.Draft);
         await context.SaveChangesAsync();
+
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
@@ -45,6 +63,7 @@ public class ApplicationDocumentServiceTests
         await using var context = CreateContext();
         AddApplication(context, RentalApplicationStatus.ChangesRequested);
         await context.SaveChangesAsync();
+
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
@@ -62,10 +81,14 @@ public class ApplicationDocumentServiceTests
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
-        var exception = await Assert.ThrowsAsync<ApplicationDocumentServiceException>(() =>
-            UploadAsync(service, fileSizeBytes: 0));
+        var exception =
+            await Assert.ThrowsAsync<ApplicationDocumentServiceException>(
+                () => UploadAsync(service, fileSizeBytes: 0));
 
-        Assert.Equal(ApplicationDocumentServiceError.Validation, exception.Error);
+        Assert.Equal(
+            ApplicationDocumentServiceError.Validation,
+            exception.Error);
+
         Assert.Empty(storage.UploadCalls);
     }
 
@@ -76,10 +99,16 @@ public class ApplicationDocumentServiceTests
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
-        var exception = await Assert.ThrowsAsync<ApplicationDocumentServiceException>(() =>
-            UploadAsync(service, fileSizeBytes: (5 * 1024 * 1024) + 1));
+        var exception =
+            await Assert.ThrowsAsync<ApplicationDocumentServiceException>(
+                () => UploadAsync(
+                    service,
+                    fileSizeBytes: (5 * 1024 * 1024) + 1));
 
-        Assert.Equal(ApplicationDocumentServiceError.Validation, exception.Error);
+        Assert.Equal(
+            ApplicationDocumentServiceError.Validation,
+            exception.Error);
+
         Assert.Empty(storage.UploadCalls);
     }
 
@@ -90,10 +119,14 @@ public class ApplicationDocumentServiceTests
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
-        var exception = await Assert.ThrowsAsync<ApplicationDocumentServiceException>(() =>
-            UploadAsync(service, "text/plain"));
+        var exception =
+            await Assert.ThrowsAsync<ApplicationDocumentServiceException>(
+                () => UploadAsync(service, "text/plain"));
 
-        Assert.Equal(ApplicationDocumentServiceError.Validation, exception.Error);
+        Assert.Equal(
+            ApplicationDocumentServiceError.Validation,
+            exception.Error);
+
         Assert.Empty(storage.UploadCalls);
     }
 
@@ -103,13 +136,18 @@ public class ApplicationDocumentServiceTests
         await using var context = CreateContext();
         AddApplication(context, RentalApplicationStatus.Draft);
         await context.SaveChangesAsync();
+
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
-        var exception = await Assert.ThrowsAsync<ApplicationDocumentServiceException>(() =>
-            UploadAsync(service, tenantId: OtherTenantId));
+        var exception =
+            await Assert.ThrowsAsync<ApplicationDocumentServiceException>(
+                () => UploadAsync(service, tenantId: OtherTenantId));
 
-        Assert.Equal(ApplicationDocumentServiceError.NotFound, exception.Error);
+        Assert.Equal(
+            ApplicationDocumentServiceError.NotFound,
+            exception.Error);
+
         Assert.Empty(storage.UploadCalls);
     }
 
@@ -119,13 +157,18 @@ public class ApplicationDocumentServiceTests
         await using var context = CreateContext();
         AddApplication(context, RentalApplicationStatus.Submitted);
         await context.SaveChangesAsync();
+
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
-        var exception = await Assert.ThrowsAsync<ApplicationDocumentServiceException>(() =>
-            UploadAsync(service));
+        var exception =
+            await Assert.ThrowsAsync<ApplicationDocumentServiceException>(
+                () => UploadAsync(service));
 
-        Assert.Equal(ApplicationDocumentServiceError.Conflict, exception.Error);
+        Assert.Equal(
+            ApplicationDocumentServiceError.Conflict,
+            exception.Error);
+
         Assert.Empty(storage.UploadCalls);
     }
 
@@ -135,13 +178,18 @@ public class ApplicationDocumentServiceTests
         await using var context = CreateContext();
         AddApplication(context, RentalApplicationStatus.Approved);
         await context.SaveChangesAsync();
+
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
-        var exception = await Assert.ThrowsAsync<ApplicationDocumentServiceException>(() =>
-            UploadAsync(service));
+        var exception =
+            await Assert.ThrowsAsync<ApplicationDocumentServiceException>(
+                () => UploadAsync(service));
 
-        Assert.Equal(ApplicationDocumentServiceError.Conflict, exception.Error);
+        Assert.Equal(
+            ApplicationDocumentServiceError.Conflict,
+            exception.Error);
+
         Assert.Empty(storage.UploadCalls);
     }
 
@@ -151,6 +199,7 @@ public class ApplicationDocumentServiceTests
         await using var context = CreateContext();
         AddApplication(context, RentalApplicationStatus.Draft);
         await context.SaveChangesAsync();
+
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
@@ -160,10 +209,16 @@ public class ApplicationDocumentServiceTests
             originalFileName: @"C:\uploads\income.png",
             fileSizeBytes: 128);
 
-        var stored = await context.ApplicationDocuments.SingleAsync();
+        var stored =
+            await context.ApplicationDocuments.SingleAsync();
+
         Assert.Equal(result.Id, stored.Id);
         Assert.Equal(ApplicationId, stored.ApplicationId);
-        Assert.Equal(ApplicationDocumentType.IncomeProof, stored.DocumentType);
+
+        Assert.Equal(
+            ApplicationDocumentType.IncomeProof,
+            stored.DocumentType);
+
         Assert.Equal("income.png", stored.OriginalFileName);
         Assert.Equal("image/png", stored.ContentType);
         Assert.Equal(128, stored.FileSizeBytes);
@@ -176,13 +231,18 @@ public class ApplicationDocumentServiceTests
         await using var context = CreateContext();
         AddApplication(context, RentalApplicationStatus.Draft);
         await context.SaveChangesAsync();
+
         var storage = new FakeFileStorageService
         {
-            UploadException = new InvalidOperationException("Simulated storage failure.")
+            UploadException =
+                new InvalidOperationException(
+                    "Simulated storage failure.")
         };
+
         var service = CreateService(context, storage);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => UploadAsync(service));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => UploadAsync(service));
 
         Assert.Empty(context.ApplicationDocuments);
         Assert.Single(storage.UploadCalls);
@@ -193,38 +253,70 @@ public class ApplicationDocumentServiceTests
     public async Task UploadAsync_WhenDatabasePersistenceFails_AttemptsStorageCleanup()
     {
         await using var context = CreateFailingContext();
+
         AddApplication(context, RentalApplicationStatus.Draft);
         await context.SaveChangesAsync();
+
         context.FailNextSave = true;
+
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => UploadAsync(service));
+        await Assert.ThrowsAsync<DbUpdateException>(
+            () => UploadAsync(service));
 
         var upload = Assert.Single(storage.UploadCalls);
         var cleanup = Assert.Single(storage.DeleteCalls);
+
         Assert.Equal(upload.StorageKey, cleanup.StorageKey);
-        Assert.Empty(await context.ApplicationDocuments.AsNoTracking().ToListAsync());
+
+        Assert.Empty(
+            await context.ApplicationDocuments
+                .AsNoTracking()
+                .ToListAsync());
     }
 
     [Fact]
     public async Task GetByApplicationAsync_ReturnsOnlyDocumentsForOwnedApplication()
     {
         await using var context = CreateContext();
-        AddApplication(context, RentalApplicationStatus.Draft);
+
+        AddApplication(
+            context,
+            RentalApplicationStatus.Draft);
+
         AddApplication(
             context,
             RentalApplicationStatus.Draft,
             OtherApplicationId,
             TenantId);
-        AddDocument(context, DocumentId, ApplicationId, UploadedAt);
-        AddDocument(context, OtherDocumentId, OtherApplicationId, UploadedAt.AddMinutes(1));
-        await context.SaveChangesAsync();
-        var service = CreateService(context, new FakeFileStorageService());
 
-        var results = await service.GetByApplicationAsync(ApplicationId, TenantId);
+        AddDocument(
+            context,
+            DocumentId,
+            ApplicationId,
+            UploadedAt);
+
+        AddDocument(
+            context,
+            OtherDocumentId,
+            OtherApplicationId,
+            UploadedAt.AddMinutes(1));
+
+        await context.SaveChangesAsync();
+
+        var service =
+            CreateService(
+                context,
+                new FakeFileStorageService());
+
+        var results =
+            await service.GetByApplicationAsync(
+                ApplicationId,
+                TenantId);
 
         var result = Assert.Single(results);
+
         Assert.Equal(DocumentId, result.Id);
         Assert.Equal(ApplicationId, result.ApplicationId);
     }
@@ -233,12 +325,24 @@ public class ApplicationDocumentServiceTests
     public async Task GetByIdAsync_ReturnsOwnedDocument()
     {
         await using var context = CreateContext();
-        AddApplication(context, RentalApplicationStatus.Draft);
-        AddDocument(context);
-        await context.SaveChangesAsync();
-        var service = CreateService(context, new FakeFileStorageService());
 
-        var result = await service.GetByIdAsync(DocumentId, TenantId);
+        AddApplication(
+            context,
+            RentalApplicationStatus.Draft);
+
+        AddDocument(context);
+
+        await context.SaveChangesAsync();
+
+        var service =
+            CreateService(
+                context,
+                new FakeFileStorageService());
+
+        var result =
+            await service.GetByIdAsync(
+                DocumentId,
+                TenantId);
 
         Assert.NotNull(result);
         Assert.Equal(DocumentId, result.Id);
@@ -250,12 +354,24 @@ public class ApplicationDocumentServiceTests
     public async Task GetByIdAsync_ForOwnershipMismatch_ReturnsSafeNotFound()
     {
         await using var context = CreateContext();
-        AddApplication(context, RentalApplicationStatus.Draft);
-        AddDocument(context);
-        await context.SaveChangesAsync();
-        var service = CreateService(context, new FakeFileStorageService());
 
-        var result = await service.GetByIdAsync(DocumentId, OtherTenantId);
+        AddApplication(
+            context,
+            RentalApplicationStatus.Draft);
+
+        AddDocument(context);
+
+        await context.SaveChangesAsync();
+
+        var service =
+            CreateService(
+                context,
+                new FakeFileStorageService());
+
+        var result =
+            await service.GetByIdAsync(
+                DocumentId,
+                OtherTenantId);
 
         Assert.Null(result);
     }
@@ -264,57 +380,114 @@ public class ApplicationDocumentServiceTests
     public async Task GenerateDownloadUrlAsync_RequestsShortLivedUrlWithStoredMetadata()
     {
         await using var context = CreateContext();
-        AddApplication(context, RentalApplicationStatus.Draft);
+
+        AddApplication(
+            context,
+            RentalApplicationStatus.Draft);
+
         AddDocument(context);
+
         await context.SaveChangesAsync();
+
         var storage = new FakeFileStorageService
         {
-            DownloadUrl = "https://downloads.invalid/signed-document"
+            DownloadUrl =
+                "https://downloads.invalid/signed-document"
         };
+
         var service = CreateService(context, storage);
 
-        var result = await service.GenerateDownloadUrlAsync(DocumentId, TenantId);
+        var result =
+            await service.GenerateDownloadUrlAsync(
+                DocumentId,
+                TenantId);
 
         Assert.Equal(storage.DownloadUrl, result);
-        var request = Assert.Single(storage.DownloadUrlCalls);
-        Assert.Equal("test-storage-key", request.StorageKey);
-        Assert.Equal("evidence.pdf", request.OriginalFileName);
-        Assert.Equal("application/pdf", request.ContentType);
-        Assert.Equal(TimeSpan.FromMinutes(10), request.Lifetime);
+
+        var request =
+            Assert.Single(storage.DownloadUrlCalls);
+
+        Assert.Equal(
+            "test-storage-key",
+            request.StorageKey);
+
+        Assert.Equal(
+            "evidence.pdf",
+            request.OriginalFileName);
+
+        Assert.Equal(
+            "application/pdf",
+            request.ContentType);
+
+        Assert.Equal(
+            TimeSpan.FromMinutes(10),
+            request.Lifetime);
     }
 
     [Fact]
     public async Task DeleteAsync_ForEditableApplication_RemovesMetadataAndStorageObject()
     {
         await using var context = CreateContext();
-        AddApplication(context, RentalApplicationStatus.ChangesRequested);
+
+        AddApplication(
+            context,
+            RentalApplicationStatus.ChangesRequested);
+
         AddDocument(context);
+
         await context.SaveChangesAsync();
+
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
-        await service.DeleteAsync(DocumentId, TenantId);
+        await service.DeleteAsync(
+            DocumentId,
+            TenantId);
 
-        Assert.Empty(await context.ApplicationDocuments.AsNoTracking().ToListAsync());
-        var deletion = Assert.Single(storage.DeleteCalls);
-        Assert.Equal("test-storage-key", deletion.StorageKey);
+        Assert.Empty(
+            await context.ApplicationDocuments
+                .AsNoTracking()
+                .ToListAsync());
+
+        var deletion =
+            Assert.Single(storage.DeleteCalls);
+
+        Assert.Equal(
+            "test-storage-key",
+            deletion.StorageKey);
     }
 
     [Fact]
     public async Task DeleteAsync_RejectsOwnershipMismatch()
     {
         await using var context = CreateContext();
-        AddApplication(context, RentalApplicationStatus.Draft);
+
+        AddApplication(
+            context,
+            RentalApplicationStatus.Draft);
+
         AddDocument(context);
+
         await context.SaveChangesAsync();
+
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
-        var exception = await Assert.ThrowsAsync<ApplicationDocumentServiceException>(() =>
-            service.DeleteAsync(DocumentId, OtherTenantId));
+        var exception =
+            await Assert.ThrowsAsync<ApplicationDocumentServiceException>(
+                () => service.DeleteAsync(
+                    DocumentId,
+                    OtherTenantId));
 
-        Assert.Equal(ApplicationDocumentServiceError.NotFound, exception.Error);
-        Assert.Single(await context.ApplicationDocuments.AsNoTracking().ToListAsync());
+        Assert.Equal(
+            ApplicationDocumentServiceError.NotFound,
+            exception.Error);
+
+        Assert.Single(
+            await context.ApplicationDocuments
+                .AsNoTracking()
+                .ToListAsync());
+
         Assert.Empty(storage.DeleteCalls);
     }
 
@@ -322,34 +495,57 @@ public class ApplicationDocumentServiceTests
     public async Task DeleteAsync_RejectsNonEditableApplicationState()
     {
         await using var context = CreateContext();
-        AddApplication(context, RentalApplicationStatus.Approved);
+
+        AddApplication(
+            context,
+            RentalApplicationStatus.Approved);
+
         AddDocument(context);
+
         await context.SaveChangesAsync();
+
         var storage = new FakeFileStorageService();
         var service = CreateService(context, storage);
 
-        var exception = await Assert.ThrowsAsync<ApplicationDocumentServiceException>(() =>
-            service.DeleteAsync(DocumentId, TenantId));
+        var exception =
+            await Assert.ThrowsAsync<ApplicationDocumentServiceException>(
+                () => service.DeleteAsync(
+                    DocumentId,
+                    TenantId));
 
-        Assert.Equal(ApplicationDocumentServiceError.Conflict, exception.Error);
-        Assert.Single(await context.ApplicationDocuments.AsNoTracking().ToListAsync());
+        Assert.Equal(
+            ApplicationDocumentServiceError.Conflict,
+            exception.Error);
+
+        Assert.Single(
+            await context.ApplicationDocuments
+                .AsNoTracking()
+                .ToListAsync());
+
         Assert.Empty(storage.DeleteCalls);
     }
 
     private static ApplicationDocumentService CreateService(
         ApplicationDbContext context,
         IFileStorageService storage) =>
-        new(context, storage, NullLogger<ApplicationDocumentService>.Instance);
+        new(
+            context,
+            storage,
+            NullLogger<ApplicationDocumentService>.Instance);
 
     private static ApplicationDbContext CreateContext()
     {
-        var options = CreateOptions<ApplicationDbContext>();
+        var options =
+            CreateOptions<ApplicationDbContext>();
+
         return new ApplicationDbContext(options);
     }
 
     private static FailingSaveApplicationDbContext CreateFailingContext()
     {
-        var options = CreateOptions<ApplicationDbContext>();
+        var options =
+            CreateOptions<ApplicationDbContext>();
+
         return new FailingSaveApplicationDbContext(options);
     }
 
@@ -357,8 +553,12 @@ public class ApplicationDocumentServiceTests
         where TContext : DbContext
     {
         return new DbContextOptionsBuilder<TContext>()
-            .UseInMemoryDatabase($"ApplicationDocumentServiceTests-{Guid.NewGuid()}")
-            .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .UseInMemoryDatabase(
+                $"ApplicationDocumentServiceTests-{Guid.NewGuid()}")
+            .ConfigureWarnings(
+                warnings =>
+                    warnings.Ignore(
+                        InMemoryEventId.TransactionIgnoredWarning))
             .Options;
     }
 
@@ -382,6 +582,7 @@ public class ApplicationDocumentServiceTests
         };
 
         context.RentalApplications.Add(application);
+
         return application;
     }
 
@@ -395,7 +596,8 @@ public class ApplicationDocumentServiceTests
         {
             Id = documentId ?? DocumentId,
             ApplicationId = applicationId ?? ApplicationId,
-            DocumentType = ApplicationDocumentType.IncomeProof,
+            DocumentType =
+                ApplicationDocumentType.IncomeProof,
             OriginalFileName = "evidence.pdf",
             StorageKey = "test-storage-key",
             ContentType = "application/pdf",
@@ -404,6 +606,7 @@ public class ApplicationDocumentServiceTests
         };
 
         context.ApplicationDocuments.Add(document);
+
         return document;
     }
 
@@ -425,23 +628,28 @@ public class ApplicationDocumentServiceTests
     }
 
     private sealed class FailingSaveApplicationDbContext(
-        DbContextOptions<ApplicationDbContext> options) : ApplicationDbContext(options)
+        DbContextOptions<ApplicationDbContext> options)
+        : ApplicationDbContext(options)
     {
         public bool FailNextSave { get; set; }
 
-        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        public override Task<int> SaveChangesAsync(
+            CancellationToken cancellationToken = default)
         {
             if (FailNextSave)
             {
                 FailNextSave = false;
-                throw new DbUpdateException("Simulated database persistence failure.");
+
+                throw new DbUpdateException(
+                    "Simulated database persistence failure.");
             }
 
             return base.SaveChangesAsync(cancellationToken);
         }
     }
 
-    private sealed class FakeFileStorageService : IFileStorageService
+    private sealed class FakeFileStorageService
+        : IFileStorageService
     {
         public List<UploadCall> UploadCalls { get; } = [];
 
@@ -451,7 +659,8 @@ public class ApplicationDocumentServiceTests
 
         public Exception? UploadException { get; init; }
 
-        public string DownloadUrl { get; init; } = "https://downloads.invalid/document";
+        public string DownloadUrl { get; init; } =
+            "https://downloads.invalid/document";
 
         public Task UploadAsync(
             Stream content,
@@ -459,7 +668,10 @@ public class ApplicationDocumentServiceTests
             string contentType,
             CancellationToken cancellationToken = default)
         {
-            UploadCalls.Add(new UploadCall(storageKey, contentType));
+            UploadCalls.Add(
+                new UploadCall(
+                    storageKey,
+                    contentType));
 
             return UploadException is null
                 ? Task.CompletedTask
@@ -470,15 +682,20 @@ public class ApplicationDocumentServiceTests
             string storageKey,
             CancellationToken cancellationToken = default)
         {
-            DeleteCalls.Add(new DeleteCall(storageKey));
+            DeleteCalls.Add(
+                new DeleteCall(storageKey));
+
             return Task.CompletedTask;
         }
 
         public Task<byte[]> DownloadBytesAsync(
             string storageKey,
             long maximumBytes,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(Array.Empty<byte>());
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                Array.Empty<byte>());
+        }
 
         public Task<string> GenerateDownloadUrlAsync(
             string storageKey,
@@ -487,14 +704,31 @@ public class ApplicationDocumentServiceTests
             TimeSpan lifetime)
         {
             DownloadUrlCalls.Add(
-                new DownloadUrlCall(storageKey, originalFileName, contentType, lifetime));
+                new DownloadUrlCall(
+                    storageKey,
+                    originalFileName,
+                    contentType,
+                    lifetime));
+
             return Task.FromResult(DownloadUrl);
+        }
+
+        public Task<string> GenerateInlineUrlAsync(
+            string storageKey,
+            string contentType,
+            TimeSpan lifetime)
+        {
+            return Task.FromResult(
+                $"https://downloads.invalid/inline/{storageKey}");
         }
     }
 
-    private sealed record UploadCall(string StorageKey, string ContentType);
+    private sealed record UploadCall(
+        string StorageKey,
+        string ContentType);
 
-    private sealed record DeleteCall(string StorageKey);
+    private sealed record DeleteCall(
+        string StorageKey);
 
     private sealed record DownloadUrlCall(
         string StorageKey,

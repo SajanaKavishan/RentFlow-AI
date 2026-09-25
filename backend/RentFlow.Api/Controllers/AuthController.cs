@@ -12,6 +12,7 @@ public sealed class AuthController(
     IAuthService authService,
     ICurrentUserService currentUserService) : ControllerBase
 {
+    private const long MaximumProfileImageRequestBytes = 5 * 1024 * 1024 + 64 * 1024;
     [AllowAnonymous]
     [HttpPost("register")]
     [ProducesResponseType<AuthResponseDto>(StatusCodes.Status201Created)]
@@ -63,6 +64,71 @@ public sealed class AuthController(
 
         var user = await authService.GetUserAsync(userId, cancellationToken);
         return user is null ? Unauthorized() : Ok(user);
+    }
+
+    [Authorize]
+    [HttpPut("profile")]
+    [ProducesResponseType<UserProfileDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<UserProfileDto>> UpdateProfile(
+        [FromBody] UpdateProfileRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (currentUserService.UserId is not { } userId) return Unauthorized();
+        try
+        {
+            var profile = await authService.UpdateProfileAsync(userId, request, cancellationToken);
+            return profile is null ? Unauthorized() : Ok(profile);
+        }
+        catch (AuthServiceException exception)
+        {
+            return MapException(exception);
+        }
+    }
+
+    [Authorize]
+    [HttpPost("profile-image")]
+    [RequestSizeLimit(MaximumProfileImageRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaximumProfileImageRequestBytes)]
+    [ProducesResponseType<UserProfileDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<UserProfileDto>> UploadProfileImage(
+        [FromForm] UploadProfileImageRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (currentUserService.UserId is not { } userId) return Unauthorized();
+        try
+        {
+            await using var stream = new MemoryStream();
+            await request.File.CopyToAsync(stream, cancellationToken);
+            var profile = await authService.UploadProfileImageAsync(
+                userId,
+                stream.ToArray(),
+                request.File.ContentType,
+                cancellationToken);
+            return profile is null ? Unauthorized() : Ok(profile);
+        }
+        catch (AuthServiceException exception)
+        {
+            return MapException(exception);
+        }
+    }
+
+    [Authorize]
+    [HttpGet("profile-image")]
+    [Produces("image/jpeg", "image/png", "image/webp")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetProfileImage(CancellationToken cancellationToken)
+    {
+        if (currentUserService.UserId is not { } userId) return Unauthorized();
+        var image = await authService.GetProfileImageAsync(userId, cancellationToken);
+        if (image is null) return NotFound();
+        Response.Headers.CacheControl = "private, no-store";
+        return File(image.Content, image.ContentType);
     }
 
     private ActionResult MapException(AuthServiceException exception)

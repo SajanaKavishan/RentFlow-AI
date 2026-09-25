@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,16 +14,17 @@ const account = (role) => ({ id: '11111111-1111-1111-1111-111111111111', fullNam
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
 function renderProfile(role = 'Tenant') {
-  const logout = vi.fn()
-  const result = render(<MemoryRouter><AuthContext.Provider value={{ user: account(role), logout, isAuthenticated: true, isLoading: false }}><ProfilePage /></AuthContext.Provider></MemoryRouter>)
-  return { ...result, logout }
+  const updateProfile = vi.fn().mockResolvedValue(account(role))
+  const uploadProfileImage = vi.fn().mockResolvedValue({ ...account(role), hasProfileImage: true })
+  const result = render(<MemoryRouter><AuthContext.Provider value={{ user: account(role), updateProfile, uploadProfileImage, isAuthenticated: true, isLoading: false }}><ProfilePage /></AuthContext.Provider></MemoryRouter>)
+  return { ...result, updateProfile, uploadProfileImage }
 }
 
 beforeEach(() => { tokenStorage.setToken('profile-token'); vi.stubGlobal('fetch', vi.fn()) })
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('shared profile', () => {
-  it.each(['Tenant', 'Landlord', 'MaintenanceTechnician', 'Admin'])('shows real account details and unavailable actions for %s', (role) => {
+  it.each(['Tenant', 'Landlord', 'MaintenanceTechnician', 'Admin'])('shows real account details and the available profile editor for %s', (role) => {
     const { container } = renderProfile(role)
     expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument()
     expect(container.querySelector('.profile-identity')).toHaveTextContent('ASAmara Silvaamara@example.com')
@@ -31,13 +32,62 @@ describe('shared profile', () => {
     for (const section of ['Account', 'Preferences', 'Support']) expect(screen.getByRole('region', { name: section })).toBeInTheDocument()
     const accountSection = screen.getByRole('region', { name: 'Account' })
     expect(within(accountSection).getByText('+94 77 123 4567')).toBeInTheDocument()
-    for (const name of ['Edit profile', 'Change password', 'Notifications', 'Language', 'Contact support']) {
+    for (const name of ['Change password', 'Notifications', 'Contact support']) {
       expect(screen.getByRole('button', { name: new RegExp(name) })).toBeDisabled()
     }
-    expect(screen.getByRole('button', { name: /Sign out/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Edit profile/ })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /Sign out/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Language/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
     expect(Boolean(screen.queryByRole('button', { name: /Application documents/ }))).toBe(role === 'Tenant')
+  })
+
+  it('updates profile fields and uploads a validated local image', async () => {
+    const NativeURL = URL
+    const createObjectURL = vi.fn(() => 'blob:profile-preview')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', class extends NativeURL {
+      static createObjectURL = createObjectURL
+      static revokeObjectURL = revokeObjectURL
+    })
+    const { updateProfile, uploadProfileImage } = renderProfile('Admin')
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    await userEvent.clear(screen.getByLabelText('Full name'))
+    await userEvent.type(screen.getByLabelText('Full name'), 'Updated Admin')
+    await userEvent.clear(screen.getByLabelText('Phone number'))
+    await userEvent.type(screen.getByLabelText('Phone number'), '+94 71 222 3333')
+    const image = new File([new Uint8Array([0x89, 0x50, 0x4E, 0x47])], 'avatar.png', { type: 'image/png' })
+    await userEvent.upload(screen.getByLabelText(/Profile image/), image)
+    expect(document.querySelector('.profile-identity__avatar img')).toHaveAttribute('src', 'blob:profile-preview')
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await waitFor(() => expect(updateProfile).toHaveBeenCalledWith({ fullName: 'Updated Admin', phoneNumber: '+94 71 222 3333' }))
+    expect(uploadProfileImage).toHaveBeenCalledWith(image)
+    expect(await screen.findByText('Profile updated successfully.')).toBeInTheDocument()
+  })
+
+  it('rejects unsupported or oversized local images before upload', async () => {
+    const { uploadProfileImage } = renderProfile('Admin')
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    await userEvent.upload(screen.getByLabelText(/Profile image/), new File(['text'], 'avatar.txt', { type: 'text/plain' }), { applyAccept: false })
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a JPEG, PNG, or WEBP image.')
+    expect(uploadProfileImage).not.toHaveBeenCalled()
+  })
+
+  it('automatically hides profile error notifications after three seconds', () => {
+    vi.useFakeTimers()
+    try {
+      renderProfile('Admin')
+      fireEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+      fireEvent.change(screen.getByLabelText(/Profile image/), {
+        target: { files: [new File(['text'], 'avatar.txt', { type: 'text/plain' })] },
+      })
+      expect(screen.getByRole('alert')).toHaveTextContent('Choose a JPEG, PNG, or WEBP image.')
+      act(() => vi.advanceTimersByTime(3000))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('loads only the signed-in tenant’s applications and their authorized documents on demand', async () => {
@@ -97,7 +147,7 @@ describe('shared profile', () => {
     expect(await screen.findByText('No documents have been added to this application.')).toBeInTheDocument()
   })
 
-  it('keeps disabled actions out of keyboard activation and signs out through the existing session', async () => {
+  it('keeps removed account actions out of the page and opens the editor from the keyboard', async () => {
     const api = { getCurrentUser: vi.fn().mockResolvedValue(account('Tenant')) }
     render(<MemoryRouter initialEntries={['/profile']}><AuthProvider api={api}><App /></AuthProvider></MemoryRouter>)
     const documents = await screen.findByRole('button', { name: /Application documents/ })
@@ -105,9 +155,10 @@ describe('shared profile', () => {
     // The shared shell provides earlier focus targets; focus the live profile action directly.
     documents.focus()
     await userEvent.tab()
-    expect(screen.getByRole('button', { name: /Sign out/ })).toHaveFocus()
+    expect(screen.getByRole('button', { name: /Edit profile/ })).toHaveFocus()
     await userEvent.keyboard('{Enter}')
-    expect(await screen.findByRole('heading', { name: 'Sign in to RentFlow' })).toBeInTheDocument()
-    expect(tokenStorage.getToken()).toBeNull()
+    expect(screen.getByRole('form', { name: 'Edit profile' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Sign out/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Language/ })).not.toBeInTheDocument()
   })
 })

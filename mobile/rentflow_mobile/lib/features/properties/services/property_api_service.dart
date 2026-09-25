@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../models/property.dart';
+import '../models/property_matching.dart';
 
 class PropertyApiService {
   const PropertyApiService(this.apiClient);
@@ -50,13 +51,17 @@ class PropertyApiService {
       queryParameters['amenity'] = amenity.trim();
     }
 
-    final baseUri = apiClient.buildUri(ApiConstants.propertiesPath);
+    final baseUri =
+        apiClient.buildUri(ApiConstants.propertiesPath);
 
     final uri = queryParameters.isEmpty
         ? baseUri
-        : baseUri.replace(queryParameters: queryParameters);
+        : baseUri.replace(
+            queryParameters: queryParameters,
+          );
 
-    final response = await _send(() => apiClient.get(uri));
+    final response =
+        await _send(() => apiClient.get(uri));
 
     return _parsePropertyList(response.body);
   }
@@ -66,9 +71,30 @@ class PropertyApiService {
       '${ApiConstants.propertiesPath}/$id',
     );
 
-    final response = await _send(() => apiClient.get(uri));
+    final response =
+        await _send(() => apiClient.get(uri));
 
     return _parseProperty(response.body);
+  }
+
+  Future<PropertyMatchingResponse> matchProperties(
+    PropertyMatchingRequest preferences,
+  ) async {
+    final uri = apiClient.buildUri(
+      '${ApiConstants.propertiesPath}/match',
+    );
+
+    final response = await _send(
+      () => apiClient.post(
+        uri,
+        body: jsonEncode(preferences.toJson()),
+        authenticated: false,
+      ),
+    );
+
+    return _parsePropertyMatchingResponse(
+      response.body,
+    );
   }
 
   Future<http.Response> _send(
@@ -84,7 +110,8 @@ class PropertyApiService {
       );
     }
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300) {
       throw PropertyApiException(
         _safeErrorMessage(response) ??
             'The property request failed. Please try again.',
@@ -133,7 +160,28 @@ class PropertyApiService {
     }
   }
 
-  String? _safeErrorMessage(http.Response response) {
+  PropertyMatchingResponse
+      _parsePropertyMatchingResponse(String body) {
+    try {
+      final decoded = jsonDecode(body);
+
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException();
+      }
+
+      return PropertyMatchingResponse.fromJson(
+        decoded,
+      );
+    } on FormatException {
+      throw const PropertyApiException(
+        'The property matching service returned an invalid response.',
+      );
+    }
+  }
+
+  String? _safeErrorMessage(
+    http.Response response,
+  ) {
     if (response.statusCode == 403) {
       return 'You do not have permission to access this resource.';
     }
@@ -161,10 +209,15 @@ class PropertyApiService {
         return null;
       }
 
-      for (final key in ['detail', 'title', 'message']) {
+      for (final key in [
+        'detail',
+        'title',
+        'message',
+      ]) {
         final value = decoded[key];
 
-        if (value is String && value.trim().isNotEmpty) {
+        if (value is String &&
+            value.trim().isNotEmpty) {
           return value.trim();
         }
       }

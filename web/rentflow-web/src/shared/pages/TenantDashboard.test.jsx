@@ -173,10 +173,30 @@ describe('tenant dashboard', () => {
     expect(screen.getByText('Integration pending')).toBeInTheDocument()
   })
 
-  it.each(['Landlord', 'Admin', 'MaintenanceTechnician'])('does not call tenant APIs for %s', (role) => {
+  it.each(['Landlord', 'Admin', 'MaintenanceTechnician'])('does not call tenant APIs for %s', async (role) => {
+    if (role === 'Admin') {
+      fetch.mockResolvedValue(json({
+        items: [],
+        pagination: {
+          page: 1, pageSize: 1, totalCount: 0, totalPages: 0,
+          hasNextPage: false, hasPreviousPage: false,
+        },
+      }))
+    }
     renderApp({ ...tenant, role })
-    expect(screen.getByRole('heading', { name: 'Welcome, Amara Silva' })).toBeInTheDocument()
-    expect(fetch).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: role === 'Admin' ? 'System Overview' : 'Welcome, Amara Silva' })).toBeInTheDocument()
+    await act(async () => {})
+    const requestedPaths = fetch.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname)
+    expect(requestedPaths).not.toContain('/api/rental-applications')
+    expect(requestedPaths).not.toContain('/api/viewings')
+    expect(requestedPaths).toEqual(role === 'Admin' ? Array(5).fill('/api/admin/users') : [])
+    if (role === 'Admin') {
+      const roleFilters = fetch.mock.calls
+        .map(([url]) => new URL(url, 'http://localhost').searchParams.get('role'))
+        .filter(Boolean)
+        .sort()
+      expect(roleFilters).toEqual(['Admin', 'Landlord', 'MaintenanceTechnician', 'Tenant'])
+    }
   })
 
   it('uses the existing session expiry handling when a summary returns 401', async () => {

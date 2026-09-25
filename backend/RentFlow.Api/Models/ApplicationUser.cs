@@ -12,7 +12,7 @@ public sealed class ApplicationUser
 
     public string PhoneNumber { get; set; } = string.Empty;
 
-    public string PasswordHash { get; set; } = string.Empty;
+    public string? PasswordHash { get; set; }
 
     public UserRole Role { get; set; }
 
@@ -21,4 +21,6 @@ public sealed class ApplicationUser
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    public UserProfileImage? ProfileImage { get; set; }
 }

@@ -4,6 +4,7 @@ import '../../../shared/theme/app_theme.dart';
 import '../models/property.dart';
 import '../services/property_api_service.dart';
 import '../widgets/property_card.dart';
+import 'property_matching_screen.dart';
 
 class PropertyListScreen extends StatefulWidget {
   const PropertyListScreen({
@@ -66,7 +67,23 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
       });
     }
   }
-    @override
+
+  void _openPropertyMatching() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(
+            title: const Text('AI Property Match'),
+          ),
+          body: PropertyMatchingScreen(
+            propertyApiService: widget.propertyApiService,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: RefreshIndicator(
@@ -80,7 +97,10 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
                 delegate: SliverChildListDelegate([
                   Text(
                     'EXPLORE HOMES',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelMedium
+                        ?.copyWith(
                           color: AppPalette.olive,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 1.4,
@@ -89,7 +109,10 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'Find your place',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineMedium
+                        ?.copyWith(
                           color: AppPalette.darkOlive,
                           fontWeight: FontWeight.w700,
                         ),
@@ -99,14 +122,29 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
                     'Explore available homes that fit the way you want to live.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 18),
+
+                  // AI Property Matching
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _openPropertyMatching,
+                      icon: const Icon(Icons.auto_awesome),
+                      label: const Text('AI Property Match'),
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
                   _buildSearch(),
                   const SizedBox(height: 14),
                   _buildFilters(),
                   const SizedBox(height: 26),
                   Text(
                     'Properties',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
                   ),
@@ -125,7 +163,8 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
       ),
     );
   }
-    Widget _buildSearch() {
+
+  Widget _buildSearch() {
     return TextField(
       controller: _searchController,
       textInputAction: TextInputAction.search,
@@ -186,7 +225,8 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
       ),
     );
   }
-    Widget _buildPropertyContent() {
+
+  Widget _buildPropertyContent() {
     if (_isLoading) {
       return const SliverFillRemaining(
         hasScrollBody: false,

@@ -7,7 +7,9 @@ function invalidResponse() {
 function parseNotification(item) {
   if (!item || typeof item.id !== 'string' || typeof item.title !== 'string'
     || typeof item.message !== 'string' || typeof item.createdAt !== 'string'
-    || typeof item.isRead !== 'boolean') invalidResponse()
+    || typeof item.isRead !== 'boolean' || typeof item.eventType !== 'string'
+    || typeof item.relatedResourceType !== 'string'
+    || typeof item.relatedResourceId !== 'string') invalidResponse()
   return item
 }
 

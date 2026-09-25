@@ -4,11 +4,12 @@ import { useAuth } from '../../features/auth/useAuth.js'
 import { navigationForRole } from '../navigation/roleNavigation.js'
 import Icon from '../ui/Icons.jsx'
 import { BrandWordmark } from '../ui/BrandLogo.jsx'
-import { initialsForName } from '../ui/userDisplay.js'
+import ProfileAvatar from '../../features/auth/ProfileAvatar.jsx'
 import { USER_ROLES } from '../../features/auth/authModel.js'
 import { propertyIdFromLocation } from '../property/usePropertyContext.js'
 import { getUnreadCount } from '../../features/notifications/notificationsApi.js'
 import { NotificationCountContext } from '../../features/notifications/NotificationCountContext.js'
+import NotificationPopover from '../../features/notifications/NotificationPopover.jsx'
 import { PendingViewingsContext } from './PendingViewingsContext.js'
 import { PendingApplicationsContext } from './PendingApplicationsContext.js'
 import { getViewingsByProperty, VIEWING_STATUS } from '../../features/viewings/services/viewingApiService.js'
@@ -17,7 +18,8 @@ import './shell.css'
 
 function navigationPath(pathname) {
   if (pathname.startsWith('/notifications/')) return '/notifications'
-  const scoped = /^\/properties\/[^/]+\/(viewing-requests|rental-applications|ai-review)\/?$/.exec(pathname)
+  const scoped = /^\/properties\/[^/]+\/(viewing-requests|ai-review|rental-applications)(?:\/[^/]+\/validation)?\/?$/.exec(pathname)
+  if (/^\/rental-applications\/[^/]+\/validation\/?$/.test(pathname)) return '/rental-applications'
   return scoped ? `/${scoped[1]}` : pathname
 }
 
@@ -111,6 +113,10 @@ export default function AppShell() {
   const menuOpen = menu.path === location.pathname && menu.open
   const menuRef = useRef(null)
   const sidebarRef = useRef(null)
+  const accountButtonRef = useRef(null)
+  const accountPopupRef = useRef(null)
+  const [accountMenu, setAccountMenu] = useState({ path: location.pathname, open: false })
+  const accountOpen = accountMenu.path === location.pathname && accountMenu.open
   useEffect(() => {
     if (!menuOpen) return undefined
     const sidebar = sidebarRef.current
@@ -140,8 +146,26 @@ export default function AppShell() {
       desktop.removeEventListener('change', onDesktop)
     }
   }, [menuOpen, location.pathname])
+  useEffect(() => {
+    if (!accountOpen) return undefined
+    const onPointerDown = (event) => {
+      if (!accountPopupRef.current?.contains(event.target) && !accountButtonRef.current?.contains(event.target)) setAccountMenu({ path: location.pathname, open: false })
+    }
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setAccountMenu({ path: location.pathname, open: false })
+        accountButtonRef.current?.focus()
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [accountOpen, location.pathname])
   const items = navigationForRole(user.role)
-  const current = (activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : activePath === '/viewing-requests' ? 'Viewings Management' : activePath === '/rental-applications' ? 'Applications Management' : items.find((item) => item.path === activePath)?.label)
+  const current = (activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : activePath === '/modules/users' ? 'User Management' : activePath === '/viewing-requests' ? 'Viewings Management' : activePath === '/rental-applications' ? 'Applications Management' : items.find((item) => item.path === activePath)?.label)
     || (location.pathname === '/unauthorized' ? 'Access restricted' : 'RentFlow AI')
   const closeMenu = () => { setMenu({ path: location.pathname, open: false }); if (menuOpen) menuRef.current?.focus() }
   const navLink = (item) => {
@@ -164,7 +188,7 @@ export default function AppShell() {
       <span className="shared-brand__workspace">{portalRole} workspace</span>
       <nav aria-label="Primary navigation" className="shared-sidebar__nav">
         <div className="shared-sidebar__nav-main">{items.filter((item) => item.path !== '/profile').map(navLink)}</div>
-        <div className="shared-sidebar__nav-bottom">{items.filter((item) => item.path === '/profile').map(navLink)}
+        <div className="shared-sidebar__nav-bottom">
           <button className="shared-nav-link shared-nav-link--button" type="button" onClick={logout}><Icon name="logout" size={19} /><span className="shared-nav-link__label">Logout</span></button>
         </div>
       </nav>
@@ -173,9 +197,19 @@ export default function AppShell() {
     <div className="shared-shell__body">
       <header className="shared-topbar">
         <button ref={menuRef} type="button" className="shared-menu-button" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="shared-navigation" onClick={() => setMenu({ path: location.pathname, open: !menuOpen })}><Icon name={menuOpen ? 'close' : 'menu'} size={22} /></button>
-        <div className="shared-topbar__title"><strong>{current}</strong></div>
-        <Link className="shared-topbar__notifications" to="/notifications" onClick={closeMenu} aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'} aria-current={activePath === '/notifications' ? 'page' : undefined}><Icon name="bell" size={21} />{unreadCount > 0 && <span className="shared-topbar__notification-count" aria-hidden="true">{unreadCount}</span>}</Link>
-        <Link className="shared-topbar__account" to={scopedPath('/profile')} title={user.email} onClick={closeMenu} aria-label={`Profile for ${user.fullName}`}><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span></span><span className="shared-avatar" aria-hidden="true">{initialsForName(user.fullName)}</span></Link>
+        {activePath !== '/notifications' && <div className="shared-topbar__title"><strong>{current}</strong></div>}
+        <NotificationPopover key={user.id} userId={user.id} unreadCount={unreadCount} refreshCount={refreshCount} onOpen={() => { closeMenu(); setAccountMenu({ path: location.pathname, open: false }) }} />
+        <button ref={accountButtonRef} className="shared-topbar__account" type="button" title={user.email} aria-label={`Profile for ${user.fullName}`} aria-haspopup="dialog" aria-expanded={accountOpen} onClick={() => { closeMenu(); setAccountMenu({ path: location.pathname, open: !accountOpen }) }}><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span></span><ProfileAvatar user={user} className="shared-avatar" /></button>
+        {accountOpen && <section ref={accountPopupRef} className="shared-account-popup" role="dialog" aria-label="Account menu">
+          <div className="shared-account-popup__identity">
+            <ProfileAvatar user={user} className="shared-avatar" />
+            <span><strong>{user.fullName}</strong><small>{user.email}</small></span>
+          </div>
+          <span className="shared-account-popup__role">{portalRole}</span>
+          <div className="shared-account-popup__actions">
+            <Link to={scopedPath('/profile')} onClick={() => setAccountMenu({ path: location.pathname, open: false })}><Icon name="user" size={18} />View full profile</Link>
+          </div>
+        </section>}
       </header>
       <NotificationCountContext.Provider value={{ refreshCount, unreadCount, countStatus: notificationCountStatus }}><PendingViewingsContext.Provider value={publishPendingViewings}><PendingApplicationsContext.Provider value={publishPendingApplications}><div className="shared-shell__content"><Outlet key={user.id} /></div></PendingApplicationsContext.Provider></PendingViewingsContext.Provider></NotificationCountContext.Provider>
     </div>

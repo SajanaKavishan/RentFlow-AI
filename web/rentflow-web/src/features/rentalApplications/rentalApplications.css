@@ -389,11 +389,17 @@
 }
 
 .application-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   min-height: 42px;
   padding: 9px 16px;
   border: 1px solid transparent;
   border-radius: 10px;
   font-weight: 750;
+  text-decoration: none;
+  cursor: pointer;
   transition:
     transform 150ms ease,
     background-color 150ms ease,
@@ -1038,6 +1044,114 @@
   font-size: 0.7rem;
 }
 
+.validation-workflow__steps {
+  margin-top: 24px;
+}
+
+.validation-workflow__steps > h4 {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.validation-step-accordion {
+  margin-top: 11px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: #fff;
+}
+
+.validation-step-accordion > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.validation-step-accordion > summary::-webkit-details-marker { display: none; }
+.validation-step-accordion > summary::after { content: '+'; margin-left: 2px; color: var(--muted); font-size: 1.15rem; }
+.validation-step-accordion[open] > summary::after { content: '\2212'; }
+
+.validation-step-accordion__identity {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.validation-step-accordion__identity strong { color: var(--ink); font-size: .88rem; overflow-wrap: anywhere; }
+.validation-step-accordion__identity small { color: var(--muted); font-size: .7rem; }
+
+.validation-step-accordion__status {
+  flex: none;
+  padding: 4px 9px;
+  border: 1px solid #d5d8c9;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--cream-50);
+  font-size: .68rem;
+  font-weight: 800;
+}
+
+.validation-step-accordion__status--completed { border-color: #b9ddbd; color: #246033; background: #edf8ec; }
+.validation-step-accordion__status--failed { border-color: #e1c0bd; color: var(--danger); background: #fff3f2; }
+.validation-step-accordion__status--running { border-color: #d8ae5f; color: #80520e; background: #fff8e9; }
+.validation-step__number--failed { background: var(--danger); }
+.validation-step__number--pending { background: #85887c; }
+
+.validation-step-accordion__body {
+  padding: 20px;
+  border-top: 1px solid var(--border);
+  background: #fdfcf9;
+}
+
+.validation-step-accordion__body > .structured-validation-section:first-child,
+.validation-step-accordion__body > .validation-findings:first-child { margin-top: 0; }
+
+.validation-step__outcome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--cream-100);
+  font-size: .8rem;
+}
+
+.validation-step__outcome span:first-child { color: var(--muted); }
+.validation-step__outcome strong { color: var(--ink); }
+.validation-step__outcome span:last-child:not(:first-child) { margin-left: auto; color: var(--olive-700); font-weight: 800; }
+
+.validation-workflow__recommendation {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid #d8ae5f;
+  border-radius: 14px;
+  background: #fffaf0;
+}
+
+.validation-workflow__recommendation > div:first-child > span {
+  display: block;
+  color: #8a5b16;
+  font-size: .7rem;
+  font-weight: 800;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.validation-workflow__recommendation > div:first-child > strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
 .application-card__decision {
   margin-top: 22px;
   padding: 20px;
@@ -1281,6 +1395,14 @@
   .validation-step__result {
     margin-left: 38px;
   }
+
+  .validation-step-accordion > summary { align-items: flex-start; flex-wrap: wrap; padding: 14px; }
+  .validation-step-accordion__identity { flex-basis: calc(100% - 44px); }
+  .validation-step-accordion__status { margin-left: 40px; }
+  .validation-step-accordion > summary::after { margin-left: auto; }
+  .validation-step-accordion__body { padding: 14px; }
+  .validation-step__outcome { align-items: flex-start; flex-direction: column; }
+  .validation-step__outcome span:last-child:not(:first-child) { margin-left: 0; }
 
   .application-card__actions .application-button {
     flex: 1 1 auto;

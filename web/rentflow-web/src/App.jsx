@@ -7,6 +7,7 @@ import RegisterPage from './features/auth/pages/RegisterPage.jsx'
 import { USER_ROLES } from './features/auth/authModel.js'
 
 import RentalApplicationsPage from './features/rentalApplications/pages/RentalApplicationsPage.jsx'
+import ApplicationValidationReportPage from './features/rentalApplications/pages/ApplicationValidationReportPage.jsx'
 import MyApplicationsPage from './features/rentalApplications/pages/MyApplicationsPage.jsx'
 
 import ViewingRequestsPage from './features/viewings/pages/ViewingRequestsPage.jsx'
@@ -21,6 +22,8 @@ import PropertiesPage from './features/properties/pages/PropertiesPage.jsx'
 import PropertyDetailsPage from './features/properties/pages/PropertyDetailsPage.jsx'
 import PropertyMatchingPage from './features/properties/pages/PropertyMatchingPage.jsx'
 import ManagePropertiesPage from './features/properties/pages/ManagePropertiesPage.jsx'
+
+import PasswordSetupPage from './features/staffProvisioning/PasswordSetupPage.jsx'
 
 import AppShell from './shared/layout/AppShell.jsx'
 import DashboardPage from './shared/pages/DashboardPage.jsx'
@@ -42,6 +45,7 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/setup-password" element={<PasswordSetupPage />} />
 
       {/* Authenticated application */}
       <Route element={<ProtectedRoute />}>
@@ -52,7 +56,7 @@ export default function App() {
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/unauthorized" element={<UnauthorizedState />} />
 
-          {/* Property details can be viewed by authenticated users */}
+          {/* Property details */}
           <Route
             path="/properties/:propertyId"
             element={<PropertyDetailsPage />}
@@ -72,7 +76,9 @@ export default function App() {
             <Route
               path="/notifications/rental-application/:id"
               element={
-                <NotificationResourcePage resourceType="RentalApplication" />
+                <NotificationResourcePage
+                  resourceType="RentalApplication"
+                />
               }
             />
           </Route>
@@ -157,7 +163,9 @@ export default function App() {
             <Route
               path="/notifications/viewing-request/:id"
               element={
-                <NotificationResourcePage resourceType="ViewingRequest" />
+                <NotificationResourcePage
+                  resourceType="ViewingRequest"
+                />
               }
             />
 
@@ -179,6 +187,16 @@ export default function App() {
             <Route
               path="/properties/:propertyId/rental-applications"
               element={<RentalApplicationsPage />}
+            />
+
+            <Route
+              path="/properties/:propertyId/rental-applications/:applicationId/validation"
+              element={<ApplicationValidationReportPage />}
+            />
+
+            <Route
+              path="/rental-applications/:applicationId/validation"
+              element={<ApplicationValidationReportPage />}
             />
 
             <Route

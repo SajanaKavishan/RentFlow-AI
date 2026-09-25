@@ -4,6 +4,24 @@ namespace RentFlow.Api.Services;
 
 internal static class NotificationEventFactory
 {
+    public static Notification ForMaintenanceTechnicianActivation(
+        ApplicationUser technician,
+        Guid provisioningAdminId,
+        DateTimeOffset activatedAt)
+    {
+        return new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientId = provisioningAdminId,
+            EventType = "maintenance_technician.activated",
+            RelatedResourceType = "MaintenanceTechnician",
+            RelatedResourceId = technician.Id,
+            Title = "Technician account activated",
+            Message = "The Maintenance Technician account you provisioned is now active.",
+            CreatedAt = activatedAt
+        };
+    }
+
     public static Notification ForViewingCreated(
         ViewingRequest viewing,
         Guid landlordId)
