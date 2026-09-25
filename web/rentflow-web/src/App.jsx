@@ -5,6 +5,7 @@ import LoginPage from './features/auth/pages/LoginPage.jsx'
 import RegisterPage from './features/auth/pages/RegisterPage.jsx'
 import { USER_ROLES } from './features/auth/authModel.js'
 import RentalApplicationsPage from './features/rentalApplications/pages/RentalApplicationsPage.jsx'
+import ApplicationValidationReportPage from './features/rentalApplications/pages/ApplicationValidationReportPage.jsx'
 import MyApplicationsPage from './features/rentalApplications/pages/MyApplicationsPage.jsx'
 import ViewingRequestsPage from './features/viewings/pages/ViewingRequestsPage.jsx'
 import MyViewingsPage from './features/viewings/pages/MyViewingsPage.jsx'
@@ -59,6 +60,14 @@ export default function App() {
           <Route
             path="/properties/:propertyId/rental-applications"
             element={<RentalApplicationsPage />}
+          />
+          <Route
+            path="/properties/:propertyId/rental-applications/:applicationId/validation"
+            element={<ApplicationValidationReportPage />}
+          />
+          <Route
+            path="/rental-applications/:applicationId/validation"
+            element={<ApplicationValidationReportPage />}
           />
           <Route path="/ai-review" element={<RentalApplicationsPage />} />
           <Route
