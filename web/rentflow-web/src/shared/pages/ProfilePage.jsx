@@ -23,6 +23,8 @@ function validateProfile(fullName, phoneNumber) {
 
 export default function ProfilePage() {
   const { user, updateProfile, uploadProfileImage, changePassword } = useAuth()
+  const showsNotificationPreferences = [USER_ROLES.TENANT, USER_ROLES.LANDLORD].includes(user.role)
+  const isAdmin = user.role === USER_ROLES.ADMIN
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState(() => ({ fullName: user.fullName, phoneNumber: user.phoneNumber }))
   const [imageFile, setImageFile] = useState(null)
@@ -36,6 +38,9 @@ export default function ProfilePage() {
   const hasProfileChanges = form.fullName.trim() !== user.fullName.trim()
     || (form.phoneNumber || '').trim() !== (user.phoneNumber?.trim() || '')
     || imageFile !== null
+  const profileLayoutClassName = isAdmin
+    ? 'profile-layout profile-layout--account-only'
+    : `profile-layout${showsNotificationPreferences ? '' : ' profile-layout--without-preferences'}`
 
   useEffect(() => () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
@@ -138,7 +143,7 @@ export default function ProfilePage() {
       </div>
     </AppCard>
 
-    <div className="profile-layout">
+    <div className={profileLayoutClassName}>
       <section className="profile-section profile-section--account" aria-labelledby="profile-account-title">
         <h2 id="profile-account-title">Account</h2>
         <AppCard className="profile-section__card">
@@ -174,17 +179,17 @@ export default function ProfilePage() {
         </AppCard>
       </section>
 
-      <section className="profile-section profile-section--preferences" aria-labelledby="profile-preferences-title">
+      {showsNotificationPreferences && <section className="profile-section profile-section--preferences" aria-labelledby="profile-preferences-title">
         <h2 id="profile-preferences-title">Preferences</h2>
         <NotificationPreferencesSection key={user.id} userId={user.id} showToast={showToast} />
-      </section>
+      </section>}
 
-      <section className="profile-section profile-section--support" aria-labelledby="profile-support-title">
+      {!isAdmin && <section className="profile-section profile-section--support" aria-labelledby="profile-support-title">
         <h2 id="profile-support-title">Support</h2>
         <AppCard className="profile-section__card profile-actions">
           <SupportRequestsSection key={user.id} />
         </AppCard>
-      </section>
+      </section>}
     </div>
     {changingPassword && <ChangePasswordDialog changePassword={changePassword} onClose={closeChangePassword} onSuccess={(message) => showToast('success', message)} />}
   </main>

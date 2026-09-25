@@ -7,6 +7,8 @@
 .profile-identity__copy h2 { margin: 0 0 5px; color: var(--ink); font-size: 1.3rem; letter-spacing: -.035em; overflow-wrap: anywhere; }
 .profile-identity__copy p { margin: 0; color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
 .profile-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); grid-template-areas: 'account preferences' 'account support'; align-items: start; gap: 30px 22px; }
+.profile-layout--without-preferences { grid-template-areas: 'account support'; }
+.profile-layout--account-only { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'account'; }
 .profile-section { min-width: 0; }
 .profile-section--account { grid-area: account; }
 .profile-section--preferences { grid-area: preferences; }
@@ -25,13 +27,9 @@
 .profile-action__copy { min-width: 0; display: grid; gap: 4px; }
 .profile-action__copy strong { font-size: .86rem; font-weight: 800; }
 .profile-action__copy small { color: var(--muted); font-size: .73rem; line-height: 1.45; overflow-wrap: anywhere; }
-.profile-action__status { flex: none; margin-left: auto; color: var(--muted); font-size: .67rem; font-weight: 700; }
-.profile-action--unavailable:disabled { color: var(--ink); cursor: not-allowed; }
-.profile-action--available, .profile-action--logout { cursor: pointer; }
-.profile-action--available:hover, .profile-action--logout:hover { background: var(--cream-50); }
+.profile-action--available { cursor: pointer; }
+.profile-action--available:hover { background: var(--cream-50); }
 .profile-action--available > svg:last-child { flex: none; margin-left: auto; color: var(--olive-700); }
-.profile-action--logout { color: var(--danger); }
-.profile-action--logout .profile-action__icon { color: var(--danger); background: var(--danger-bg); }
 .notification-preferences__list { display: grid; }
 .notification-preference { min-height: 84px; display: flex; align-items: center; gap: 16px; padding: 18px 22px; border-top: 1px solid var(--border); }
 .notification-preference:first-child { border-top: 0; }
@@ -125,7 +123,11 @@
 .profile-application__body > p, .profile-application__body > div[role='alert'] { margin: 0; color: var(--muted); font-size: .83rem; line-height: 1.5; }
 .profile-application__body > div[role='alert'] { color: var(--danger); }
 .profile-application__documents { display: grid; gap: 10px; }
-@media (max-width: 1200px) { .profile-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'account' 'preferences' 'support'; } }
+@media (max-width: 1200px) {
+  .profile-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'account' 'preferences' 'support'; }
+  .profile-layout--without-preferences { grid-template-areas: 'account' 'support'; }
+  .profile-layout--account-only { grid-template-areas: 'account'; }
+}
 @media (max-width: 620px) {
   .profile-toast { top: 12px; width: calc(100vw - 24px); max-width: none; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 11px 12px; border-radius: 14px; }
   .profile-toast p { max-width: none; font-size: .76rem; }
@@ -140,7 +142,6 @@
   .profile-dialog__header, .change-password-form, .support-ticket-form { padding-right: 18px; padding-left: 18px; }
   .change-password-policy { grid-template-columns: 1fr; }
   .profile-action { gap: 11px; padding: 15px 17px; }
-  .profile-action__status { font-size: .62rem; }
   .profile-application__toggle { align-items: flex-start; flex-direction: column; }
 }
 @media (prefers-reduced-motion: reduce) { .profile-toast { animation: none; } }

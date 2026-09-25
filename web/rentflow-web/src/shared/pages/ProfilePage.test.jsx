@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App.jsx'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 import { AuthProvider } from '../../features/auth/AuthContext.jsx'
+import { USER_ROLES } from '../../features/auth/authModel.js'
 import { AuthContext } from '../../features/auth/useAuth.js'
 import {
   getNotificationPreferences,
@@ -44,6 +45,7 @@ function renderProfile(role = 'Tenant', overrides = {}) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks()
   tokenStorage.setToken('profile-token')
   vi.stubGlobal('fetch', vi.fn())
   getNotificationPreferences.mockResolvedValue({
@@ -61,28 +63,56 @@ beforeEach(() => {
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('shared profile', () => {
-  it.each(['Tenant', 'Landlord', 'MaintenanceTechnician', 'Admin'])('shows real account details and notification preferences for %s', async (role) => {
+  it.each([
+    { role: USER_ROLES.TENANT, showsPreferences: true, isAdmin: false, showsDocuments: true },
+    { role: USER_ROLES.LANDLORD, showsPreferences: true, isAdmin: false, showsDocuments: false },
+    { role: USER_ROLES.MAINTENANCE_TECHNICIAN, showsPreferences: false, isAdmin: false, showsDocuments: false },
+    { role: USER_ROLES.ADMIN, showsPreferences: false, isAdmin: true, showsDocuments: false },
+  ])('shows only the features relevant to $role', async ({ role, showsPreferences, isAdmin, showsDocuments }) => {
     const { container } = renderProfile(role)
     expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument()
     expect(container.querySelector('.profile-identity')).toHaveTextContent('ASAmara Silvaamara@example.com')
     expect(container.querySelector('.profile-identity')).not.toHaveTextContent(role)
-    for (const section of ['Account', 'Preferences', 'Support']) expect(screen.getByRole('region', { name: section })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Account' })).toBeInTheDocument()
     const accountSection = screen.getByRole('region', { name: 'Account' })
     expect(within(accountSection).getByText('+94 77 123 4567')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Change password/ })).toBeEnabled()
-    expect(screen.getByRole('button', { name: /Contact support/ })).toBeEnabled()
-    expect(await screen.findByRole('checkbox', { name: /Viewing updates/ })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: /Rental application updates/ })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: /Account & security updates/ })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: /Account & security updates/ })).toBeDisabled()
-    expect(screen.getByText('On / Required')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save preferences' })).toBeDisabled()
     expect(screen.getByRole('button', { name: /Edit profile/ })).toBeEnabled()
     expect(screen.queryByRole('button', { name: /Sign out/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Language/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
-    expect(Boolean(screen.queryByRole('button', { name: /Application documents/ }))).toBe(role === 'Tenant')
+    expect(Boolean(screen.queryByRole('button', { name: /Application documents/ }))).toBe(showsDocuments)
+
+    if (showsPreferences) {
+      expect(screen.getByRole('region', { name: 'Preferences' })).toBeInTheDocument()
+      expect(await screen.findByRole('checkbox', { name: /Viewing updates/ })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: /Rental application updates/ })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: /Account & security updates/ })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: /Account & security updates/ })).toBeDisabled()
+      expect(screen.getByText('On / Required')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save preferences' })).toBeDisabled()
+      expect(getNotificationPreferences).toHaveBeenCalledTimes(1)
+    } else {
+      expect(screen.queryByRole('region', { name: 'Preferences' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: /Viewing updates/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: /Rental application updates/ })).not.toBeInTheDocument()
+      expect(screen.queryByText('Account & security updates')).not.toBeInTheDocument()
+      expect(getNotificationPreferences).not.toHaveBeenCalled()
+    }
+
+    if (isAdmin) {
+      expect(screen.queryByRole('region', { name: 'Support' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /Manage support requests/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Contact support/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'My support requests' })).not.toBeInTheDocument()
+      expect(getMySupportTickets).not.toHaveBeenCalled()
+    } else {
+      expect(screen.getByRole('region', { name: 'Support' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Contact support/ })).toBeEnabled()
+      expect(screen.getByRole('heading', { name: 'My support requests' })).toBeInTheDocument()
+      await waitFor(() => expect(getMySupportTickets).toHaveBeenCalledTimes(1))
+    }
   })
 
   it('shows notification preference loading and load-retry states', async () => {
@@ -106,7 +136,7 @@ describe('shared profile', () => {
   it('waits for API confirmation before reporting a saved preference', async () => {
     let confirmSave
     updateNotificationPreferences.mockReturnValueOnce(new Promise((resolve) => { confirmSave = resolve }))
-    renderProfile('Admin')
+    renderProfile('Tenant')
     const viewingToggle = await screen.findByRole('checkbox', { name: /Viewing updates/ })
     await userEvent.click(viewingToggle)
     await userEvent.click(screen.getByRole('button', { name: 'Save preferences' }))
@@ -135,7 +165,7 @@ describe('shared profile', () => {
         rentalApplicationUpdatesEnabled: false,
         accountSecurityUpdatesEnabled: true,
       })
-    renderProfile('MaintenanceTechnician')
+    renderProfile('Landlord')
     const applicationToggle = await screen.findByRole('checkbox', { name: /Rental application updates/ })
     await userEvent.click(applicationToggle)
     await userEvent.click(screen.getByRole('button', { name: 'Save preferences' }))

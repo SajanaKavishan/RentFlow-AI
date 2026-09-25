@@ -13,7 +13,7 @@ The controlled `UserRole` values are:
 - `MaintenanceTechnician`
 - `Admin`
 
-Public registration accepts only `Tenant` and `Landlord`. A caller cannot self-register as `Admin` or `MaintenanceTechnician`; those roles require a future authorized administrative workflow or controlled development seed.
+Public registration accepts only `Tenant` and `Landlord`. A caller cannot self-register as `Admin` or `MaintenanceTechnician`. The initial Admin is created through the controlled bootstrap command, and active Admins can provision inactive Maintenance Technician accounts through the documented staff-provisioning workflow.
 
 ## Configuration
 
@@ -24,7 +24,7 @@ cd backend/RentFlow.Api
 dotnet user-secrets set "Jwt:SigningKey" "use-a-long-random-development-secret-here"
 ```
 
-Deployment environments should set `Jwt__SigningKey` through their secret manager. The API validates JWT configuration at startup. Default access-token lifetime is 30 minutes; Phase 1 does not issue refresh tokens.
+Deployment environments should set `Jwt__SigningKey` through their secret manager. The API validates JWT configuration at startup. Default access-token lifetime is 30 minutes. The application does not issue refresh tokens; a successful password change returns a replacement access token.
 
 ## Endpoints
 
@@ -52,6 +52,28 @@ Public. Accepts `email` and `password`. A successful request returns the same sa
 
 Requires `Authorization: Bearer <accessToken>`. The user is identified from the signed JWT `sub` claim; this endpoint never accepts a user ID in the route or query string. It returns `id`, `fullName`, `email`, `phoneNumber`, and `role` for the active user.
 
+### `PUT /api/auth/change-password`
+
+Requires authentication. Accepts `currentPassword`, `newPassword`, and `newPasswordConfirmation`; it never accepts a user ID or role. A successful change updates the password hash, increments the user's token version, creates the mandatory `account.password_changed` notification, and returns `message`, a replacement `accessToken`, and `expiresAt`. Every token issued before the change is rejected on its next authenticated request, including tokens from other sessions.
+
+### Profile endpoints
+
+- `PUT /api/auth/profile` updates the authenticated user's name and phone number.
+- `POST /api/auth/profile-image` uploads a validated JPEG, PNG, or WEBP image of at most 5 MB.
+- `GET /api/auth/profile-image` returns only the authenticated user's image with private, no-store caching.
+
+All ownership comes from the validated JWT subject.
+
+### Notification preferences
+
+`GET` and `PUT /api/notification-preferences` operate only on the authenticated user. Viewing and rental-application preferences suppress only optional events created after the preference is disabled; existing notifications remain stored. Account and security notifications are mandatory, cannot be disabled by the client or API, and bypass optional delivery preferences.
+
+### Support requests
+
+Authenticated users create tickets with `POST /api/support-tickets` and retrieve only their own tickets with `GET /api/support-tickets/mine`. Ticket ownership is derived from the JWT and is never accepted from the request body.
+
+The Admin queue under `/api/admin/support-tickets` uses the `ActiveAdmin` policy. Admins may list and filter tickets, view details, and perform only the forward status transitions `Open -> InProgress`, `Open -> Resolved`, and `InProgress -> Resolved`. Admin responses expose only the ticket fields and limited requester identity required by the management UI.
+
 ## JWT claims
 
 Access tokens include:
@@ -59,9 +81,10 @@ Access tokens include:
 - `sub`: application user ID (`Guid`)
 - `role`: one allow-listed role string
 - `email`: the user's safe email identity context for clients
+- `token_version`: the user's current session-generation number
 - `jti`: unique token ID
 
-Tokens are signed with HMAC SHA-256 and validated for signature, issuer, audience, and lifetime. The signing key is not included in any response or log.
+Tokens are signed with HMAC SHA-256 and validated for signature, issuer, audience, and lifetime. Token validation also loads the current user and rejects deleted or inactive accounts, stored-role mismatches, and stale token versions. The signing key is not included in any response or log.
 
 ## Using authorization in backend components
 
