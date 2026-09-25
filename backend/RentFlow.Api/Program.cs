@@ -202,6 +202,29 @@ builder.Services.AddScoped<
 // =========================================================
 
 builder.Services.AddScoped<
+    IPricingPropertyFactsTool,
+    PricingPropertyFactsTool>();
+
+builder.Services.AddScoped<
+    IPricingComparableRentalsTool,
+    PricingComparableRentalsTool>();
+
+builder.Services.AddScoped<
+    IPricingEvidenceAssessmentTool,
+    PricingEvidenceAssessmentTool>();
+
+builder.Services.AddHttpClient<
+    IPricingAnalysisAgentClient,
+    PricingAnalysisAgentClient>(
+        client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+
+builder.Services.AddScoped<IPricingAnalysisOrchestrator, PricingAnalysisOrchestrator>();
+builder.Services.AddScoped<IPricingAnalysisQueryService, PricingAnalysisQueryService>();
+
+builder.Services.AddScoped<
     IRentalOfferService,
     RentalOfferService>();
 

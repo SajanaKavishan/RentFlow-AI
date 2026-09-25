@@ -380,5 +380,9 @@ public class LeaseAgreementsControllerTests
         public Task<bool> CanAccessWorkflowAsync(
             Guid landlordId, Guid workflowId, CancellationToken cancellationToken = default)
             => Task.FromResult(false);
+
+        public Task<bool> CanAccessPricingAnalysisWorkflowAsync(
+            Guid landlordId, Guid workflowId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
     }
 }

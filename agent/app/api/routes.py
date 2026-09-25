@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 
 from app.graph.workflow import build_application_validation_graph
 from app.graph.maintenance_workflow import build_maintenance_coordination_graph
+from app.graph.pricing_workflow import build_pricing_analysis_graph, initial_pricing_state
 from app.schemas.analysis import FinalAgentSummary
 from app.schemas.maintenance import (
     MaintenanceCoordinationRequest,
@@ -13,6 +14,7 @@ from app.schemas.maintenance import (
     MaintenanceCoordinationSummary,
 )
 from app.schemas.requests import ApplicationValidationRequest
+from app.schemas.pricing import PricingAnalysisAgentRequest, PricingAnalysisAgentResponse
 from app.schemas.responses import AnalysisResponse, ExecutionMetadata
 
 router = APIRouter()
@@ -108,3 +110,22 @@ async def analyze_maintenance_coordination(
         result=MaintenanceCoordinationSummary.model_validate(result["final_summary"]),
         execution_metadata={"executedSteps": result["execution_steps"]},
     )
+
+
+@router.post(
+    "/internal/pricing-analysis/analyze",
+    response_model=PricingAnalysisAgentResponse,
+    response_model_by_alias=True,
+)
+async def analyze_pricing(
+    payload: PricingAnalysisAgentRequest,
+    request: Request,
+) -> PricingAnalysisAgentResponse:
+    settings = request.app.state.settings
+    graph = build_pricing_analysis_graph(
+        request.app.state.model_provider,
+        timeout_seconds=settings.ai_timeout_seconds,
+        agent_version=settings.agent_version,
+    )
+    result = await graph.ainvoke(initial_pricing_state(payload))
+    return PricingAnalysisAgentResponse.model_validate(result["response"])

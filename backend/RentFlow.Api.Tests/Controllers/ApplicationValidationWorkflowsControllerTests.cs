@@ -230,6 +230,9 @@ public class ApplicationValidationWorkflowsControllerTests
 
         public Task<bool> CanAccessWorkflowAsync(Guid landlordId, Guid workflowId,
             CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public Task<bool> CanAccessPricingAnalysisWorkflowAsync(Guid landlordId, Guid workflowId,
+            CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 
     private sealed class AdminCurrentUserService : ICurrentUserService
