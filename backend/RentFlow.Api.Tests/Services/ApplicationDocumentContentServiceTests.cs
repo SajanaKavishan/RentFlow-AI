@@ -24,7 +24,8 @@ public sealed class ApplicationDocumentContentServiceTests
         var storage = new FakeStorage { Content = bytes };
         var document = CreateDocument(contentType, bytes.Length);
 
-        var result = await CreateService(storage).PrepareForAnalysisAsync(ApplicationId, document);
+        var result = await CreateService(storage)
+            .PrepareForAnalysisAsync(ApplicationId, document);
 
         Assert.NotNull(result.Input);
         Assert.Equal(Convert.ToBase64String(bytes), result.Input.ContentBase64);
@@ -32,12 +33,34 @@ public sealed class ApplicationDocumentContentServiceTests
         Assert.Equal(document.DocumentType, result.Input.DocumentType);
         Assert.Single(storage.DownloadedKeys);
 
-        var json = JsonSerializer.Serialize(result.Input, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        Assert.DoesNotContain("storageKey", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("signedUrl", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("publicUrl", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(document.StorageKey, json, StringComparison.Ordinal);
-        Assert.Contains("\"documentType\":\"IncomeProof\"", json, StringComparison.Ordinal);
+        var json = JsonSerializer.Serialize(
+            result.Input,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.DoesNotContain(
+            "storageKey",
+            json,
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.DoesNotContain(
+            "signedUrl",
+            json,
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.DoesNotContain(
+            "publicUrl",
+            json,
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.DoesNotContain(
+            document.StorageKey,
+            json,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "\"documentType\":\"IncomeProof\"",
+            json,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -46,7 +69,8 @@ public sealed class ApplicationDocumentContentServiceTests
         var storage = new FakeStorage { Content = [1] };
         var document = CreateDocument("text/plain", 1);
 
-        var result = await CreateService(storage).PrepareForAnalysisAsync(ApplicationId, document);
+        var result = await CreateService(storage)
+            .PrepareForAnalysisAsync(ApplicationId, document);
 
         Assert.Null(result.Input);
         Assert.Equal("unsupported_content_type", result.WarningCode);
@@ -57,9 +81,13 @@ public sealed class ApplicationDocumentContentServiceTests
     public async Task PrepareForAnalysisAsync_OversizedMetadataIsExcludedSafely()
     {
         var storage = new FakeStorage { Content = [1] };
-        var document = CreateDocument("application/pdf", DocumentAnalysisOptions.UploadLimitBytes + 1);
 
-        var result = await CreateService(storage).PrepareForAnalysisAsync(ApplicationId, document);
+        var document = CreateDocument(
+            "application/pdf",
+            DocumentAnalysisOptions.UploadLimitBytes + 1);
+
+        var result = await CreateService(storage)
+            .PrepareForAnalysisAsync(ApplicationId, document);
 
         Assert.Null(result.Input);
         Assert.Equal("invalid_file_size", result.WarningCode);
@@ -71,16 +99,28 @@ public sealed class ApplicationDocumentContentServiceTests
     {
         var storage = new FakeStorage
         {
-            DownloadException = new InvalidOperationException("secret storage provider detail")
+            DownloadException =
+                new InvalidOperationException(
+                    "secret storage provider detail")
         };
+
         var document = CreateDocument("application/pdf", 1);
 
-        var result = await CreateService(storage).PrepareForAnalysisAsync(ApplicationId, document);
+        var result = await CreateService(storage)
+            .PrepareForAnalysisAsync(ApplicationId, document);
 
         Assert.Null(result.Input);
         Assert.Equal("retrieval_failed", result.WarningCode);
-        Assert.DoesNotContain("secret", result.Warning!, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("provider", result.Warning!, StringComparison.OrdinalIgnoreCase);
+
+        Assert.DoesNotContain(
+            "secret",
+            result.Warning!,
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.DoesNotContain(
+            "provider",
+            result.Warning!,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -89,7 +129,8 @@ public sealed class ApplicationDocumentContentServiceTests
         var storage = new FakeStorage { Content = [1] };
         var document = CreateDocument("application/pdf", 1);
 
-        var result = await CreateService(storage).PrepareForAnalysisAsync(Guid.NewGuid(), document);
+        var result = await CreateService(storage)
+            .PrepareForAnalysisAsync(Guid.NewGuid(), document);
 
         Assert.Null(result.Input);
         Assert.Equal("application_mismatch", result.WarningCode);
@@ -102,51 +143,76 @@ public sealed class ApplicationDocumentContentServiceTests
         var storage = new FakeStorage { Content = [1, 2] };
         var document = CreateDocument("application/pdf", 1);
 
-        var result = await CreateService(storage).PrepareForAnalysisAsync(ApplicationId, document);
+        var result = await CreateService(storage)
+            .PrepareForAnalysisAsync(ApplicationId, document);
 
         Assert.Null(result.Input);
         Assert.Equal("content_validation_failed", result.WarningCode);
     }
 
-    private static ApplicationDocumentContentService CreateService(FakeStorage storage) =>
+    private static ApplicationDocumentContentService CreateService(
+        FakeStorage storage) =>
         new(
             storage,
             Options.Create(new DocumentAnalysisOptions()),
             NullLogger<ApplicationDocumentContentService>.Instance);
 
-    private static ApplicationDocument CreateDocument(string contentType, long sizeBytes) => new()
-    {
-        ApplicationId = ApplicationId,
-        DocumentType = ApplicationDocumentType.IncomeProof,
-        OriginalFileName = "income-proof.pdf",
-        StorageKey = "private/application/storage-key",
-        ContentType = contentType,
-        FileSizeBytes = sizeBytes
-    };
+    private static ApplicationDocument CreateDocument(
+        string contentType,
+        long sizeBytes) =>
+        new()
+        {
+            ApplicationId = ApplicationId,
+            DocumentType = ApplicationDocumentType.IncomeProof,
+            OriginalFileName = "income-proof.pdf",
+            StorageKey = "private/application/storage-key",
+            ContentType = contentType,
+            FileSizeBytes = sizeBytes
+        };
 
     private sealed class FakeStorage : IFileStorageService
     {
         public byte[] Content { get; init; } = [];
+
         public Exception? DownloadException { get; init; }
+
         public List<string> DownloadedKeys { get; } = [];
 
-        public Task UploadAsync(Stream content, string storageKey, string contentType,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task UploadAsync(
+            Stream content,
+            string storageKey,
+            string contentType,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
 
-        public Task DeleteAsync(string storageKey,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteAsync(
+            string storageKey,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
 
-        public Task<byte[]> DownloadBytesAsync(string storageKey,
+        public Task<byte[]> DownloadBytesAsync(
+            string storageKey,
             long maximumBytes,
             CancellationToken cancellationToken = default)
         {
             DownloadedKeys.Add(storageKey);
+
             return DownloadException is null
                 ? Task.FromResult(Content)
                 : Task.FromException<byte[]>(DownloadException);
         }
 
-        public Task<string> GenerateDownloadUrlAsync(string storageKey, string originalFileName,
-            string contentType, TimeSpan lifetime) => Task.FromResult("https://unused.invalid");
+        public Task<string> GenerateDownloadUrlAsync(
+            string storageKey,
+            string originalFileName,
+            string contentType,
+            TimeSpan lifetime) =>
+            Task.FromResult("https://unused.invalid");
+
+        public Task<string> GenerateInlineUrlAsync(
+            string storageKey,
+            string contentType,
+            TimeSpan lifetime) =>
+            Task.FromResult("https://unused.invalid/inline");
     }
 }

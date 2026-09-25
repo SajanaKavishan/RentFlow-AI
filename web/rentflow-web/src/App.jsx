@@ -1,84 +1,229 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
+
 import ProtectedRoute from './features/auth/components/ProtectedRoute.jsx'
 import LoginPage from './features/auth/pages/LoginPage.jsx'
 import RegisterPage from './features/auth/pages/RegisterPage.jsx'
 import { USER_ROLES } from './features/auth/authModel.js'
+
 import RentalApplicationsPage from './features/rentalApplications/pages/RentalApplicationsPage.jsx'
 import ApplicationValidationReportPage from './features/rentalApplications/pages/ApplicationValidationReportPage.jsx'
 import MyApplicationsPage from './features/rentalApplications/pages/MyApplicationsPage.jsx'
+
 import ViewingRequestsPage from './features/viewings/pages/ViewingRequestsPage.jsx'
 import MyViewingsPage from './features/viewings/pages/MyViewingsPage.jsx'
+
+import NotificationsPage from './features/notifications/NotificationsPage.jsx'
+import NotificationResourcePage from './features/notifications/NotificationResourcePage.jsx'
+
+import LandingPage from './features/landing/pages/LandingPage.jsx'
+
+import PropertiesPage from './features/properties/pages/PropertiesPage.jsx'
+import PropertyDetailsPage from './features/properties/pages/PropertyDetailsPage.jsx'
+import PropertyMatchingPage from './features/properties/pages/PropertyMatchingPage.jsx'
+import ManagePropertiesPage from './features/properties/pages/ManagePropertiesPage.jsx'
+
+import PasswordSetupPage from './features/staffProvisioning/PasswordSetupPage.jsx'
+
 import AppShell from './shared/layout/AppShell.jsx'
 import DashboardPage from './shared/pages/DashboardPage.jsx'
 import TechnicianAssignedWorkPage from './shared/pages/TechnicianAssignedWorkPage.jsx'
 import AdminUsersPage from './shared/pages/AdminUsersPage.jsx'
 import AdminSystemOverviewPage from './shared/pages/AdminSystemOverviewPage.jsx'
 import ProfilePage from './shared/pages/ProfilePage.jsx'
-import NotificationsPage from './features/notifications/NotificationsPage.jsx'
-import NotificationResourcePage from './features/notifications/NotificationResourcePage.jsx'
-import { NotFoundState, UnauthorizedState, UnavailableState } from './shared/ui/States.jsx'
-import LandingPage from './features/landing/pages/LandingPage.jsx'
-import PasswordSetupPage from './features/staffProvisioning/PasswordSetupPage.jsx'
+
+import {
+  NotFoundState,
+  UnauthorizedState,
+  UnavailableState,
+} from './shared/ui/States.jsx'
 
 export default function App() {
-  return <Routes>
-    <Route path="/" element={<LandingPage />} />
-    <Route path="/login" element={<LoginPage />} />
-    <Route path="/register" element={<RegisterPage />} />
-    <Route path="/setup-password" element={<PasswordSetupPage />} />
-    <Route element={<ProtectedRoute />}>
-      <Route element={<AppShell />}>
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/notifications" element={<NotificationsPage />} />
-        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT, USER_ROLES.LANDLORD]} />}>
-          <Route path="/notifications/rental-application/:id" element={<NotificationResourcePage resourceType="RentalApplication" />} />
-        </Route>
-        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
-          <Route path="/notifications/viewing-request/:id" element={<NotificationResourcePage resourceType="ViewingRequest" />} />
-        </Route>
-        <Route path="/unauthorized" element={<UnauthorizedState />} />
-        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT]} />}>
-          <Route path="/modules/my-viewings" element={<MyViewingsPage />} />
-          <Route path="/modules/my-applications" element={<MyApplicationsPage />} />
-        </Route>
-        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.MAINTENANCE_TECHNICIAN]} />}>
-          <Route path="/modules/assigned-work" element={<TechnicianAssignedWorkPage />} />
-        </Route>
-        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} />}>
-          <Route path="/modules/users" element={<AdminUsersPage />} />
-          <Route path="/modules/ai-system-overview" element={<AdminSystemOverviewPage />} />
-        </Route>
-        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
-          <Route path="/viewing-requests" element={<ViewingRequestsPage />} />
+  return (
+    <Routes>
+      {/* Public routes */}
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/setup-password" element={<PasswordSetupPage />} />
+
+      {/* Authenticated application */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppShell />}>
+          {/* Shared routes */}
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/unauthorized" element={<UnauthorizedState />} />
+
+          {/* Property details */}
           <Route
-            path="/properties/:propertyId/viewing-requests"
-            element={<ViewingRequestsPage />}
+            path="/properties/:propertyId"
+            element={<PropertyDetailsPage />}
           />
-          <Route path="/rental-applications" element={<RentalApplicationsPage />} />
+
+          {/* Tenant + landlord notification routes */}
           <Route
-            path="/properties/:propertyId/rental-applications"
-            element={<RentalApplicationsPage />}
-          />
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  USER_ROLES.TENANT,
+                  USER_ROLES.LANDLORD,
+                ]}
+              />
+            }
+          >
+            <Route
+              path="/notifications/rental-application/:id"
+              element={
+                <NotificationResourcePage
+                  resourceType="RentalApplication"
+                />
+              }
+            />
+          </Route>
+
+          {/* Tenant routes */}
           <Route
-            path="/properties/:propertyId/rental-applications/:applicationId/validation"
-            element={<ApplicationValidationReportPage />}
-          />
+            element={
+              <ProtectedRoute
+                allowedRoles={[USER_ROLES.TENANT]}
+              />
+            }
+          >
+            <Route
+              path="/modules/my-viewings"
+              element={<MyViewingsPage />}
+            />
+
+            <Route
+              path="/modules/my-applications"
+              element={<MyApplicationsPage />}
+            />
+
+            <Route
+              path="/modules/properties"
+              element={<PropertiesPage />}
+            />
+
+            <Route
+              path="/modules/property-matching"
+              element={<PropertyMatchingPage />}
+            />
+          </Route>
+
+          {/* Maintenance technician routes */}
           <Route
-            path="/rental-applications/:applicationId/validation"
-            element={<ApplicationValidationReportPage />}
-          />
-          <Route path="/ai-review" element={<RentalApplicationsPage />} />
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  USER_ROLES.MAINTENANCE_TECHNICIAN,
+                ]}
+              />
+            }
+          >
+            <Route
+              path="/modules/assigned-work"
+              element={<TechnicianAssignedWorkPage />}
+            />
+          </Route>
+
+          {/* Admin routes */}
           <Route
-            path="/properties/:propertyId/ai-review"
-            element={<RentalApplicationsPage />}
+            element={
+              <ProtectedRoute
+                allowedRoles={[USER_ROLES.ADMIN]}
+              />
+            }
+          >
+            <Route
+              path="/modules/users"
+              element={<AdminUsersPage />}
+            />
+
+            <Route
+              path="/modules/ai-system-overview"
+              element={<AdminSystemOverviewPage />}
+            />
+          </Route>
+
+          {/* Landlord routes */}
+          <Route
+            element={
+              <ProtectedRoute
+                allowedRoles={[USER_ROLES.LANDLORD]}
+              />
+            }
+          >
+            <Route
+              path="/modules/manage-properties"
+              element={<ManagePropertiesPage />}
+            />
+
+            <Route
+              path="/notifications/viewing-request/:id"
+              element={
+                <NotificationResourcePage
+                  resourceType="ViewingRequest"
+                />
+              }
+            />
+
+            <Route
+              path="/viewing-requests"
+              element={<ViewingRequestsPage />}
+            />
+
+            <Route
+              path="/properties/:propertyId/viewing-requests"
+              element={<ViewingRequestsPage />}
+            />
+
+            <Route
+              path="/rental-applications"
+              element={<RentalApplicationsPage />}
+            />
+
+            <Route
+              path="/properties/:propertyId/rental-applications"
+              element={<RentalApplicationsPage />}
+            />
+
+            <Route
+              path="/properties/:propertyId/rental-applications/:applicationId/validation"
+              element={<ApplicationValidationReportPage />}
+            />
+
+            <Route
+              path="/rental-applications/:applicationId/validation"
+              element={<ApplicationValidationReportPage />}
+            />
+
+            <Route
+              path="/ai-review"
+              element={<RentalApplicationsPage />}
+            />
+
+            <Route
+              path="/properties/:propertyId/ai-review"
+              element={<RentalApplicationsPage />}
+            />
+          </Route>
+
+          {/* Existing fallback routes */}
+          <Route
+            path="/modules/:module"
+            element={<UnavailableState />}
           />
+
+          <Route path="*" element={<NotFoundState />} />
         </Route>
-        <Route path="/modules/:module" element={<UnavailableState />} />
-        <Route path="*" element={<NotFoundState />} />
       </Route>
-    </Route>
-    <Route path="*" element={<Navigate to="/login" replace />} />
-  </Routes>
+
+      <Route
+        path="*"
+        element={<Navigate to="/login" replace />}
+      />
+    </Routes>
+  )
 }

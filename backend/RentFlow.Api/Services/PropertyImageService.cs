@@ -148,11 +148,10 @@ public class PropertyImageService : IPropertyImageService
             return null;
         }
 
-        return await _fileStorageService.GenerateDownloadUrlAsync(
-            image.StorageKey,
-            image.OriginalFileName,
-            image.ContentType,
-            SignedUrlLifetime);
+      return await _fileStorageService.GenerateInlineUrlAsync(
+    image.StorageKey,
+    image.ContentType,
+    SignedUrlLifetime);
     }
 
     public async Task<bool> DeleteAsync(

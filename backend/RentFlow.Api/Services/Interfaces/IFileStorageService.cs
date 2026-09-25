@@ -1,7 +1,8 @@
 namespace RentFlow.Api.Services.Interfaces;
 
 /// <summary>
-/// Defines the storage operations required by application document services.
+/// Defines the storage operations required by application documents
+/// and property images.
 /// </summary>
 public interface IFileStorageService
 {
@@ -23,9 +24,20 @@ public interface IFileStorageService
         long maximumBytes,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Generates a signed URL that downloads the object.
+    /// </summary>
     Task<string> GenerateDownloadUrlAsync(
         string storageKey,
         string originalFileName,
+        string contentType,
+        TimeSpan lifetime);
+
+    /// <summary>
+    /// Generates a signed URL for displaying an object directly in the browser.
+    /// </summary>
+    Task<string> GenerateInlineUrlAsync(
+        string storageKey,
         string contentType,
         TimeSpan lifetime);
 }

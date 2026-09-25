@@ -6,6 +6,12 @@ from fastapi import APIRouter, Request
 
 from app.graph.workflow import build_application_validation_graph
 from app.graph.maintenance_workflow import build_maintenance_coordination_graph
+from app.graph.property_matching_workflow import build_property_matching_graph
+from app.schemas.property_matching import (
+    PropertyMatchingRequest,
+    PropertyMatchingResponse,
+    PropertyMatchingSummary,
+)
 from app.schemas.analysis import FinalAgentSummary
 from app.schemas.maintenance import (
     MaintenanceCoordinationRequest,
@@ -107,4 +113,46 @@ async def analyze_maintenance_coordination(
         maintenance_request_id=payload.maintenance_request_id,
         result=MaintenanceCoordinationSummary.model_validate(result["final_summary"]),
         execution_metadata={"executedSteps": result["execution_steps"]},
+    )
+@router.post(
+    "/internal/property-matching/analyze",
+    response_model=PropertyMatchingResponse,
+    response_model_by_alias=True,
+)
+async def analyze_property_matching(
+    payload: PropertyMatchingRequest,
+    request: Request,
+) -> PropertyMatchingResponse:
+    settings = request.app.state.settings
+
+    graph = build_property_matching_graph(
+        request.app.state.model_provider,
+        timeout_seconds=settings.ai_timeout_seconds,
+        agent_version=settings.agent_version,
+    )
+
+    result = await graph.ainvoke(
+        {
+            "preferences": payload.preferences.model_dump(
+                mode="json",
+                by_alias=True,
+            ),
+            "candidates": [
+                candidate.model_dump(mode="json", by_alias=True)
+                for candidate in payload.candidates
+            ],
+            "plan": None,
+            "match_analysis": None,
+            "final_summary": None,
+            "execution_steps": [],
+        }
+    )
+
+    return PropertyMatchingResponse(
+        result=PropertyMatchingSummary.model_validate(
+            result["final_summary"]
+        ),
+        execution_metadata={
+            "executedSteps": result["execution_steps"]
+        },
     )
