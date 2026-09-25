@@ -48,7 +48,7 @@ describe('shared React shell', () => {
 
   it.each([
     ['Tenant', ['Dashboard', 'Properties', 'My Viewings', 'My Applications', 'Lease & Payments', 'Maintenance']],
-    ['Landlord', ['Dashboard', 'Properties', 'Viewing Requests', 'Rental Applications', 'AI Review', 'Pricing / Lease', 'Payments', 'Maintenance']],
+    ['Landlord', ['Dashboard', 'Manage Properties', 'Viewing Requests', 'Rental Applications', 'AI Review', 'Pricing / Lease', 'Payments', 'Maintenance']],
     ['MaintenanceTechnician', ['Dashboard', 'Assigned Work']],
     ['Admin', ['Dashboard', 'Users', 'Support Requests', 'AI / System Overview']],
   ])('renders the exact navigation map for %s', async (role, expectedLabels) => {
@@ -62,27 +62,19 @@ describe('shared React shell', () => {
   })
 
   it('labels missing modules honestly', async () => {
-    renderApp('Tenant', '/modules/properties')
-    expect(await screen.findByRole('heading', { name: 'Properties' })).toBeInTheDocument()
+    renderApp('Tenant', '/modules/lease-payments')
+    expect(await screen.findByRole('heading', { name: 'Lease & Payments' })).toBeInTheDocument()
     expect(screen.getByText('Integration pending')).toBeInTheDocument()
-    expect(screen.getByText(/property module is integrated/)).toBeInTheDocument()
-    expect(screen.getByText('Owning area: Property management')).toBeInTheDocument()
+    expect(screen.getByText(/lease details and payment schedule/)).toBeInTheDocument()
+    expect(screen.getByText('Owning area: Lease and payment management')).toBeInTheDocument()
   })
 
-  it('keeps landlord property selection unavailable without inventing property context', async () => {
-    renderApp('Landlord', '/viewing-requests')
-    expect(await screen.findByRole('heading', { name: 'Viewing requests workflow' })).toBeInTheDocument()
-
+  it('opens the landlord property management route without inventing property context', async () => {
+    renderApp('Landlord', '/modules/manage-properties')
+    expect(await screen.findByRole('heading', { name: 'Manage your properties' })).toBeInTheDocument()
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
-    const propertiesLink = within(nav).getByText('Properties').closest('a')
-    const viewingsLink = within(nav).getByRole('link', { name: 'Viewing Requests' })
-
-    expect(propertiesLink).toHaveAttribute('href', '/modules/properties')
-    expect(within(propertiesLink).getByText('Soon')).toBeInTheDocument()
-    expect(viewingsLink).toHaveAttribute('href', '/viewing-requests')
-    expect(fetch.mock.calls.some(([url]) =>
-      new URL(url).pathname.startsWith('/api/properties') ||
-      new URL(url).pathname.startsWith('/api/viewings'))).toBe(false)
+    const propertiesLink = within(nav).getByRole('link', { name: 'Manage Properties' })
+    expect(propertiesLink).toHaveAttribute('href', '/modules/manage-properties')
   })
 
   it('keeps landlord AI review on the real rental application workflow', async () => {

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+
 using RentFlow.Api.Configuration;
 using RentFlow.Api.Commands;
 using RentFlow.Api.Authorization;
@@ -70,7 +72,8 @@ builder.Services.AddOptions<JwtOptions>()
     .ValidateOnStart();
 
 builder.Services.AddOptions<StaffProvisioningOptions>()
-    .Bind(builder.Configuration.GetSection(StaffProvisioningOptions.SectionName))
+    .Bind(builder.Configuration.GetSection(
+        StaffProvisioningOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
@@ -186,17 +189,21 @@ builder.Services.AddAuthorization(options =>
         {
             policy.RequireAuthenticatedUser();
             policy.RequireRole(nameof(UserRole.Admin));
-            policy.AddRequirements(new ActiveAdminRequirement());
+            policy.AddRequirements(
+                new ActiveAdminRequirement());
         });
 });
 
 builder.Services.AddRateLimiter(options =>
 {
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.RejectionStatusCode =
+        StatusCodes.Status429TooManyRequests;
+
     options.AddPolicy(
         "technician-activation",
         context => RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            context.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown",
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 5,
@@ -258,15 +265,21 @@ builder.Services.AddScoped<
 
 builder.Services.AddScoped<AdminBootstrapService>();
 builder.Services.AddScoped<AdminBootstrapCommand>();
-builder.Services.AddSingleton<IAdminBootstrapConsole, SystemAdminBootstrapConsole>();
+
+builder.Services.AddSingleton<
+    IAdminBootstrapConsole,
+    SystemAdminBootstrapConsole>();
+
 builder.Services.AddScoped<TechnicianProvisioningService>();
 builder.Services.AddScoped<PasswordResetService>();
-builder.Services.AddScoped<IAuthorizationHandler, ActiveAdminAuthorizationHandler>();
+builder.Services.AddScoped<
+    IAuthorizationHandler,
+    ActiveAdminAuthorizationHandler>();
 
 builder.Services.AddHttpContextAccessor();
 
 // =========================================================
-// PROPERTY MANAGEMENT
+// PROPERTY MANAGEMENT / PROPERTY MATCHING AI
 // =========================================================
 
 builder.Services.AddScoped<
@@ -280,6 +293,22 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IPropertyImageService,
     PropertyImageService>();
+
+builder.Services.AddScoped<
+    IPropertyMatchingRuleTool,
+    PropertyMatchingRuleTool>();
+
+builder.Services.AddScoped<
+    IPropertyMatchingOrchestrator,
+    PropertyMatchingOrchestrator>();
+
+builder.Services.AddHttpClient<
+    IPropertyMatchingAgentClient,
+    PropertyMatchingAgentClient>(
+        client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
 
 // =========================================================
 // RENTAL APPLICATION SERVICES
@@ -426,6 +455,7 @@ builder.Services.AddSingleton<
     CloudflareR2StorageService>();
 
 builder.Services.AddSingleton(TimeProvider.System);
+
 builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
@@ -474,8 +504,22 @@ if (builder.Environment.IsDevelopment())
             policy =>
             {
                 policy
-                    .WithOrigins(
-                        "http://localhost:5173")
+                    .SetIsOriginAllowed(origin =>
+                    {
+                        if (!Uri.TryCreate(
+                                origin,
+                                UriKind.Absolute,
+                                out var uri))
+                        {
+                            return false;
+                        }
+
+                        return
+                            (uri.Host == "localhost"
+                                || uri.Host == "127.0.0.1")
+                            && (uri.Scheme == "http"
+                                || uri.Scheme == "https");
+                    })
                     .AllowAnyHeader()
                     .AllowAnyMethod();
             });
@@ -490,9 +534,16 @@ var app = builder.Build();
 
 if (AdminBootstrapCommand.IsRequested(args))
 {
-    await using var scope = app.Services.CreateAsyncScope();
-    var command = scope.ServiceProvider.GetRequiredService<AdminBootstrapCommand>();
-    Environment.ExitCode = await command.ExecuteAsync(args);
+    await using var scope =
+        app.Services.CreateAsyncScope();
+
+    var command =
+        scope.ServiceProvider
+            .GetRequiredService<AdminBootstrapCommand>();
+
+    Environment.ExitCode =
+        await command.ExecuteAsync(args);
+
     return;
 }
 

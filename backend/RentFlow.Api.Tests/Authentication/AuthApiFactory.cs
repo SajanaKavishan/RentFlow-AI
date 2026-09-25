@@ -59,31 +59,42 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["CloudflareR2:BucketName"] = "test-bucket"
             });
         });
+
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<ApplicationDbContext>();
             services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
+
             var providerConfigurations = services
-                .Where(descriptor => descriptor.ServiceType.IsGenericType
-                    && descriptor.ServiceType.GetGenericTypeDefinition().Name
+                .Where(descriptor =>
+                    descriptor.ServiceType.IsGenericType &&
+                    descriptor.ServiceType.GetGenericTypeDefinition().Name
                         == "IDbContextOptionsConfiguration`1")
                 .ToArray();
+
             foreach (var descriptor in providerConfigurations)
             {
                 services.Remove(descriptor);
             }
+
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName));
-            services.AddDataProtection().UseEphemeralDataProtectionProvider();
+
+            services.AddDataProtection()
+                .UseEphemeralDataProtectionProvider();
+
             if (_timeProvider is not null)
             {
                 services.RemoveAll<TimeProvider>();
                 services.AddSingleton(_timeProvider);
             }
+
             services.RemoveAll<IFileStorageService>();
             services.AddSingleton<IFileStorageService>(FileStorage);
+
             services.RemoveAll<IApplicationValidationOrchestrator>();
-            services.AddSingleton<IApplicationValidationOrchestrator>(ValidationOrchestrator);
+            services.AddSingleton<IApplicationValidationOrchestrator>(
+                ValidationOrchestrator);
         });
     }
 
@@ -153,11 +164,15 @@ internal sealed class RecordingLoggerProvider : ILoggerProvider
 
 internal sealed class RecordingFileStorageService : IFileStorageService
 {
-    private readonly Dictionary<string, byte[]> _objects = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, byte[]> _objects =
+        new(StringComparer.Ordinal);
 
     public int DownloadUrlCalls { get; private set; }
 
-    public async Task UploadAsync(Stream content, string storageKey, string contentType,
+    public async Task UploadAsync(
+        Stream content,
+        string storageKey,
+        string contentType,
         CancellationToken cancellationToken = default)
     {
         await using var buffer = new MemoryStream();
@@ -165,26 +180,48 @@ internal sealed class RecordingFileStorageService : IFileStorageService
         _objects[storageKey] = buffer.ToArray();
     }
 
-    public Task DeleteAsync(string storageKey,
+    public Task DeleteAsync(
+        string storageKey,
         CancellationToken cancellationToken = default)
     {
         _objects.Remove(storageKey);
         return Task.CompletedTask;
     }
 
-    public Task<byte[]> DownloadBytesAsync(string storageKey, long maximumBytes,
-        CancellationToken cancellationToken = default) => Task.FromResult(
-            _objects.TryGetValue(storageKey, out var content) ? content : Array.Empty<byte>());
+    public Task<byte[]> DownloadBytesAsync(
+        string storageKey,
+        long maximumBytes,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(
+            _objects.TryGetValue(storageKey, out var content)
+                ? content
+                : Array.Empty<byte>());
+    }
 
-    public Task<string> GenerateDownloadUrlAsync(string storageKey, string originalFileName,
-        string contentType, TimeSpan lifetime)
+    public Task<string> GenerateDownloadUrlAsync(
+        string storageKey,
+        string originalFileName,
+        string contentType,
+        TimeSpan lifetime)
     {
         DownloadUrlCalls++;
-        return Task.FromResult("https://signed.example.test/document");
+        return Task.FromResult(
+            "https://signed.example.test/document");
+    }
+
+    public Task<string> GenerateInlineUrlAsync(
+        string storageKey,
+        string contentType,
+        TimeSpan lifetime)
+    {
+        return Task.FromResult(
+            $"https://signed.example.test/inline/{storageKey}");
     }
 }
 
-internal sealed class RecordingValidationOrchestrator : IApplicationValidationOrchestrator
+internal sealed class RecordingValidationOrchestrator
+    : IApplicationValidationOrchestrator
 {
     public int Calls { get; private set; }
 
@@ -193,15 +230,18 @@ internal sealed class RecordingValidationOrchestrator : IApplicationValidationOr
         CancellationToken cancellationToken = default)
     {
         Calls++;
-        return Task.FromResult(new ApplicationValidationWorkflowResponseDto
-        {
-            Id = Guid.NewGuid(),
-            ApplicationId = applicationId,
-            Objective = "Validate application for landlord review.",
-            Status = ApplicationValidationWorkflowStatus.AwaitingHumanReview,
-            RequiresHumanApproval = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
+
+        return Task.FromResult(
+            new ApplicationValidationWorkflowResponseDto
+            {
+                Id = Guid.NewGuid(),
+                ApplicationId = applicationId,
+                Objective = "Validate application for landlord review.",
+                Status =
+                    ApplicationValidationWorkflowStatus.AwaitingHumanReview,
+                RequiresHumanApproval = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
     }
 }
