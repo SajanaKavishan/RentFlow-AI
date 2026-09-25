@@ -32,6 +32,22 @@
 .profile-action--available > svg:last-child { flex: none; margin-left: auto; color: var(--olive-700); }
 .profile-action--logout { color: var(--danger); }
 .profile-action--logout .profile-action__icon { color: var(--danger); background: var(--danger-bg); }
+.notification-preferences__list { display: grid; }
+.notification-preference { min-height: 84px; display: flex; align-items: center; gap: 16px; padding: 18px 22px; border-top: 1px solid var(--border); }
+.notification-preference:first-child { border-top: 0; }
+.notification-preference__copy { min-width: 0; display: grid; gap: 5px; cursor: pointer; }
+.notification-preference__copy strong { color: var(--ink); font-size: .86rem; font-weight: 800; }
+.notification-preference__copy small { color: var(--muted); font-size: .73rem; line-height: 1.45; }
+.notification-preference__control { flex: none; margin-left: auto; display: flex; align-items: center; gap: 9px; }
+.notification-preference__required { color: var(--olive-700); font-size: .67rem; font-weight: 800; }
+.notification-preference input { width: 38px; height: 21px; margin: 0; accent-color: var(--olive-700); cursor: pointer; }
+.notification-preference input:disabled { cursor: not-allowed; }
+.notification-preferences__actions { display: grid; gap: 12px; justify-items: end; padding: 16px 22px; border-top: 1px solid var(--border); background: var(--cream-50); }
+.notification-preferences__actions > div { width: 100%; color: var(--muted); font-size: .73rem; line-height: 1.45; }
+.notification-preferences__actions [role='alert'] { color: var(--danger); }
+.notification-preferences-state { display: grid; gap: 14px; justify-items: start; padding: 22px; }
+.notification-preferences-state p { margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+.notification-preferences-state[role='alert'] p { color: var(--danger); }
 .profile-edit { padding: 23px 25px; border-top: 1px solid var(--border); background: var(--cream-50); }
 .profile-edit__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .profile-edit label { min-width: 0; display: grid; gap: 7px; color: var(--ink); font-size: .75rem; font-weight: 750; }

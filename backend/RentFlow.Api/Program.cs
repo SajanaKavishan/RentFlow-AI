@@ -352,6 +352,10 @@ builder.Services.AddScoped<
     NotificationService>();
 
 builder.Services.AddScoped<
+    INotificationPreferenceService,
+    NotificationPreferenceService>();
+
+builder.Services.AddScoped<
     IPasswordHasher<ApplicationUser>,
     PasswordHasher<ApplicationUser>>();
 

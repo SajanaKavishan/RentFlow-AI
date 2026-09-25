@@ -195,11 +195,13 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             application.PropertyId,
             cancellationToken);
 
-        dbContext.Notifications.Add(
+        await NotificationDeliveryPolicy.QueueAsync(
+            dbContext,
             NotificationEventFactory.ForRentalApplicationSubmission(
                 application,
                 landlordId,
-                isResubmission));
+                isResubmission),
+            cancellationToken);
 
         await using var transaction = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
@@ -334,8 +336,10 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             workflow.UpdatedAt = decisionAt;
         }
 
-        dbContext.Notifications.Add(
-            NotificationEventFactory.ForRentalApplication(application, targetStatus));
+        await NotificationDeliveryPolicy.QueueAsync(
+            dbContext,
+            NotificationEventFactory.ForRentalApplication(application, targetStatus),
+            cancellationToken);
 
         await using var transaction = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)

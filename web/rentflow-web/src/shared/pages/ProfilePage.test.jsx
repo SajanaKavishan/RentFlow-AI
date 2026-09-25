@@ -6,7 +6,16 @@ import App from '../../App.jsx'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 import { AuthProvider } from '../../features/auth/AuthContext.jsx'
 import { AuthContext } from '../../features/auth/useAuth.js'
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+} from '../../features/notifications/notificationPreferencesApi.js'
 import ProfilePage from './ProfilePage.jsx'
+
+vi.mock('../../features/notifications/notificationPreferencesApi.js', () => ({
+  getNotificationPreferences: vi.fn(),
+  updateNotificationPreferences: vi.fn(),
+}))
 
 const applicationId = '22222222-2222-2222-2222-222222222222'
 const documentId = '33333333-3333-3333-3333-333333333333'
@@ -20,11 +29,24 @@ function renderProfile(role = 'Tenant') {
   return { ...result, updateProfile, uploadProfileImage }
 }
 
-beforeEach(() => { tokenStorage.setToken('profile-token'); vi.stubGlobal('fetch', vi.fn()) })
+beforeEach(() => {
+  tokenStorage.setToken('profile-token')
+  vi.stubGlobal('fetch', vi.fn())
+  getNotificationPreferences.mockResolvedValue({
+    viewingUpdatesEnabled: true,
+    rentalApplicationUpdatesEnabled: true,
+    accountSecurityUpdatesEnabled: true,
+  })
+  updateNotificationPreferences.mockResolvedValue({
+    viewingUpdatesEnabled: true,
+    rentalApplicationUpdatesEnabled: true,
+    accountSecurityUpdatesEnabled: true,
+  })
+})
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('shared profile', () => {
-  it.each(['Tenant', 'Landlord', 'MaintenanceTechnician', 'Admin'])('shows real account details and the available profile editor for %s', (role) => {
+  it.each(['Tenant', 'Landlord', 'MaintenanceTechnician', 'Admin'])('shows real account details and notification preferences for %s', async (role) => {
     const { container } = renderProfile(role)
     expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument()
     expect(container.querySelector('.profile-identity')).toHaveTextContent('ASAmara Silvaamara@example.com')
@@ -32,15 +54,84 @@ describe('shared profile', () => {
     for (const section of ['Account', 'Preferences', 'Support']) expect(screen.getByRole('region', { name: section })).toBeInTheDocument()
     const accountSection = screen.getByRole('region', { name: 'Account' })
     expect(within(accountSection).getByText('+94 77 123 4567')).toBeInTheDocument()
-    for (const name of ['Change password', 'Notifications', 'Contact support']) {
+    for (const name of ['Change password', 'Contact support']) {
       expect(screen.getByRole('button', { name: new RegExp(name) })).toBeDisabled()
     }
+    expect(await screen.findByRole('checkbox', { name: /Viewing updates/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Rental application updates/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Account & security updates/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Account & security updates/ })).toBeDisabled()
+    expect(screen.getByText('On / Required')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Edit profile/ })).toBeEnabled()
     expect(screen.queryByRole('button', { name: /Sign out/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Language/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
     expect(Boolean(screen.queryByRole('button', { name: /Application documents/ }))).toBe(role === 'Tenant')
+  })
+
+  it('shows notification preference loading and load-retry states', async () => {
+    let rejectLoad
+    getNotificationPreferences.mockReturnValueOnce(new Promise((resolve, reject) => { rejectLoad = reject }))
+    renderProfile('Landlord')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading notification preferences')
+    rejectLoad(new Error('Notification preferences could not be loaded.'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Notification preferences could not be loaded.')
+
+    getNotificationPreferences.mockResolvedValueOnce({
+      viewingUpdatesEnabled: false,
+      rentalApplicationUpdatesEnabled: true,
+      accountSecurityUpdatesEnabled: true,
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('checkbox', { name: /Viewing updates/ })).not.toBeChecked()
+    expect(getNotificationPreferences).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits for API confirmation before reporting a saved preference', async () => {
+    let confirmSave
+    updateNotificationPreferences.mockReturnValueOnce(new Promise((resolve) => { confirmSave = resolve }))
+    renderProfile('Admin')
+    const viewingToggle = await screen.findByRole('checkbox', { name: /Viewing updates/ })
+    await userEvent.click(viewingToggle)
+    await userEvent.click(screen.getByRole('button', { name: 'Save preferences' }))
+
+    expect(updateNotificationPreferences).toHaveBeenCalledWith(expect.objectContaining({
+      viewingUpdatesEnabled: false,
+      rentalApplicationUpdatesEnabled: true,
+    }))
+    expect(screen.getByRole('status')).toHaveTextContent('Saving notification preferences')
+    expect(screen.queryByText('Notification preferences saved.')).not.toBeInTheDocument()
+
+    confirmSave({
+      viewingUpdatesEnabled: false,
+      rentalApplicationUpdatesEnabled: true,
+      accountSecurityUpdatesEnabled: true,
+    })
+    expect((await screen.findAllByText('Notification preferences saved.')).length).toBeGreaterThan(0)
+    expect(viewingToggle).not.toBeChecked()
+  })
+
+  it('keeps failed notification changes unconfirmed and supports save retry', async () => {
+    updateNotificationPreferences
+      .mockRejectedValueOnce(new Error('Notification preferences could not be saved.'))
+      .mockResolvedValueOnce({
+        viewingUpdatesEnabled: true,
+        rentalApplicationUpdatesEnabled: false,
+        accountSecurityUpdatesEnabled: true,
+      })
+    renderProfile('MaintenanceTechnician')
+    const applicationToggle = await screen.findByRole('checkbox', { name: /Rental application updates/ })
+    await userEvent.click(applicationToggle)
+    await userEvent.click(screen.getByRole('button', { name: 'Save preferences' }))
+
+    const errors = await screen.findAllByRole('alert')
+    expect(errors.some((alert) => alert.textContent.includes('Your previous settings are still saved.'))).toBe(true)
+    expect(screen.queryByText('Notification preferences saved.')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect((await screen.findAllByText('Notification preferences saved.')).length).toBeGreaterThan(0)
+    expect(updateNotificationPreferences).toHaveBeenCalledTimes(2)
   })
 
   it('updates profile fields and uploads a validated local image', async () => {

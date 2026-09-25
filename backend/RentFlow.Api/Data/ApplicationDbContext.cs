@@ -44,6 +44,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<Notification> Notifications => Set<Notification>();
 
+    public DbSet<NotificationPreference> NotificationPreferences =>
+        Set<NotificationPreference>();
+
     public DbSet<MaintenanceCoordinationWorkflow> MaintenanceCoordinationWorkflows => Set<MaintenanceCoordinationWorkflow>();
 
     public DbSet<MaintenanceCoordinationStep> MaintenanceCoordinationSteps => Set<MaintenanceCoordinationStep>();
@@ -237,6 +240,26 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             });
 
             entity.HasIndex(notification => notification.EventType);
+        });
+
+        modelBuilder.Entity<NotificationPreference>(entity =>
+        {
+            entity.HasKey(preference => preference.UserId);
+
+            entity.Property(preference => preference.ViewingUpdatesEnabled)
+                .HasDefaultValue(true)
+                .HasSentinel(true)
+                .IsRequired();
+
+            entity.Property(preference => preference.RentalApplicationUpdatesEnabled)
+                .HasDefaultValue(true)
+                .HasSentinel(true)
+                .IsRequired();
+
+            entity.HasOne<ApplicationUser>()
+                .WithOne()
+                .HasForeignKey<NotificationPreference>(preference => preference.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // =========================================================

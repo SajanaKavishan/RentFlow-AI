@@ -5,6 +5,7 @@ import { USER_ROLES } from '../../features/auth/authModel.js'
 import { AppCard, PageHeader } from '../ui/States.jsx'
 import Icon from '../ui/Icons.jsx'
 import TenantApplicationDocuments from './TenantApplicationDocuments.jsx'
+import NotificationPreferencesSection from './NotificationPreferencesSection.jsx'
 import './profile.css'
 
 const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -167,9 +168,7 @@ export default function ProfilePage() {
 
       <section className="profile-section profile-section--preferences" aria-labelledby="profile-preferences-title">
         <h2 id="profile-preferences-title">Preferences</h2>
-        <AppCard className="profile-section__card profile-actions">
-          <UnavailableAction icon="info" title="Notifications" explanation="Notification preferences are not available yet." />
-        </AppCard>
+        <NotificationPreferencesSection key={user.id} userId={user.id} showToast={showToast} />
       </section>
 
       <section className="profile-section profile-section--support" aria-labelledby="profile-support-title">
