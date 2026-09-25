@@ -115,7 +115,7 @@ public sealed class AuthService(
         return CreateAuthResponse(user);
     }
 
-    public async Task<bool> ChangePasswordAsync(
+    public async Task<ChangePasswordResponseDto?> ChangePasswordAsync(
         Guid userId,
         ChangePasswordRequestDto request,
         CancellationToken cancellationToken = default)
@@ -137,7 +137,7 @@ public sealed class AuthService(
             cancellationToken);
         if (user is null)
         {
-            return false;
+            return null;
         }
 
         var passwordHash = user.PasswordHash;
@@ -172,13 +172,18 @@ public sealed class AuthService(
 
         var changedAt = timeProvider.GetUtcNow();
         user.PasswordHash = passwordHasher.HashPassword(user, request.NewPassword);
+        user.TokenVersion = checked(user.TokenVersion + 1);
         user.UpdatedAt = changedAt;
         await NotificationDeliveryPolicy.QueueAsync(
             dbContext,
             NotificationEventFactory.ForPasswordChanged(user, changedAt),
             cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return true;
+        var token = jwtTokenService.CreateToken(user);
+        return new ChangePasswordResponseDto(
+            "Your password was changed successfully.",
+            token.Value,
+            token.ExpiresAt);
     }
 
     public async Task<UserProfileDto?> GetUserAsync(

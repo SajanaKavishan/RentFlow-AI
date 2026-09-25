@@ -67,12 +67,12 @@ public sealed class AuthController(
 
         try
         {
-            var changed = await authService.ChangePasswordAsync(
+            var response = await authService.ChangePasswordAsync(
                 userId,
                 request,
                 cancellationToken);
-            return changed
-                ? Ok(new ChangePasswordResponseDto("Your password was changed successfully."))
+            return response is not null
+                ? Ok(response)
                 : Unauthorized();
         }
         catch (AuthServiceException exception)

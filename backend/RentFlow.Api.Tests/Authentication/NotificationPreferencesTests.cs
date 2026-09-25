@@ -154,6 +154,7 @@ public sealed class NotificationPreferencesTests
         Guid userId,
         UserRole role)
     {
+        factory.EnsureActiveUser(userId, role);
         var client = factory.CreateHttpsClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(userId, role));
@@ -172,7 +173,8 @@ public sealed class NotificationPreferencesTests
             claims:
             [
                 new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
-                new Claim("role", role.ToString())
+                new Claim("role", role.ToString()),
+                new Claim("token_version", "0")
             ],
             expires: DateTime.UtcNow.AddMinutes(10),
             signingCredentials: credentials);

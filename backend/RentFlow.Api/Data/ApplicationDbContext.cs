@@ -98,6 +98,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(user => user.IsActive)
                 .IsRequired();
 
+            entity.Property(user => user.TokenVersion)
+                .HasDefaultValue(0)
+                .IsRequired();
+
             entity.Property(user => user.CreatedAt)
                 .IsRequired();
 

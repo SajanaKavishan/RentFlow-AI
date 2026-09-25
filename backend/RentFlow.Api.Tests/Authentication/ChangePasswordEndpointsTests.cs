@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.IdentityModel.Tokens.Jwt;
 using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -106,10 +107,14 @@ public sealed class ChangePasswordEndpointsTests
         Assert.Equal(
             HttpStatusCode.OK,
             (await LoginAsync(client, "invalid-change@example.com", CurrentPassword)).StatusCode);
+        using var verificationScope = factory.Services.CreateScope();
+        var context = verificationScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Equal(0, (await context.Users.SingleAsync()).TokenVersion);
+        Assert.Empty(await context.Notifications.ToListAsync());
     }
 
     [Fact]
-    public async Task ChangePassword_ChangesOnlyJwtUserHashesPasswordAndKeepsExistingJwtValid()
+    public async Task ChangePassword_RotatesTokenAndInvalidatesEveryPreviouslyIssuedSession()
     {
         using var factory = new AuthApiFactory();
         using var client = factory.CreateHttpsClient();
@@ -117,6 +122,9 @@ public sealed class ChangePasswordEndpointsTests
         var bodyA = await ParseAsync(registrationA);
         var userAId = bodyA.RootElement.GetProperty("user").GetProperty("id").GetGuid();
         var existingToken = bodyA.RootElement.GetProperty("accessToken").GetString()!;
+        var secondSessionLogin = await LoginAsync(client, "change-a@example.com", CurrentPassword);
+        var secondSessionToken = (await ParseAsync(secondSessionLogin))
+            .RootElement.GetProperty("accessToken").GetString()!;
         var registrationB = await RegisterAsync(client, "change-b@example.com");
         var bodyB = await ParseAsync(registrationB);
         var userBId = bodyB.RootElement.GetProperty("user").GetProperty("id").GetGuid();
@@ -140,6 +148,15 @@ public sealed class ChangePasswordEndpointsTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             existingToken);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/me")).StatusCode);
+        using var secondSessionClient = factory.CreateHttpsClient();
+        secondSessionClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            secondSessionToken);
+        Assert.Equal(
+            HttpStatusCode.OK,
+            (await secondSessionClient.GetAsync("/api/auth/me")).StatusCode);
+
         var response = await client.PutAsJsonAsync("/api/auth/change-password", new
         {
             currentPassword = CurrentPassword,
@@ -152,9 +169,18 @@ public sealed class ChangePasswordEndpointsTests
         var responseText = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var responseBody = JsonDocument.Parse(responseText);
+        var replacementToken = responseBody.RootElement.GetProperty("accessToken").GetString()!;
+
         Assert.Equal(
             "Your password was changed successfully.",
-            JsonDocument.Parse(responseText).RootElement.GetProperty("message").GetString());
+            responseBody.RootElement.GetProperty("message").GetString());
+        Assert.True(responseBody.RootElement.GetProperty("expiresAt").GetDateTimeOffset()
+            > DateTimeOffset.UtcNow);
+        var parsedReplacementToken = new JwtSecurityTokenHandler().ReadJwtToken(replacementToken);
+        Assert.Equal(
+            "1",
+            parsedReplacementToken.Claims.Single(claim => claim.Type == "token_version").Value);
 
         using (var scope = factory.Services.CreateScope())
         {
@@ -165,6 +191,7 @@ public sealed class ChangePasswordEndpointsTests
             var hasher = services.GetRequiredService<IPasswordHasher<ApplicationUser>>();
 
             Assert.NotEqual(originalAHash, userA.PasswordHash);
+            Assert.Equal(1, userA.TokenVersion);
             Assert.Equal(
                 PasswordVerificationResult.Failed,
                 hasher.VerifyHashedPassword(userA, userA.PasswordHash!, CurrentPassword));
@@ -186,23 +213,32 @@ public sealed class ChangePasswordEndpointsTests
             Assert.Null(notification.ReadAt);
         }
 
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
         Assert.Equal(
             HttpStatusCode.Unauthorized,
-            (await LoginAsync(client, "change-a@example.com", CurrentPassword)).StatusCode);
+            (await secondSessionClient.GetAsync("/api/auth/me")).StatusCode);
+        using var replacementClient = factory.CreateHttpsClient();
+        replacementClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            replacementToken);
         Assert.Equal(
             HttpStatusCode.OK,
-            (await LoginAsync(client, "change-a@example.com", NewPassword)).StatusCode);
+            (await replacementClient.GetAsync("/api/auth/me")).StatusCode);
 
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer",
-            existingToken);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/me")).StatusCode);
+        using var loginClient = factory.CreateHttpsClient();
+        Assert.Equal(
+            HttpStatusCode.Unauthorized,
+            (await LoginAsync(loginClient, "change-a@example.com", CurrentPassword)).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.OK,
+            (await LoginAsync(loginClient, "change-a@example.com", NewPassword)).StatusCode);
 
         var sensitiveValues = new[]
         {
             CurrentPassword,
             NewPassword,
             existingToken,
+            secondSessionToken,
             originalAHash,
             originalBHash
         };
@@ -213,6 +249,9 @@ public sealed class ChangePasswordEndpointsTests
                 factory.Logs.Messages,
                 message => message.Contains(sensitiveValue, StringComparison.Ordinal));
         }
+        Assert.DoesNotContain(
+            factory.Logs.Messages,
+            message => message.Contains(replacementToken, StringComparison.Ordinal));
     }
 
     private static Task<HttpResponseMessage> RegisterAsync(HttpClient client, string email) =>

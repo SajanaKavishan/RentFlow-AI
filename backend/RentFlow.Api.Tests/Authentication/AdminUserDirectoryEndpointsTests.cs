@@ -63,7 +63,7 @@ public sealed class AdminUserDirectoryEndpointsTests
 
         using var response = await client.GetAsync("/api/admin/users");
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]

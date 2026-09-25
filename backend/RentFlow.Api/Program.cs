@@ -114,7 +114,7 @@ builder.Services
 
         options.Events = new JwtBearerEvents
         {
-            OnTokenValidated = context =>
+            OnTokenValidated = async context =>
             {
                 var subject =
                     context.Principal?
@@ -124,6 +124,10 @@ builder.Services
                     context.Principal?
                         .FindFirstValue("role");
 
+                var tokenVersionValue =
+                    context.Principal?
+                        .FindFirstValue(JwtClaimNames.TokenVersion);
+
                 if (!Guid.TryParse(
                         subject,
                         out var userId)
@@ -132,13 +136,39 @@ builder.Services
                         roleValue,
                         ignoreCase: false,
                         out var role)
-                    || !Enum.IsDefined(role))
+                    || !Enum.IsDefined(role)
+                    || !int.TryParse(
+                        tokenVersionValue,
+                        System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var tokenVersion)
+                    || tokenVersion < 0)
                 {
                     context.Fail(
                         "The token identity claims are invalid.");
+                    return;
                 }
 
-                return Task.CompletedTask;
+                var dbContext = context.HttpContext.RequestServices
+                    .GetRequiredService<ApplicationDbContext>();
+                var storedUser = await dbContext.Users
+                    .AsNoTracking()
+                    .Where(user => user.Id == userId)
+                    .Select(user => new
+                    {
+                        user.IsActive,
+                        user.Role,
+                        user.TokenVersion
+                    })
+                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+
+                if (storedUser is null
+                    || !storedUser.IsActive
+                    || storedUser.Role != role
+                    || storedUser.TokenVersion != tokenVersion)
+                {
+                    context.Fail("The token is no longer valid.");
+                }
             }
         };
     });

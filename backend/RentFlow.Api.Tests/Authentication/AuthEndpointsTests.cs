@@ -118,6 +118,7 @@ public sealed class AuthEndpointsTests
         Assert.Equal(userId.ToString(), token.Claims.Single(claim => claim.Type == "sub").Value);
         Assert.Equal("Landlord", token.Claims.Single(claim => claim.Type == "role").Value);
         Assert.Equal("login@example.com", token.Claims.Single(claim => claim.Type == "email").Value);
+        Assert.Equal("0", token.Claims.Single(claim => claim.Type == "token_version").Value);
     }
 
     [Fact]

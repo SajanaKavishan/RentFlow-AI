@@ -12,7 +12,7 @@ public interface IAuthService
         LoginRequestDto request,
         CancellationToken cancellationToken = default);
 
-    Task<bool> ChangePasswordAsync(
+    Task<ChangePasswordResponseDto?> ChangePasswordAsync(
         Guid userId,
         ChangePasswordRequestDto request,
         CancellationToken cancellationToken = default);

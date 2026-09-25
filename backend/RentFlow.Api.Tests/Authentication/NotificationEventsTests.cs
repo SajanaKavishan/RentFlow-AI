@@ -256,6 +256,7 @@ public sealed class NotificationEventsTests
         Guid userId,
         UserRole role)
     {
+        factory.EnsureActiveUser(userId, role);
         var client = factory.CreateHttpsClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(userId, role));
@@ -271,7 +272,8 @@ public sealed class NotificationEventsTests
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
-            new Claim("role", role.ToString())
+            new Claim("role", role.ToString()),
+            new Claim("token_version", "0")
         };
         var token = new JwtSecurityToken(
             issuer: "RentFlow.Api.Tests",

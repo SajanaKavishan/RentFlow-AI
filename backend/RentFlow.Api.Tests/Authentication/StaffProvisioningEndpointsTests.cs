@@ -62,7 +62,7 @@ public sealed class StaffProvisioningEndpointsTests
 
         var response = await CreateTechnicianAsync(client);
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]

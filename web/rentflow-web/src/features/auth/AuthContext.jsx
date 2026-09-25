@@ -64,7 +64,11 @@ export function AuthProvider({ children, api = authApi }) {
     setUser(currentUser)
     return currentUser
   }, [api])
-  const changePassword = useCallback((details) => api.changePassword(details), [api])
+  const changePassword = useCallback(async (details) => {
+    const result = await api.changePassword(details)
+    tokenStorage.setToken(result.accessToken)
+    return result
+  }, [api])
   const value = useMemo(() => ({ user, token: tokenStorage.getToken(),
     isAuthenticated: Boolean(user && tokenStorage.getToken()), isLoading, login, register,
     logout: clearSession, refreshCurrentUser, updateProfile, uploadProfileImage, changePassword }),

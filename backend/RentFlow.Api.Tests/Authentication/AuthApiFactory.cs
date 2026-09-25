@@ -87,6 +87,32 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
         BaseAddress = new Uri("https://localhost"),
         AllowAutoRedirect = allowAutoRedirect
     });
+
+    public void EnsureActiveUser(Guid userId, UserRole role)
+    {
+        using var scope = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        if (context.Users.Any(user => user.Id == userId))
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        context.Users.Add(new ApplicationUser
+        {
+            Id = userId,
+            FullName = $"Test {role}",
+            Email = $"{userId:N}@example.test",
+            NormalizedEmail = $"{userId:N}@EXAMPLE.TEST",
+            PhoneNumber = "+94770000000",
+            Role = role,
+            IsActive = true,
+            TokenVersion = 0,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        context.SaveChanges();
+    }
 }
 
 internal sealed class RecordingLoggerProvider : ILoggerProvider

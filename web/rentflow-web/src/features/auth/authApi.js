@@ -37,11 +37,19 @@ export async function updateProfile(details) {
   }))
 }
 
+function parseChangePasswordResponse(response) {
+  if (!response || typeof response.accessToken !== 'string' || !response.accessToken.trim()
+    || typeof response.message !== 'string' || typeof response.expiresAt !== 'string') {
+    throw new TypeError('The server returned an invalid password-change response.')
+  }
+  return response
+}
+
 export async function changePassword(details) {
-  return apiRequest('/api/auth/change-password', {
+  return parseChangePasswordResponse(await apiRequest('/api/auth/change-password', {
     method: 'PUT', body: JSON.stringify(details),
     errorMessage: 'Your password could not be changed.',
-  })
+  }))
 }
 
 export async function uploadProfileImage(file) {
