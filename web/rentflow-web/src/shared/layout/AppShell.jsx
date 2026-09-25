@@ -29,6 +29,7 @@ function iconForItem(label) {
   if (/Viewing|Viewings/.test(label)) return 'calendar'
   if (/Maintenance/.test(label)) return 'tools'
   if (/Application|AI|System|Lease|Payment/.test(label)) return 'document'
+  if (/Support/.test(label)) return 'info'
   return 'building'
 }
 

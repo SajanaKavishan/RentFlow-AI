@@ -50,7 +50,7 @@ describe('shared React shell', () => {
     ['Tenant', ['Dashboard', 'Properties', 'My Viewings', 'My Applications', 'Lease & Payments', 'Maintenance']],
     ['Landlord', ['Dashboard', 'Properties', 'Viewing Requests', 'Rental Applications', 'AI Review', 'Pricing / Lease', 'Payments', 'Maintenance']],
     ['MaintenanceTechnician', ['Dashboard', 'Assigned Work']],
-    ['Admin', ['Dashboard', 'Users', 'AI / System Overview']],
+    ['Admin', ['Dashboard', 'Users', 'Support Requests', 'AI / System Overview']],
   ])('renders the exact navigation map for %s', async (role, expectedLabels) => {
     renderApp(role)
     const nav = await screen.findByRole('navigation', { name: 'Primary navigation' })

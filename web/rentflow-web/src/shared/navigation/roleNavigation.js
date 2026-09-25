@@ -60,6 +60,11 @@ export const NAV_ITEMS = Object.freeze([
     description: 'The Admin Users workspace is available while its authorized directory contract awaits integration.',
   },
   {
+    id: 'support-requests', label: 'Support Requests', path: '/modules/support-requests', roles: [A], available: true,
+    owner: 'Administration',
+    description: 'Review and update authenticated user support requests.',
+  },
+  {
     id: 'ai-system-overview', label: 'AI / System Overview', path: '/modules/ai-system-overview', roles: [A], available: true,
     owner: 'Administration',
     description: 'The Admin overview workspace is available while its aggregate reporting contract awaits integration.',
