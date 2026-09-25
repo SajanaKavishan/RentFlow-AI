@@ -74,6 +74,11 @@ builder.Services.AddOptions<StaffProvisioningOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+builder.Services.AddOptions<PasswordResetOptions>()
+    .Bind(builder.Configuration.GetSection(PasswordResetOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 // =========================================================
 // JWT AUTHENTICATION
 // =========================================================
@@ -199,6 +204,28 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
+    options.AddPolicy(
+        "forgot-password",
+        context => RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy(
+        "password-reset",
+        context => RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
 });
 
 // =========================================================
@@ -233,6 +260,7 @@ builder.Services.AddScoped<AdminBootstrapService>();
 builder.Services.AddScoped<AdminBootstrapCommand>();
 builder.Services.AddSingleton<IAdminBootstrapConsole, SystemAdminBootstrapConsole>();
 builder.Services.AddScoped<TechnicianProvisioningService>();
+builder.Services.AddScoped<PasswordResetService>();
 builder.Services.AddScoped<IAuthorizationHandler, ActiveAdminAuthorizationHandler>();
 
 builder.Services.AddHttpContextAccessor();

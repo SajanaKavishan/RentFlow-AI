@@ -21,6 +21,23 @@ internal static class NotificationEventFactory
         };
     }
 
+    public static Notification ForPasswordReset(
+        ApplicationUser user,
+        DateTimeOffset resetAt)
+    {
+        return new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientId = user.Id,
+            EventType = NotificationEventTypes.AccountPasswordReset,
+            RelatedResourceType = "UserAccount",
+            RelatedResourceId = user.Id,
+            Title = "Password reset",
+            Message = "Your password was reset successfully.",
+            CreatedAt = resetAt
+        };
+    }
+
     public static Notification ForMaintenanceTechnicianActivation(
         ApplicationUser technician,
         Guid provisioningAdminId,

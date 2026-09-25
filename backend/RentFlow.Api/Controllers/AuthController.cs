@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using RentFlow.Api.DTOs.Auth;
 using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
@@ -10,6 +11,7 @@ namespace RentFlow.Api.Controllers;
 [Route("api/auth")]
 public sealed class AuthController(
     IAuthService authService,
+    PasswordResetService passwordResetService,
     ICurrentUserService currentUserService) : ControllerBase
 {
     private const long MaximumProfileImageRequestBytes = 5 * 1024 * 1024 + 64 * 1024;
@@ -48,6 +50,46 @@ public sealed class AuthController(
         catch (AuthServiceException exception)
         {
             return MapException(exception);
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("forgot-password")]
+    [EnableRateLimiting("forgot-password")]
+    [ProducesResponseType<ForgotPasswordResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<ForgotPasswordResponseDto>> ForgotPassword(
+        [FromBody] ForgotPasswordRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await passwordResetService.RequestAsync(request, cancellationToken));
+        }
+        catch (PasswordResetException exception)
+        {
+            return MapPasswordResetException(exception, "Invalid password reset request.");
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("reset-password")]
+    [EnableRateLimiting("password-reset")]
+    [ProducesResponseType<ResetPasswordResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<ResetPasswordResponseDto>> ResetPassword(
+        [FromBody] ResetPasswordRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await passwordResetService.ResetAsync(request, cancellationToken));
+        }
+        catch (PasswordResetException exception)
+        {
+            return MapPasswordResetException(exception, "Password reset failed.");
         }
     }
 
@@ -188,6 +230,23 @@ public sealed class AuthController(
                 (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
         };
 
+        return StatusCode(statusCode, new ProblemDetails
+        {
+            Status = statusCode,
+            Title = title,
+            Detail = statusCode == StatusCodes.Status500InternalServerError
+                ? "The request could not be completed."
+                : exception.Message
+        });
+    }
+
+    private ActionResult MapPasswordResetException(
+        PasswordResetException exception,
+        string title)
+    {
+        var statusCode = exception.Error == PasswordResetError.Persistence
+            ? StatusCodes.Status500InternalServerError
+            : StatusCodes.Status400BadRequest;
         return StatusCode(statusCode, new ProblemDetails
         {
             Status = statusCode,

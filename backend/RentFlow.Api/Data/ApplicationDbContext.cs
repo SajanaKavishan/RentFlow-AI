@@ -16,6 +16,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TechnicianPasswordSetupToken> TechnicianPasswordSetupTokens =>
         Set<TechnicianPasswordSetupToken>();
 
+    public DbSet<PasswordResetToken> PasswordResetTokens =>
+        Set<PasswordResetToken>();
+
     public DbSet<Property> Properties => Set<Property>();
 
     public DbSet<PropertyAmenity> PropertyAmenities => Set<PropertyAmenity>();
@@ -246,6 +249,35 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             });
 
             entity.HasIndex(notification => notification.EventType);
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.HasKey(token => token.Id);
+
+            entity.Property(token => token.TokenDigest)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            entity.Property(token => token.CreatedAt)
+                .IsRequired();
+
+            entity.Property(token => token.ExpiresAt)
+                .IsRequired();
+
+            entity.Property(token => token.ConsumedAt)
+                .IsRequired(false)
+                .IsConcurrencyToken();
+
+            entity.HasIndex(token => token.TokenDigest)
+                .IsUnique();
+
+            entity.HasIndex(token => new { token.UserId, token.CreatedAt });
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(token => token.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<NotificationPreference>(entity =>

@@ -26,6 +26,10 @@ dotnet user-secrets set "Jwt:SigningKey" "use-a-long-random-development-secret-h
 
 Deployment environments should set `Jwt__SigningKey` through their secret manager. The API validates JWT configuration at startup. Default access-token lifetime is 30 minutes. The application does not issue refresh tokens; a successful password change returns a replacement access token.
 
+Password-reset tokens expire after 45 minutes by default. Configure the lifetime with `PasswordReset__TokenLifetimeMinutes` (30-60 minutes). `PasswordReset__DevelopmentWebBaseUrl` controls only the local Development reset-link origin and defaults to `http://localhost:5173`.
+
+RentFlow does not currently include a production email provider. Production deployment therefore requires an approved transactional email service to deliver reset links. The API still creates a secure reset token for eligible accounts, but non-Development responses never expose the raw token or reset link and do not claim an email was sent. Development responses include a local reset link for testing; this field is absent outside the `Development` environment. Valid requests for existing, missing, inactive, and unsupported accounts otherwise receive the same generic message and response shape.
+
 ## Endpoints
 
 ### `POST /api/auth/register`
@@ -55,6 +59,18 @@ Requires `Authorization: Bearer <accessToken>`. The user is identified from the 
 ### `PUT /api/auth/change-password`
 
 Requires authentication. Accepts `currentPassword`, `newPassword`, and `newPasswordConfirmation`; it never accepts a user ID or role. A successful change updates the password hash, increments the user's token version, creates the mandatory `account.password_changed` notification, and returns `message`, a replacement `accessToken`, and `expiresAt`. Every token issued before the change is rejected on its next authenticated request, including tokens from other sessions.
+
+### `POST /api/auth/forgot-password`
+
+Public and rate-limited by client IP. Accepts `email`. Every validly formatted request returns HTTP 200 with the generic message `If an account exists, password reset instructions have been created.` regardless of account existence, activation state, or role. Eligible accounts receive a cryptographically random 256-bit reset token; only its SHA-256 digest is stored. Issuing a new token consumes prior outstanding tokens for that account.
+
+In Development only, the response also contains `developmentResetLink` for local testing. Existing eligible accounts receive a usable link; all other valid requests receive the same field and an opaque non-usable link to avoid enumeration through the forgot-password response. Non-Development responses omit this field completely.
+
+### `POST /api/auth/reset-password`
+
+Public and separately rate-limited by client IP. Accepts `token`, `newPassword`, and `newPasswordConfirmation`. The token must exist, be unexpired, unconsumed, and belong to an active account with an established password. The password uses the existing password policy and must match its confirmation.
+
+A successful reset atomically replaces the password hash, increments `TokenVersion`, consumes all outstanding reset tokens for the account, and creates exactly one mandatory `account.password_reset` notification titled `Password reset`. It returns only `Your password was reset successfully.` and does not create a login session or access token. Invalid, expired, and reused tokens share the same safe HTTP 400 response.
 
 ### Profile endpoints
 

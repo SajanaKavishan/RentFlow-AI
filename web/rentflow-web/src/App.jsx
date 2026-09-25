@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import ProtectedRoute from './features/auth/components/ProtectedRoute.jsx'
 import LoginPage from './features/auth/pages/LoginPage.jsx'
+import ForgotPasswordPage from './features/auth/pages/ForgotPasswordPage.jsx'
+import ResetPasswordPage from './features/auth/pages/ResetPasswordPage.jsx'
 import RegisterPage from './features/auth/pages/RegisterPage.jsx'
 import { USER_ROLES } from './features/auth/authModel.js'
 import RentalApplicationsPage from './features/rentalApplications/pages/RentalApplicationsPage.jsx'
@@ -26,6 +28,8 @@ export default function App() {
   return <Routes>
     <Route path="/" element={<LandingPage />} />
     <Route path="/login" element={<LoginPage />} />
+    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+    <Route path="/reset-password" element={<ResetPasswordPage />} />
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/setup-password" element={<PasswordSetupPage />} />
     <Route element={<ProtectedRoute />}>

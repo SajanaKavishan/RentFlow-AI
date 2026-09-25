@@ -18,10 +18,14 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"AuthApiTests-{Guid.NewGuid()}";
     private readonly TimeProvider? _timeProvider;
+    private readonly string _environmentName;
 
-    public AuthApiFactory(TimeProvider? timeProvider = null)
+    public AuthApiFactory(
+        TimeProvider? timeProvider = null,
+        string environmentName = "Testing")
     {
         _timeProvider = timeProvider;
+        _environmentName = environmentName;
     }
 
     public RecordingFileStorageService FileStorage { get; } = new();
@@ -32,7 +36,7 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Testing");
+        builder.UseEnvironment(_environmentName);
         builder.ConfigureLogging(logging =>
         {
             logging.ClearProviders();
@@ -47,6 +51,8 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["Jwt:SigningKey"] = "test-only-signing-key-that-is-at-least-32-bytes-long",
                 ["Jwt:ExpiryMinutes"] = "15",
                 ["StaffProvisioning:SetupTokenLifetimeMinutes"] = "60",
+                ["PasswordReset:TokenLifetimeMinutes"] = "45",
+                ["PasswordReset:DevelopmentWebBaseUrl"] = "https://web.example.test",
                 ["CloudflareR2:AccountId"] = "test-account",
                 ["CloudflareR2:AccessKeyId"] = "test-access-key",
                 ["CloudflareR2:SecretAccessKey"] = "test-secret-key",

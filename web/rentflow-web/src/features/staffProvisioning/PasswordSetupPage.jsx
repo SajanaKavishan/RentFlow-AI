@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../core/api/apiClient.js'
 import Icon from '../../shared/ui/Icons.jsx'
 import AuthVisual from '../auth/pages/AuthVisual.jsx'
+import { validateNewPassword } from '../auth/passwordPolicy.js'
 import { activateMaintenanceTechnician } from './staffProvisioningApi.js'
 import '../auth/pages/auth.css'
 
@@ -17,16 +18,6 @@ function consumeSetupToken(location) {
     )
   }
   return token
-}
-
-function validatePassword(password, confirmation) {
-  if (password.length < 8) return 'Password must be at least 8 characters.'
-  if (!/[A-Z]/.test(password)) return 'Password must contain an uppercase letter.'
-  if (!/[a-z]/.test(password)) return 'Password must contain a lowercase letter.'
-  if (!/\d/.test(password)) return 'Password must contain a number.'
-  if (!/[^A-Za-z0-9]/.test(password)) return 'Password must contain a non-alphanumeric character.'
-  if (password !== confirmation) return 'Passwords do not match.'
-  return ''
 }
 
 export default function PasswordSetupPage() {
@@ -51,7 +42,7 @@ export default function PasswordSetupPage() {
   async function handleSubmit(event) {
     event.preventDefault()
     setError('')
-    const validationError = validatePassword(
+    const validationError = validateNewPassword(
       form.password,
       form.passwordConfirmation,
     )
