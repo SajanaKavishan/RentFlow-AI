@@ -65,6 +65,13 @@
 .profile-dialog__header h2 { margin: 0; color: var(--ink); font-size: 1.35rem; letter-spacing: -.04em; }
 .profile-dialog__close { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 10px; color: var(--muted); background: var(--cream-50); cursor: pointer; }
 .profile-dialog__close:hover:not(:disabled) { color: var(--ink); background: var(--olive-50); }
+.support-ticket-form { padding: 22px 24px 24px; }
+.support-ticket-form > p { margin: 0 0 20px; color: var(--muted); font-size: .82rem; line-height: 1.55; }
+.support-ticket-form > label { display: block; margin: 0 0 7px; color: var(--ink); font-size: .76rem; font-weight: 800; }
+.support-ticket-form input, .support-ticket-form select, .support-ticket-form textarea { width: 100%; min-height: 46px; margin: 0 0 18px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--cream-50); font: inherit; }
+.support-ticket-form textarea { min-height: 130px; resize: vertical; line-height: 1.5; }
+.support-ticket-form input:focus, .support-ticket-form select:focus, .support-ticket-form textarea:focus { border-color: var(--olive-700); background: var(--surface); }
+.support-ticket-error { margin: 0 0 18px; padding: 12px 14px; border: 1px solid var(--danger); border-radius: 10px; color: var(--danger); background: var(--danger-bg); font-size: .8rem; line-height: 1.45; }
 .change-password-form { padding: 22px 24px 24px; }
 .change-password-form > p { margin: 0 0 20px; color: var(--muted); font-size: .82rem; line-height: 1.55; }
 .change-password-form > label { display: block; margin: 0 0 7px; color: var(--ink); font-size: .76rem; font-weight: 800; }
@@ -90,6 +97,19 @@
 .profile-toast--error .profile-toast__mark { color: #ffc3bc; background: rgb(255 195 188 / 12%); }
 .profile-toast p { min-width: 0; max-width: 420px; margin: 0; font-size: .8rem; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
 @keyframes profile-toast-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.support-requests { border-top: 1px solid var(--border); }
+.support-requests__header { padding: 14px 20px; background: var(--cream-50); }
+.support-requests__header h3 { margin: 0; color: var(--ink); font-size: .78rem; font-weight: 800; }
+.support-requests__state { margin: 0; padding: 18px 20px; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+.support-requests__state[role='alert'] { display: grid; gap: 12px; justify-items: start; color: var(--danger); }
+.support-requests__state[role='alert'] p { margin: 0; }
+.support-requests__list { margin: 0; padding: 0; list-style: none; }
+.support-requests__list li { min-width: 0; display: flex; align-items: flex-start; gap: 12px; padding: 15px 20px; border-top: 1px solid var(--border); }
+.support-requests__list li:first-child { border-top: 0; }
+.support-requests__list li > div { min-width: 0; display: grid; gap: 5px; }
+.support-requests__list strong { color: var(--ink); font-size: .79rem; overflow-wrap: anywhere; }
+.support-requests__list li > div span { color: var(--muted); font-size: .68rem; line-height: 1.4; }
+.support-requests__status { flex: none; margin-left: auto; padding: 4px 8px; border-radius: 999px; color: var(--olive-900); background: var(--olive-100); font-size: .64rem; font-weight: 800; }
 .profile-documents__body { padding: 0 20px 20px; border-top: 1px solid var(--border); background: var(--cream-50); }
 .profile-documents__body > p, .profile-documents__body > div[role='alert'] { margin: 18px 0 0; color: var(--muted); font-size: .84rem; line-height: 1.55; }
 .profile-documents__body > div[role='alert'] { color: var(--danger); }
@@ -117,7 +137,7 @@
   .profile-edit { padding: 20px; }
   .profile-edit__fields { grid-template-columns: 1fr; }
   .profile-dialog-backdrop { padding: 12px; }
-  .profile-dialog__header, .change-password-form { padding-right: 18px; padding-left: 18px; }
+  .profile-dialog__header, .change-password-form, .support-ticket-form { padding-right: 18px; padding-left: 18px; }
   .change-password-policy { grid-template-columns: 1fr; }
   .profile-action { gap: 11px; padding: 15px 17px; }
   .profile-action__status { font-size: .62rem; }

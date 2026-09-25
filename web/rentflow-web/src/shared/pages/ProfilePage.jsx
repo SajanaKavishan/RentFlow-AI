@@ -7,18 +7,11 @@ import Icon from '../ui/Icons.jsx'
 import TenantApplicationDocuments from './TenantApplicationDocuments.jsx'
 import NotificationPreferencesSection from './NotificationPreferencesSection.jsx'
 import ChangePasswordDialog from './ChangePasswordDialog.jsx'
+import SupportRequestsSection from './SupportRequestsSection.jsx'
 import './profile.css'
 
 const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const maximumImageBytes = 5 * 1024 * 1024
-
-function UnavailableAction({ icon, title, explanation }) {
-  return <button className="profile-action profile-action--unavailable" type="button" disabled>
-    <span className="profile-action__icon"><Icon name={icon} size={20} /></span>
-    <span className="profile-action__copy"><strong>{title}</strong><small>{explanation}</small></span>
-    <span className="profile-action__status">Unavailable</span>
-  </button>
-}
 
 function validateProfile(fullName, phoneNumber) {
   const name = fullName.trim()
@@ -189,7 +182,7 @@ export default function ProfilePage() {
       <section className="profile-section profile-section--support" aria-labelledby="profile-support-title">
         <h2 id="profile-support-title">Support</h2>
         <AppCard className="profile-section__card profile-actions">
-          <UnavailableAction icon="info" title="Contact support" explanation="Web support is not connected yet." />
+          <SupportRequestsSection key={user.id} />
         </AppCard>
       </section>
     </div>

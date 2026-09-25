@@ -10,11 +10,24 @@ import {
   getNotificationPreferences,
   updateNotificationPreferences,
 } from '../../features/notifications/notificationPreferencesApi.js'
+import { getMySupportTickets } from '../../features/supportTickets/supportTicketsApi.js'
 import ProfilePage from './ProfilePage.jsx'
 
 vi.mock('../../features/notifications/notificationPreferencesApi.js', () => ({
   getNotificationPreferences: vi.fn(),
   updateNotificationPreferences: vi.fn(),
+}))
+
+vi.mock('../../features/supportTickets/supportTicketsApi.js', () => ({
+  SUPPORT_CATEGORIES: [
+    { value: 'TechnicalIssue', label: 'Technical issue' },
+    { value: 'AccountLogin', label: 'Account or login' },
+    { value: 'PropertyApplication', label: 'Property or application' },
+    { value: 'Payment', label: 'Payment' },
+    { value: 'Other', label: 'Other' },
+  ],
+  createSupportTicket: vi.fn(),
+  getMySupportTickets: vi.fn(),
 }))
 
 const applicationId = '22222222-2222-2222-2222-222222222222'
@@ -43,6 +56,7 @@ beforeEach(() => {
     rentalApplicationUpdatesEnabled: true,
     accountSecurityUpdatesEnabled: true,
   })
+  getMySupportTickets.mockResolvedValue([])
 })
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
@@ -56,7 +70,7 @@ describe('shared profile', () => {
     const accountSection = screen.getByRole('region', { name: 'Account' })
     expect(within(accountSection).getByText('+94 77 123 4567')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Change password/ })).toBeEnabled()
-    expect(screen.getByRole('button', { name: /Contact support/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Contact support/ })).toBeEnabled()
     expect(await screen.findByRole('checkbox', { name: /Viewing updates/ })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: /Rental application updates/ })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: /Account & security updates/ })).toBeChecked()

@@ -47,6 +47,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<NotificationPreference> NotificationPreferences =>
         Set<NotificationPreference>();
 
+    public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
+
     public DbSet<MaintenanceCoordinationWorkflow> MaintenanceCoordinationWorkflows => Set<MaintenanceCoordinationWorkflow>();
 
     public DbSet<MaintenanceCoordinationStep> MaintenanceCoordinationSteps => Set<MaintenanceCoordinationStep>();
@@ -264,6 +266,45 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithOne()
                 .HasForeignKey<NotificationPreference>(preference => preference.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SupportTicket>(entity =>
+        {
+            entity.HasKey(ticket => ticket.Id);
+
+            entity.Property(ticket => ticket.UserId)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.Category)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.Subject)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.Message)
+                .HasMaxLength(4000)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.Status)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.CreatedAt)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.UpdatedAt)
+                .IsRequired();
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(ticket => ticket.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(ticket => new { ticket.UserId, ticket.CreatedAt });
         });
 
         // =========================================================

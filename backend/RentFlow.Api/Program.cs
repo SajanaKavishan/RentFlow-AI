@@ -386,6 +386,10 @@ builder.Services.AddScoped<
     NotificationPreferenceService>();
 
 builder.Services.AddScoped<
+    ISupportTicketService,
+    SupportTicketService>();
+
+builder.Services.AddScoped<
     IPasswordHasher<ApplicationUser>,
     PasswordHasher<ApplicationUser>>();
 
