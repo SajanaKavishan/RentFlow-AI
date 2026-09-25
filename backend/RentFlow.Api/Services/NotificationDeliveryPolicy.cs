@@ -53,7 +53,8 @@ internal static class NotificationDeliveryPolicy
             or NotificationEventTypes.RentalApplicationRejected
             or NotificationEventTypes.RentalApplicationChangesRequested =>
                 NotificationCategory.RentalApplication,
-        NotificationEventTypes.MaintenanceTechnicianActivated =>
+        NotificationEventTypes.MaintenanceTechnicianActivated
+            or NotificationEventTypes.AccountPasswordChanged =>
             NotificationCategory.AccountSecurity,
         _ => throw new InvalidOperationException(
             $"Notification event type '{eventType}' has no delivery category.")

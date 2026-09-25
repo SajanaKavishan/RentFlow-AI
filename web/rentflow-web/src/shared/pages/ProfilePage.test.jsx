@@ -22,11 +22,12 @@ const documentId = '33333333-3333-3333-3333-333333333333'
 const account = (role) => ({ id: '11111111-1111-1111-1111-111111111111', fullName: 'Amara Silva', email: 'amara@example.com', phoneNumber: '+94 77 123 4567', role })
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-function renderProfile(role = 'Tenant') {
+function renderProfile(role = 'Tenant', overrides = {}) {
   const updateProfile = vi.fn().mockResolvedValue(account(role))
   const uploadProfileImage = vi.fn().mockResolvedValue({ ...account(role), hasProfileImage: true })
-  const result = render(<MemoryRouter><AuthContext.Provider value={{ user: account(role), updateProfile, uploadProfileImage, isAuthenticated: true, isLoading: false }}><ProfilePage /></AuthContext.Provider></MemoryRouter>)
-  return { ...result, updateProfile, uploadProfileImage }
+  const changePassword = overrides.changePassword || vi.fn().mockResolvedValue({ message: 'Your password was changed successfully.' })
+  const result = render(<MemoryRouter><AuthContext.Provider value={{ user: account(role), updateProfile, uploadProfileImage, changePassword, isAuthenticated: true, isLoading: false }}><ProfilePage /></AuthContext.Provider></MemoryRouter>)
+  return { ...result, updateProfile, uploadProfileImage, changePassword }
 }
 
 beforeEach(() => {
@@ -54,9 +55,8 @@ describe('shared profile', () => {
     for (const section of ['Account', 'Preferences', 'Support']) expect(screen.getByRole('region', { name: section })).toBeInTheDocument()
     const accountSection = screen.getByRole('region', { name: 'Account' })
     expect(within(accountSection).getByText('+94 77 123 4567')).toBeInTheDocument()
-    for (const name of ['Change password', 'Contact support']) {
-      expect(screen.getByRole('button', { name: new RegExp(name) })).toBeDisabled()
-    }
+    expect(screen.getByRole('button', { name: /Change password/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Contact support/ })).toBeDisabled()
     expect(await screen.findByRole('checkbox', { name: /Viewing updates/ })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: /Rental application updates/ })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: /Account & security updates/ })).toBeChecked()
@@ -166,6 +166,74 @@ describe('shared profile', () => {
     await userEvent.upload(screen.getByLabelText(/Profile image/), new File(['text'], 'avatar.txt', { type: 'text/plain' }), { applyAccept: false })
     expect(screen.getByRole('alert')).toHaveTextContent('Choose a JPEG, PNG, or WEBP image.')
     expect(uploadProfileImage).not.toHaveBeenCalled()
+  })
+
+  it('opens an accessible password dialog and validates policy and confirmation locally', async () => {
+    const { changePassword } = renderProfile('Landlord')
+    await userEvent.click(screen.getByRole('button', { name: /Change password/ }))
+    const dialog = screen.getByRole('dialog', { name: 'Change password' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(within(dialog).getByLabelText('Current password')).toHaveFocus()
+
+    await userEvent.type(within(dialog).getByLabelText('Current password'), 'Secure1!Password')
+    await userEvent.type(within(dialog).getByLabelText('New password'), 'weak')
+    await userEvent.type(within(dialog).getByLabelText('Confirm new password'), 'different')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('at least 8 characters')
+    expect(changePassword).not.toHaveBeenCalled()
+
+    await userEvent.clear(within(dialog).getByLabelText('New password'))
+    await userEvent.type(within(dialog).getByLabelText('New password'), 'NewSecure2@Password')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Show passwords' }))
+    expect(within(dialog).getByLabelText('Current password')).toHaveAttribute('type', 'text')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('must match')
+    expect(changePassword).not.toHaveBeenCalled()
+  })
+
+  it('keeps password fields and loading state until the API confirms success', async () => {
+    let confirmChange
+    const changePassword = vi.fn().mockReturnValue(new Promise((resolve) => { confirmChange = resolve }))
+    renderProfile('Admin', { changePassword })
+    await userEvent.click(screen.getByRole('button', { name: /Change password/ }))
+    const dialog = screen.getByRole('dialog', { name: 'Change password' })
+    const currentPassword = within(dialog).getByLabelText('Current password')
+    const newPassword = within(dialog).getByLabelText('New password')
+    const confirmation = within(dialog).getByLabelText('Confirm new password')
+    await userEvent.type(currentPassword, 'Secure1!Password')
+    await userEvent.type(newPassword, 'NewSecure2@Password')
+    await userEvent.type(confirmation, 'NewSecure2@Password')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }))
+
+    expect(changePassword).toHaveBeenCalledWith({
+      currentPassword: 'Secure1!Password',
+      newPassword: 'NewSecure2@Password',
+      newPasswordConfirmation: 'NewSecure2@Password',
+    })
+    expect(within(dialog).getByRole('button', { name: 'Changing password…' })).toBeDisabled()
+    expect(currentPassword).toHaveValue('Secure1!Password')
+    expect(newPassword).toHaveValue('NewSecure2@Password')
+    expect(within(dialog).queryByText('Password changed')).not.toBeInTheDocument()
+
+    await act(async () => confirmChange({ message: 'Your password was changed successfully.' }))
+    expect(await within(dialog).findByRole('heading', { name: 'Password changed' })).toBeInTheDocument()
+    expect(within(dialog).getByText('Your current session remains signed in.')).toBeInTheDocument()
+    expect(tokenStorage.getToken()).toBe('profile-token')
+  })
+
+  it('shows an incorrect-current-password API error without clearing the form', async () => {
+    const changePassword = vi.fn().mockRejectedValue(new Error('Current password is incorrect.'))
+    renderProfile('Tenant', { changePassword })
+    await userEvent.click(screen.getByRole('button', { name: /Change password/ }))
+    const dialog = screen.getByRole('dialog', { name: 'Change password' })
+    await userEvent.type(within(dialog).getByLabelText('Current password'), 'Wrong1!Password')
+    await userEvent.type(within(dialog).getByLabelText('New password'), 'NewSecure2@Password')
+    await userEvent.type(within(dialog).getByLabelText('Confirm new password'), 'NewSecure2@Password')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Current password is incorrect.')
+    expect(within(dialog).getByLabelText('Current password')).toHaveValue('Wrong1!Password')
+    expect(within(dialog).getByLabelText('New password')).toHaveValue('NewSecure2@Password')
   })
 
   it('automatically hides profile error notifications after three seconds', () => {

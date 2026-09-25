@@ -13,4 +13,5 @@ internal static class NotificationEventTypes
         "rental_application.changes_requested";
     public const string MaintenanceTechnicianActivated =
         "maintenance_technician.activated";
+    public const string AccountPasswordChanged = "account.password_changed";
 }

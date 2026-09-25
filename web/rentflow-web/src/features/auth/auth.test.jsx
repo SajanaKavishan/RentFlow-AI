@@ -6,6 +6,7 @@ import App from '../../App.jsx'
 import { ApiError, apiRequest, setUnauthorizedHandler } from '../../core/api/apiClient.js'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 import { AuthProvider } from './AuthContext.jsx'
+import { changePassword } from './authApi.js'
 import { useAuth } from './useAuth.js'
 import RegisterPage from './pages/RegisterPage.jsx'
 
@@ -101,6 +102,33 @@ describe('React authentication', () => {
     await expect(apiRequest('/api/private')).rejects.toMatchObject({ statusCode: 401 })
     expect(tokenStorage.getToken()).toBeNull()
     expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('changes a password through the authenticated API without replacing the session token', async () => {
+    tokenStorage.setToken('existing-session-token')
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({ message: 'Your password was changed successfully.' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+
+    const response = await changePassword({
+      currentPassword: 'Secure1!Password',
+      newPassword: 'NewSecure2@Password',
+      newPasswordConfirmation: 'NewSecure2@Password',
+    })
+
+    expect(response.message).toBe('Your password was changed successfully.')
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/auth/change-password'), expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        currentPassword: 'Secure1!Password',
+        newPassword: 'NewSecure2@Password',
+        newPasswordConfirmation: 'NewSecure2@Password',
+      }),
+      headers: expect.objectContaining({ Authorization: 'Bearer existing-session-token' }),
+    }))
+    expect(tokenStorage.getToken()).toBe('existing-session-token')
+    tokenStorage.clearToken()
   })
 
   it('routes an authenticated tenant away from landlord-only pages', async () => {

@@ -52,6 +52,49 @@ public sealed class AuthController(
     }
 
     [Authorize]
+    [HttpPut("change-password")]
+    [ProducesResponseType<ChangePasswordResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ChangePasswordResponseDto>> ChangePassword(
+        [FromBody] ChangePasswordRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (currentUserService.UserId is not { } userId)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var changed = await authService.ChangePasswordAsync(
+                userId,
+                request,
+                cancellationToken);
+            return changed
+                ? Ok(new ChangePasswordResponseDto("Your password was changed successfully."))
+                : Unauthorized();
+        }
+        catch (AuthServiceException exception)
+        {
+            if (exception.Error is AuthServiceError.IncorrectCurrentPassword
+                or AuthServiceError.Validation)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = exception.Error == AuthServiceError.IncorrectCurrentPassword
+                        ? "Password change failed."
+                        : "Invalid password change request.",
+                    Detail = exception.Message
+                });
+            }
+
+            return MapException(exception);
+        }
+    }
+
+    [Authorize]
     [HttpGet("me")]
     [ProducesResponseType<UserProfileDto>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

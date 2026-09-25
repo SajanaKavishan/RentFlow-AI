@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.ApplicationValidation;
 using RentFlow.Api.Models;
@@ -27,10 +28,16 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 
     public RecordingValidationOrchestrator ValidationOrchestrator { get; } = new();
 
+    public RecordingLoggerProvider Logs { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.ConfigureLogging(logging => logging.ClearProviders());
+        builder.ConfigureLogging(logging =>
+        {
+            logging.ClearProviders();
+            logging.AddProvider(Logs);
+        });
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
@@ -80,6 +87,36 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
         BaseAddress = new Uri("https://localhost"),
         AllowAutoRedirect = allowAutoRedirect
     });
+}
+
+internal sealed class RecordingLoggerProvider : ILoggerProvider
+{
+    private readonly ConcurrentQueue<string> _messages = new();
+
+    public IReadOnlyCollection<string> Messages => _messages.ToArray();
+
+    public ILogger CreateLogger(string categoryName) => new RecordingLogger(_messages);
+
+    public void Dispose()
+    {
+    }
+
+    private sealed class RecordingLogger(ConcurrentQueue<string> messages) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            messages.Enqueue(formatter(state, exception));
+        }
+    }
 }
 
 internal sealed class RecordingFileStorageService : IFileStorageService

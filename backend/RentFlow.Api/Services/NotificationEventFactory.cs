@@ -4,6 +4,23 @@ namespace RentFlow.Api.Services;
 
 internal static class NotificationEventFactory
 {
+    public static Notification ForPasswordChanged(
+        ApplicationUser user,
+        DateTimeOffset changedAt)
+    {
+        return new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientId = user.Id,
+            EventType = NotificationEventTypes.AccountPasswordChanged,
+            RelatedResourceType = "UserAccount",
+            RelatedResourceId = user.Id,
+            Title = "Password changed",
+            Message = "Your password was changed successfully.",
+            CreatedAt = changedAt
+        };
+    }
+
     public static Notification ForMaintenanceTechnicianActivation(
         ApplicationUser technician,
         Guid provisioningAdminId,

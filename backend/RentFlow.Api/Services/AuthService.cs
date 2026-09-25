@@ -115,6 +115,72 @@ public sealed class AuthService(
         return CreateAuthResponse(user);
     }
 
+    public async Task<bool> ChangePasswordAsync(
+        Guid userId,
+        ChangePasswordRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var validationResults = new List<ValidationResult>();
+        if (!Validator.TryValidateObject(
+                request,
+                new ValidationContext(request),
+                validationResults,
+                validateAllProperties: true))
+        {
+            throw AuthServiceException.Validation(string.Join(' ', validationResults
+                .Select(result => result.ErrorMessage)
+                .Where(message => !string.IsNullOrWhiteSpace(message))));
+        }
+
+        var user = await dbContext.Users.SingleOrDefaultAsync(
+            candidate => candidate.Id == userId && candidate.IsActive,
+            cancellationToken);
+        if (user is null)
+        {
+            return false;
+        }
+
+        var passwordHash = user.PasswordHash;
+        if (string.IsNullOrEmpty(passwordHash)
+            || passwordHasher.VerifyHashedPassword(
+                user,
+                passwordHash,
+                request.CurrentPassword) == PasswordVerificationResult.Failed)
+        {
+            throw AuthServiceException.IncorrectCurrentPassword();
+        }
+
+        var passwordErrors = PasswordPolicy.Validate(request.NewPassword).ToList();
+        if (!string.Equals(
+                request.NewPassword,
+                request.NewPasswordConfirmation,
+                StringComparison.Ordinal))
+        {
+            passwordErrors.Add("New password and confirmation must match.");
+        }
+        if (passwordHasher.VerifyHashedPassword(
+                user,
+                passwordHash,
+                request.NewPassword) != PasswordVerificationResult.Failed)
+        {
+            passwordErrors.Add("New password must be different from the current password.");
+        }
+        if (passwordErrors.Count > 0)
+        {
+            throw AuthServiceException.Validation(string.Join(' ', passwordErrors));
+        }
+
+        var changedAt = timeProvider.GetUtcNow();
+        user.PasswordHash = passwordHasher.HashPassword(user, request.NewPassword);
+        user.UpdatedAt = changedAt;
+        await NotificationDeliveryPolicy.QueueAsync(
+            dbContext,
+            NotificationEventFactory.ForPasswordChanged(user, changedAt),
+            cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<UserProfileDto?> GetUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default)

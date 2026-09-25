@@ -6,6 +6,7 @@ import { AppCard, PageHeader } from '../ui/States.jsx'
 import Icon from '../ui/Icons.jsx'
 import TenantApplicationDocuments from './TenantApplicationDocuments.jsx'
 import NotificationPreferencesSection from './NotificationPreferencesSection.jsx'
+import ChangePasswordDialog from './ChangePasswordDialog.jsx'
 import './profile.css'
 
 const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -28,7 +29,7 @@ function validateProfile(fullName, phoneNumber) {
 }
 
 export default function ProfilePage() {
-  const { user, updateProfile, uploadProfileImage } = useAuth()
+  const { user, updateProfile, uploadProfileImage, changePassword } = useAuth()
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState(() => ({ fullName: user.fullName, phoneNumber: user.phoneNumber }))
   const [imageFile, setImageFile] = useState(null)
@@ -37,6 +38,8 @@ export default function ProfilePage() {
   const previewUrlRef = useRef(null)
   const [submitState, setSubmitState] = useState({ status: 'idle', message: '' })
   const [toast, setToast] = useState(null)
+  const [changingPassword, setChangingPassword] = useState(false)
+  const changePasswordButtonRef = useRef(null)
   const hasProfileChanges = form.fullName.trim() !== user.fullName.trim()
     || (form.phoneNumber || '').trim() !== (user.phoneNumber?.trim() || '')
     || imageFile !== null
@@ -51,6 +54,10 @@ export default function ProfilePage() {
   }, [toast])
 
   const showToast = (tone, message) => setToast({ id: Date.now(), tone, message })
+  const closeChangePassword = () => {
+    setChangingPassword(false)
+    window.requestAnimationFrame(() => changePasswordButtonRef.current?.focus())
+  }
 
   const clearSelectedImage = () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
@@ -165,7 +172,11 @@ export default function ProfilePage() {
               <span className="profile-action__copy"><strong>Edit profile</strong><small>Update your name, phone number, and profile image.</small></span>
               <Icon name="arrow" size={18} />
             </button>
-            <UnavailableAction icon="document" title="Change password" explanation="Password changes are not available in the web app." />
+            <button ref={changePasswordButtonRef} className="profile-action profile-action--available" type="button" onClick={() => setChangingPassword(true)}>
+              <span className="profile-action__icon"><Icon name="shield" size={20} /></span>
+              <span className="profile-action__copy"><strong>Change password</strong><small>Update your password securely.</small></span>
+              <Icon name="arrow" size={18} />
+            </button>
           </div>
         </AppCard>
       </section>
@@ -182,5 +193,6 @@ export default function ProfilePage() {
         </AppCard>
       </section>
     </div>
+    {changingPassword && <ChangePasswordDialog changePassword={changePassword} onClose={closeChangePassword} onSuccess={(message) => showToast('success', message)} />}
   </main>
 }

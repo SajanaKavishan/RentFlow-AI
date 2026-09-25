@@ -37,6 +37,13 @@ export async function updateProfile(details) {
   }))
 }
 
+export async function changePassword(details) {
+  return apiRequest('/api/auth/change-password', {
+    method: 'PUT', body: JSON.stringify(details),
+    errorMessage: 'Your password could not be changed.',
+  })
+}
+
 export async function uploadProfileImage(file) {
   const body = new FormData()
   body.append('file', file)
