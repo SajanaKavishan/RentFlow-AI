@@ -46,7 +46,7 @@ export const NAV_ITEMS = Object.freeze([
     owner: 'Payments', description: 'Payment management will be connected when that module is merged.',
   },
   {
-    id: 'maintenance', label: 'Maintenance', path: '/modules/maintenance', roles: [L], available: false,
+    id: 'maintenance', label: 'Maintenance', path: '/modules/maintenance', roles: [T], available: true,
     owner: 'Maintenance', description: 'Maintenance management will be connected when that module is merged.',
   },
   {

@@ -8,6 +8,8 @@ import RentalApplicationsPage from './features/rentalApplications/pages/RentalAp
 import MyApplicationsPage from './features/rentalApplications/pages/MyApplicationsPage.jsx'
 import ViewingRequestsPage from './features/viewings/pages/ViewingRequestsPage.jsx'
 import MyViewingsPage from './features/viewings/pages/MyViewingsPage.jsx'
+import LandlordMaintenancePage from './features/maintenance/pages/LandlordMaintenancePage.jsx'
+import TenantMaintenancePage from './features/maintenance/pages/TenantMaintenancePage.jsx'
 import AppShell from './shared/layout/AppShell.jsx'
 import DashboardPage from './shared/pages/DashboardPage.jsx'
 import TechnicianAssignedWorkPage from './shared/pages/TechnicianAssignedWorkPage.jsx'
@@ -39,6 +41,7 @@ export default function App() {
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT]} />}>
           <Route path="/modules/my-viewings" element={<MyViewingsPage />} />
           <Route path="/modules/my-applications" element={<MyApplicationsPage />} />
+          <Route path="/modules/maintenance" element={<TenantMaintenancePage />} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.MAINTENANCE_TECHNICIAN]} />}>
           <Route path="/modules/assigned-work" element={<TechnicianAssignedWorkPage />} />
@@ -47,7 +50,7 @@ export default function App() {
           <Route path="/modules/users" element={<AdminUsersPage />} />
           <Route path="/modules/ai-system-overview" element={<AdminSystemOverviewPage />} />
         </Route>
-        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
+        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD, USER_ROLES.ADMIN]} />}>
           <Route path="/viewing-requests" element={<ViewingRequestsPage />} />
           <Route
             path="/properties/:propertyId/viewing-requests"
@@ -62,6 +65,10 @@ export default function App() {
           <Route
             path="/properties/:propertyId/ai-review"
             element={<RentalApplicationsPage />}
+          />
+          <Route
+            path="/properties/:propertyId/maintenance"
+            element={<LandlordMaintenancePage />}
           />
         </Route>
         <Route path="/modules/:module" element={<UnavailableState />} />
