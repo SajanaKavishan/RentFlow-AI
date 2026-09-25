@@ -45,6 +45,7 @@
 .notification-preferences__actions { display: grid; gap: 12px; justify-items: end; padding: 16px 22px; border-top: 1px solid var(--border); background: var(--cream-50); }
 .notification-preferences__actions > div { width: 100%; color: var(--muted); font-size: .73rem; line-height: 1.45; }
 .notification-preferences__actions [role='alert'] { color: var(--danger); }
+.notification-preferences__actions .shared-button:disabled { opacity: .42; filter: saturate(.25); cursor: not-allowed; transform: none; }
 .notification-preferences-state { display: grid; gap: 14px; justify-items: start; padding: 22px; }
 .notification-preferences-state p { margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
 .notification-preferences-state[role='alert'] p { color: var(--danger); }
@@ -56,6 +57,7 @@
 .profile-edit__image { grid-column: 1 / -1; }
 .profile-edit input[type='file'] { width: 100%; padding: 10px; border: 1px dashed var(--olive-300); border-radius: 10px; color: var(--muted); background: var(--surface); font-size: .72rem; }
 .profile-edit__buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.profile-edit__save:disabled { opacity: .42; filter: saturate(.25); cursor: not-allowed; transform: none; }
 .profile-toast { position: fixed; z-index: 100; top: 18px; left: 50%; width: fit-content; max-width: min(520px, calc(100vw - 32px)); display: grid; grid-template-columns: auto minmax(0, auto); align-items: center; gap: 12px; padding: 11px 15px 11px 13px; border: 1px solid; border-radius: 18px; color: var(--cream-50); background: var(--olive-900); box-shadow: 0 14px 34px rgb(48 60 31 / 24%); transform: translateX(-50%); animation: profile-toast-in .2s ease-out; }
 .profile-toast--success { border-color: var(--olive-700); }
 .profile-toast--error { border-color: #a85349; }

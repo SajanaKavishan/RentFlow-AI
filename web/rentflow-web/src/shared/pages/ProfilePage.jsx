@@ -37,6 +37,9 @@ export default function ProfilePage() {
   const previewUrlRef = useRef(null)
   const [submitState, setSubmitState] = useState({ status: 'idle', message: '' })
   const [toast, setToast] = useState(null)
+  const hasProfileChanges = form.fullName.trim() !== user.fullName.trim()
+    || (form.phoneNumber || '').trim() !== (user.phoneNumber?.trim() || '')
+    || imageFile !== null
 
   useEffect(() => () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
@@ -95,6 +98,7 @@ export default function ProfilePage() {
   }
   const submit = async (event) => {
     event.preventDefault()
+    if (!hasProfileChanges) return
     const validationError = validateProfile(form.fullName, form.phoneNumber)
     if (validationError || imageError) {
       const message = validationError || imageError
@@ -151,7 +155,7 @@ export default function ProfilePage() {
             </div>
             <div className="profile-edit__buttons">
               <button className="shared-button shared-button--outline" type="button" disabled={submitState.status === 'submitting'} onClick={cancelEditing}>Cancel</button>
-              <button className="shared-button" type="submit" disabled={submitState.status === 'submitting'}>{submitState.status === 'submitting' ? 'Saving…' : 'Save profile'}</button>
+              <button className="shared-button profile-edit__save" type="submit" disabled={submitState.status === 'submitting' || !hasProfileChanges}>{submitState.status === 'submitting' ? 'Saving…' : 'Save profile'}</button>
             </div>
           </form>}
           <div className="profile-actions">
