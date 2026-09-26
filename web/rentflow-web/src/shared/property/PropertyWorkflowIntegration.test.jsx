@@ -122,10 +122,51 @@ describe('owned property landlord workflow integration', () => {
     renderApp('/modules/manage-properties')
 
     const card = await screen.findByRole('article')
+    expect(within(card).getByRole('heading', { name: property.title })).toBeInTheDocument()
+    expect(within(card).getByText('18 Marine Drive, Colombo')).toBeInTheDocument()
+    expect(within(card).getByText('Rs. 185,000')).toBeInTheDocument()
+    expect(within(card).getByText('Available')).toBeInTheDocument()
+    expect(within(card).getByText('Bedrooms').parentElement).toHaveTextContent('3')
+    expect(within(card).getByText('Bathrooms').parentElement).toHaveTextContent('2')
     expect(within(card).getByRole('link', { name: 'Viewing Requests' }))
       .toHaveAttribute('href', `/properties/${propertyId}/viewing-requests`)
     expect(within(card).getByRole('link', { name: 'Rental Applications' }))
       .toHaveAttribute('href', `/properties/${propertyId}/rental-applications`)
+    expect(within(card).getByRole('link', { name: 'View property' }))
+      .toHaveAttribute('href', `/properties/${propertyId}`)
+    expect(within(card).getByRole('button', { name: 'Edit property' })).toBeInTheDocument()
+    expect(within(card).queryByText('Parking')).not.toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: /favorite|heart/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps the create form compact until the landlord chooses to add a property', async () => {
+    renderApp('/modules/manage-properties')
+
+    expect(await screen.findByRole('heading', { name: property.title })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create Property' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add Property' }))
+
+    expect(screen.getByRole('heading', { name: 'Add to your portfolio' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create Property' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Property title')).toBeInTheDocument()
+  })
+
+  it('filters the authenticated owned-property list by title or city on the client', async () => {
+    renderApp('/modules/manage-properties')
+
+    const search = await screen.findByLabelText('Search properties by title or city')
+    await userEvent.type(search, 'Kandy')
+
+    expect(screen.getByRole('heading', { name: 'No matching properties' })).toBeInTheDocument()
+    expect(screen.queryByRole('article')).not.toBeInTheDocument()
+
+    await userEvent.clear(search)
+    await userEvent.type(search, 'Colombo')
+
+    expect(await screen.findByRole('heading', { name: property.title })).toBeInTheDocument()
+    expect(fetch.mock.calls.filter(([url]) =>
+      new URL(url, 'http://localhost').pathname === '/api/properties/mine')).toHaveLength(1)
   })
 
   it('keeps the owned property context in AI Validation and Back to Applications', async () => {

@@ -116,7 +116,7 @@ function LandlordOverview({ user, propertyId }) {
       {selection.status === 'selected' ? <section className="landlord-dashboard__context" aria-label="Property context">
         <span className="landlord-dashboard__icon"><Icon name="building" size={24} /></span>
         <div><h2>{selection.property.title}</h2><p>{[selection.property.address, selection.property.city].filter(Boolean).join(', ')}</p></div>
-      </section> : <PropertySelectionState className="landlord-dashboard__context landlord-dashboard__selection" destination="dashboard"
+      </section> : selection.status === 'empty' ? null : <PropertySelectionState className="landlord-dashboard__context landlord-dashboard__selection" destination="dashboard"
         selectedPropertyId={selection.status === 'unauthorized' ? propertyId : null} />}
 
       <div className={`landlord-dashboard__summaries${selectedPropertyId ? '' : ' landlord-dashboard__summaries--unavailable'}`}>

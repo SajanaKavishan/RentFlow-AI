@@ -4,14 +4,22 @@ import {
   getPropertyImageUrl,
 } from '../services/propertyApiService.js'
 
-export default function PropertyImageGallery({ propertyId }) {
+export default function PropertyImageGallery({
+  propertyId,
+  variant = 'gallery',
+  alt = 'Property',
+}) {
   const [images, setImages] = useState([])
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     let active = true
 
     async function loadImages() {
+      setLoading(true)
+      setFailed(false)
+
       try {
         const imageRecords = await getPropertyImages(propertyId)
 
@@ -34,10 +42,15 @@ export default function PropertyImageGallery({ propertyId }) {
         )
 
         if (active) {
-          setImages(resolvedImages.filter(Boolean))
+          const availableImages = resolvedImages.filter(Boolean)
+          setImages(availableImages)
+          setFailed(imageRecords.length > 0 && availableImages.length === 0)
         }
       } catch {
-        if (active) setImages([])
+        if (active) {
+          setImages([])
+          setFailed(true)
+        }
       } finally {
         if (active) setLoading(false)
       }
@@ -51,20 +64,24 @@ export default function PropertyImageGallery({ propertyId }) {
   }, [propertyId])
 
   if (loading) {
-    return <p>Loading property images...</p>
+    return <div className="property-image-state" role="status">Loading property photos...</div>
+  }
+
+  if (failed) {
+    return <div className="property-image-state" role="alert">Property photos unavailable.</div>
   }
 
   if (images.length === 0) {
-    return <p>No property images uploaded yet.</p>
+    return <div className="property-image-state">No property photos uploaded yet.</div>
   }
 
   return (
-    <div className="property-image-gallery">
-      {images.map((image) => (
+    <div className={`property-image-gallery${variant === 'cover' ? ' property-image-gallery--cover' : ''}`}>
+      {(variant === 'cover' ? images.slice(0, 1) : images).map((image) => (
         <img
           key={image.id}
           src={image.url}
-          alt="Property"
+          alt={alt === 'Property' ? alt : `${alt} property`}
           loading="lazy"
         />
       ))}

@@ -59,6 +59,9 @@ describe('shared React shell', () => {
     expect(brand).toHaveTextContent('A better way to rent')
     const labels = within(nav).getAllByRole('link').map((link) => link.textContent.replace('Soon', ''))
     expect(labels).toEqual(expectedLabels)
+    const account = screen.getByRole('button', { name: 'Profile for Taylor Example' })
+    expect(account.children[0]).toHaveClass('shared-avatar')
+    expect(account.children[1]).toHaveClass('shared-topbar__identity')
   })
 
   it('labels missing modules honestly', async () => {
@@ -71,7 +74,7 @@ describe('shared React shell', () => {
 
   it('opens the landlord property management route without inventing property context', async () => {
     renderApp('Landlord', '/modules/manage-properties')
-    expect(await screen.findByRole('heading', { name: 'Manage your properties' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Manage Properties' })).toBeInTheDocument()
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
     const propertiesLink = within(nav).getByRole('link', { name: 'Manage Properties' })
     expect(propertiesLink).toHaveAttribute('href', '/modules/manage-properties')

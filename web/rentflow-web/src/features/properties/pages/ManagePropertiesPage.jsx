@@ -8,6 +8,7 @@ import {
   uploadPropertyImages,
 } from '../services/propertyApiService.js'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
+import Icon from '../../../shared/ui/Icons.jsx'
 import '../properties.css'
 
 const initialForm = {
@@ -58,6 +59,8 @@ export default function ManagePropertiesPage() {
   const [form, setForm] = useState(initialForm)
   const [files, setFiles] = useState([])
   const [editingId, setEditingId] = useState(null)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -105,6 +108,16 @@ export default function ManagePropertiesPage() {
     setForm(initialForm)
     setFiles([])
     setEditingId(null)
+    setEditorOpen(false)
+  }
+
+  function beginCreate() {
+    setForm(initialForm)
+    setFiles([])
+    setEditingId(null)
+    setError('')
+    setMessage('')
+    setEditorOpen(true)
   }
 
   function beginEdit(property) {
@@ -117,6 +130,7 @@ export default function ManagePropertiesPage() {
 
     setError('')
     setMessage('')
+    setEditorOpen(true)
 
     window.scrollTo({
       top: 0,
@@ -223,79 +237,102 @@ export default function ManagePropertiesPage() {
     }
   }
 
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
+  const visibleProperties = normalizedSearch
+    ? properties.filter((property) =>
+        [property.title, property.city].some((value) =>
+          value?.toLocaleLowerCase().includes(normalizedSearch),
+        ),
+      )
+    : properties
+  const availableCount = properties.filter(
+    (property) => property.isAvailable,
+  ).length
+
   return (
     <main className="manage-properties-page">
       <header className="manage-properties-hero">
-        <div>
+        <div className="manage-properties-hero__copy">
           <span className="properties-page__eyebrow">
-            Property Management
+            Landlord workspace
           </span>
 
-          <h1>Manage your properties</h1>
+          <h1>Manage Properties</h1>
 
           <p>
-            Create and maintain rental listings, upload property
-            photos and control listing availability.
+            Keep your portfolio details, availability and property
+            workflows up to date.
           </p>
         </div>
 
-        <div className="manage-properties-summary">
-          <strong>{properties.length}</strong>
-          <span>
-            {properties.length === 1 ? 'Property' : 'Properties'}
-          </span>
+        <div className="manage-properties-hero__actions">
+          <div className="manage-properties-summary" aria-label={`${properties.length} total properties, ${availableCount} available`}>
+            <strong>{properties.length}</strong>
+            <span>Total properties</span>
+            <small>{availableCount} available</small>
+          </div>
+
+          <button
+            type="button"
+            className="property-button property-button--primary"
+            onClick={beginCreate}
+            aria-expanded={editorOpen && !editingId}
+            aria-controls="property-editor"
+          >
+            Add Property
+          </button>
         </div>
       </header>
 
-      {error && (
-        <div className="property-management-alert property-management-alert--error">
+      {error && properties.length > 0 && (
+        <div className="property-management-alert property-management-alert--error" role="alert">
           <strong>Something went wrong</strong>
           <span>{error}</span>
         </div>
       )}
 
       {message && (
-        <div className="property-management-alert property-management-alert--success">
+        <div className="property-management-alert property-management-alert--success" role="status">
           <strong>Success</strong>
           <span>{message}</span>
         </div>
       )}
 
-      <section className="property-editor-card">
-        <div className="property-editor-heading">
-          <div>
-            <span className="property-section-number">
-              {editingId ? 'EDIT' : 'NEW'}
-            </span>
+      {editorOpen && (
+        <section className="property-editor-card" id="property-editor">
+          <div className="property-editor-heading">
+            <div>
+              <span className="property-section-number">
+                {editingId ? 'Edit property' : 'New property'}
+              </span>
 
-            <h2>
-              {editingId
-                ? 'Edit property'
-                : 'Register a property'}
-            </h2>
+              <h2>
+                {editingId
+                  ? `Update ${form.title || 'property'}`
+                  : 'Add to your portfolio'}
+              </h2>
 
-            <p>
-              {editingId
-                ? 'Update the listing details or add more photos.'
-                : 'Add the details tenants need to discover your property.'}
-            </p>
-          </div>
+              <p>
+                {editingId
+                  ? 'Update the property details or upload additional photos.'
+                  : 'Enter the property details and add photos when you are ready.'}
+              </p>
+            </div>
 
-          {editingId && (
             <button
               type="button"
               className="property-button property-button--quiet"
               onClick={resetEditor}
+              disabled={saving}
             >
-              Cancel editing
+              {editingId ? 'Cancel editing' : 'Close'}
             </button>
-          )}
-        </div>
+          </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="property-editor-form"
-        >
+          <form
+            onSubmit={handleSubmit}
+            className="property-editor-form"
+          >
           <label className="property-form-field property-form-field--wide">
             <span>Property title</span>
 
@@ -304,7 +341,7 @@ export default function ManagePropertiesPage() {
               name="title"
               value={form.title}
               onChange={updateField}
-              placeholder="Modern Apartment in Colombo"
+              placeholder="Harbour View Residence"
             />
           </label>
 
@@ -316,8 +353,8 @@ export default function ManagePropertiesPage() {
               name="description"
               value={form.description}
               onChange={updateField}
-              placeholder="Describe the property, location and key features..."
-              rows="4"
+              placeholder="Describe the property and its key features..."
+              rows="3"
             />
           </label>
 
@@ -479,9 +516,7 @@ export default function ManagePropertiesPage() {
 
             <span>
               <strong>Available for rent</strong>
-              <small>
-                Tenants can discover this property while enabled.
-              </small>
+              <small>The property is currently accepting enquiries.</small>
             </span>
           </label>
 
@@ -515,8 +550,9 @@ export default function ManagePropertiesPage() {
               </button>
             )}
           </div>
-        </form>
-      </section>
+          </form>
+        </section>
+      )}
 
       <section className="managed-property-section">
         <div className="managed-property-section__heading">
@@ -525,31 +561,89 @@ export default function ManagePropertiesPage() {
               Your portfolio
             </span>
 
-            <h2>Properties</h2>
+            <h2>Property portfolio</h2>
           </div>
 
           <span>
-            {properties.filter(
-              (property) => property.isAvailable,
-            ).length}{' '}
-            available
+            {availableCount} available
           </span>
         </div>
 
+        {!loading && properties.length > 0 && (
+          <label className="managed-property-search">
+            <Icon name="search" size={18} />
+            <span className="visually-hidden">Search properties by title or city</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by property title or city"
+            />
+            {normalizedSearch && (
+              <span className="managed-property-search__count">
+                {visibleProperties.length} of {properties.length}
+              </span>
+            )}
+          </label>
+        )}
+
         {loading ? (
-          <div className="property-state">
+          <div className="property-state" role="status">
+            <span className="property-spinner" aria-hidden="true" />
             <h3>Loading properties...</h3>
+            <p>Retrieving your owned property portfolio.</p>
+          </div>
+        ) : error && properties.length === 0 ? (
+          <div className="property-state property-state--error" role="alert">
+            <span className="property-state__icon property-state__icon--error" aria-hidden="true">
+              <Icon name="alert" size={26} />
+            </span>
+            <h3>We could not load your properties</h3>
+            <p>{error}</p>
+            <button
+              type="button"
+              className="property-button property-button--primary"
+              onClick={loadProperties}
+            >
+              Try again
+            </button>
           </div>
         ) : properties.length === 0 ? (
           <div className="property-state">
+            <span className="property-state__icon" aria-hidden="true">
+              <Icon name="building" size={27} />
+            </span>
             <h3>No properties yet</h3>
             <p>
-              Register your first property using the form above.
+              Add your first property to start managing its details and
+              landlord workflows.
             </p>
+            <button
+              type="button"
+              className="property-button property-button--primary"
+              onClick={beginCreate}
+            >
+              Add your first property
+            </button>
+          </div>
+        ) : visibleProperties.length === 0 ? (
+          <div className="property-state property-state--compact">
+            <span className="property-state__icon" aria-hidden="true">
+              <Icon name="search" size={25} />
+            </span>
+            <h3>No matching properties</h3>
+            <p>Try a different property title or city.</p>
+            <button
+              type="button"
+              className="property-button property-button--quiet"
+              onClick={() => setSearchQuery('')}
+            >
+              Clear search
+            </button>
           </div>
         ) : (
           <div className="managed-property-grid">
-            {properties.map((property) => (
+            {visibleProperties.map((property) => (
               <article
                 key={property.id}
                 className="managed-property-card"
@@ -557,10 +651,9 @@ export default function ManagePropertiesPage() {
                 <div className="managed-property-card__images">
                   <PropertyImageGallery
                     propertyId={property.id}
+                    variant="cover"
+                    alt={property.title}
                   />
-                </div>
-
-                <div className="managed-property-card__top">
                   <span
                     className={
                       property.isAvailable
@@ -572,96 +665,104 @@ export default function ManagePropertiesPage() {
                       ? 'Available'
                       : 'Unavailable'}
                   </span>
-
-                  <span className="managed-property-city">
-                    {property.city}
-                  </span>
                 </div>
 
-                <h3>{property.title}</h3>
-
-                <p className="managed-property-address">
-                  {property.address}
-                </p>
-
-                <div className="managed-property-price">
-                  <strong>
-                    Rs.{' '}
-                    {Number(
-                      property.monthlyRent,
-                    ).toLocaleString()}
-                  </strong>
-                  <span>/month</span>
-                </div>
-
-                <div className="managed-property-facts">
-                  <span>
-                    {property.bedrooms} bedroom
-                    {property.bedrooms === 1 ? '' : 's'}
-                  </span>
-
-                  <span>
-                    {property.bathrooms} bathroom
-                    {property.bathrooms === 1 ? '' : 's'}
-                  </span>
-                </div>
-
-                {property.amenities?.length > 0 && (
-                  <div className="property-card__amenities">
-                    {property.amenities
-                      .slice(0, 4)
-                      .map((amenity) => (
-                        <span key={amenity}>
-                          {amenity}
-                        </span>
-                      ))}
+                <div className="managed-property-card__body">
+                  <div className="managed-property-card__top">
+                    <span className="managed-property-city">
+                      {property.city}
+                    </span>
                   </div>
-                )}
 
-                <div className="managed-property-actions">
-                  <Link
-                    className="property-button property-button--primary"
-                    to={`/properties/${encodeURIComponent(property.id)}/viewing-requests`}
-                  >
-                    Viewing Requests
-                  </Link>
+                  <h3>{property.title}</h3>
 
-                  <Link
-                    className="property-button property-button--primary"
-                    to={`/properties/${encodeURIComponent(property.id)}/rental-applications`}
-                  >
-                    Rental Applications
-                  </Link>
+                  <p className="managed-property-address">
+                    {[property.address, property.city]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </p>
 
-                  <button
-                    type="button"
-                    className="property-button property-button--quiet"
-                    onClick={() => beginEdit(property)}
-                  >
-                    Edit
-                  </button>
+                  <div className="managed-property-price">
+                    <strong>
+                      Rs.{' '}
+                      {Number(
+                        property.monthlyRent,
+                      ).toLocaleString()}
+                    </strong>
+                    <span>per month</span>
+                  </div>
 
-                  <button
-                    type="button"
-                    className="property-button property-button--quiet"
-                    onClick={() =>
-                      handleAvailability(property)
-                    }
-                  >
-                    {property.isAvailable
-                      ? 'Mark Unavailable'
-                      : 'Mark Available'}
-                  </button>
+                  <dl className="managed-property-facts">
+                    <div>
+                      <dt>Bedrooms</dt>
+                      <dd>{property.bedrooms}</dd>
+                    </div>
 
-                  <button
-                    type="button"
-                    className="property-delete-button"
-                    onClick={() =>
-                      handleDelete(property.id)
-                    }
-                  >
-                    Delete
-                  </button>
+                    <div>
+                      <dt>Bathrooms</dt>
+                      <dd>{property.bathrooms}</dd>
+                    </div>
+                  </dl>
+
+                  <div className="managed-property-workflows">
+                    <Link
+                      className="property-workflow-link"
+                      to={`/properties/${encodeURIComponent(property.id)}/viewing-requests`}
+                    >
+                      <Icon name="calendar" size={18} />
+                      <span>Viewing Requests</span>
+                      <Icon name="arrow" size={16} />
+                    </Link>
+
+                    <Link
+                      className="property-workflow-link"
+                      to={`/properties/${encodeURIComponent(property.id)}/rental-applications`}
+                    >
+                      <Icon name="document" size={18} />
+                      <span>Rental Applications</span>
+                      <Icon name="arrow" size={16} />
+                    </Link>
+                  </div>
+
+                  <div className="managed-property-actions">
+                    <Link
+                      className="property-button property-button--quiet"
+                      to={`/properties/${encodeURIComponent(property.id)}`}
+                    >
+                      <Icon name="eye" size={17} />
+                      View property
+                    </Link>
+
+                    <button
+                      type="button"
+                      className="property-button property-button--quiet"
+                      onClick={() => beginEdit(property)}
+                    >
+                      Edit property
+                    </button>
+
+                    <button
+                      type="button"
+                      className="property-button property-button--quiet"
+                      onClick={() =>
+                        handleAvailability(property)
+                      }
+                    >
+                      {property.isAvailable
+                        ? 'Mark unavailable'
+                        : 'Mark available'}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="property-delete-button"
+                      onClick={() =>
+                        handleDelete(property.id)
+                      }
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}

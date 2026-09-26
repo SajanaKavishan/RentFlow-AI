@@ -67,6 +67,16 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('landlord dashboard', () => {
+  it('does not show the Manage Properties empty-state banner when the portfolio is empty', async () => {
+    getMyProperties.mockResolvedValue([])
+    renderApp('/dashboard')
+
+    const active = screen.getByRole('region', { name: 'Active Properties' })
+    expect(await within(active).findByText('0 total owned properties')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No owned properties' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Manage properties' })).not.toBeInTheDocument()
+  })
+
   it.each(['/dashboard', '/dashboard?propertyId=invalid'])('requires property context at %s without fetching or displaying fake counts', async (entry) => {
     renderApp(entry)
     expect(screen.getByRole('heading', { name: 'Welcome, Nila Perera' })).toBeInTheDocument()
