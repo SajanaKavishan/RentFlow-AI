@@ -20,6 +20,7 @@ import PropertiesPage from './features/properties/pages/PropertiesPage.jsx'
 import PropertyDetailsPage from './features/properties/pages/PropertyDetailsPage.jsx'
 import PropertyMatchingPage from './features/properties/pages/PropertyMatchingPage.jsx'
 import ManagePropertiesPage from './features/properties/pages/ManagePropertiesPage.jsx'
+import PropertyFormPage from './features/properties/pages/PropertyFormPage.jsx'
 import OwnedPropertiesProvider from './shared/property/OwnedPropertiesProvider.jsx'
 import LandingPage from './features/landing/pages/LandingPage.jsx'
 
@@ -74,6 +75,8 @@ export default function App() {
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
           <Route path="/modules/manage-properties" element={<ManagePropertiesPage />} />
+          <Route path="/properties/new" element={<PropertyFormPage />} />
+          <Route path="/properties/:propertyId/edit" element={<PropertyFormPage />} />
           <Route element={<OwnedPropertiesProvider />}>
             <Route path="/viewing-requests" element={<ViewingRequestsPage />} />
             <Route path="/properties/:propertyId/viewing-requests" element={<ViewingRequestsPage />} />

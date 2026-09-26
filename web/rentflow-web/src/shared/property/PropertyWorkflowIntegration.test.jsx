@@ -60,6 +60,25 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
   headers: { 'Content-Type': 'application/json' },
 })
 
+function portfolioProperties(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    ...property,
+    id: `00000000-0000-0000-0000-${String(index + 1).padStart(12, '0')}`,
+    title: `Property ${index + 1}`,
+    address: `${index + 1} Main Road`,
+    city: index === count - 1 ? 'Kandy' : 'Colombo',
+    monthlyRent: 100000 + (index * 10000),
+  }))
+}
+
+function mockOwnedPropertyCollection(collection) {
+  fetch.mockImplementation((url) => {
+    const path = new URL(url, 'http://localhost').pathname
+    if (path === '/api/properties/mine') return Promise.resolve(json(collection))
+    return Promise.resolve(json([]))
+  })
+}
+
 function renderApp(entry) {
   const router = createMemoryRouter([{ path: '*', element: <App /> }], { initialEntries: [entry] })
   render(<AuthContext.Provider value={{
@@ -121,6 +140,8 @@ describe('owned property landlord workflow integration', () => {
   it('exposes canonical viewing and application navigation from Manage Properties', async () => {
     renderApp('/modules/manage-properties')
 
+    expect(await screen.findByRole('heading', { name: 'My Properties' })).toBeInTheDocument()
+    expect(screen.getByText('1 property listed')).toBeInTheDocument()
     const card = await screen.findByRole('article')
     expect(within(card).getByRole('heading', { name: property.title })).toBeInTheDocument()
     expect(within(card).getByText('18 Marine Drive, Colombo')).toBeInTheDocument()
@@ -134,39 +155,93 @@ describe('owned property landlord workflow integration', () => {
       .toHaveAttribute('href', `/properties/${propertyId}/rental-applications`)
     expect(within(card).getByRole('link', { name: 'View property' }))
       .toHaveAttribute('href', `/properties/${propertyId}`)
-    expect(within(card).getByRole('button', { name: 'Edit property' })).toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: 'Edit property' }))
+      .toHaveAttribute('href', `/properties/${propertyId}/edit`)
     expect(within(card).queryByText('Parking')).not.toBeInTheDocument()
     expect(within(card).queryByRole('button', { name: /favorite|heart/i })).not.toBeInTheDocument()
   })
 
-  it('keeps the create form compact until the landlord chooses to add a property', async () => {
-    renderApp('/modules/manage-properties')
+  it('keeps My Properties list-only and navigates to the dedicated create route', async () => {
+    const router = renderApp('/modules/manage-properties')
 
     expect(await screen.findByRole('heading', { name: property.title })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create Property' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Property title')).not.toBeInTheDocument()
+    const addProperty = screen.getByRole('link', { name: '+ Add Property' })
+    expect(addProperty).toHaveAttribute('href', '/properties/new')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Add Property' }))
+    await userEvent.click(addProperty)
 
-    expect(screen.getByRole('heading', { name: 'Add to your portfolio' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Create Property' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/properties/new')
+    expect(screen.getByRole('heading', { name: 'Add Property' })).toBeInTheDocument()
     expect(screen.getByLabelText('Property title')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create Property' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument()
   })
 
   it('filters the authenticated owned-property list by title or city on the client', async () => {
     renderApp('/modules/manage-properties')
 
     const search = await screen.findByLabelText('Search properties by title or city')
-    await userEvent.type(search, 'Kandy')
+    expect(search).toHaveAttribute('placeholder', 'Search by property name or city...')
+    await userEvent.type(search, 'hArBoUr')
+
+    expect(screen.getByRole('heading', { name: property.title })).toBeInTheDocument()
+
+    await userEvent.clear(search)
+    await userEvent.type(search, 'kAnDy')
 
     expect(screen.getByRole('heading', { name: 'No matching properties' })).toBeInTheDocument()
     expect(screen.queryByRole('article')).not.toBeInTheDocument()
 
     await userEvent.clear(search)
-    await userEvent.type(search, 'Colombo')
+    await userEvent.type(search, 'cOlOmBo')
 
     expect(await screen.findByRole('heading', { name: property.title })).toBeInTheDocument()
     expect(fetch.mock.calls.filter(([url]) =>
       new URL(url, 'http://localhost').pathname === '/api/properties/mine')).toHaveLength(1)
+  })
+
+  it('paginates six properties at a time and resets to page one after search', async () => {
+    const portfolio = portfolioProperties(8)
+    mockOwnedPropertyCollection(portfolio)
+    renderApp('/modules/manage-properties')
+
+    expect(await screen.findByText('8 properties listed')).toBeInTheDocument()
+    expect(screen.getAllByRole('article')).toHaveLength(6)
+    expect(screen.getByRole('heading', { name: 'Property 1' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Property 7' })).not.toBeInTheDocument()
+
+    const pagination = screen.getByRole('navigation', { name: 'Property pagination' })
+    expect(within(pagination).getByRole('button', { name: 'Previous' })).toBeDisabled()
+    expect(within(pagination).getByRole('button', { name: 'Page 1' })).toHaveAttribute('aria-current', 'page')
+
+    await userEvent.click(within(pagination).getByRole('button', { name: 'Next' }))
+
+    expect(screen.getAllByRole('article')).toHaveLength(2)
+    expect(screen.getByRole('heading', { name: 'Property 7' })).toBeInTheDocument()
+    expect(within(pagination).getByRole('button', { name: 'Page 2' })).toHaveAttribute('aria-current', 'page')
+
+    await userEvent.type(screen.getByLabelText('Search properties by title or city'), 'Colombo')
+
+    expect(screen.getAllByRole('article')).toHaveLength(6)
+    expect(screen.getByRole('heading', { name: 'Property 1' })).toBeInTheDocument()
+    expect(within(pagination).getByRole('button', { name: 'Previous' })).toBeDisabled()
+    expect(within(pagination).getByRole('button', { name: 'Page 1' })).toHaveAttribute('aria-current', 'page')
+    expect(fetch.mock.calls.filter(([url]) =>
+      new URL(url, 'http://localhost').pathname === '/api/properties/mine')).toHaveLength(1)
+  })
+
+  it('shows the compact zero-property state with the real owned count', async () => {
+    mockOwnedPropertyCollection([])
+    renderApp('/modules/manage-properties')
+
+    expect(await screen.findByText('0 properties listed')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'No properties yet' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Add your first property' }))
+      .toHaveAttribute('href', '/properties/new')
+    expect(screen.queryByLabelText('Search properties by title or city')).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Property pagination' })).not.toBeInTheDocument()
   })
 
   it('keeps the owned property context in AI Validation and Back to Applications', async () => {

@@ -74,7 +74,7 @@ describe('shared React shell', () => {
 
   it('opens the landlord property management route without inventing property context', async () => {
     renderApp('Landlord', '/modules/manage-properties')
-    expect(await screen.findByRole('heading', { name: 'Manage Properties' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'My Properties' })).toBeInTheDocument()
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
     const propertiesLink = within(nav).getByRole('link', { name: 'Manage Properties' })
     expect(propertiesLink).toHaveAttribute('href', '/modules/manage-properties')

@@ -1,70 +1,25 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
-  createProperty,
   deleteProperty,
   getMyProperties,
   updateProperty,
-  uploadPropertyImages,
 } from '../services/propertyApiService.js'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import Icon from '../../../shared/ui/Icons.jsx'
 import '../properties.css'
 
-const initialForm = {
-  title: '',
-  description: '',
-  address: '',
-  city: '',
-  monthlyRent: '',
-  bedrooms: '',
-  bathrooms: '',
-  amenities: '',
-  isAvailable: true,
-}
-
-function propertyToForm(property) {
-  return {
-    title: property.title || '',
-    description: property.description || '',
-    address: property.address || '',
-    city: property.city || '',
-    monthlyRent: property.monthlyRent ?? '',
-    bedrooms: property.bedrooms ?? '',
-    bathrooms: property.bathrooms ?? '',
-    amenities: (property.amenities || []).join(', '),
-    isAvailable: property.isAvailable ?? true,
-  }
-}
-
-function formToRequest(form) {
-  return {
-    title: form.title.trim(),
-    description: form.description.trim(),
-    address: form.address.trim(),
-    city: form.city.trim(),
-    monthlyRent: Number(form.monthlyRent),
-    bedrooms: Number(form.bedrooms),
-    bathrooms: Number(form.bathrooms),
-    isAvailable: Boolean(form.isAvailable),
-    amenities: form.amenities
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean),
-  }
-}
+const PAGE_SIZE = 6
 
 export default function ManagePropertiesPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [properties, setProperties] = useState([])
-  const [form, setForm] = useState(initialForm)
-  const [files, setFiles] = useState([])
-  const [editingId, setEditingId] = useState(null)
-  const [editorOpen, setEditorOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(location.state?.propertyMessage || '')
 
   async function loadProperties() {
     setLoading(true)
@@ -95,94 +50,10 @@ export default function ManagePropertiesPage() {
     return () => { active = false }
   }, [])
 
-  function updateField(event) {
-    const { name, value, type, checked } = event.target
-
-    setForm((current) => ({
-      ...current,
-      [name]: type === 'checkbox' ? checked : value,
-    }))
-  }
-
-  function resetEditor() {
-    setForm(initialForm)
-    setFiles([])
-    setEditingId(null)
-    setEditorOpen(false)
-  }
-
-  function beginCreate() {
-    setForm(initialForm)
-    setFiles([])
-    setEditingId(null)
-    setError('')
-    setMessage('')
-    setEditorOpen(true)
-  }
-
-  function beginEdit(property) {
-    setEditingId(property.id)
-    setForm(propertyToForm(property))
-
-    // Clear files from a previous create/edit operation.
-    // Existing property images are loaded separately.
-    setFiles([])
-
-    setError('')
-    setMessage('')
-    setEditorOpen(true)
-
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth',
-    })
-  }
-
-  async function handleSubmit(event) {
-    event.preventDefault()
-
-    setSaving(true)
-    setError('')
-    setMessage('')
-
-    try {
-      const request = formToRequest(form)
-
-      if (editingId) {
-        await updateProperty(editingId, request)
-
-        // Only upload newly selected photos.
-        if (files.length > 0) {
-          await uploadPropertyImages(editingId, files)
-        }
-
-        setMessage(
-          files.length > 0
-            ? `Property updated and ${files.length} new photo(s) uploaded.`
-            : 'Property updated successfully.',
-        )
-      } else {
-        const property = await createProperty(request)
-
-        if (files.length > 0) {
-          await uploadPropertyImages(property.id, files)
-        }
-
-        setMessage(
-          files.length > 0
-            ? `Property created with ${files.length} photo(s).`
-            : 'Property created successfully.',
-        )
-      }
-
-      resetEditor()
-      await loadProperties()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSaving(false)
-    }
-  }
+  useEffect(() => {
+    if (!location.state?.propertyMessage) return
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location.pathname, location.search, location.state, navigate])
 
   async function handleAvailability(property) {
     setError('')
@@ -226,15 +97,21 @@ export default function ManagePropertiesPage() {
     try {
       await deleteProperty(propertyId)
 
-      if (editingId === propertyId) {
-        resetEditor()
-      }
-
       setMessage('Property deleted successfully.')
       await loadProperties()
     } catch (err) {
       setError(err.message)
     }
+  }
+
+  function handleSearchChange(event) {
+    setSearchQuery(event.target.value)
+    setCurrentPage(1)
+  }
+
+  function clearSearch() {
+    setSearchQuery('')
+    setCurrentPage(1)
   }
 
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
@@ -245,43 +122,32 @@ export default function ManagePropertiesPage() {
         ),
       )
     : properties
-  const availableCount = properties.filter(
-    (property) => property.isAvailable,
-  ).length
+  const totalPages = Math.ceil(visibleProperties.length / PAGE_SIZE)
+  const activePage = Math.min(currentPage, Math.max(totalPages, 1))
+  const paginatedProperties = visibleProperties.slice(
+    (activePage - 1) * PAGE_SIZE,
+    activePage * PAGE_SIZE,
+  )
+  const propertyCountLabel = loading
+    ? 'Loading properties...'
+    : error && properties.length === 0
+      ? 'Property count unavailable'
+      : `${properties.length} ${properties.length === 1 ? 'property' : 'properties'} listed`
 
   return (
     <main className="manage-properties-page">
-      <header className="manage-properties-hero">
-        <div className="manage-properties-hero__copy">
-          <span className="properties-page__eyebrow">
-            Landlord workspace
-          </span>
-
-          <h1>Manage Properties</h1>
-
-          <p>
-            Keep your portfolio details, availability and property
-            workflows up to date.
-          </p>
+      <header className="manage-properties-header">
+        <div>
+          <h1>My Properties</h1>
+          <p>{propertyCountLabel}</p>
         </div>
 
-        <div className="manage-properties-hero__actions">
-          <div className="manage-properties-summary" aria-label={`${properties.length} total properties, ${availableCount} available`}>
-            <strong>{properties.length}</strong>
-            <span>Total properties</span>
-            <small>{availableCount} available</small>
-          </div>
-
-          <button
-            type="button"
-            className="property-button property-button--primary"
-            onClick={beginCreate}
-            aria-expanded={editorOpen && !editingId}
-            aria-controls="property-editor"
-          >
-            Add Property
-          </button>
-        </div>
+        <Link
+          to="/properties/new"
+          className="property-button property-button--primary"
+        >
+          + Add Property
+        </Link>
       </header>
 
       {error && properties.length > 0 && (
@@ -298,277 +164,7 @@ export default function ManagePropertiesPage() {
         </div>
       )}
 
-      {editorOpen && (
-        <section className="property-editor-card" id="property-editor">
-          <div className="property-editor-heading">
-            <div>
-              <span className="property-section-number">
-                {editingId ? 'Edit property' : 'New property'}
-              </span>
-
-              <h2>
-                {editingId
-                  ? `Update ${form.title || 'property'}`
-                  : 'Add to your portfolio'}
-              </h2>
-
-              <p>
-                {editingId
-                  ? 'Update the property details or upload additional photos.'
-                  : 'Enter the property details and add photos when you are ready.'}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              className="property-button property-button--quiet"
-              onClick={resetEditor}
-              disabled={saving}
-            >
-              {editingId ? 'Cancel editing' : 'Close'}
-            </button>
-          </div>
-
-          <form
-            onSubmit={handleSubmit}
-            className="property-editor-form"
-          >
-          <label className="property-form-field property-form-field--wide">
-            <span>Property title</span>
-
-            <input
-              required
-              name="title"
-              value={form.title}
-              onChange={updateField}
-              placeholder="Harbour View Residence"
-            />
-          </label>
-
-          <label className="property-form-field property-form-field--wide">
-            <span>Description</span>
-
-            <textarea
-              required
-              name="description"
-              value={form.description}
-              onChange={updateField}
-              placeholder="Describe the property and its key features..."
-              rows="3"
-            />
-          </label>
-
-          <label className="property-form-field property-form-field--wide">
-            <span>Address</span>
-
-            <input
-              required
-              name="address"
-              value={form.address}
-              onChange={updateField}
-              placeholder="Property address"
-            />
-          </label>
-
-          <label className="property-form-field">
-            <span>City</span>
-
-            <input
-              required
-              name="city"
-              value={form.city}
-              onChange={updateField}
-              placeholder="Colombo"
-            />
-          </label>
-
-          <label className="property-form-field">
-            <span>Monthly rent</span>
-
-            <div className="property-input-prefix">
-              <span>Rs.</span>
-
-              <input
-                required
-                type="number"
-                min="0"
-                name="monthlyRent"
-                value={form.monthlyRent}
-                onChange={updateField}
-                placeholder="85000"
-              />
-            </div>
-          </label>
-
-          <label className="property-form-field">
-            <span>Bedrooms</span>
-
-            <input
-              required
-              type="number"
-              min="0"
-              name="bedrooms"
-              value={form.bedrooms}
-              onChange={updateField}
-              placeholder="2"
-            />
-          </label>
-
-          <label className="property-form-field">
-            <span>Bathrooms</span>
-
-            <input
-              required
-              type="number"
-              min="0"
-              name="bathrooms"
-              value={form.bathrooms}
-              onChange={updateField}
-              placeholder="2"
-            />
-          </label>
-
-          <label className="property-form-field property-form-field--wide">
-            <span>Amenities</span>
-
-            <input
-              name="amenities"
-              value={form.amenities}
-              onChange={updateField}
-              placeholder="Parking, Air Conditioning, Security"
-            />
-
-            <small>
-              Separate multiple amenities with commas.
-            </small>
-          </label>
-
-          <div className="property-photo-field">
-            {editingId && (
-              <div className="property-existing-images">
-                <strong>Current photos</strong>
-
-                <p>
-                  These photos are already saved with this property.
-                </p>
-
-                <PropertyImageGallery
-                  propertyId={editingId}
-                />
-              </div>
-            )}
-
-            <div>
-              <strong>
-                {editingId
-                  ? 'Add more property photos'
-                  : 'Property photos'}
-              </strong>
-
-              <p>
-                {editingId
-                  ? 'Select new images only if you want to add more photos.'
-                  : 'Select multiple images to upload them together.'}
-              </p>
-            </div>
-
-            <label className="property-photo-picker">
-              <span>
-                {files.length > 0
-                  ? `${files.length} photo${
-                      files.length === 1 ? '' : 's'
-                    } selected`
-                  : editingId
-                    ? 'Choose additional photos'
-                    : 'Choose property photos'}
-              </span>
-
-              <input
-                type="file"
-                accept="image/jpeg,image/png"
-                multiple
-                onChange={(event) =>
-                  setFiles(
-                    Array.from(event.target.files || []),
-                  )
-                }
-              />
-            </label>
-
-            {files.length > 0 && (
-              <div className="property-selected-files">
-                {files.map((file) => (
-                  <span key={`${file.name}-${file.size}`}>
-                    {file.name}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <label className="property-availability-control">
-            <input
-              type="checkbox"
-              name="isAvailable"
-              checked={form.isAvailable}
-              onChange={updateField}
-            />
-
-            <span>
-              <strong>Available for rent</strong>
-              <small>The property is currently accepting enquiries.</small>
-            </span>
-          </label>
-
-          <div className="property-editor-actions">
-            <button
-              type="submit"
-              className="property-button property-button--primary"
-              disabled={saving}
-            >
-              {saving
-                ? editingId
-                  ? 'Saving changes...'
-                  : 'Creating property...'
-                : editingId
-                  ? 'Save Changes'
-                  : 'Create Property'}
-            </button>
-
-            {(editingId ||
-              Object.values(form).some(
-                (value) =>
-                  typeof value === 'string' && value !== '',
-              )) && (
-              <button
-                type="button"
-                className="property-button property-button--quiet"
-                onClick={resetEditor}
-                disabled={saving}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          </form>
-        </section>
-      )}
-
-      <section className="managed-property-section">
-        <div className="managed-property-section__heading">
-          <div>
-            <span className="properties-page__eyebrow">
-              Your portfolio
-            </span>
-
-            <h2>Property portfolio</h2>
-          </div>
-
-          <span>
-            {availableCount} available
-          </span>
-        </div>
-
+      <section className="managed-property-section" aria-label="Owned properties">
         {!loading && properties.length > 0 && (
           <label className="managed-property-search">
             <Icon name="search" size={18} />
@@ -576,8 +172,8 @@ export default function ManagePropertiesPage() {
             <input
               type="search"
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search by property title or city"
+              onChange={handleSearchChange}
+              placeholder="Search by property name or city..."
             />
             {normalizedSearch && (
               <span className="managed-property-search__count">
@@ -618,13 +214,12 @@ export default function ManagePropertiesPage() {
               Add your first property to start managing its details and
               landlord workflows.
             </p>
-            <button
-              type="button"
+            <Link
+              to="/properties/new"
               className="property-button property-button--primary"
-              onClick={beginCreate}
             >
               Add your first property
-            </button>
+            </Link>
           </div>
         ) : visibleProperties.length === 0 ? (
           <div className="property-state property-state--compact">
@@ -636,14 +231,15 @@ export default function ManagePropertiesPage() {
             <button
               type="button"
               className="property-button property-button--quiet"
-              onClick={() => setSearchQuery('')}
+              onClick={clearSearch}
             >
               Clear search
             </button>
           </div>
         ) : (
-          <div className="managed-property-grid">
-            {visibleProperties.map((property) => (
+          <>
+            <div className="managed-property-grid">
+            {paginatedProperties.map((property) => (
               <article
                 key={property.id}
                 className="managed-property-card"
@@ -733,13 +329,12 @@ export default function ManagePropertiesPage() {
                       View property
                     </Link>
 
-                    <button
-                      type="button"
+                    <Link
                       className="property-button property-button--quiet"
-                      onClick={() => beginEdit(property)}
+                      to={`/properties/${encodeURIComponent(property.id)}/edit`}
                     >
                       Edit property
-                    </button>
+                    </Link>
 
                     <button
                       type="button"
@@ -766,7 +361,42 @@ export default function ManagePropertiesPage() {
                 </div>
               </article>
             ))}
-          </div>
+            </div>
+
+            {totalPages > 1 && (
+              <nav className="managed-property-pagination" aria-label="Property pagination">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(activePage - 1)}
+                  disabled={activePage === 1}
+                >
+                  Previous
+                </button>
+
+                <div className="managed-property-pagination__pages">
+                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      aria-label={`Page ${page}`}
+                      aria-current={page === activePage ? 'page' : undefined}
+                      onClick={() => setCurrentPage(page)}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(activePage + 1)}
+                  disabled={activePage === totalPages}
+                >
+                  Next
+                </button>
+              </nav>
+            )}
+          </>
         )}
       </section>
     </main>
