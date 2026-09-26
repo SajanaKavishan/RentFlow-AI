@@ -77,7 +77,18 @@ export default function ManagePropertiesPage() {
   }
 
   useEffect(() => {
-    loadProperties()
+    let active = true
+    getMyProperties()
+      .then((result) => {
+        if (active) setProperties(result)
+      })
+      .catch((err) => {
+        if (active) setError(err.message)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => { active = false }
   }, [])
 
   function updateField(event) {

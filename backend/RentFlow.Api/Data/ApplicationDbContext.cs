@@ -16,6 +16,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TechnicianPasswordSetupToken> TechnicianPasswordSetupTokens =>
         Set<TechnicianPasswordSetupToken>();
 
+    public DbSet<PasswordResetToken> PasswordResetTokens =>
+        Set<PasswordResetToken>();
+
     public DbSet<Property> Properties => Set<Property>();
 
     public DbSet<PropertyAmenity> PropertyAmenities => Set<PropertyAmenity>();
@@ -43,6 +46,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         Set<ApplicationValidationStep>();
 
     public DbSet<Notification> Notifications => Set<Notification>();
+
+    public DbSet<NotificationPreference> NotificationPreferences =>
+        Set<NotificationPreference>();
+
+    public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
 
     public DbSet<MaintenanceCoordinationWorkflow> MaintenanceCoordinationWorkflows => Set<MaintenanceCoordinationWorkflow>();
 
@@ -93,6 +101,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .IsRequired();
 
             entity.Property(user => user.IsActive)
+                .IsRequired();
+
+            entity.Property(user => user.TokenVersion)
+                .HasDefaultValue(0)
                 .IsRequired();
 
             entity.Property(user => user.CreatedAt)
@@ -237,6 +249,94 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             });
 
             entity.HasIndex(notification => notification.EventType);
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.HasKey(token => token.Id);
+
+            entity.Property(token => token.TokenDigest)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            entity.Property(token => token.CreatedAt)
+                .IsRequired();
+
+            entity.Property(token => token.ExpiresAt)
+                .IsRequired();
+
+            entity.Property(token => token.ConsumedAt)
+                .IsRequired(false)
+                .IsConcurrencyToken();
+
+            entity.HasIndex(token => token.TokenDigest)
+                .IsUnique();
+
+            entity.HasIndex(token => new { token.UserId, token.CreatedAt });
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(token => token.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NotificationPreference>(entity =>
+        {
+            entity.HasKey(preference => preference.UserId);
+
+            entity.Property(preference => preference.ViewingUpdatesEnabled)
+                .HasDefaultValue(true)
+                .HasSentinel(true)
+                .IsRequired();
+
+            entity.Property(preference => preference.RentalApplicationUpdatesEnabled)
+                .HasDefaultValue(true)
+                .HasSentinel(true)
+                .IsRequired();
+
+            entity.HasOne<ApplicationUser>()
+                .WithOne()
+                .HasForeignKey<NotificationPreference>(preference => preference.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SupportTicket>(entity =>
+        {
+            entity.HasKey(ticket => ticket.Id);
+
+            entity.Property(ticket => ticket.UserId)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.Category)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.Subject)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.Message)
+                .HasMaxLength(4000)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.Status)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.CreatedAt)
+                .IsRequired();
+
+            entity.Property(ticket => ticket.UpdatedAt)
+                .IsRequired();
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(ticket => ticket.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(ticket => new { ticket.UserId, ticket.CreatedAt });
         });
 
         // =========================================================

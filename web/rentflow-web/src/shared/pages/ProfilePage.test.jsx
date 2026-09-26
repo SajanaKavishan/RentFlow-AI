@@ -5,42 +5,178 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App.jsx'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 import { AuthProvider } from '../../features/auth/AuthContext.jsx'
+import { USER_ROLES } from '../../features/auth/authModel.js'
 import { AuthContext } from '../../features/auth/useAuth.js'
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+} from '../../features/notifications/notificationPreferencesApi.js'
+import { getMySupportTickets } from '../../features/supportTickets/supportTicketsApi.js'
 import ProfilePage from './ProfilePage.jsx'
+
+vi.mock('../../features/notifications/notificationPreferencesApi.js', () => ({
+  getNotificationPreferences: vi.fn(),
+  updateNotificationPreferences: vi.fn(),
+}))
+
+vi.mock('../../features/supportTickets/supportTicketsApi.js', () => ({
+  SUPPORT_CATEGORIES: [
+    { value: 'TechnicalIssue', label: 'Technical issue' },
+    { value: 'AccountLogin', label: 'Account or login' },
+    { value: 'PropertyApplication', label: 'Property or application' },
+    { value: 'Payment', label: 'Payment' },
+    { value: 'Other', label: 'Other' },
+  ],
+  createSupportTicket: vi.fn(),
+  getMySupportTickets: vi.fn(),
+}))
 
 const applicationId = '22222222-2222-2222-2222-222222222222'
 const documentId = '33333333-3333-3333-3333-333333333333'
 const account = (role) => ({ id: '11111111-1111-1111-1111-111111111111', fullName: 'Amara Silva', email: 'amara@example.com', phoneNumber: '+94 77 123 4567', role })
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-function renderProfile(role = 'Tenant') {
+function renderProfile(role = 'Tenant', overrides = {}) {
   const updateProfile = vi.fn().mockResolvedValue(account(role))
   const uploadProfileImage = vi.fn().mockResolvedValue({ ...account(role), hasProfileImage: true })
-  const result = render(<MemoryRouter><AuthContext.Provider value={{ user: account(role), updateProfile, uploadProfileImage, isAuthenticated: true, isLoading: false }}><ProfilePage /></AuthContext.Provider></MemoryRouter>)
-  return { ...result, updateProfile, uploadProfileImage }
+  const changePassword = overrides.changePassword || vi.fn().mockResolvedValue({ message: 'Your password was changed successfully.' })
+  const result = render(<MemoryRouter><AuthContext.Provider value={{ user: account(role), updateProfile, uploadProfileImage, changePassword, isAuthenticated: true, isLoading: false }}><ProfilePage /></AuthContext.Provider></MemoryRouter>)
+  return { ...result, updateProfile, uploadProfileImage, changePassword }
 }
 
-beforeEach(() => { tokenStorage.setToken('profile-token'); vi.stubGlobal('fetch', vi.fn()) })
+beforeEach(() => {
+  vi.clearAllMocks()
+  tokenStorage.setToken('profile-token')
+  vi.stubGlobal('fetch', vi.fn())
+  getNotificationPreferences.mockResolvedValue({
+    viewingUpdatesEnabled: true,
+    rentalApplicationUpdatesEnabled: true,
+    accountSecurityUpdatesEnabled: true,
+  })
+  updateNotificationPreferences.mockResolvedValue({
+    viewingUpdatesEnabled: true,
+    rentalApplicationUpdatesEnabled: true,
+    accountSecurityUpdatesEnabled: true,
+  })
+  getMySupportTickets.mockResolvedValue([])
+})
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('shared profile', () => {
-  it.each(['Tenant', 'Landlord', 'MaintenanceTechnician', 'Admin'])('shows real account details and the available profile editor for %s', (role) => {
+  it.each([
+    { role: USER_ROLES.TENANT, showsPreferences: true, isAdmin: false, showsDocuments: true },
+    { role: USER_ROLES.LANDLORD, showsPreferences: true, isAdmin: false, showsDocuments: false },
+    { role: USER_ROLES.MAINTENANCE_TECHNICIAN, showsPreferences: false, isAdmin: false, showsDocuments: false },
+    { role: USER_ROLES.ADMIN, showsPreferences: false, isAdmin: true, showsDocuments: false },
+  ])('shows only the features relevant to $role', async ({ role, showsPreferences, isAdmin, showsDocuments }) => {
     const { container } = renderProfile(role)
     expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument()
     expect(container.querySelector('.profile-identity')).toHaveTextContent('ASAmara Silvaamara@example.com')
     expect(container.querySelector('.profile-identity')).not.toHaveTextContent(role)
-    for (const section of ['Account', 'Preferences', 'Support']) expect(screen.getByRole('region', { name: section })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Account' })).toBeInTheDocument()
     const accountSection = screen.getByRole('region', { name: 'Account' })
     expect(within(accountSection).getByText('+94 77 123 4567')).toBeInTheDocument()
-    for (const name of ['Change password', 'Notifications', 'Contact support']) {
-      expect(screen.getByRole('button', { name: new RegExp(name) })).toBeDisabled()
-    }
+    expect(screen.getByRole('button', { name: /Change password/ })).toBeEnabled()
     expect(screen.getByRole('button', { name: /Edit profile/ })).toBeEnabled()
     expect(screen.queryByRole('button', { name: /Sign out/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Language/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
-    expect(Boolean(screen.queryByRole('button', { name: /Application documents/ }))).toBe(role === 'Tenant')
+    expect(Boolean(screen.queryByRole('button', { name: /Application documents/ }))).toBe(showsDocuments)
+
+    if (showsPreferences) {
+      expect(screen.getByRole('region', { name: 'Preferences' })).toBeInTheDocument()
+      expect(await screen.findByRole('checkbox', { name: /Viewing updates/ })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: /Rental application updates/ })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: /Account & security updates/ })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: /Account & security updates/ })).toBeDisabled()
+      expect(screen.getByText('On / Required')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save preferences' })).toBeDisabled()
+      expect(getNotificationPreferences).toHaveBeenCalledTimes(1)
+    } else {
+      expect(screen.queryByRole('region', { name: 'Preferences' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: /Viewing updates/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: /Rental application updates/ })).not.toBeInTheDocument()
+      expect(screen.queryByText('Account & security updates')).not.toBeInTheDocument()
+      expect(getNotificationPreferences).not.toHaveBeenCalled()
+    }
+
+    if (isAdmin) {
+      expect(screen.queryByRole('region', { name: 'Support' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /Manage support requests/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Contact support/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'My support requests' })).not.toBeInTheDocument()
+      expect(getMySupportTickets).not.toHaveBeenCalled()
+    } else {
+      expect(screen.getByRole('region', { name: 'Support' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Contact support/ })).toBeEnabled()
+      expect(screen.getByRole('heading', { name: 'My support requests' })).toBeInTheDocument()
+      await waitFor(() => expect(getMySupportTickets).toHaveBeenCalledTimes(1))
+    }
+  })
+
+  it('shows notification preference loading and load-retry states', async () => {
+    let rejectLoad
+    getNotificationPreferences.mockReturnValueOnce(new Promise((resolve, reject) => { rejectLoad = reject }))
+    renderProfile('Landlord')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading notification preferences')
+    rejectLoad(new Error('Notification preferences could not be loaded.'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Notification preferences could not be loaded.')
+
+    getNotificationPreferences.mockResolvedValueOnce({
+      viewingUpdatesEnabled: false,
+      rentalApplicationUpdatesEnabled: true,
+      accountSecurityUpdatesEnabled: true,
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('checkbox', { name: /Viewing updates/ })).not.toBeChecked()
+    expect(getNotificationPreferences).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits for API confirmation before reporting a saved preference', async () => {
+    let confirmSave
+    updateNotificationPreferences.mockReturnValueOnce(new Promise((resolve) => { confirmSave = resolve }))
+    renderProfile('Tenant')
+    const viewingToggle = await screen.findByRole('checkbox', { name: /Viewing updates/ })
+    await userEvent.click(viewingToggle)
+    await userEvent.click(screen.getByRole('button', { name: 'Save preferences' }))
+
+    expect(updateNotificationPreferences).toHaveBeenCalledWith(expect.objectContaining({
+      viewingUpdatesEnabled: false,
+      rentalApplicationUpdatesEnabled: true,
+    }))
+    expect(screen.getByRole('status')).toHaveTextContent('Saving notification preferences')
+    expect(screen.queryByText('Notification preferences saved.')).not.toBeInTheDocument()
+
+    confirmSave({
+      viewingUpdatesEnabled: false,
+      rentalApplicationUpdatesEnabled: true,
+      accountSecurityUpdatesEnabled: true,
+    })
+    expect((await screen.findAllByText('Notification preferences saved.')).length).toBeGreaterThan(0)
+    expect(viewingToggle).not.toBeChecked()
+  })
+
+  it('keeps failed notification changes unconfirmed and supports save retry', async () => {
+    updateNotificationPreferences
+      .mockRejectedValueOnce(new Error('Notification preferences could not be saved.'))
+      .mockResolvedValueOnce({
+        viewingUpdatesEnabled: true,
+        rentalApplicationUpdatesEnabled: false,
+        accountSecurityUpdatesEnabled: true,
+      })
+    renderProfile('Landlord')
+    const applicationToggle = await screen.findByRole('checkbox', { name: /Rental application updates/ })
+    await userEvent.click(applicationToggle)
+    await userEvent.click(screen.getByRole('button', { name: 'Save preferences' }))
+
+    const errors = await screen.findAllByRole('alert')
+    expect(errors.some((alert) => alert.textContent.includes('Your previous settings are still saved.'))).toBe(true)
+    expect(screen.queryByText('Notification preferences saved.')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect((await screen.findAllByText('Notification preferences saved.')).length).toBeGreaterThan(0)
+    expect(updateNotificationPreferences).toHaveBeenCalledTimes(2)
   })
 
   it('updates profile fields and uploads a validated local image', async () => {
@@ -53,8 +189,10 @@ describe('shared profile', () => {
     })
     const { updateProfile, uploadProfileImage } = renderProfile('Admin')
     await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
     await userEvent.clear(screen.getByLabelText('Full name'))
     await userEvent.type(screen.getByLabelText('Full name'), 'Updated Admin')
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeEnabled()
     await userEvent.clear(screen.getByLabelText('Phone number'))
     await userEvent.type(screen.getByLabelText('Phone number'), '+94 71 222 3333')
     const image = new File([new Uint8Array([0x89, 0x50, 0x4E, 0x47])], 'avatar.png', { type: 'image/png' })
@@ -72,6 +210,74 @@ describe('shared profile', () => {
     await userEvent.upload(screen.getByLabelText(/Profile image/), new File(['text'], 'avatar.txt', { type: 'text/plain' }), { applyAccept: false })
     expect(screen.getByRole('alert')).toHaveTextContent('Choose a JPEG, PNG, or WEBP image.')
     expect(uploadProfileImage).not.toHaveBeenCalled()
+  })
+
+  it('opens an accessible password dialog and validates policy and confirmation locally', async () => {
+    const { changePassword } = renderProfile('Landlord')
+    await userEvent.click(screen.getByRole('button', { name: /Change password/ }))
+    const dialog = screen.getByRole('dialog', { name: 'Change password' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(within(dialog).getByLabelText('Current password')).toHaveFocus()
+
+    await userEvent.type(within(dialog).getByLabelText('Current password'), 'Secure1!Password')
+    await userEvent.type(within(dialog).getByLabelText('New password'), 'weak')
+    await userEvent.type(within(dialog).getByLabelText('Confirm new password'), 'different')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('at least 8 characters')
+    expect(changePassword).not.toHaveBeenCalled()
+
+    await userEvent.clear(within(dialog).getByLabelText('New password'))
+    await userEvent.type(within(dialog).getByLabelText('New password'), 'NewSecure2@Password')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Show passwords' }))
+    expect(within(dialog).getByLabelText('Current password')).toHaveAttribute('type', 'text')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('must match')
+    expect(changePassword).not.toHaveBeenCalled()
+  })
+
+  it('keeps password fields and loading state until the API confirms success', async () => {
+    let confirmChange
+    const changePassword = vi.fn().mockReturnValue(new Promise((resolve) => { confirmChange = resolve }))
+    renderProfile('Admin', { changePassword })
+    await userEvent.click(screen.getByRole('button', { name: /Change password/ }))
+    const dialog = screen.getByRole('dialog', { name: 'Change password' })
+    const currentPassword = within(dialog).getByLabelText('Current password')
+    const newPassword = within(dialog).getByLabelText('New password')
+    const confirmation = within(dialog).getByLabelText('Confirm new password')
+    await userEvent.type(currentPassword, 'Secure1!Password')
+    await userEvent.type(newPassword, 'NewSecure2@Password')
+    await userEvent.type(confirmation, 'NewSecure2@Password')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }))
+
+    expect(changePassword).toHaveBeenCalledWith({
+      currentPassword: 'Secure1!Password',
+      newPassword: 'NewSecure2@Password',
+      newPasswordConfirmation: 'NewSecure2@Password',
+    })
+    expect(within(dialog).getByRole('button', { name: 'Changing password…' })).toBeDisabled()
+    expect(currentPassword).toHaveValue('Secure1!Password')
+    expect(newPassword).toHaveValue('NewSecure2@Password')
+    expect(within(dialog).queryByText('Password changed')).not.toBeInTheDocument()
+
+    await act(async () => confirmChange({ message: 'Your password was changed successfully.' }))
+    expect(await within(dialog).findByRole('heading', { name: 'Password changed' })).toBeInTheDocument()
+    expect(within(dialog).getByText('Your current session remains signed in.')).toBeInTheDocument()
+    expect(tokenStorage.getToken()).toBe('profile-token')
+  })
+
+  it('shows an incorrect-current-password API error without clearing the form', async () => {
+    const changePassword = vi.fn().mockRejectedValue(new Error('Current password is incorrect.'))
+    renderProfile('Tenant', { changePassword })
+    await userEvent.click(screen.getByRole('button', { name: /Change password/ }))
+    const dialog = screen.getByRole('dialog', { name: 'Change password' })
+    await userEvent.type(within(dialog).getByLabelText('Current password'), 'Wrong1!Password')
+    await userEvent.type(within(dialog).getByLabelText('New password'), 'NewSecure2@Password')
+    await userEvent.type(within(dialog).getByLabelText('Confirm new password'), 'NewSecure2@Password')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Current password is incorrect.')
+    expect(within(dialog).getByLabelText('Current password')).toHaveValue('Wrong1!Password')
+    expect(within(dialog).getByLabelText('New password')).toHaveValue('NewSecure2@Password')
   })
 
   it('automatically hides profile error notifications after three seconds', () => {

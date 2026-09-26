@@ -62,7 +62,7 @@ public sealed class StaffProvisioningEndpointsTests
 
         var response = await CreateTechnicianAsync(client);
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
@@ -166,6 +166,15 @@ public sealed class StaffProvisioningEndpointsTests
         using var provisioningAdminClient = AuthorizedClient(
             factory,
             provisioningAdmin.Token);
+        var preferenceResponse = await provisioningAdminClient.PutAsJsonAsync(
+            "/api/notification-preferences",
+            new
+            {
+                viewingUpdatesEnabled = false,
+                rentalApplicationUpdatesEnabled = false,
+                accountSecurityUpdatesEnabled = true
+            });
+        Assert.Equal(HttpStatusCode.OK, preferenceResponse.StatusCode);
         using var createResponse = await CreateTechnicianAsync(provisioningAdminClient);
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         using var createBody = JsonDocument.Parse(

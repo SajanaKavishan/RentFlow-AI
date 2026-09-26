@@ -37,6 +37,54 @@ export async function updateProfile(details) {
   }))
 }
 
+function parseForgotPasswordResponse(response) {
+  if (!response || typeof response.message !== 'string'
+    || (import.meta.env.DEV && response.developmentResetLink !== undefined
+      && typeof response.developmentResetLink !== 'string')) {
+    throw new TypeError('The server returned an invalid password-reset response.')
+  }
+  return import.meta.env.DEV
+    ? response
+    : { message: response.message }
+}
+
+export async function requestPasswordReset(details) {
+  return parseForgotPasswordResponse(await apiRequest('/api/auth/forgot-password', {
+    method: 'POST', body: JSON.stringify(details), authenticated: false,
+    handleUnauthorized: false,
+    errorMessage: 'Password reset instructions could not be created.',
+    networkErrorMessage: 'Unable to connect. Please try again.',
+  }))
+}
+
+export async function resetPassword(details) {
+  const response = await apiRequest('/api/auth/reset-password', {
+    method: 'POST', body: JSON.stringify(details), authenticated: false,
+    handleUnauthorized: false,
+    errorMessage: 'Password reset could not be completed.',
+    networkErrorMessage: 'Unable to connect. Please try again.',
+  })
+  if (!response || typeof response.message !== 'string') {
+    throw new TypeError('The server returned an invalid password-reset response.')
+  }
+  return response
+}
+
+function parseChangePasswordResponse(response) {
+  if (!response || typeof response.accessToken !== 'string' || !response.accessToken.trim()
+    || typeof response.message !== 'string' || typeof response.expiresAt !== 'string') {
+    throw new TypeError('The server returned an invalid password-change response.')
+  }
+  return response
+}
+
+export async function changePassword(details) {
+  return parseChangePasswordResponse(await apiRequest('/api/auth/change-password', {
+    method: 'PUT', body: JSON.stringify(details),
+    errorMessage: 'Your password could not be changed.',
+  }))
+}
+
 export async function uploadProfileImage(file) {
   const body = new FormData()
   body.append('file', file)

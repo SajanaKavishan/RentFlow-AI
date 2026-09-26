@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import Icon from '../../../shared/ui/Icons.jsx'
 import { matchProperties } from '../services/propertyApiService.js'
 import '../properties.css'
 

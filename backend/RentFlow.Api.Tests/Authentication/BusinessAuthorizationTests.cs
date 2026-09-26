@@ -1277,6 +1277,7 @@ public sealed class BusinessAuthorizationTests
         UserRole role,
         bool allowAutoRedirect = true)
     {
+        factory.EnsureActiveUser(userId, role);
         var client = factory.CreateHttpsClient(allowAutoRedirect);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(userId.ToString(), role.ToString()));
@@ -1289,7 +1290,11 @@ public sealed class BusinessAuthorizationTests
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
                 "test-only-signing-key-that-is-at-least-32-bytes-long")),
             SecurityAlgorithms.HmacSha256);
-        var claims = new List<Claim> { new(JwtRegisteredClaimNames.Sub, subject) };
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, subject),
+            new("token_version", "0")
+        };
         if (role is not null)
         {
             claims.Add(new Claim("role", role));

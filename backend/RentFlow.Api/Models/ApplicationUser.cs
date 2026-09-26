@@ -18,6 +18,8 @@ public sealed class ApplicationUser
 
     public bool IsActive { get; set; } = true;
 
+    public int TokenVersion { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

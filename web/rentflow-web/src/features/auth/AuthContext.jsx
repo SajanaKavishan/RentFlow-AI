@@ -64,9 +64,14 @@ export function AuthProvider({ children, api = authApi }) {
     setUser(currentUser)
     return currentUser
   }, [api])
+  const changePassword = useCallback(async (details) => {
+    const result = await api.changePassword(details)
+    tokenStorage.setToken(result.accessToken)
+    return result
+  }, [api])
   const value = useMemo(() => ({ user, token: tokenStorage.getToken(),
     isAuthenticated: Boolean(user && tokenStorage.getToken()), isLoading, login, register,
-    logout: clearSession, refreshCurrentUser, updateProfile, uploadProfileImage }),
-  [clearSession, isLoading, login, refreshCurrentUser, register, updateProfile, uploadProfileImage, user])
+    logout: clearSession, refreshCurrentUser, updateProfile, uploadProfileImage, changePassword }),
+  [changePassword, clearSession, isLoading, login, refreshCurrentUser, register, updateProfile, uploadProfileImage, user])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

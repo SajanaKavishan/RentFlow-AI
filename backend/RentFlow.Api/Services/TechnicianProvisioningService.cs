@@ -161,11 +161,13 @@ public sealed class TechnicianProvisioningService(
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
-            dbContext.Notifications.Add(
+            await NotificationDeliveryPolicy.QueueAsync(
+                dbContext,
                 NotificationEventFactory.ForMaintenanceTechnicianActivation(
                     user,
                     setupToken.CreatedByAdminId,
-                    now));
+                    now),
+                cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
             if (transaction is not null)
             {

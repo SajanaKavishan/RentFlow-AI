@@ -36,9 +36,11 @@ export default function LoginPage() {
     <p className="auth-eyebrow">Welcome back</p><h1 id="login-title">Sign in to RentFlow</h1>
     <p className="auth-intro">Enter your details to continue your rental journey.</p>
     {location.state?.passwordSetupComplete && <div className="auth-success" role="status">Your Technician account is active. Sign in with your new password.</div>}
+    {location.state?.passwordResetComplete && <div className="auth-success" role="status">Your password was reset successfully. Sign in with your new password.</div>}
     <form onSubmit={handleSubmit} noValidate>
       <label htmlFor="email">Email</label><input id="email" type="email" autoComplete="email" placeholder="you@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={isSubmitting} />
-      <label htmlFor="password">Password</label><div className="auth-password"><input id="password" type={passwordVisible ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} disabled={isSubmitting} /><button type="button" aria-label={passwordVisible ? 'Hide password' : 'Show password'} aria-pressed={passwordVisible} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? 'eyeOff' : 'eye'} /></button></div>
+      <div className="auth-password-heading"><label htmlFor="password">Password</label><Link to="/forgot-password">Forgot password?</Link></div>
+      <div className="auth-password"><input id="password" type={passwordVisible ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} disabled={isSubmitting} /><button type="button" aria-label={passwordVisible ? 'Hide password' : 'Show password'} aria-pressed={passwordVisible} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? 'eyeOff' : 'eye'} /></button></div>
       {error && <div className="auth-error" role="alert">{error}</div>}
       <button className="auth-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in'}</button>
     </form><p className="auth-switch">New to RentFlow? <Link to="/register">Create an account</Link></p>

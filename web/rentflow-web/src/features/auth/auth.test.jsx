@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -6,6 +7,7 @@ import App from '../../App.jsx'
 import { ApiError, apiRequest, setUnauthorizedHandler } from '../../core/api/apiClient.js'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 import { AuthProvider } from './AuthContext.jsx'
+import { changePassword } from './authApi.js'
 import { useAuth } from './useAuth.js'
 import RegisterPage from './pages/RegisterPage.jsx'
 
@@ -101,6 +103,66 @@ describe('React authentication', () => {
     await expect(apiRequest('/api/private')).rejects.toMatchObject({ statusCode: 401 })
     expect(tokenStorage.getToken()).toBeNull()
     expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('parses the replacement token returned by the authenticated password-change API', async () => {
+    tokenStorage.setToken('existing-session-token')
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({
+      message: 'Your password was changed successfully.',
+      accessToken: 'fresh-session-token',
+      expiresAt: '2026-09-26T02:00:00Z',
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+
+    const response = await changePassword({
+      currentPassword: 'Secure1!Password',
+      newPassword: 'NewSecure2@Password',
+      newPasswordConfirmation: 'NewSecure2@Password',
+    })
+
+    expect(response.message).toBe('Your password was changed successfully.')
+    expect(response.accessToken).toBe('fresh-session-token')
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/auth/change-password'), expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        currentPassword: 'Secure1!Password',
+        newPassword: 'NewSecure2@Password',
+        newPasswordConfirmation: 'NewSecure2@Password',
+      }),
+      headers: expect.objectContaining({ Authorization: 'Bearer existing-session-token' }),
+    }))
+    expect(tokenStorage.getToken()).toBe('existing-session-token')
+    tokenStorage.clearToken()
+  })
+
+  it('replaces the stored token before confirming a password change to consumers', async () => {
+    tokenStorage.setToken('existing-session-token')
+    const api = {
+      login: vi.fn(),
+      register: vi.fn(),
+      getCurrentUser: vi.fn().mockResolvedValue(tenant),
+      changePassword: vi.fn().mockResolvedValue({
+        message: 'Your password was changed successfully.',
+        accessToken: 'fresh-session-token',
+        expiresAt: '2026-09-26T02:00:00Z',
+      }),
+    }
+    function PasswordChangeProbe() {
+      const auth = useAuth()
+      const [result, setResult] = useState('idle')
+      return <><button type="button" onClick={async () => {
+        const response = await auth.changePassword({ currentPassword: 'old', newPassword: 'new', newPasswordConfirmation: 'new' })
+        setResult(`${response.message}|${tokenStorage.getToken()}`)
+      }}>Change test password</button><span>{result}</span></>
+    }
+
+    render(<AuthProvider api={api}><PasswordChangeProbe /></AuthProvider>)
+    await userEvent.click(screen.getByRole('button', { name: 'Change test password' }))
+
+    expect(await screen.findByText('Your password was changed successfully.|fresh-session-token')).toBeInTheDocument()
+    expect(tokenStorage.getToken()).toBe('fresh-session-token')
   })
 
   it('routes an authenticated tenant away from landlord-only pages', async () => {

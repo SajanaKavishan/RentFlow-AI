@@ -5,18 +5,13 @@ import { USER_ROLES } from '../../features/auth/authModel.js'
 import { AppCard, PageHeader } from '../ui/States.jsx'
 import Icon from '../ui/Icons.jsx'
 import TenantApplicationDocuments from './TenantApplicationDocuments.jsx'
+import NotificationPreferencesSection from './NotificationPreferencesSection.jsx'
+import ChangePasswordDialog from './ChangePasswordDialog.jsx'
+import SupportRequestsSection from './SupportRequestsSection.jsx'
 import './profile.css'
 
 const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const maximumImageBytes = 5 * 1024 * 1024
-
-function UnavailableAction({ icon, title, explanation }) {
-  return <button className="profile-action profile-action--unavailable" type="button" disabled>
-    <span className="profile-action__icon"><Icon name={icon} size={20} /></span>
-    <span className="profile-action__copy"><strong>{title}</strong><small>{explanation}</small></span>
-    <span className="profile-action__status">Unavailable</span>
-  </button>
-}
 
 function validateProfile(fullName, phoneNumber) {
   const name = fullName.trim()
@@ -27,7 +22,9 @@ function validateProfile(fullName, phoneNumber) {
 }
 
 export default function ProfilePage() {
-  const { user, updateProfile, uploadProfileImage } = useAuth()
+  const { user, updateProfile, uploadProfileImage, changePassword } = useAuth()
+  const showsNotificationPreferences = [USER_ROLES.TENANT, USER_ROLES.LANDLORD].includes(user.role)
+  const isAdmin = user.role === USER_ROLES.ADMIN
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState(() => ({ fullName: user.fullName, phoneNumber: user.phoneNumber }))
   const [imageFile, setImageFile] = useState(null)
@@ -36,6 +33,14 @@ export default function ProfilePage() {
   const previewUrlRef = useRef(null)
   const [submitState, setSubmitState] = useState({ status: 'idle', message: '' })
   const [toast, setToast] = useState(null)
+  const [changingPassword, setChangingPassword] = useState(false)
+  const changePasswordButtonRef = useRef(null)
+  const hasProfileChanges = form.fullName.trim() !== user.fullName.trim()
+    || (form.phoneNumber || '').trim() !== (user.phoneNumber?.trim() || '')
+    || imageFile !== null
+  const profileLayoutClassName = isAdmin
+    ? 'profile-layout profile-layout--account-only'
+    : `profile-layout${showsNotificationPreferences ? '' : ' profile-layout--without-preferences'}`
 
   useEffect(() => () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
@@ -47,6 +52,10 @@ export default function ProfilePage() {
   }, [toast])
 
   const showToast = (tone, message) => setToast({ id: Date.now(), tone, message })
+  const closeChangePassword = () => {
+    setChangingPassword(false)
+    window.requestAnimationFrame(() => changePasswordButtonRef.current?.focus())
+  }
 
   const clearSelectedImage = () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
@@ -94,6 +103,7 @@ export default function ProfilePage() {
   }
   const submit = async (event) => {
     event.preventDefault()
+    if (!hasProfileChanges) return
     const validationError = validateProfile(form.fullName, form.phoneNumber)
     if (validationError || imageError) {
       const message = validationError || imageError
@@ -133,7 +143,7 @@ export default function ProfilePage() {
       </div>
     </AppCard>
 
-    <div className="profile-layout">
+    <div className={profileLayoutClassName}>
       <section className="profile-section profile-section--account" aria-labelledby="profile-account-title">
         <h2 id="profile-account-title">Account</h2>
         <AppCard className="profile-section__card">
@@ -150,7 +160,7 @@ export default function ProfilePage() {
             </div>
             <div className="profile-edit__buttons">
               <button className="shared-button shared-button--outline" type="button" disabled={submitState.status === 'submitting'} onClick={cancelEditing}>Cancel</button>
-              <button className="shared-button" type="submit" disabled={submitState.status === 'submitting'}>{submitState.status === 'submitting' ? 'Saving…' : 'Save profile'}</button>
+              <button className="shared-button profile-edit__save" type="submit" disabled={submitState.status === 'submitting' || !hasProfileChanges}>{submitState.status === 'submitting' ? 'Saving…' : 'Save profile'}</button>
             </div>
           </form>}
           <div className="profile-actions">
@@ -160,24 +170,27 @@ export default function ProfilePage() {
               <span className="profile-action__copy"><strong>Edit profile</strong><small>Update your name, phone number, and profile image.</small></span>
               <Icon name="arrow" size={18} />
             </button>
-            <UnavailableAction icon="document" title="Change password" explanation="Password changes are not available in the web app." />
+            <button ref={changePasswordButtonRef} className="profile-action profile-action--available" type="button" onClick={() => setChangingPassword(true)}>
+              <span className="profile-action__icon"><Icon name="shield" size={20} /></span>
+              <span className="profile-action__copy"><strong>Change password</strong><small>Update your password securely.</small></span>
+              <Icon name="arrow" size={18} />
+            </button>
           </div>
         </AppCard>
       </section>
 
-      <section className="profile-section profile-section--preferences" aria-labelledby="profile-preferences-title">
+      {showsNotificationPreferences && <section className="profile-section profile-section--preferences" aria-labelledby="profile-preferences-title">
         <h2 id="profile-preferences-title">Preferences</h2>
-        <AppCard className="profile-section__card profile-actions">
-          <UnavailableAction icon="info" title="Notifications" explanation="Notification preferences are not available yet." />
-        </AppCard>
-      </section>
+        <NotificationPreferencesSection key={user.id} userId={user.id} showToast={showToast} />
+      </section>}
 
-      <section className="profile-section profile-section--support" aria-labelledby="profile-support-title">
+      {!isAdmin && <section className="profile-section profile-section--support" aria-labelledby="profile-support-title">
         <h2 id="profile-support-title">Support</h2>
         <AppCard className="profile-section__card profile-actions">
-          <UnavailableAction icon="info" title="Contact support" explanation="Web support is not connected yet." />
+          <SupportRequestsSection key={user.id} />
         </AppCard>
-      </section>
+      </section>}
     </div>
+    {changingPassword && <ChangePasswordDialog changePassword={changePassword} onClose={closeChangePassword} onSuccess={(message) => showToast('success', message)} />}
   </main>
 }

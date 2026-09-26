@@ -77,6 +77,26 @@ builder.Services.AddOptions<StaffProvisioningOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+builder.Services.AddOptions<PasswordResetOptions>()
+    .Bind(builder.Configuration.GetSection(PasswordResetOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+var emailOptions = builder.Services.AddOptions<EmailOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOptions.SectionName));
+var frontendOptions = builder.Services.AddOptions<FrontendOptions>()
+    .Bind(builder.Configuration.GetSection(FrontendOptions.SectionName));
+
+if (!builder.Environment.IsDevelopment())
+{
+    emailOptions
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    frontendOptions
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+}
+
 // =========================================================
 // JWT AUTHENTICATION
 // =========================================================
@@ -117,7 +137,7 @@ builder.Services
 
         options.Events = new JwtBearerEvents
         {
-            OnTokenValidated = context =>
+            OnTokenValidated = async context =>
             {
                 var subject =
                     context.Principal?
@@ -127,6 +147,10 @@ builder.Services
                     context.Principal?
                         .FindFirstValue("role");
 
+                var tokenVersionValue =
+                    context.Principal?
+                        .FindFirstValue(JwtClaimNames.TokenVersion);
+
                 if (!Guid.TryParse(
                         subject,
                         out var userId)
@@ -135,13 +159,39 @@ builder.Services
                         roleValue,
                         ignoreCase: false,
                         out var role)
-                    || !Enum.IsDefined(role))
+                    || !Enum.IsDefined(role)
+                    || !int.TryParse(
+                        tokenVersionValue,
+                        System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var tokenVersion)
+                    || tokenVersion < 0)
                 {
                     context.Fail(
                         "The token identity claims are invalid.");
+                    return;
                 }
 
-                return Task.CompletedTask;
+                var dbContext = context.HttpContext.RequestServices
+                    .GetRequiredService<ApplicationDbContext>();
+                var storedUser = await dbContext.Users
+                    .AsNoTracking()
+                    .Where(user => user.Id == userId)
+                    .Select(user => new
+                    {
+                        user.IsActive,
+                        user.Role,
+                        user.TokenVersion
+                    })
+                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+
+                if (storedUser is null
+                    || !storedUser.IsActive
+                    || storedUser.Role != role
+                    || storedUser.TokenVersion != tokenVersion)
+                {
+                    context.Fail("The token is no longer valid.");
+                }
             }
         };
     });
@@ -169,6 +219,28 @@ builder.Services.AddRateLimiter(options =>
         context => RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString()
                 ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy(
+        "forgot-password",
+        context => RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy(
+        "password-reset",
+        context => RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 5,
@@ -214,7 +286,8 @@ builder.Services.AddSingleton<
     SystemAdminBootstrapConsole>();
 
 builder.Services.AddScoped<TechnicianProvisioningService>();
-
+builder.Services.AddScoped<PasswordResetService>();
+builder.Services.AddTransient<IEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<
     IAuthorizationHandler,
     ActiveAdminAuthorizationHandler>();
@@ -380,6 +453,14 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     INotificationService,
     NotificationService>();
+
+builder.Services.AddScoped<
+    INotificationPreferenceService,
+    NotificationPreferenceService>();
+
+builder.Services.AddScoped<
+    ISupportTicketService,
+    SupportTicketService>();
 
 builder.Services.AddScoped<
     IPasswordHasher<ApplicationUser>,

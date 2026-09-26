@@ -26,6 +26,7 @@ const second = {
 }
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const page = (items) => ({ items, pagination: { page: 1, pageSize: 5, totalCount: items.length, totalPages: items.length ? 1 : 0, hasNextPage: false, hasPreviousPage: false } })
+const preferences = { viewingUpdatesEnabled: true, rentalApplicationUpdatesEnabled: true, accountSecurityUpdatesEnabled: true }
 const session = (id = 'first-user') => ({ user: { id, fullName: 'Taylor Example', email: 'taylor@example.com', role: 'Tenant' }, isAuthenticated: true, isLoading: false, logout: vi.fn() })
 
 function renderApp(auth = session()) {
@@ -42,6 +43,8 @@ describe('notification bell preview', () => {
   it('loads recent recipient-scoped notifications and closes after See all navigation', async () => {
     vi.stubGlobal('fetch', vi.fn((url) => {
       const request = new URL(url, 'http://localhost')
+      if (request.pathname === '/api/notification-preferences') return Promise.resolve(json(preferences))
+      if (request.pathname === '/api/support-tickets/mine') return Promise.resolve(json([]))
       if (request.pathname === '/api/notifications/unread-count') return Promise.resolve(json({ unreadCount: 1 }))
       if (request.pathname === '/api/notifications') return Promise.resolve(json(page([first])))
       throw new Error(`Unexpected request: ${request.pathname}`)
@@ -66,6 +69,8 @@ describe('notification bell preview', () => {
     let read = false
     vi.stubGlobal('fetch', vi.fn((url, options) => {
       const path = new URL(url, 'http://localhost').pathname
+      if (path === '/api/notification-preferences') return Promise.resolve(json(preferences))
+      if (path === '/api/support-tickets/mine') return Promise.resolve(json([]))
       if (path === '/api/notifications/unread-count') return Promise.resolve(json({ unreadCount: read ? 0 : 1 }))
       if (path === '/api/notifications') return Promise.resolve(json(page([{ ...first, isRead: read, readAt: read ? '2026-09-22T10:00:00Z' : null }])))
       if (options?.method === 'PATCH') { read = true; return Promise.resolve(json({ ...first, isRead: true, readAt: '2026-09-22T10:00:00Z' })) }
@@ -95,6 +100,8 @@ describe('notification bell preview', () => {
     let attempts = 0
     vi.stubGlobal('fetch', vi.fn((url) => {
       const path = new URL(url, 'http://localhost').pathname
+      if (path === '/api/notification-preferences') return Promise.resolve(json(preferences))
+      if (path === '/api/support-tickets/mine') return Promise.resolve(json([]))
       if (path === '/api/notifications/unread-count') return Promise.resolve(json({ unreadCount: 0 }))
       attempts++
       if (attempts === 1) return new Promise((resolve) => { finishRequest = resolve })
@@ -113,6 +120,8 @@ describe('notification bell preview', () => {
     let activeItems = [first]
     vi.stubGlobal('fetch', vi.fn((url) => {
       const path = new URL(url, 'http://localhost').pathname
+      if (path === '/api/notification-preferences') return Promise.resolve(json(preferences))
+      if (path === '/api/support-tickets/mine') return Promise.resolve(json([]))
       return Promise.resolve(json(path === '/api/notifications/unread-count' ? { unreadCount: 0 } : page(activeItems)))
     }))
     const view = renderApp(session('first-user'))

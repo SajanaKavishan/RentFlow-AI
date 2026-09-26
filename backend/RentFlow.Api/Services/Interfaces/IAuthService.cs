@@ -12,6 +12,11 @@ public interface IAuthService
         LoginRequestDto request,
         CancellationToken cancellationToken = default);
 
+    Task<ChangePasswordResponseDto?> ChangePasswordAsync(
+        Guid userId,
+        ChangePasswordRequestDto request,
+        CancellationToken cancellationToken = default);
+
     Task<UserProfileDto?> GetUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default);

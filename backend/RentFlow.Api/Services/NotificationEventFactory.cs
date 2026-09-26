@@ -4,6 +4,40 @@ namespace RentFlow.Api.Services;
 
 internal static class NotificationEventFactory
 {
+    public static Notification ForPasswordChanged(
+        ApplicationUser user,
+        DateTimeOffset changedAt)
+    {
+        return new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientId = user.Id,
+            EventType = NotificationEventTypes.AccountPasswordChanged,
+            RelatedResourceType = "UserAccount",
+            RelatedResourceId = user.Id,
+            Title = "Password changed",
+            Message = "Your password was changed successfully.",
+            CreatedAt = changedAt
+        };
+    }
+
+    public static Notification ForPasswordReset(
+        ApplicationUser user,
+        DateTimeOffset resetAt)
+    {
+        return new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientId = user.Id,
+            EventType = NotificationEventTypes.AccountPasswordReset,
+            RelatedResourceType = "UserAccount",
+            RelatedResourceId = user.Id,
+            Title = "Password reset",
+            Message = "Your password was reset successfully.",
+            CreatedAt = resetAt
+        };
+    }
+
     public static Notification ForMaintenanceTechnicianActivation(
         ApplicationUser technician,
         Guid provisioningAdminId,
@@ -13,7 +47,7 @@ internal static class NotificationEventFactory
         {
             Id = Guid.NewGuid(),
             RecipientId = provisioningAdminId,
-            EventType = "maintenance_technician.activated",
+            EventType = NotificationEventTypes.MaintenanceTechnicianActivated,
             RelatedResourceType = "MaintenanceTechnician",
             RelatedResourceId = technician.Id,
             Title = "Technician account activated",
@@ -30,7 +64,7 @@ internal static class NotificationEventFactory
         {
             Id = Guid.NewGuid(),
             RecipientId = landlordId,
-            EventType = "viewing.created",
+            EventType = NotificationEventTypes.ViewingCreated,
             RelatedResourceType = "ViewingRequest",
             RelatedResourceId = viewing.Id,
             Title = "New viewing request",
@@ -52,7 +86,9 @@ internal static class NotificationEventFactory
         {
             Id = Guid.NewGuid(),
             RecipientId = viewing.TenantId,
-            EventType = approved ? "viewing.approved" : "viewing.rejected",
+            EventType = approved
+                ? NotificationEventTypes.ViewingApproved
+                : NotificationEventTypes.ViewingRejected,
             RelatedResourceType = "ViewingRequest",
             RelatedResourceId = viewing.Id,
             Title = approved ? "Viewing approved" : "Viewing rejected",
@@ -70,15 +106,15 @@ internal static class NotificationEventFactory
         var (eventType, title, message) = status switch
         {
             RentalApplicationStatus.Approved => (
-                "rental_application.approved",
+                NotificationEventTypes.RentalApplicationApproved,
                 "Rental application approved",
                 "Your rental application was approved."),
             RentalApplicationStatus.Rejected => (
-                "rental_application.rejected",
+                NotificationEventTypes.RentalApplicationRejected,
                 "Rental application rejected",
                 "Your rental application was rejected."),
             RentalApplicationStatus.ChangesRequested => (
-                "rental_application.changes_requested",
+                NotificationEventTypes.RentalApplicationChangesRequested,
                 "Changes requested for rental application",
                 "Changes were requested for your rental application."),
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
@@ -111,8 +147,8 @@ internal static class NotificationEventFactory
             Id = Guid.NewGuid(),
             RecipientId = landlordId,
             EventType = isResubmission
-                ? "rental_application.resubmitted"
-                : "rental_application.submitted",
+                ? NotificationEventTypes.RentalApplicationResubmitted
+                : NotificationEventTypes.RentalApplicationSubmitted,
             RelatedResourceType = "RentalApplication",
             RelatedResourceId = application.Id,
             Title = isResubmission
