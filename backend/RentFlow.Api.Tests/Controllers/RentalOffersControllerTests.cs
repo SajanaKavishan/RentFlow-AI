@@ -275,6 +275,10 @@ public class RentalOffersControllerTests
         public Task<bool> CanAccessWorkflowAsync(
             Guid landlordId, Guid workflowId, CancellationToken cancellationToken = default)
             => Task.FromResult(false);
+
+        public Task<bool> CanAccessPricingAnalysisWorkflowAsync(
+            Guid landlordId, Guid workflowId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
     }
 
     private sealed class StubRentalOfferService : IRentalOfferService

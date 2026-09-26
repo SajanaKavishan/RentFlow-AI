@@ -56,6 +56,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<MaintenanceCoordinationStep> MaintenanceCoordinationSteps => Set<MaintenanceCoordinationStep>();
 
+    public DbSet<PricingAnalysisWorkflow> PricingAnalysisWorkflows => Set<PricingAnalysisWorkflow>();
+
+    public DbSet<PricingAnalysisWorkflowStep> PricingAnalysisWorkflowSteps => Set<PricingAnalysisWorkflowStep>();
+
     public DbSet<MaintenanceRequest> MaintenanceRequests => Set<MaintenanceRequest>();
 
     public DbSet<MaintenanceStatusHistory> MaintenanceStatusHistories => Set<MaintenanceStatusHistory>();
@@ -966,6 +970,121 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.Property(step => step.OutputSummary)
                 .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.ValidationSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.ErrorMessage)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.StartedAt)
+                .IsRequired(false);
+
+            entity.Property(step => step.CompletedAt)
+                .IsRequired(false);
+
+            entity.HasOne(step => step.Workflow)
+                .WithMany(workflow => workflow.Steps)
+                .HasForeignKey(step => step.WorkflowId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(step => new { step.WorkflowId, step.StepOrder })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<PricingAnalysisWorkflow>(entity =>
+        {
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_PricingAnalysisWorkflows_CurrentStep",
+                "\"CurrentStep\" >= 0 AND \"CurrentStep\" <= 6"));
+
+            entity.HasKey(workflow => workflow.Id);
+
+            entity.Property(workflow => workflow.PropertyId)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.Objective)
+                .HasMaxLength(2000)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.Status)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.CurrentStep)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.EvidencePolicyVersion)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.EvidenceSufficiency)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.Confidence)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.AgentVersion)
+                .HasMaxLength(200)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.ResultJson)
+                .HasColumnType("text")
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.ErrorMessage)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.CreatedAt)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.UpdatedAt)
+                .IsRequired();
+
+            entity.Property(workflow => workflow.StartedAt)
+                .IsRequired(false);
+
+            entity.Property(workflow => workflow.CompletedAt)
+                .IsRequired(false);
+
+            entity.HasOne(workflow => workflow.Property)
+                .WithMany()
+                .HasForeignKey(workflow => workflow.PropertyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(workflow => workflow.PropertyId);
+        });
+
+        modelBuilder.Entity<PricingAnalysisWorkflowStep>(entity =>
+        {
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_PricingAnalysisWorkflowSteps_StepOrder",
+                "\"StepOrder\" >= 1 AND \"StepOrder\" <= 6"));
+
+            entity.HasKey(step => step.Id);
+
+            entity.Property(step => step.WorkflowId)
+                .IsRequired();
+
+            entity.Property(step => step.StepName)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(step => step.StepOrder)
+                .IsRequired();
+
+            entity.Property(step => step.Status)
+                .IsRequired();
+
+            entity.Property(step => step.OutputSummary)
+                .HasMaxLength(4000)
+                .IsRequired(false);
+
+            entity.Property(step => step.ResultJson)
+                .HasColumnType("text")
                 .IsRequired(false);
 
             entity.Property(step => step.ValidationSummary)
