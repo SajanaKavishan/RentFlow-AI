@@ -20,6 +20,7 @@ import PropertiesPage from './features/properties/pages/PropertiesPage.jsx'
 import PropertyDetailsPage from './features/properties/pages/PropertyDetailsPage.jsx'
 import PropertyMatchingPage from './features/properties/pages/PropertyMatchingPage.jsx'
 import ManagePropertiesPage from './features/properties/pages/ManagePropertiesPage.jsx'
+import OwnedPropertiesProvider from './shared/property/OwnedPropertiesProvider.jsx'
 import LandingPage from './features/landing/pages/LandingPage.jsx'
 
 import AppShell from './shared/layout/AppShell.jsx'
@@ -73,14 +74,16 @@ export default function App() {
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
           <Route path="/modules/manage-properties" element={<ManagePropertiesPage />} />
-          <Route path="/viewing-requests" element={<ViewingRequestsPage />} />
-          <Route path="/properties/:propertyId/viewing-requests" element={<ViewingRequestsPage />} />
-          <Route path="/rental-applications" element={<RentalApplicationsPage />} />
-          <Route path="/properties/:propertyId/rental-applications" element={<RentalApplicationsPage />} />
-          <Route path="/properties/:propertyId/rental-applications/:applicationId/validation" element={<ApplicationValidationReportPage />} />
-          <Route path="/rental-applications/:applicationId/validation" element={<ApplicationValidationReportPage />} />
-          <Route path="/ai-review" element={<RentalApplicationsPage />} />
-          <Route path="/properties/:propertyId/ai-review" element={<RentalApplicationsPage />} />
+          <Route element={<OwnedPropertiesProvider />}>
+            <Route path="/viewing-requests" element={<ViewingRequestsPage />} />
+            <Route path="/properties/:propertyId/viewing-requests" element={<ViewingRequestsPage />} />
+            <Route path="/rental-applications" element={<RentalApplicationsPage />} />
+            <Route path="/properties/:propertyId/rental-applications" element={<RentalApplicationsPage />} />
+            <Route path="/properties/:propertyId/rental-applications/:applicationId/validation" element={<ApplicationValidationReportPage />} />
+            <Route path="/rental-applications/:applicationId/validation" element={<ApplicationValidationReportPage />} />
+            <Route path="/ai-review" element={<RentalApplicationsPage />} />
+            <Route path="/properties/:propertyId/ai-review" element={<RentalApplicationsPage />} />
+          </Route>
         </Route>
 
         <Route path="/modules/:module" element={<UnavailableState />} />

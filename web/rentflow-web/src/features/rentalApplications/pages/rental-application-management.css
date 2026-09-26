@@ -5,6 +5,8 @@
 .applications-page__header .application-button { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .applications-page__count { margin: 6px 0 0 !important; color: var(--muted); font-size: .92rem; }
 .applications-page__count span { padding: 0 4px; }
+.applications-page__property { display: grid; gap: 3px; margin: 10px 0 0 !important; color: var(--ink) !important; }
+.applications-page__property span, .application-list-card__property-location { display: block; color: var(--muted); font-size: .78rem; }
 .applications-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--card-shadow); }
 .applications-toolbar__search { min-width: min(100%, 240px); min-height: 44px; display: flex; align-items: center; gap: 9px; flex: 1 1 270px; padding: 0 13px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--muted); background: var(--cream-50); }
 .applications-toolbar__search:focus-within { border-color: var(--olive-700); outline: 2px solid var(--olive-100); }

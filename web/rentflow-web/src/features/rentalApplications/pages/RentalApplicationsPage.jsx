@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
+import { useOwnedPropertySelection } from '../../../shared/property/useOwnedProperties.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import { APPLICATION_STATUS_DETAILS } from '../components/applicationStatus.js'
 import RentalApplicationListCard from '../components/RentalApplicationListCard.jsx'
@@ -60,6 +61,7 @@ function verifyPropertyApplications(applications, propertyId) {
 
 function RentalApplicationsPage() {
   const { propertyId } = usePropertyContext()
+  const selection = useOwnedPropertySelection(propertyId)
   const { pathname } = useLocation()
   const isAiReviewRoute = pathname === '/ai-review' || /\/ai-review\/?$/.test(pathname)
   const [pageState, setPageState] = useState({
@@ -74,14 +76,14 @@ function RentalApplicationsPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const pageStatus = !propertyId
-    ? 'property-required'
+  const pageStatus = selection.status !== 'selected'
+    ? 'property-context'
     : pageState.propertyId === propertyId
       ? pageState.status
       : 'loading'
 
   useEffect(() => {
-    if (!propertyId) return undefined
+    if (!propertyId || selection.status !== 'selected') return undefined
 
     let isActive = true
 
@@ -112,10 +114,10 @@ function RentalApplicationsPage() {
     return () => {
       isActive = false
     }
-  }, [propertyId, reloadKey])
+  }, [propertyId, reloadKey, selection.status])
 
   function loadApplications() {
-    if (!propertyId || pageStatus === 'loading') return
+    if (!propertyId || selection.status !== 'selected' || pageStatus === 'loading') return
 
     setPageState((current) => ({
       ...current,
@@ -199,7 +201,9 @@ function RentalApplicationsPage() {
   const query = search.trim().toLocaleLowerCase()
   const visibleApplications = applications.filter((application) =>
     (statusFilter === 'all' || application.status === Number(statusFilter))
-    && (!query || [application.tenantId, application.propertyId].some((value) => value.toLocaleLowerCase().includes(query))))
+    && (!query || [application.tenantId, application.propertyId, selection.property?.title,
+      selection.property?.address, selection.property?.city]
+      .filter(Boolean).some((value) => value.toLocaleLowerCase().includes(query))))
 
   return (
     <main
@@ -214,6 +218,10 @@ function RentalApplicationsPage() {
               ? 'Review application validation findings and supporting documents before making a decision.'
               : 'Track tenant applications, review documents and validation findings, and make the final landlord decision.'}
           </p>
+          {selection.property && <p className="applications-page__property">
+            <strong>{selection.property.title}</strong>
+            <span>{[selection.property.address, selection.property.city].filter(Boolean).join(', ')}</span>
+          </p>}
           {pageStatus === 'success' && <p className="applications-page__count">
             {applications.length} total <span aria-hidden="true">&middot;</span> {awaitingReview} awaiting review
           </p>}
@@ -222,14 +230,15 @@ function RentalApplicationsPage() {
           type="button"
           className="application-button application-button--quiet"
           onClick={loadApplications}
-          disabled={!propertyId || pageStatus === 'loading'}
+          disabled={selection.status !== 'selected' || pageStatus === 'loading'}
         >
           <Icon name="refresh" size={17} />Refresh
         </button>
       </header>
 
-      {pageStatus === 'property-required' && (
-        <PropertySelectionState className="applications-state" />
+      {pageStatus === 'property-context' && (
+        <PropertySelectionState className="applications-state" destination={isAiReviewRoute ? 'ai-review' : 'rental-applications'}
+          selectedPropertyId={selection.status === 'unauthorized' ? propertyId : null} />
       )}
 
       {pageStatus === 'success' && notice.propertyId === propertyId && notice.message && (
@@ -281,8 +290,8 @@ function RentalApplicationsPage() {
             <div className="applications-toolbar">
               <label className="applications-toolbar__search">
                 <Icon name="search" size={19} />
-                <input type="search" aria-label="Search tenant or property reference" value={search} onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search tenant or property reference" />
+                <input type="search" aria-label="Search tenant or property" value={search} onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search tenant or property" />
               </label>
               <div className="applications-toolbar__filters" role="group" aria-label="Filter applications by status">
                 {FILTER_STATUSES.map(([label, value]) => <button key={value} type="button"
@@ -294,12 +303,12 @@ function RentalApplicationsPage() {
             {visibleApplications.length === 0 ? <section className="applications-state applications-state--filtered">
               <Icon name="search" size={28} />
               <h2>No matching applications</h2>
-              <p>Try a different tenant or property reference, or choose another status.</p>
+              <p>Try a different tenant or property search, or choose another status.</p>
               <button type="button" className="application-button application-button--quiet"
                 onClick={() => { setSearch(''); setStatusFilter('all') }}>Clear filters</button>
             </section> : <section className="applications-list" aria-label="Rental applications">
               {visibleApplications.map((application) => <RentalApplicationListCard
-                key={application.id} application={application} isUpdating={updatingId === application.id}
+                key={application.id} application={application} property={selection.property} isUpdating={updatingId === application.id}
                 actionError={actionError.id === application.id ? actionError.message : ''}
                 onReview={handleReview} onApprove={handleApprove} onReject={handleReject}
                 onRequestChanges={handleRequestChanges} />)}

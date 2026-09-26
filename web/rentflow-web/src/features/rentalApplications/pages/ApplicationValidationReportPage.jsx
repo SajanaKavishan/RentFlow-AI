@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
+import { useOwnedPropertySelection } from '../../../shared/property/useOwnedProperties.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import ApplicationDecisionSection from '../components/ApplicationDecisionSection.jsx'
 import ApplicationValidationSection from '../components/ApplicationValidationSection.jsx'
@@ -44,6 +45,7 @@ function validApplication(application, applicationId, propertyId) {
 export default function ApplicationValidationReportPage() {
   const { applicationId } = useParams()
   const { propertyId } = usePropertyContext()
+  const selection = useOwnedPropertySelection(propertyId)
   const [state, setState] = useState({
     status: 'loading', propertyId: null, applicationId: null, application: null, error: '',
   })
@@ -53,7 +55,7 @@ export default function ApplicationValidationReportPage() {
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
-    if (!propertyId || !applicationId) return undefined
+    if (!propertyId || !applicationId || selection.status !== 'selected') return undefined
     let active = true
     getApplicationById(applicationId)
       .then((application) => {
@@ -73,7 +75,7 @@ export default function ApplicationValidationReportPage() {
         })
       })
     return () => { active = false }
-  }, [applicationId, propertyId, reloadKey])
+  }, [applicationId, propertyId, reloadKey, selection.status])
 
   async function updateApplication(operation, successMessage) {
     if (isUpdating) return false
@@ -107,8 +109,9 @@ export default function ApplicationValidationReportPage() {
     ? `/properties/${encodeURIComponent(propertyId)}/rental-applications`
     : '/rental-applications'
 
-  if (!propertyId) {
-    return <main className="applications-page"><PropertySelectionState className="applications-state" /></main>
+  if (selection.status !== 'selected') {
+    return <main className="applications-page"><PropertySelectionState className="applications-state" destination="rental-applications"
+      selectedPropertyId={selection.status === 'unauthorized' ? propertyId : null} /></main>
   }
 
   if (pageStatus === 'loading') {
@@ -150,7 +153,9 @@ export default function ApplicationValidationReportPage() {
     </header>
 
     <dl className="validation-report-page__references">
-      <div><dt>Property reference</dt><dd><code>{application.propertyId}</code></dd></div>
+      <div><dt>Property</dt><dd>{selection.property
+        ? <><strong>{selection.property.title}</strong><span>{[selection.property.address, selection.property.city].filter(Boolean).join(', ')}</span></>
+        : <code>{application.propertyId}</code>}</dd></div>
       <div><dt>Tenant reference</dt><dd><code>{application.tenantId}</code></dd></div>
       <div><dt>Submitted</dt><dd>{application.submittedAt ? formatDateTime(application.submittedAt) : 'Not submitted'}</dd></div>
       <div><dt>Last updated</dt><dd>{formatDateTime(application.updatedAt || application.createdAt)}</dd></div>

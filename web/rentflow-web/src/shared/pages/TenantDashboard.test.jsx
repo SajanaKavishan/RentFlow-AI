@@ -189,7 +189,10 @@ describe('tenant dashboard', () => {
     const requestedPaths = fetch.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname)
     expect(requestedPaths).not.toContain('/api/rental-applications')
     expect(requestedPaths).not.toContain('/api/viewings')
-    expect(requestedPaths).toEqual(role === 'Admin' ? Array(5).fill('/api/admin/users') : [])
+    expect(requestedPaths).toEqual(
+      role === 'Admin' ? Array(5).fill('/api/admin/users')
+        : role === 'Landlord' ? ['/api/properties/mine'] : [],
+    )
     if (role === 'Admin') {
       const roleFilters = fetch.mock.calls
         .map(([url]) => new URL(url, 'http://localhost').searchParams.get('role'))

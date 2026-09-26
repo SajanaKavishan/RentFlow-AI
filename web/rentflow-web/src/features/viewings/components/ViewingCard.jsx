@@ -18,7 +18,7 @@ function displayValue(...values) {
   return values.find((value) => typeof value === 'string' && value.trim())?.trim() || null
 }
 
-function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) {
+function ViewingCard({ viewing, property, isUpdating, actionError, onApprove, onReject }) {
   const [action, setAction] = useState(null)
   const [response, setResponse] = useState('')
   const [validationError, setValidationError] = useState('')
@@ -29,8 +29,12 @@ function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) 
   const landlordResponse = viewing.landlordResponse?.trim()
   const tenantName = displayValue(viewing.tenantName, viewing.tenant?.name)
   const tenantEmail = displayValue(viewing.tenantEmail, viewing.tenant?.email)
-  const propertyName = displayValue(viewing.propertyName, viewing.property?.name)
-  const propertyLocation = displayValue(viewing.propertyLocation, viewing.property?.location)
+  const propertyName = displayValue(property?.title, viewing.propertyName, viewing.property?.name)
+  const propertyLocation = displayValue(
+    property && [property.address, property.city].filter(Boolean).join(', '),
+    viewing.propertyLocation,
+    viewing.property?.location,
+  )
   const createdDate = parseViewingDate(viewing.createdAt)
 
   function openAction(nextAction) {

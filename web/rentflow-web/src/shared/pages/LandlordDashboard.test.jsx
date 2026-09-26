@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,15 +11,40 @@ vi.mock('../../features/notifications/notificationsApi.js', async (importOrigina
 import { AuthProvider } from '../../features/auth/AuthContext.jsx'
 import { AuthContext } from '../../features/auth/useAuth.js'
 import { getApplicationValidationRuns } from '../../features/rentalApplications/services/applicationValidationApiService.js'
+import { getMyProperties } from '../../features/properties/services/propertyApiService.js'
 
 vi.mock('../../features/rentalApplications/services/applicationValidationApiService.js', async (importOriginal) => ({
   ...(await importOriginal()), getApplicationValidationRuns: vi.fn(),
+}))
+
+vi.mock('../../features/properties/services/propertyApiService.js', async (importOriginal) => ({
+  ...(await importOriginal()), getMyProperties: vi.fn(),
 }))
 
 // Fixture IDs are only used by tests; production always uses the existing context.
 const propertyId = '88888888-8888-8888-8888-888888888888'
 const otherPropertyId = '99999999-9999-9999-9999-999999999999'
 const landlord = { id: 'landlord-one', fullName: 'Nila Perera', email: 'nila@example.com', phoneNumber: '', role: 'Landlord' }
+const ownedProperty = {
+  id: propertyId,
+  landlordId: landlord.id,
+  title: 'Lake View Apartment',
+  description: 'Owned property',
+  address: '12 Lake Road',
+  city: 'Colombo',
+  monthlyRent: 120000,
+  bedrooms: 2,
+  bathrooms: 2,
+  isAvailable: true,
+  amenities: [],
+}
+const otherOwnedProperty = {
+  ...ownedProperty,
+  id: otherPropertyId,
+  title: 'Garden House',
+  address: '44 Green Lane',
+  isAvailable: false,
+}
 const viewings = [0, 0, 1, 2, 3, 4].map((status, index) => ({ id: `viewing-${index}`, propertyId, status }))
 const applications = [0, 1, 1, 2, 3, 4, 5, 6].map((status, index) => ({ id: `application-${index}`, propertyId, status }))
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -35,29 +60,31 @@ function renderApp(entry = scopedDashboard(), user = landlord) {
 
 beforeEach(() => {
   tokenStorage.setToken('landlord-token')
+  getMyProperties.mockReset().mockResolvedValue([ownedProperty, otherOwnedProperty])
   getApplicationValidationRuns.mockReset().mockResolvedValue([])
   vi.stubGlobal('fetch', vi.fn((url) => Promise.resolve(json(isViewing(url) ? viewings : applications))))
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('landlord dashboard', () => {
-  it.each(['/dashboard', '/dashboard?propertyId=invalid'])('requires property context at %s without fetching or displaying fake counts', (entry) => {
+  it.each(['/dashboard', '/dashboard?propertyId=invalid'])('requires property context at %s without fetching or displaying fake counts', async (entry) => {
     renderApp(entry)
     expect(screen.getByRole('heading', { name: 'Welcome, Nila Perera' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Select a property' })).toBeInTheDocument()
-    expect(screen.getByText(/Property integration pending/)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Select a property' })).toBeInTheDocument()
+    expect(screen.getByText(/Choose one of your owned properties/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Lake View Apartment/ })).toHaveAttribute('href', `/dashboard?propertyId=${propertyId}`)
     expect(screen.queryByText('Property required')).not.toBeInTheDocument()
     expect(screen.getAllByText('Summary unavailable')).toHaveLength(2)
     const cards = document.querySelector('.landlord-dashboard__summaries')
     expect(within(cards).getAllByRole('region').map((card) => card.getAttribute('aria-label'))).toEqual([
       'Active Properties', 'Pending Viewings', 'Applications', 'Revenue This Month',
     ])
-    expect(within(cards).getAllByText('Integration pending')).toHaveLength(2)
+    expect(within(cards).getAllByText('Integration pending')).toHaveLength(1)
     expect(document.querySelector('.landlord-dashboard__summaries--unavailable')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Needs Attention' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Recent Applications' })).not.toBeInTheDocument()
     expect(getApplicationValidationRuns).not.toHaveBeenCalled()
-    expect(screen.queryByText('0')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Active Properties' })).getByText('1')).toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
     expect(screen.queryByLabelText(/Viewing Requests, \d+ pending/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Rental Applications, \d+ pending/)).not.toBeInTheDocument()
@@ -84,13 +111,15 @@ describe('landlord dashboard', () => {
     for (const [label, count] of [['Submitted', '2'], ['Under review', '1'], ['Changes requested', '1']]) {
       expect(within(apps).getByText(label).nextElementSibling).toHaveTextContent(count)
     }
-    expect(screen.getByRole('region', { name: 'Property context' })).toHaveTextContent(propertyId)
-    for (const title of ['Active Properties', 'Revenue This Month']) {
-      const card = screen.getByRole('region', { name: title })
-      expect(within(card).getByText('Integration pending')).toBeInTheDocument()
-      expect(within(card).queryByRole('link')).not.toBeInTheDocument()
-      expect(within(card).queryByText(/\$|\d+ properties/i)).not.toBeInTheDocument()
-    }
+    expect(screen.getByRole('region', { name: 'Property context' })).toHaveTextContent('Lake View Apartment')
+    expect(screen.getByRole('region', { name: 'Property context' })).toHaveTextContent('12 Lake Road, Colombo')
+    const active = screen.getByRole('region', { name: 'Active Properties' })
+    expect(within(active).getByText('1')).toBeInTheDocument()
+    expect(within(active).getByText('2 total owned properties')).toBeInTheDocument()
+    expect(within(active).getByRole('link', { name: 'Open Manage Properties' })).toHaveAttribute('href', '/modules/manage-properties')
+    const revenue = screen.getByRole('region', { name: 'Revenue This Month' })
+    expect(within(revenue).getByText('Integration pending')).toBeInTheDocument()
+    expect(within(revenue).queryByRole('link')).not.toBeInTheDocument()
     expect(fetch).toHaveBeenCalledTimes(2)
     expect(fetch.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname).sort()).toEqual([
       `/api/rental-applications/property/${propertyId}`, `/api/viewings/property/${propertyId}`,
@@ -147,7 +176,7 @@ describe('landlord dashboard', () => {
     let finishViewings
     fetch.mockImplementation((url) => isViewing(url) ? new Promise((resolve) => { finishViewings = resolve }) : new Promise(() => {}))
     renderApp()
-    expect(screen.getAllByText('Loading summary…')).toHaveLength(2)
+    await waitFor(() => expect(screen.getAllByText('Loading summary…')).toHaveLength(2))
     expect(screen.queryByText('0')).not.toBeInTheDocument()
     await act(async () => { finishViewings(json([])) })
     expect(screen.getByText('No viewing requests for this property yet.')).toBeInTheDocument()
@@ -206,13 +235,14 @@ describe('landlord dashboard', () => {
     const oldRequests = []
     fetch.mockImplementation(() => new Promise((resolve) => { oldRequests.push(resolve) }))
     const { router } = renderApp()
+    await waitFor(() => expect(oldRequests).toHaveLength(2))
     fetch.mockImplementation(() => Promise.resolve(json([])))
     await act(async () => { await router.navigate(scopedDashboard(otherPropertyId)) })
     expect(await screen.findByText('No rental applications for this property yet.')).toBeInTheDocument()
     await act(async () => { oldRequests[0](json(viewings)); oldRequests[1](json(applications)) })
     expect(screen.queryByText('6 total requests')).not.toBeInTheDocument()
     expect(screen.queryByText('8')).not.toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Property context' })).toHaveTextContent(otherPropertyId)
+    expect(screen.getByRole('region', { name: 'Property context' })).toHaveTextContent('Garden House')
     expect(fetch.mock.calls.slice(2).every(([url]) => url.endsWith(otherPropertyId))).toBe(true)
     await act(async () => { await router.navigate('/dashboard') })
     expect(screen.getByRole('heading', { name: 'Select a property' })).toBeInTheDocument()
@@ -234,6 +264,7 @@ describe('landlord dashboard', () => {
     const oldRequests = []
     fetch.mockImplementation(() => new Promise((resolve) => { oldRequests.push(resolve) }))
     const { changeUser } = renderApp()
+    await waitFor(() => expect(oldRequests).toHaveLength(2))
     fetch.mockImplementation(() => Promise.resolve(json([])))
     tokenStorage.setToken('second-landlord-token')
     changeUser({ ...landlord, id: 'landlord-two', fullName: 'Amara Silva' })

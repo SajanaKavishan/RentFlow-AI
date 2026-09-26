@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   createProperty,
   deleteProperty,
@@ -618,9 +619,23 @@ export default function ManagePropertiesPage() {
                 )}
 
                 <div className="managed-property-actions">
+                  <Link
+                    className="property-button property-button--primary"
+                    to={`/properties/${encodeURIComponent(property.id)}/viewing-requests`}
+                  >
+                    Viewing Requests
+                  </Link>
+
+                  <Link
+                    className="property-button property-button--primary"
+                    to={`/properties/${encodeURIComponent(property.id)}/rental-applications`}
+                  >
+                    Rental Applications
+                  </Link>
+
                   <button
                     type="button"
-                    className="property-button property-button--primary"
+                    className="property-button property-button--quiet"
                     onClick={() => beginEdit(property)}
                   >
                     Edit

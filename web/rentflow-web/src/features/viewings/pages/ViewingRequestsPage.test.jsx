@@ -235,10 +235,9 @@ describe('Landlord viewing requests', () => {
     expect(
       screen.getByRole('heading', { name: 'Select a property' }),
     ).toBeInTheDocument()
-    expect(
-      screen.getByText(/authenticated list of your properties/),
-    ).toBeInTheDocument()
-    expect(screen.getByText(/verified property selection/)).toBeInTheDocument()
+    expect(screen.getByText(/Choose one of your owned properties/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open Manage Properties' }))
+      .toHaveAttribute('href', '/modules/manage-properties')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

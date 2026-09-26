@@ -45,6 +45,9 @@
   line-height: 1.75;
 }
 
+.viewings-page__header .viewings-page__property { display: grid; gap: 3px; margin-top: 10px; color: var(--ink); }
+.viewings-page__property span { color: var(--muted); font-size: .82rem; }
+
 .viewings-page__eyebrow,
 .viewing-card__eyebrow {
   margin: 0;

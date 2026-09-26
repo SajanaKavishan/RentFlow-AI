@@ -29,7 +29,7 @@ function displayIncome(value) {
 }
 
 export default function RentalApplicationListCard({
-  application, isUpdating, actionError, onReview, onApprove, onReject, onRequestChanges,
+  application, property, isUpdating, actionError, onReview, onApprove, onReject, onRequestChanges,
 }) {
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const detailsPanelId = `application-details-${application.id}`
@@ -41,7 +41,9 @@ export default function RentalApplicationListCard({
       <div className="application-list-card__identity">
         <p className="application-list-card__eyebrow">Tenant reference</p>
         <h2>{application.tenantId}</h2>
-        <p>Property reference <code>{application.propertyId}</code></p>
+        {property
+          ? <p>Property <strong>{property.title}</strong><span className="application-list-card__property-location">{[property.address, property.city].filter(Boolean).join(', ')}</span></p>
+          : <p>Property reference <code>{application.propertyId}</code></p>}
       </div>
       <RentalApplicationStatusBadge status={application.status} />
     </div>

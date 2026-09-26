@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
+import { useOwnedPropertySelection } from '../../../shared/property/useOwnedProperties.js'
 import ViewingCard from '../components/ViewingCard.jsx'
 import {
   approveViewing,
@@ -35,7 +36,7 @@ const STATUS_FILTERS = [
   { value: VIEWING_STATUS.COMPLETED, label: 'Completed' },
 ]
 
-function optionalSearchFields(viewing) {
+function optionalSearchFields(viewing, property) {
   return [
     viewing.tenantName,
     viewing.tenantEmail,
@@ -45,11 +46,15 @@ function optionalSearchFields(viewing) {
     viewing.propertyId,
     viewing.tenantMessage,
     viewing.landlordResponse,
+    property?.title,
+    property?.address,
+    property?.city,
   ].filter((value) => typeof value === 'string')
 }
 
 function ViewingRequestsPage() {
   const { propertyId } = usePropertyContext()
+  const selection = useOwnedPropertySelection(propertyId)
   const [pageState, setPageState] = useState({
     status: 'loading',
     propertyId: null,
@@ -69,19 +74,19 @@ function ViewingRequestsPage() {
     const normalizedSearch = search.trim().toLowerCase()
     return orderedViewings.filter((viewing) => {
       const matchesStatus = statusFilter === 'all' || viewing.status === statusFilter
-      const matchesSearch = !normalizedSearch || optionalSearchFields(viewing)
+      const matchesSearch = !normalizedSearch || optionalSearchFields(viewing, selection.property)
         .some((value) => value.toLowerCase().includes(normalizedSearch))
       return matchesStatus && matchesSearch
     })
-  }, [orderedViewings, search, statusFilter])
-  const pageStatus = !propertyId
-    ? 'property-required'
+  }, [orderedViewings, search, selection.property, statusFilter])
+  const pageStatus = selection.status !== 'selected'
+    ? 'property-context'
     : pageState.propertyId === propertyId
       ? pageState.status
       : 'loading'
 
   useEffect(() => {
-    if (!propertyId) return undefined
+    if (!propertyId || selection.status !== 'selected') return undefined
 
     let isActive = true
 
@@ -107,10 +112,10 @@ function ViewingRequestsPage() {
     return () => {
       isActive = false
     }
-  }, [propertyId])
+  }, [propertyId, selection.status])
 
   async function loadViewings() {
-    if (!propertyId) return
+    if (!propertyId || selection.status !== 'selected') return
 
     setPageState((current) => ({
       ...current,
@@ -186,7 +191,7 @@ function ViewingRequestsPage() {
   return (
     <main
       className="viewings-page"
-      aria-busy={pageStatus === 'loading'}
+      aria-busy={pageStatus === 'loading' || selection.status === 'loading'}
     >
       <header className="viewings-page__header">
         <div>
@@ -195,20 +200,25 @@ function ViewingRequestsPage() {
             Review requested appointments and respond to tenants interested in
             your property.
           </p>
+          {selection.property && <p className="viewings-page__property">
+            <strong>{selection.property.title}</strong>
+            <span>{[selection.property.address, selection.property.city].filter(Boolean).join(', ')}</span>
+          </p>}
         </div>
         <button
           type="button"
           className="button button--quiet viewings-page__refresh"
           onClick={loadViewings}
-          disabled={!propertyId || pageStatus === 'loading'}
+          disabled={selection.status !== 'selected' || pageStatus === 'loading'}
         >
           <span aria-hidden="true">↻</span>
           {pageStatus === 'loading' ? 'Refreshing...' : 'Refresh'}
         </button>
       </header>
 
-      {pageStatus === 'property-required' && (
-        <PropertySelectionState className="page-state" />
+      {pageStatus === 'property-context' && (
+        <PropertySelectionState className="page-state" destination="viewing-requests"
+          selectedPropertyId={selection.status === 'unauthorized' ? propertyId : null} />
       )}
 
       {pageStatus === 'success' && notice && (
@@ -322,6 +332,7 @@ function ViewingRequestsPage() {
                 <ViewingCard
                   key={viewing.id}
                   viewing={viewing}
+                  property={selection.property}
                   isUpdating={updatingId === viewing.id}
                   actionError={
                     actionError.id === viewing.id ? actionError.message : ''

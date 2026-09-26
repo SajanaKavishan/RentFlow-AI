@@ -4,6 +4,7 @@ import { getViewingsByProperty, VIEWING_STATUS } from '../../features/viewings/s
 import { getApplicationsByProperty, RENTAL_APPLICATION_STATUS } from '../../features/rentalApplications/services/rentalApplicationApiService.js'
 import PropertySelectionState from '../property/PropertySelectionState.jsx'
 import usePropertyContext from '../property/usePropertyContext.js'
+import { useOwnedPropertySelection, useOwnedProperties } from '../property/useOwnedProperties.js'
 import { AppCard, PageHeader } from '../ui/States.jsx'
 import RentalApplicationStatusBadge from '../../features/rentalApplications/components/RentalApplicationStatusBadge.jsx'
 import Icon from '../ui/Icons.jsx'
@@ -22,7 +23,7 @@ function SummaryCard({ title, icon, summary, to, actionLabel, count, children })
       {summary.status === 'property-required' && <p className="landlord-summary__unavailable">Summary unavailable</p>}
       {summary.status === 'loading' && <p className="landlord-summary__state" role="status">Loading summary…</p>}
       {summary.status === 'error' && <div className="landlord-summary__state" role="alert">
-        <p>{summary.message}</p>
+        <p>{summary.message || summary.error}</p>
         <button type="button" className="shared-button shared-button--outline" onClick={summary.retry}>Retry {title.toLowerCase()}</button>
       </div>}
       {summary.status === 'ready' && children}
@@ -82,18 +83,21 @@ export default function LandlordDashboard({ user }) {
 function LandlordOverview({ user, propertyId }) {
   const publishPendingViewings = useContext(PendingViewingsContext)
   const publishPendingApplications = useContext(PendingApplicationsContext)
-  const viewings = usePropertySummary(getViewingsByProperty, propertyId)
-  const applications = usePropertySummary(getApplicationsByProperty, propertyId)
+  const ownedProperties = useOwnedProperties()
+  const selection = useOwnedPropertySelection(propertyId)
+  const selectedPropertyId = selection.status === 'selected' ? propertyId : null
+  const viewings = usePropertySummary(getViewingsByProperty, selectedPropertyId)
+  const applications = usePropertySummary(getApplicationsByProperty, selectedPropertyId)
   const validation = useDashboardValidation(applications)
-  const scopedPath = (path) => propertyId ? `${path}?${new URLSearchParams({ propertyId })}` : path
+  const scopedPath = (path) => selectedPropertyId ? `${path}?${new URLSearchParams({ propertyId: selectedPropertyId })}` : path
   const pendingViewings = viewings.data.filter((item) => item.status === VIEWING_STATUS.PENDING).length
   useEffect(() => {
-    publishPendingViewings?.(propertyId, viewings.status === 'ready' ? pendingViewings : null)
-  }, [propertyId, viewings.status, pendingViewings, publishPendingViewings])
+    publishPendingViewings?.(selectedPropertyId, viewings.status === 'ready' ? pendingViewings : null)
+  }, [selectedPropertyId, viewings.status, pendingViewings, publishPendingViewings])
   const reviewableApplications = applications.data.filter(isReviewable).length
   useEffect(() => {
-    publishPendingApplications?.(propertyId, applications.status === 'ready' ? reviewableApplications : null)
-  }, [propertyId, applications.status, reviewableApplications, publishPendingApplications])
+    publishPendingApplications?.(selectedPropertyId, applications.status === 'ready' ? reviewableApplications : null)
+  }, [selectedPropertyId, applications.status, reviewableApplications, publishPendingApplications])
   const awaitingReview = validation.attention.filter((item) => item.status === WORKFLOW_STATUS.AWAITING_HUMAN_REVIEW).length
   const failedWorkflows = validation.attention.filter((item) => item.status === WORKFLOW_STATUS.FAILED).length
   const hasAttention = pendingViewings + reviewableApplications + validation.attention.length > 0
@@ -109,13 +113,18 @@ function LandlordOverview({ user, propertyId }) {
         <p>Review requests, follow up on applications and keep your property moving.</p>
       </PageHeader>
 
-      {propertyId ? <section className="landlord-dashboard__context" aria-label="Property context">
+      {selection.status === 'selected' ? <section className="landlord-dashboard__context" aria-label="Property context">
         <span className="landlord-dashboard__icon"><Icon name="building" size={24} /></span>
-        <div><h2>Selected property</h2><code>{propertyId}</code></div>
-      </section> : <PropertySelectionState className="landlord-dashboard__context landlord-dashboard__selection" />}
+        <div><h2>{selection.property.title}</h2><p>{[selection.property.address, selection.property.city].filter(Boolean).join(', ')}</p></div>
+      </section> : <PropertySelectionState className="landlord-dashboard__context landlord-dashboard__selection" destination="dashboard"
+        selectedPropertyId={selection.status === 'unauthorized' ? propertyId : null} />}
 
-      <div className={`landlord-dashboard__summaries${propertyId ? '' : ' landlord-dashboard__summaries--unavailable'}`}>
-        <PendingIntegrationCard title="Active Properties" icon="building" />
+      <div className={`landlord-dashboard__summaries${selectedPropertyId ? '' : ' landlord-dashboard__summaries--unavailable'}`}>
+        <SummaryCard title="Active Properties" icon="building" summary={ownedProperties ?? { status: 'loading' }}
+          count={ownedProperties?.properties.filter((property) => property.isAvailable).length ?? 0}
+          to="/modules/manage-properties" actionLabel="Open Manage Properties">
+          <p>{ownedProperties?.properties.length ?? 0} total owned {ownedProperties?.properties.length === 1 ? 'property' : 'properties'}</p>
+        </SummaryCard>
         <SummaryCard title="Pending Viewings" icon="calendar" summary={viewings} count={pendingViewings} to={scopedPath('/viewing-requests')} actionLabel="Open Viewing Requests">
           <p>{viewings.data.length === 0 ? 'No viewing requests for this property yet.' : `${viewings.data.length} total ${viewings.data.length === 1 ? 'request' : 'requests'}`}</p>
         </SummaryCard>
@@ -126,7 +135,7 @@ function LandlordOverview({ user, propertyId }) {
         </SummaryCard>
         <PendingIntegrationCard title="Revenue This Month" icon="trend" />
       </div>
-      {propertyId && <p className="landlord-dashboard__note">Summaries load when you open this dashboard. Open a workspace to review the latest records.</p>}
+      {selectedPropertyId && <p className="landlord-dashboard__note">Summaries load for the selected owned property. Open a workspace to review the latest records.</p>}
 
       {hasAttention && <section className="landlord-attention" aria-labelledby="landlord-attention-title">
         <div className="landlord-dashboard__section-heading"><h2 id="landlord-attention-title">Needs Attention</h2><span>For this property</span></div>

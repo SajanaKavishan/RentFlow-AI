@@ -223,14 +223,14 @@ describe('Landlord rental applications', () => {
     const list = await screen.findByRole('region', { name: 'Rental applications' })
     const filters = screen.getByRole('group', { name: 'Filter applications by status' })
     expect(within(list).getAllByRole('article')).toHaveLength(3)
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search tenant or property reference' }), '99999999')
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search tenant or property' }), '99999999')
     expect(within(list).getAllByRole('article')).toHaveLength(2)
     await userEvent.click(within(filters).getByRole('button', { name: 'Under review' }))
     expect(within(list).getAllByRole('article')).toHaveLength(1)
     expect(within(list).getByText('Architect')).toBeInTheDocument()
     expect(within(filters).getByRole('button', { name: 'Under review' })).toHaveAttribute('aria-pressed', 'true')
-    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search tenant or property reference' }))
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search tenant or property reference' }), 'Product designer')
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search tenant or property' }))
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search tenant or property' }), 'Product designer')
     expect(screen.getByRole('heading', { name: 'No matching applications' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
     expect(within(screen.getByRole('region', { name: 'Rental applications' })).getAllByRole('article')).toHaveLength(3)
@@ -304,7 +304,7 @@ describe('Landlord rental applications', () => {
     expect(
       screen.getByRole('heading', { name: 'Select a property' }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/Property integration pending/)).toBeInTheDocument()
+    expect(screen.getByText(/Choose one of your owned properties/)).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
