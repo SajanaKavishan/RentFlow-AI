@@ -39,11 +39,13 @@ export async function updateProfile(details) {
 
 function parseForgotPasswordResponse(response) {
   if (!response || typeof response.message !== 'string'
-    || (response.developmentResetLink !== undefined
+    || (import.meta.env.DEV && response.developmentResetLink !== undefined
       && typeof response.developmentResetLink !== 'string')) {
     throw new TypeError('The server returned an invalid password-reset response.')
   }
-  return response
+  return import.meta.env.DEV
+    ? response
+    : { message: response.message }
 }
 
 export async function requestPasswordReset(details) {

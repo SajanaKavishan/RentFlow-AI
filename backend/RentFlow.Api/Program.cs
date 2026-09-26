@@ -82,6 +82,21 @@ builder.Services.AddOptions<PasswordResetOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+var emailOptions = builder.Services.AddOptions<EmailOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOptions.SectionName));
+var frontendOptions = builder.Services.AddOptions<FrontendOptions>()
+    .Bind(builder.Configuration.GetSection(FrontendOptions.SectionName));
+
+if (!builder.Environment.IsDevelopment())
+{
+    emailOptions
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    frontendOptions
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+}
+
 // =========================================================
 // JWT AUTHENTICATION
 // =========================================================
@@ -272,6 +287,7 @@ builder.Services.AddSingleton<
 
 builder.Services.AddScoped<TechnicianProvisioningService>();
 builder.Services.AddScoped<PasswordResetService>();
+builder.Services.AddTransient<IEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<
     IAuthorizationHandler,
     ActiveAdminAuthorizationHandler>();

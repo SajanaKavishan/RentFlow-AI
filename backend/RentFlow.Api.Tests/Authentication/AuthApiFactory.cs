@@ -32,6 +32,8 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 
     public RecordingValidationOrchestrator ValidationOrchestrator { get; } = new();
 
+    public RecordingEmailSender EmailSender { get; } = new();
+
     public RecordingLoggerProvider Logs { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -53,6 +55,14 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["StaffProvisioning:SetupTokenLifetimeMinutes"] = "60",
                 ["PasswordReset:TokenLifetimeMinutes"] = "45",
                 ["PasswordReset:DevelopmentWebBaseUrl"] = "https://web.example.test",
+                ["Email:SmtpHost"] = "smtp.example.test",
+                ["Email:SmtpPort"] = "587",
+                ["Email:Username"] = "test-user",
+                ["Email:Password"] = "test-password",
+                ["Email:FromAddress"] = "no-reply@example.test",
+                ["Email:FromName"] = "RentFlow AI",
+                ["Email:UseSsl"] = "true",
+                ["Frontend:BaseUrl"] = "https://app.example.test",
                 ["CloudflareR2:AccountId"] = "test-account",
                 ["CloudflareR2:AccessKeyId"] = "test-access-key",
                 ["CloudflareR2:SecretAccessKey"] = "test-secret-key",
@@ -95,6 +105,9 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<IApplicationValidationOrchestrator>();
             services.AddSingleton<IApplicationValidationOrchestrator>(
                 ValidationOrchestrator);
+
+            services.RemoveAll<IEmailSender>();
+            services.AddSingleton<IEmailSender>(EmailSender);
         });
     }
 
@@ -129,6 +142,25 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
             UpdatedAt = now
         });
         context.SaveChanges();
+    }
+}
+
+internal sealed class RecordingEmailSender : IEmailSender
+{
+    private readonly ConcurrentQueue<PasswordResetEmail> _messages = new();
+
+    public IReadOnlyList<PasswordResetEmail> Messages => _messages.ToArray();
+
+    public Exception? Failure { get; set; }
+
+    public Task SendPasswordResetEmailAsync(
+        PasswordResetEmail email,
+        CancellationToken cancellationToken = default)
+    {
+        _messages.Enqueue(email);
+        return Failure is null
+            ? Task.CompletedTask
+            : Task.FromException(Failure);
     }
 }
 

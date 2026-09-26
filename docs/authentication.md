@@ -28,7 +28,35 @@ Deployment environments should set `Jwt__SigningKey` through their secret manage
 
 Password-reset tokens expire after 45 minutes by default. Configure the lifetime with `PasswordReset__TokenLifetimeMinutes` (30-60 minutes). `PasswordReset__DevelopmentWebBaseUrl` controls only the local Development reset-link origin and defaults to `http://localhost:5173`.
 
-RentFlow does not currently include a production email provider. Production deployment therefore requires an approved transactional email service to deliver reset links. The API still creates a secure reset token for eligible accounts, but non-Development responses never expose the raw token or reset link and do not claim an email was sent. Development responses include a local reset link for testing; this field is absent outside the `Development` environment. Valid requests for existing, missing, inactive, and unsupported accounts otherwise receive the same generic message and response shape.
+Non-Development deployments send password-reset links through SMTP and require all of these environment variables:
+
+- `Email__SmtpHost`
+- `Email__SmtpPort`
+- `Email__Username`
+- `Email__Password`
+- `Email__FromAddress`
+- `Email__FromName`
+- `Email__UseSsl`
+- `Frontend__BaseUrl`
+
+`Frontend__BaseUrl` must be an absolute HTTP or HTTPS origin/base path without a query or fragment. When `Email__UseSsl` is `true`, port 465 uses implicit TLS and other ports require STARTTLS. When it is `false`, the connection is unencrypted and should be used only for an explicitly trusted SMTP relay. Non-Development configuration is validated when the API starts.
+
+Example PowerShell setup (placeholder values only):
+
+```powershell
+$env:Email__SmtpHost = "<smtp-host>"
+$env:Email__SmtpPort = "587"
+$env:Email__Username = "<smtp-username>"
+$env:Email__Password = "<smtp-password-from-secret-manager>"
+$env:Email__FromAddress = "<verified-sender-address>"
+$env:Email__FromName = "RentFlow AI"
+$env:Email__UseSsl = "true"
+$env:Frontend__BaseUrl = "https://<rentflow-web-host>"
+```
+
+Never commit SMTP credentials, provider app passwords, API keys, or personal email passwords. Supply secrets through the deployment platform's secret manager (or .NET user-secrets for local non-Development testing), and restrict the SMTP credential to the approved sender where the provider supports it.
+
+In Development, the API does not contact SMTP and returns `developmentResetLink` for local testing. Eligible accounts receive a usable link; other valid requests receive the same field with an opaque non-usable link to preserve response uniformity. Outside Development, eligible accounts are emailed at their stored address and `developmentResetLink` is always absent. SMTP failures are recorded as a safe server-side error without the recipient, token, reset URL, credentials, or provider message; the anonymous caller still receives the generic success response.
 
 ## Endpoints
 
@@ -62,9 +90,9 @@ Requires authentication. Accepts `currentPassword`, `newPassword`, and `newPassw
 
 ### `POST /api/auth/forgot-password`
 
-Public and rate-limited by client IP. Accepts `email`. Every validly formatted request returns HTTP 200 with the generic message `If an account exists, password reset instructions have been created.` regardless of account existence, activation state, or role. Eligible accounts receive a cryptographically random 256-bit reset token; only its SHA-256 digest is stored. Issuing a new token consumes prior outstanding tokens for that account.
+Public and rate-limited by client IP. Accepts `email`. Every validly formatted request returns HTTP 200 with the generic message `If an account matches that email, password reset instructions will be sent.` regardless of account existence, activation state, role, or SMTP delivery outcome. Eligible accounts receive a cryptographically random 256-bit reset token; only its SHA-256 digest is stored. Issuing a new token consumes prior outstanding tokens for that account.
 
-In Development only, the response also contains `developmentResetLink` for local testing. Existing eligible accounts receive a usable link; all other valid requests receive the same field and an opaque non-usable link to avoid enumeration through the forgot-password response. Non-Development responses omit this field completely.
+In Development only, the response also contains `developmentResetLink` for local testing. Existing eligible accounts receive a usable link; all other valid requests receive the same field and an opaque non-usable link to avoid enumeration through the forgot-password response. Non-Development responses omit this field completely and send `/reset-password#token=<raw-token>` using the configured `Frontend__BaseUrl`. The email states that the link expires after the configured token lifetime (45 minutes by default) and can be ignored when the recipient did not request it.
 
 ### `POST /api/auth/reset-password`
 

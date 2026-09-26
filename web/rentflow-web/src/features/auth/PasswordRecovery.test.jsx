@@ -7,7 +7,7 @@ import { tokenStorage } from '../../core/auth/tokenStorage.js'
 import { AuthContext } from './useAuth.js'
 
 const resetToken = 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG'
-const genericMessage = 'If an account exists, password reset instructions have been created.'
+const genericMessage = 'If an account matches that email, password reset instructions will be sent.'
 const anonymousSession = {
   user: null,
   isAuthenticated: false,

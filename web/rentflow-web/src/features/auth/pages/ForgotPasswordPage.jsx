@@ -7,31 +7,29 @@ import './auth.css'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
-  const [state, setState] = useState({ status: 'editing', message: '', developmentResetLink: '' })
+  const [state, setState] = useState({ status: 'editing', message: '', localResetLink: '' })
 
   async function handleSubmit(event) {
     event.preventDefault()
     const normalizedEmail = email.trim()
     if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
-      setState({ status: 'error', message: 'Enter a valid email address.', developmentResetLink: '' })
+      setState({ status: 'error', message: 'Enter a valid email address.', localResetLink: '' })
       return
     }
 
-    setState({ status: 'submitting', message: '', developmentResetLink: '' })
+    setState({ status: 'submitting', message: '', localResetLink: '' })
     try {
       const response = await requestPasswordReset({ email: normalizedEmail })
       setState({
         status: 'confirmed',
         message: response.message,
-        developmentResetLink: response.developmentResetLink || '',
+        localResetLink: import.meta.env.DEV ? response.developmentResetLink || '' : '',
       })
     } catch (caught) {
       const message = caught instanceof ApiError && caught.statusCode === 429
         ? 'Too many password reset requests. Wait a minute and try again.'
-        : caught instanceof ApiError
-          ? caught.message
-          : 'Password reset instructions could not be created.'
-      setState({ status: 'error', message, developmentResetLink: '' })
+        : 'Password reset instructions could not be requested. Please try again.'
+      setState({ status: 'error', message, localResetLink: '' })
     }
   }
 
@@ -47,7 +45,7 @@ export default function ForgotPasswordPage() {
     {state.status === 'confirmed' ? <div className="auth-recovery-confirmed" role="status">
       <h2>Request confirmed</h2>
       <p>{state.message}</p>
-      {state.developmentResetLink && <p className="auth-development-link"><strong>Development only:</strong> <a href={state.developmentResetLink}>Open the local reset page</a></p>}
+      {import.meta.env.DEV && state.localResetLink && <p className="auth-development-link"><strong>Development only:</strong> <a href={state.localResetLink}>Open the local reset page</a></p>}
       <Link className="shared-button" to="/login">Return to sign in</Link>
     </div> : <form onSubmit={handleSubmit} noValidate>
       <label htmlFor="recoveryEmail">Email</label>

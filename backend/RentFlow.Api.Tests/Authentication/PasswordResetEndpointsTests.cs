@@ -19,7 +19,7 @@ public sealed class PasswordResetEndpointsTests
     private const string OldPassword = "Original1!Password";
     private const string NewPassword = "Replacement2@Password";
     private const string GenericMessage =
-        "If an account exists, password reset instructions have been created.";
+        "If an account matches that email, password reset instructions will be sent.";
 
     [Fact]
     public async Task ForgotPassword_ReturnsSameGenericDevelopmentShapeWithoutAccountEnumeration()
@@ -50,6 +50,7 @@ public sealed class PasswordResetEndpointsTests
         existing.Dispose();
         missing.Dispose();
         inactive.Dispose();
+        Assert.Empty(factory.EmailSender.Messages);
     }
 
     [Fact]
@@ -99,10 +100,53 @@ public sealed class PasswordResetEndpointsTests
     }
 
     [Fact]
-    public async Task DevelopmentResetLink_IsAbsentOutsideDevelopment()
+    public async Task ProductionForgotPassword_SendsOnlyToEligibleAccountWithoutExposingLink()
     {
         using var factory = new AuthApiFactory(environmentName: "Production");
         await SeedUserAsync(factory, "user@example.com", UserRole.Tenant);
+        await SeedUserAsync(factory, "inactive@example.com", UserRole.Admin, isActive: false);
+        using var client = factory.CreateHttpsClient();
+
+        using var existing = await ForgotAsync(client, "user@example.com");
+        using var missing = await ForgotAsync(client, "missing@example.com");
+        using var inactive = await ForgotAsync(client, "inactive@example.com");
+        var existingText = await existing.Content.ReadAsStringAsync();
+        var missingText = await missing.Content.ReadAsStringAsync();
+        var inactiveText = await inactive.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, existing.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, missing.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, inactive.StatusCode);
+        Assert.Equal(existingText, missingText);
+        Assert.Equal(existingText, inactiveText);
+        Assert.DoesNotContain("developmentResetLink", existingText, StringComparison.Ordinal);
+        Assert.DoesNotContain("reset-password#token", existingText, StringComparison.Ordinal);
+        Assert.Equal(GenericMessage, JsonDocument.Parse(existingText).RootElement.GetProperty("message").GetString());
+
+        var email = Assert.Single(factory.EmailSender.Messages);
+        Assert.Equal("user@example.com", email.RecipientAddress);
+        Assert.StartsWith(
+            "https://app.example.test/reset-password#token=",
+            email.ResetUrl,
+            StringComparison.Ordinal);
+        Assert.Equal(45, email.TokenLifetimeMinutes);
+
+        var rawToken = ExtractToken(email.ResetUrl);
+        Assert.DoesNotContain(rawToken, existingText, StringComparison.Ordinal);
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Equal(
+            PasswordResetService.ComputeTokenDigest(rawToken),
+            (await context.PasswordResetTokens.SingleAsync()).TokenDigest);
+    }
+
+    [Fact]
+    public async Task ProductionForgotPassword_EmailFailureRemainsGenericAndLogsNoSecrets()
+    {
+        const string providerDetails = "SMTP provider private diagnostic 535-secret";
+        using var factory = new AuthApiFactory(environmentName: "Production");
+        factory.EmailSender.Failure = new InvalidOperationException(providerDetails);
+        await SeedUserAsync(factory, "user@example.com", UserRole.Landlord);
         using var client = factory.CreateHttpsClient();
 
         using var existing = await ForgotAsync(client, "user@example.com");
@@ -113,9 +157,21 @@ public sealed class PasswordResetEndpointsTests
         Assert.Equal(HttpStatusCode.OK, existing.StatusCode);
         Assert.Equal(HttpStatusCode.OK, missing.StatusCode);
         Assert.Equal(existingText, missingText);
-        Assert.DoesNotContain("developmentResetLink", existingText, StringComparison.Ordinal);
-        Assert.DoesNotContain("reset-password#token", existingText, StringComparison.Ordinal);
         Assert.Equal(GenericMessage, JsonDocument.Parse(existingText).RootElement.GetProperty("message").GetString());
+        Assert.DoesNotContain(providerDetails, existingText, StringComparison.Ordinal);
+
+        var sent = Assert.Single(factory.EmailSender.Messages);
+        var rawToken = ExtractToken(sent.ResetUrl);
+        Assert.Contains(factory.Logs.Messages, message =>
+            message.Contains("Password reset email delivery failed", StringComparison.Ordinal));
+        Assert.All(factory.Logs.Messages, message =>
+        {
+            Assert.DoesNotContain(providerDetails, message, StringComparison.Ordinal);
+            Assert.DoesNotContain(rawToken, message, StringComparison.Ordinal);
+            Assert.DoesNotContain(sent.ResetUrl, message, StringComparison.Ordinal);
+            Assert.DoesNotContain(OldPassword, message, StringComparison.Ordinal);
+            Assert.DoesNotContain(NewPassword, message, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
@@ -301,6 +357,14 @@ public sealed class PasswordResetEndpointsTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var link = new Uri(body.RootElement.GetProperty("developmentResetLink").GetString()!);
+        const string prefix = "#token=";
+        Assert.StartsWith(prefix, link.Fragment);
+        return Uri.UnescapeDataString(link.Fragment[prefix.Length..]);
+    }
+
+    private static string ExtractToken(string resetUrl)
+    {
+        var link = new Uri(resetUrl);
         const string prefix = "#token=";
         Assert.StartsWith(prefix, link.Fragment);
         return Uri.UnescapeDataString(link.Fragment[prefix.Length..]);

@@ -9,6 +9,7 @@ using RentFlow.Api.Configuration;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.Auth;
 using RentFlow.Api.Models;
+using RentFlow.Api.Services.Interfaces;
 
 namespace RentFlow.Api.Services;
 
@@ -16,13 +17,20 @@ public sealed class PasswordResetService(
     ApplicationDbContext dbContext,
     IPasswordHasher<ApplicationUser> passwordHasher,
     IOptions<PasswordResetOptions> options,
+    IOptions<FrontendOptions> frontendOptions,
+    IEmailSender emailSender,
     IHostEnvironment environment,
+    ILogger<PasswordResetService> logger,
     TimeProvider timeProvider)
 {
+    private static readonly EventId EmailDeliveryFailedEvent =
+        new(3001, "PasswordResetEmailDeliveryFailed");
+
     public const string GenericRequestMessage =
-        "If an account exists, password reset instructions have been created.";
+        "If an account matches that email, password reset instructions will be sent.";
 
     private readonly PasswordResetOptions _options = options.Value;
+    private readonly FrontendOptions _frontendOptions = frontendOptions.Value;
 
     public async Task<ForgotPasswordResponseDto> RequestAsync(
         ForgotPasswordRequestDto request,
@@ -70,11 +78,36 @@ public sealed class PasswordResetService(
             {
                 throw PasswordResetException.Persistence();
             }
+
+            if (!environment.IsDevelopment())
+            {
+                var resetUrl = CreateResetLink(_frontendOptions.BaseUrl, rawToken);
+                try
+                {
+                    await emailSender.SendPasswordResetEmailAsync(
+                        new PasswordResetEmail(
+                            user.Email,
+                            resetUrl,
+                            _options.TokenLifetimeMinutes),
+                        cancellationToken);
+                }
+                catch (Exception exception)
+                    when (exception is not OperationCanceledException
+                        || !cancellationToken.IsCancellationRequested)
+                {
+                    logger.LogError(
+                        EmailDeliveryFailedEvent,
+                        "Password reset email delivery failed with error type {ErrorType}.",
+                        exception.GetType().Name);
+                }
+            }
         }
 
         return new ForgotPasswordResponseDto(
             GenericRequestMessage,
-            environment.IsDevelopment() ? CreateDevelopmentResetLink(rawToken) : null);
+            environment.IsDevelopment()
+                ? CreateResetLink(_options.DevelopmentWebBaseUrl, rawToken)
+                : null);
     }
 
     public async Task<ResetPasswordResponseDto> ResetAsync(
@@ -161,8 +194,8 @@ public sealed class PasswordResetService(
         return new ResetPasswordResponseDto("Your password was reset successfully.");
     }
 
-    private string CreateDevelopmentResetLink(string rawToken) =>
-        $"{_options.DevelopmentWebBaseUrl.TrimEnd('/')}/reset-password#token={Uri.EscapeDataString(rawToken)}";
+    private static string CreateResetLink(string baseUrl, string rawToken) =>
+        $"{baseUrl.TrimEnd('/')}/reset-password#token={Uri.EscapeDataString(rawToken)}";
 
     internal static string ComputeTokenDigest(string token) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
