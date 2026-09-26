@@ -13,7 +13,7 @@ The controlled `UserRole` values are:
 - `MaintenanceTechnician`
 - `Admin`
 
-Public registration accepts only `Tenant` and `Landlord`. A caller cannot self-register as `Admin` or `MaintenanceTechnician`; those roles require a future authorized administrative workflow or controlled development seed.
+Public registration accepts only `Tenant` and `Landlord`. A caller cannot self-register as `Admin` or `MaintenanceTechnician`. The initial Admin is created through the controlled bootstrap command, and active Admins can provision inactive Maintenance Technician accounts through the documented staff-provisioning workflow.
 
 ## Configuration
 
@@ -24,7 +24,39 @@ cd backend/RentFlow.Api
 dotnet user-secrets set "Jwt:SigningKey" "use-a-long-random-development-secret-here"
 ```
 
-Deployment environments should set `Jwt__SigningKey` through their secret manager. The API validates JWT configuration at startup. Default access-token lifetime is 30 minutes; Phase 1 does not issue refresh tokens.
+Deployment environments should set `Jwt__SigningKey` through their secret manager. The API validates JWT configuration at startup. Default access-token lifetime is 30 minutes. The application does not issue refresh tokens; a successful password change returns a replacement access token.
+
+Password-reset tokens expire after 45 minutes by default. Configure the lifetime with `PasswordReset__TokenLifetimeMinutes` (30-60 minutes). `PasswordReset__DevelopmentWebBaseUrl` controls only the local Development reset-link origin and defaults to `http://localhost:5173`.
+
+Non-Development deployments send password-reset links through SMTP and require all of these environment variables:
+
+- `Email__SmtpHost`
+- `Email__SmtpPort`
+- `Email__Username`
+- `Email__Password`
+- `Email__FromAddress`
+- `Email__FromName`
+- `Email__UseSsl`
+- `Frontend__BaseUrl`
+
+`Frontend__BaseUrl` must be an absolute HTTP or HTTPS origin/base path without a query or fragment. When `Email__UseSsl` is `true`, port 465 uses implicit TLS and other ports require STARTTLS. When it is `false`, the connection is unencrypted and should be used only for an explicitly trusted SMTP relay. Non-Development configuration is validated when the API starts.
+
+Example PowerShell setup (placeholder values only):
+
+```powershell
+$env:Email__SmtpHost = "<smtp-host>"
+$env:Email__SmtpPort = "587"
+$env:Email__Username = "<smtp-username>"
+$env:Email__Password = "<smtp-password-from-secret-manager>"
+$env:Email__FromAddress = "<verified-sender-address>"
+$env:Email__FromName = "RentFlow AI"
+$env:Email__UseSsl = "true"
+$env:Frontend__BaseUrl = "https://<rentflow-web-host>"
+```
+
+Never commit SMTP credentials, provider app passwords, API keys, or personal email passwords. Supply secrets through the deployment platform's secret manager (or .NET user-secrets for local non-Development testing), and restrict the SMTP credential to the approved sender where the provider supports it.
+
+In Development, the API does not contact SMTP and returns `developmentResetLink` for local testing. Eligible accounts receive a usable link; other valid requests receive the same field with an opaque non-usable link to preserve response uniformity. Outside Development, eligible accounts are emailed at their stored address and `developmentResetLink` is always absent. SMTP failures are recorded as a safe server-side error without the recipient, token, reset URL, credentials, or provider message; the anonymous caller still receives the generic success response.
 
 ## Endpoints
 
@@ -52,6 +84,40 @@ Public. Accepts `email` and `password`. A successful request returns the same sa
 
 Requires `Authorization: Bearer <accessToken>`. The user is identified from the signed JWT `sub` claim; this endpoint never accepts a user ID in the route or query string. It returns `id`, `fullName`, `email`, `phoneNumber`, and `role` for the active user.
 
+### `PUT /api/auth/change-password`
+
+Requires authentication. Accepts `currentPassword`, `newPassword`, and `newPasswordConfirmation`; it never accepts a user ID or role. A successful change updates the password hash, increments the user's token version, creates the mandatory `account.password_changed` notification, and returns `message`, a replacement `accessToken`, and `expiresAt`. Every token issued before the change is rejected on its next authenticated request, including tokens from other sessions.
+
+### `POST /api/auth/forgot-password`
+
+Public and rate-limited by client IP. Accepts `email`. Every validly formatted request returns HTTP 200 with the generic message `If an account matches that email, password reset instructions will be sent.` regardless of account existence, activation state, role, or SMTP delivery outcome. Eligible accounts receive a cryptographically random 256-bit reset token; only its SHA-256 digest is stored. Issuing a new token consumes prior outstanding tokens for that account.
+
+In Development only, the response also contains `developmentResetLink` for local testing. Existing eligible accounts receive a usable link; all other valid requests receive the same field and an opaque non-usable link to avoid enumeration through the forgot-password response. Non-Development responses omit this field completely and send `/reset-password#token=<raw-token>` using the configured `Frontend__BaseUrl`. The email states that the link expires after the configured token lifetime (45 minutes by default) and can be ignored when the recipient did not request it.
+
+### `POST /api/auth/reset-password`
+
+Public and separately rate-limited by client IP. Accepts `token`, `newPassword`, and `newPasswordConfirmation`. The token must exist, be unexpired, unconsumed, and belong to an active account with an established password. The password uses the existing password policy and must match its confirmation.
+
+A successful reset atomically replaces the password hash, increments `TokenVersion`, consumes all outstanding reset tokens for the account, and creates exactly one mandatory `account.password_reset` notification titled `Password reset`. It returns only `Your password was reset successfully.` and does not create a login session or access token. Invalid, expired, and reused tokens share the same safe HTTP 400 response.
+
+### Profile endpoints
+
+- `PUT /api/auth/profile` updates the authenticated user's name and phone number.
+- `POST /api/auth/profile-image` uploads a validated JPEG, PNG, or WEBP image of at most 5 MB.
+- `GET /api/auth/profile-image` returns only the authenticated user's image with private, no-store caching.
+
+All ownership comes from the validated JWT subject.
+
+### Notification preferences
+
+`GET` and `PUT /api/notification-preferences` operate only on the authenticated user. Viewing and rental-application preferences suppress only optional events created after the preference is disabled; existing notifications remain stored. Account and security notifications are mandatory, cannot be disabled by the client or API, and bypass optional delivery preferences.
+
+### Support requests
+
+Authenticated users create tickets with `POST /api/support-tickets` and retrieve only their own tickets with `GET /api/support-tickets/mine`. Ticket ownership is derived from the JWT and is never accepted from the request body.
+
+The Admin queue under `/api/admin/support-tickets` uses the `ActiveAdmin` policy. Admins may list and filter tickets, view details, and perform only the forward status transitions `Open -> InProgress`, `Open -> Resolved`, and `InProgress -> Resolved`. Admin responses expose only the ticket fields and limited requester identity required by the management UI.
+
 ## JWT claims
 
 Access tokens include:
@@ -59,9 +125,10 @@ Access tokens include:
 - `sub`: application user ID (`Guid`)
 - `role`: one allow-listed role string
 - `email`: the user's safe email identity context for clients
+- `token_version`: the user's current session-generation number
 - `jti`: unique token ID
 
-Tokens are signed with HMAC SHA-256 and validated for signature, issuer, audience, and lifetime. The signing key is not included in any response or log.
+Tokens are signed with HMAC SHA-256 and validated for signature, issuer, audience, and lifetime. Token validation also loads the current user and rejects deleted or inactive accounts, stored-role mismatches, and stale token versions. The signing key is not included in any response or log.
 
 ## Using authorization in backend components
 

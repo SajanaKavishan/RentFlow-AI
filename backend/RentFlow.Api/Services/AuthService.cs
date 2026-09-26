@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.Auth;
 using RentFlow.Api.Models;
@@ -11,8 +12,19 @@ public sealed class AuthService(
     ApplicationDbContext dbContext,
     IPasswordHasher<ApplicationUser> passwordHasher,
     IJwtTokenService jwtTokenService,
-    TimeProvider timeProvider) : IAuthService
+    IFileStorageService fileStorageService,
+    TimeProvider timeProvider,
+    ILogger<AuthService> logger) : IAuthService
 {
+    private const long MaximumProfileImageBytes = 5 * 1024 * 1024;
+    private static readonly IReadOnlyDictionary<string, string> AllowedProfileImageTypes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["image/jpeg"] = "jpg",
+            ["image/png"] = "png",
+            ["image/webp"] = "webp"
+        };
+
     public async Task<AuthResponseDto> RegisterAsync(
         RegisterRequestDto request,
         CancellationToken cancellationToken = default)
@@ -24,10 +36,10 @@ public sealed class AuthService(
                 "Public registration is limited to Tenant and Landlord roles.");
         }
 
-        var passwordErrors = PasswordPolicy.Validate(request.Password);
-        if (passwordErrors.Count > 0)
+        var validationErrors = RegistrationInputValidator.Validate(request);
+        if (validationErrors.Count > 0)
         {
-            throw AuthServiceException.Validation(string.Join(' ', passwordErrors));
+            throw AuthServiceException.Validation(string.Join(' ', validationErrors));
         }
 
         var normalizedEmail = NormalizeEmail(request.Email);
@@ -72,18 +84,21 @@ public sealed class AuthService(
         CancellationToken cancellationToken = default)
     {
         var normalizedEmail = NormalizeEmail(request.Email);
-        var user = await dbContext.Users.SingleOrDefaultAsync(
+        var user = await dbContext.Users
+            .Include(candidate => candidate.ProfileImage)
+            .SingleOrDefaultAsync(
             candidate => candidate.NormalizedEmail == normalizedEmail,
             cancellationToken);
 
-        if (user is null || !user.IsActive)
+        var passwordHash = user?.PasswordHash;
+        if (user is null || !user.IsActive || string.IsNullOrEmpty(passwordHash))
         {
             throw AuthServiceException.InvalidCredentials();
         }
 
         var verification = passwordHasher.VerifyHashedPassword(
             user,
-            user.PasswordHash,
+            passwordHash,
             request.Password);
         if (verification == PasswordVerificationResult.Failed)
         {
@@ -100,6 +115,77 @@ public sealed class AuthService(
         return CreateAuthResponse(user);
     }
 
+    public async Task<ChangePasswordResponseDto?> ChangePasswordAsync(
+        Guid userId,
+        ChangePasswordRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var validationResults = new List<ValidationResult>();
+        if (!Validator.TryValidateObject(
+                request,
+                new ValidationContext(request),
+                validationResults,
+                validateAllProperties: true))
+        {
+            throw AuthServiceException.Validation(string.Join(' ', validationResults
+                .Select(result => result.ErrorMessage)
+                .Where(message => !string.IsNullOrWhiteSpace(message))));
+        }
+
+        var user = await dbContext.Users.SingleOrDefaultAsync(
+            candidate => candidate.Id == userId && candidate.IsActive,
+            cancellationToken);
+        if (user is null)
+        {
+            return null;
+        }
+
+        var passwordHash = user.PasswordHash;
+        if (string.IsNullOrEmpty(passwordHash)
+            || passwordHasher.VerifyHashedPassword(
+                user,
+                passwordHash,
+                request.CurrentPassword) == PasswordVerificationResult.Failed)
+        {
+            throw AuthServiceException.IncorrectCurrentPassword();
+        }
+
+        var passwordErrors = PasswordPolicy.Validate(request.NewPassword).ToList();
+        if (!string.Equals(
+                request.NewPassword,
+                request.NewPasswordConfirmation,
+                StringComparison.Ordinal))
+        {
+            passwordErrors.Add("New password and confirmation must match.");
+        }
+        if (passwordHasher.VerifyHashedPassword(
+                user,
+                passwordHash,
+                request.NewPassword) != PasswordVerificationResult.Failed)
+        {
+            passwordErrors.Add("New password must be different from the current password.");
+        }
+        if (passwordErrors.Count > 0)
+        {
+            throw AuthServiceException.Validation(string.Join(' ', passwordErrors));
+        }
+
+        var changedAt = timeProvider.GetUtcNow();
+        user.PasswordHash = passwordHasher.HashPassword(user, request.NewPassword);
+        user.TokenVersion = checked(user.TokenVersion + 1);
+        user.UpdatedAt = changedAt;
+        await NotificationDeliveryPolicy.QueueAsync(
+            dbContext,
+            NotificationEventFactory.ForPasswordChanged(user, changedAt),
+            cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        var token = jwtTokenService.CreateToken(user);
+        return new ChangePasswordResponseDto(
+            "Your password was changed successfully.",
+            token.Value,
+            token.ExpiresAt);
+    }
+
     public async Task<UserProfileDto?> GetUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
@@ -112,8 +198,120 @@ public sealed class AuthService(
                 user.FullName,
                 user.Email,
                 user.PhoneNumber,
-                user.Role))
+                user.Role,
+                user.ProfileImage != null))
             .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<UserProfileDto?> UpdateProfileAsync(
+        Guid userId,
+        UpdateProfileRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var validationResults = new List<ValidationResult>();
+        if (!Validator.TryValidateObject(request, new ValidationContext(request), validationResults, true))
+        {
+            throw AuthServiceException.Validation(string.Join(' ', validationResults
+                .Select(result => result.ErrorMessage)
+                .Where(message => !string.IsNullOrWhiteSpace(message))));
+        }
+
+        var user = await dbContext.Users
+            .Include(candidate => candidate.ProfileImage)
+            .SingleOrDefaultAsync(candidate => candidate.Id == userId && candidate.IsActive, cancellationToken);
+        if (user is null) return null;
+
+        user.FullName = request.FullName.Trim();
+        user.PhoneNumber = request.PhoneNumber.Trim();
+        user.UpdatedAt = timeProvider.GetUtcNow();
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ToProfile(user);
+    }
+
+    public async Task<UserProfileDto?> UploadProfileImageAsync(
+        Guid userId,
+        byte[] content,
+        string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedType = contentType.Trim().ToLowerInvariant();
+        if (content.Length == 0 || content.LongLength > MaximumProfileImageBytes)
+        {
+            throw AuthServiceException.Validation("The profile image must be between 1 byte and 5 MB.");
+        }
+        if (!AllowedProfileImageTypes.TryGetValue(normalizedType, out var extension)
+            || !HasValidImageSignature(content, normalizedType))
+        {
+            throw AuthServiceException.Validation("Only valid JPEG, PNG, and WEBP profile images are supported.");
+        }
+
+        var user = await dbContext.Users
+            .Include(candidate => candidate.ProfileImage)
+            .SingleOrDefaultAsync(candidate => candidate.Id == userId && candidate.IsActive, cancellationToken);
+        if (user is null) return null;
+
+        var oldStorageKey = user.ProfileImage?.StorageKey;
+        var storageKey = $"users/{userId:N}/profile/{Guid.NewGuid():N}.{extension}";
+        await using var stream = new MemoryStream(content, writable: false);
+        await fileStorageService.UploadAsync(stream, storageKey, normalizedType, cancellationToken);
+
+        try
+        {
+            var now = timeProvider.GetUtcNow();
+            if (user.ProfileImage is null)
+            {
+                user.ProfileImage = new UserProfileImage
+                {
+                    UserId = user.Id,
+                    StorageKey = storageKey,
+                    ContentType = normalizedType,
+                    FileSizeBytes = content.LongLength,
+                    UpdatedAt = now
+                };
+            }
+            else
+            {
+                user.ProfileImage.StorageKey = storageKey;
+                user.ProfileImage.ContentType = normalizedType;
+                user.ProfileImage.FileSizeBytes = content.LongLength;
+                user.ProfileImage.UpdatedAt = now;
+            }
+            user.UpdatedAt = now;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            await TryDeleteImageAsync(storageKey);
+            throw;
+        }
+
+        if (!string.IsNullOrEmpty(oldStorageKey) && oldStorageKey != storageKey)
+        {
+            await TryDeleteImageAsync(oldStorageKey);
+        }
+        return ToProfile(user);
+    }
+
+    public async Task<UserProfileImageContentDto?> GetProfileImageAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var image = await dbContext.UserProfileImages
+            .AsNoTracking()
+            .Where(candidate => candidate.UserId == userId && candidate.User.IsActive)
+            .Select(candidate => new { candidate.StorageKey, candidate.ContentType, candidate.FileSizeBytes })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (image is null) return null;
+
+        var content = await fileStorageService.DownloadBytesAsync(
+            image.StorageKey,
+            MaximumProfileImageBytes,
+            cancellationToken);
+        if (content.LongLength != image.FileSizeBytes)
+        {
+            throw new InvalidOperationException("The stored profile image did not match its metadata.");
+        }
+        return new UserProfileImageContentDto(content, image.ContentType);
     }
 
     public static string NormalizeEmail(string email) =>
@@ -126,5 +324,27 @@ public sealed class AuthService(
     }
 
     private static UserProfileDto ToProfile(ApplicationUser user) =>
-        new(user.Id, user.FullName, user.Email, user.PhoneNumber, user.Role);
+        new(user.Id, user.FullName, user.Email, user.PhoneNumber, user.Role, user.ProfileImage is not null);
+
+    private static bool HasValidImageSignature(byte[] content, string contentType) => contentType switch
+    {
+        "image/jpeg" => content.Length >= 3 && content[0] == 0xFF && content[1] == 0xD8 && content[2] == 0xFF,
+        "image/png" => content.Length >= 8 && content.AsSpan(0, 8).SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }),
+        "image/webp" => content.Length >= 12
+            && content.AsSpan(0, 4).SequenceEqual("RIFF"u8)
+            && content.AsSpan(8, 4).SequenceEqual("WEBP"u8),
+        _ => false
+    };
+
+    private async Task TryDeleteImageAsync(string storageKey)
+    {
+        try
+        {
+            await fileStorageService.DeleteAsync(storageKey);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Unable to remove replaced profile image object {StorageKey}.", storageKey);
+        }
+    }
 }

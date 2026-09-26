@@ -26,6 +26,7 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
   ApiClient? _ownedApiClient;
   late final MaintenanceApiService _apiService;
   MaintenanceRequest? _request;
+  List<MaintenanceRequest> _assignedWork = const [];
 
   bool _isStartingWork = false;
   bool _isCompletingWork = false;
@@ -49,14 +50,17 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
     super.dispose();
   }
 
+  MaintenanceRequest? get _activeRequest =>
+      _request ?? (_assignedWork.isNotEmpty ? _assignedWork.first : null);
+
   bool get _hasActionableRequest =>
-      _request != null ||
+      _activeRequest != null ||
       (widget.requestId != null && widget.requestId!.trim().isNotEmpty);
 
-  bool get _canStartWork => _request?.status == MaintenanceRequestStatus.approved;
+  bool get _canStartWork => _activeRequest?.status == MaintenanceRequestStatus.approved;
 
   bool get _canCompleteWork =>
-      _request?.status == MaintenanceRequestStatus.inProgress;
+      _activeRequest?.status == MaintenanceRequestStatus.inProgress;
 
   Future<MaintenanceRequest?> _loadRequest() async {
     if (_request != null) {
@@ -65,7 +69,15 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
 
     final id = widget.requestId?.trim();
     if (id == null || id.isEmpty) {
-      return null;
+      final technicianId = _resolveTechnicianId();
+      if (technicianId == null) {
+        return null;
+      }
+      final assignedWork = await _apiService.getAssignedWork(technicianId: technicianId);
+      if (mounted) {
+        setState(() => _assignedWork = assignedWork);
+      }
+      return assignedWork.isEmpty ? null : assignedWork.first;
     }
 
     final loaded = await _apiService.getMaintenanceRequestById(id);
@@ -73,6 +85,14 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
       setState(() => _request = loaded);
     }
     return loaded;
+  }
+
+  String? _resolveTechnicianId() {
+    final request = widget.request;
+    if (request != null && request.technicianId != null) {
+      return request.technicianId;
+    }
+    return null;
   }
 
   Future<void> _startWork(MaintenanceRequest request) async {
@@ -200,7 +220,8 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
           }
 
           final request = _request ?? snapshot.data;
-          if (request == null || !_hasActionableRequest) {
+          final hasAssignedWork = _assignedWork.isNotEmpty || (request != null && _hasActionableRequest);
+          if (!hasAssignedWork) {
             return AuthenticatedPage(
               child: SharedState(
                 title: 'No assigned work found',
@@ -211,6 +232,7 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
             );
           }
 
+          final activeRequest = request ?? _assignedWork.first;
           return AuthenticatedPage(
             maxWidth: 620,
             child: Column(
@@ -224,19 +246,19 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              request.title,
+                              activeRequest.title,
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                           ),
                           StatusChip(
-                            label: _statusLabel(request.status),
-                            tone: _statusTone(request.status),
+                            label: _statusLabel(activeRequest.status),
+                            tone: _statusTone(activeRequest.status),
                           ),
                         ],
                       ),
                       const SizedBox(height: AppSpacing.md),
                       Text(
-                        request.description,
+                        activeRequest.description,
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
                     ],
@@ -248,18 +270,18 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                 AppCard(
                   child: Column(
                     children: [
-                      _InfoRow(label: 'Property', value: request.propertyId),
+                      _InfoRow(label: 'Property', value: activeRequest.propertyId),
                       const Divider(height: AppSpacing.lg),
-                      _InfoRow(label: 'Tenant', value: request.tenantId),
+                      _InfoRow(label: 'Tenant', value: activeRequest.tenantId),
                       const Divider(height: AppSpacing.lg),
                       _InfoRow(
                         label: 'Priority',
-                        value: _capitalise(request.priority.name),
+                        value: _capitalise(activeRequest.priority.name),
                       ),
                       const Divider(height: AppSpacing.lg),
                       _InfoRow(
                         label: 'Category',
-                        value: _capitalise(request.category.name),
+                        value: _capitalise(activeRequest.category.name),
                       ),
                     ],
                   ),
@@ -272,7 +294,7 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                 if (_canStartWork) ...[
                   FilledButton.icon(
                     key: const ValueKey('start-maintenance-work'),
-                    onPressed: _isStartingWork || _isCompletingWork ? null : () => _startWork(request),
+                    onPressed: _isStartingWork || _isCompletingWork ? null : () => _startWork(activeRequest),
                     icon: _isStartingWork
                         ? const _ButtonProgress()
                         : const Icon(Icons.play_arrow_outlined),
@@ -281,7 +303,7 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                 ] else if (_canCompleteWork) ...[
                   FilledButton.icon(
                     key: const ValueKey('complete-maintenance-work'),
-                    onPressed: _isStartingWork || _isCompletingWork ? null : () => _completeWork(request),
+                    onPressed: _isStartingWork || _isCompletingWork ? null : () => _completeWork(activeRequest),
                     icon: _isCompletingWork
                         ? const _ButtonProgress()
                         : const Icon(Icons.check_circle_outline),
@@ -291,7 +313,7 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                   AppCard(
                     color: AppPalette.softCream,
                     child: Text(
-                      'This request is currently ${_statusLabel(request.status).toLowerCase()} and is waiting for the next maintenance stage.',
+                      'This request is currently ${_statusLabel(activeRequest.status).toLowerCase()} and is waiting for the next maintenance stage.',
                     ),
                   ),
                 ],

@@ -7,4 +7,5 @@ public sealed record UserProfileDto(
     string FullName,
     string Email,
     string PhoneNumber,
-    UserRole Role);
+    UserRole Role,
+    bool HasProfileImage);

@@ -144,88 +144,17 @@ describe('Landlord rental applications', () => {
     expect(within(review).getByRole('button', { name: 'Open document' })).toBeInTheDocument()
   })
 
-  it('presents AwaitingHumanReview findings separately from landlord controls', async () => {
-    const workflow = {
-      id: '55555555-5555-5555-5555-555555555555',
-      applicationId: '33333333-3333-3333-3333-333333333333',
-      status: 2,
-      currentStep: 4,
-      completenessScore: 75,
-      recommendation: 'Manual review required',
-      requiresHumanApproval: true,
-      createdAt: '2026-09-12T08:00:00Z',
-      updatedAt: '2026-09-12T08:04:00Z',
-      steps: [],
-      summary: {
-        applicationData: {
-          missingFields: ['Occupation history'],
-          warnings: ['Move-in date is close.'],
-        },
-        documents: {
-          missingDocumentTypes: ['IdentityDocument'],
-          warnings: ['Income proof needs confirmation.'],
-        },
-        deterministicRules: {
-          passedRules: ['Applicant income was provided.'],
-          failedRules: ['Identity document is required.'],
-          warnings: [],
-        },
-        agenticReview: {
-          recommendation: 'Review documents',
-          summary: 'The supplied income evidence requires a human check.',
-          keyFindings: ['Income evidence was detected.'],
-          warnings: ['Do not rely on extracted values without opening the source document.'],
-          requiresHumanApproval: true,
-          agentVersion: '1.0',
-          supportingDocumentVerification: [
-            {
-              documentId: '44444444-4444-4444-4444-444444444444',
-              documentType: 'IncomeProof',
-              readable: true,
-              detectedDocumentCategory: 'Payslip',
-              extractedFacts: { applicantName: 'API Applicant', incomeAmount: 6500 },
-              warnings: ['Employer name could not be confirmed.'],
-              confidenceLabel: 'Medium',
-              extractionMethod: 'Text extraction',
-              requiresManualReview: true,
-            },
-          ],
-          crossDocumentConsistency: {
-            matchedFacts: [{ comparison: 'Name', message: 'Applicant name matched.' }],
-            mismatches: [],
-            warnings: [],
-            requiresManualReview: true,
-          },
-        },
-      },
-    }
-    mockApplicationApi([application()], { validationRuns: [workflow] })
-
+  it('opens AI Validation on the property-scoped full report route', async () => {
+    mockApplicationApi([application()])
     renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: 'AI Validation' }))
-
-    const aiReview = await screen.findByRole('region', {
-      name: 'Application validation',
+    const link = await screen.findByRole('link', {
+      name: `AI Validation for application ${application().id}`,
     })
-    expect(aiReview).toHaveFocus()
-    expect(
-      await within(aiReview).findByText('Awaiting human review'),
-    ).toBeInTheDocument()
-    expect(within(aiReview).getByText('Human decision required.')).toBeInTheDocument()
-    expect(within(aiReview).getByText('IdentityDocument')).toBeInTheDocument()
-    expect(within(aiReview).getByText('Applicant income was provided.')).toBeInTheDocument()
-    expect(within(aiReview).getByText('Identity document is required.')).toBeInTheDocument()
-    expect(within(aiReview).getByText('Employer name could not be confirmed.')).toBeInTheDocument()
-    expect(within(aiReview).getByText('Manual review: Required')).toBeInTheDocument()
-    expect(
-      within(aiReview).getByText(
-        'This application changed after this validation run. Run validation again before relying on these findings.',
-      ),
-    ).toBeInTheDocument()
-
-    const decision = screen.getByRole('region', { name: 'Landlord decision' })
-    expect(within(decision).getByRole('button', { name: 'Approve' })).toBeInTheDocument()
-    expect(within(decision).getByRole('button', { name: 'Reject' })).toBeInTheDocument()
+    expect(link).toHaveAttribute(
+      'href',
+      `/properties/${propertyId}/rental-applications/${application().id}/validation`,
+    )
+    expect(screen.queryByRole('region', { name: 'Application validation' })).not.toBeInTheDocument()
   })
 
   it('uses an AI Review heading only on the AI Review route', async () => {
@@ -246,29 +175,19 @@ describe('Landlord rental applications', () => {
     expect(screen.getByText('Track tenant applications, review documents and validation findings, and make the final landlord decision.')).toBeInTheDocument()
   })
 
-  it('keeps Details and AI Validation expansion state and targets independent', async () => {
+  it('keeps Details inline while AI Validation remains a dedicated navigation target', async () => {
     mockApplicationApi([application()])
     renderPage()
     const details = await screen.findByRole('button', { name: 'Details' })
-    const validation = screen.getByRole('button', { name: 'AI Validation' })
+    const validation = screen.getByRole('link', { name: `AI Validation for application ${application().id}` })
 
     expect(details).toHaveAttribute('aria-expanded', 'false')
-    expect(validation).toHaveAttribute('aria-expanded', 'false')
     expect(details).toHaveAttribute('aria-controls', `application-details-${application().id}`)
-    expect(validation).toHaveAttribute('aria-controls', `application-validation-${application().id}`)
+    expect(validation).toHaveAttribute('href', `/properties/${propertyId}/rental-applications/${application().id}/validation`)
 
     await userEvent.click(details)
     expect(details).toHaveAttribute('aria-expanded', 'true')
-    expect(validation).toHaveAttribute('aria-expanded', 'false')
     expect(document.getElementById(details.getAttribute('aria-controls'))).toBeInTheDocument()
-
-    await userEvent.click(validation)
-    expect(details).toHaveAttribute('aria-expanded', 'false')
-    expect(validation).toHaveAttribute('aria-expanded', 'true')
-    expect(document.getElementById(validation.getAttribute('aria-controls'))).toBeInTheDocument()
-
-    await userEvent.click(validation)
-    expect(validation).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('shows retryable page errors and a genuine empty state', async () => {

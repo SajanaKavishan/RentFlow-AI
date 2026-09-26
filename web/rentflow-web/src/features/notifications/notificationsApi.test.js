@@ -3,7 +3,7 @@ import { tokenStorage } from '../../core/auth/tokenStorage.js'
 import { getNotifications, getUnreadCount, markNotificationRead } from './notificationsApi.js'
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
-const item = { id: '11111111-1111-1111-1111-111111111111', title: 'Viewing confirmed', message: 'Your viewing was confirmed.', createdAt: '2026-09-20T10:00:00Z', isRead: false }
+const item = { id: '11111111-1111-1111-1111-111111111111', eventType: 'viewing.approved', relatedResourceType: 'ViewingRequest', relatedResourceId: '22222222-2222-2222-2222-222222222222', title: 'Viewing confirmed', message: 'Your viewing was confirmed.', createdAt: '2026-09-20T10:00:00Z', isRead: false }
 const page = { items: [item], pagination: { page: 2, pageSize: 20, totalCount: 21, totalPages: 2, hasNextPage: false, hasPreviousPage: true } }
 
 beforeEach(() => { tokenStorage.setToken('session-token'); vi.stubGlobal('fetch', vi.fn()) })

@@ -47,6 +47,34 @@ public sealed class NotificationsTests
         Assert.Equal(HttpStatusCode.NotFound, foreignRead.StatusCode);
     }
 
+    [Theory]
+    [InlineData(UserRole.Tenant)]
+    [InlineData(UserRole.Landlord)]
+    [InlineData(UserRole.MaintenanceTechnician)]
+    [InlineData(UserRole.Admin)]
+    public async Task RecipientScope_IsEnforcedForEveryAuthenticatedRole(UserRole role)
+    {
+        using var factory = new AuthApiFactory();
+        var owned = await SeedNotificationAsync(factory, UserA, $"{role} owned");
+        var foreign = await SeedNotificationAsync(factory, UserB, $"{role} foreign");
+        using var client = AuthorizedClient(factory, UserA, role);
+
+        var page = await client.GetFromJsonAsync<NotificationPageResponseDto>(
+            "/api/notifications?pageSize=100");
+        var count = await client.GetFromJsonAsync<UnreadNotificationCountResponseDto>(
+            "/api/notifications/unread-count");
+        var ownedRead = await client.PatchAsync($"/api/notifications/{owned.Id}/read", null);
+        var foreignRead = await client.PatchAsync($"/api/notifications/{foreign.Id}/read", null);
+
+        Assert.NotNull(page);
+        Assert.Single(page!.Items);
+        Assert.Equal(owned.Id, page.Items[0].Id);
+        Assert.NotNull(count);
+        Assert.Equal(1, count!.UnreadCount);
+        Assert.Equal(HttpStatusCode.OK, ownedRead.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, foreignRead.StatusCode);
+    }
+
     [Fact]
     public async Task Notifications_AreNewestFirstAndPaginated()
     {
@@ -125,15 +153,19 @@ public sealed class NotificationsTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    private static HttpClient AuthorizedClient(AuthApiFactory factory, Guid userId)
+    private static HttpClient AuthorizedClient(
+        AuthApiFactory factory,
+        Guid userId,
+        UserRole role = UserRole.Tenant)
     {
+        factory.EnsureActiveUser(userId, role);
         var client = factory.CreateHttpsClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer", CreateToken(userId));
+            "Bearer", CreateToken(userId, role));
         return client;
     }
 
-    private static string CreateToken(Guid userId)
+    private static string CreateToken(Guid userId, UserRole role)
     {
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
@@ -142,7 +174,8 @@ public sealed class NotificationsTests
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
-            new Claim("role", UserRole.Tenant.ToString())
+            new Claim("role", role.ToString()),
+            new Claim("token_version", "0")
         };
         var token = new JwtSecurityToken(
             issuer: "RentFlow.Api.Tests",

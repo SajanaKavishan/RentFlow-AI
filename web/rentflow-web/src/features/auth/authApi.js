@@ -29,3 +29,75 @@ export async function getCurrentUser() {
     errorMessage: 'Your session is no longer valid.',
   }))
 }
+
+export async function updateProfile(details) {
+  return parseCurrentUser(await apiRequest('/api/auth/profile', {
+    method: 'PUT', body: JSON.stringify(details),
+    errorMessage: 'Your profile could not be updated.',
+  }))
+}
+
+function parseForgotPasswordResponse(response) {
+  if (!response || typeof response.message !== 'string'
+    || (import.meta.env.DEV && response.developmentResetLink !== undefined
+      && typeof response.developmentResetLink !== 'string')) {
+    throw new TypeError('The server returned an invalid password-reset response.')
+  }
+  return import.meta.env.DEV
+    ? response
+    : { message: response.message }
+}
+
+export async function requestPasswordReset(details) {
+  return parseForgotPasswordResponse(await apiRequest('/api/auth/forgot-password', {
+    method: 'POST', body: JSON.stringify(details), authenticated: false,
+    handleUnauthorized: false,
+    errorMessage: 'Password reset instructions could not be created.',
+    networkErrorMessage: 'Unable to connect. Please try again.',
+  }))
+}
+
+export async function resetPassword(details) {
+  const response = await apiRequest('/api/auth/reset-password', {
+    method: 'POST', body: JSON.stringify(details), authenticated: false,
+    handleUnauthorized: false,
+    errorMessage: 'Password reset could not be completed.',
+    networkErrorMessage: 'Unable to connect. Please try again.',
+  })
+  if (!response || typeof response.message !== 'string') {
+    throw new TypeError('The server returned an invalid password-reset response.')
+  }
+  return response
+}
+
+function parseChangePasswordResponse(response) {
+  if (!response || typeof response.accessToken !== 'string' || !response.accessToken.trim()
+    || typeof response.message !== 'string' || typeof response.expiresAt !== 'string') {
+    throw new TypeError('The server returned an invalid password-change response.')
+  }
+  return response
+}
+
+export async function changePassword(details) {
+  return parseChangePasswordResponse(await apiRequest('/api/auth/change-password', {
+    method: 'PUT', body: JSON.stringify(details),
+    errorMessage: 'Your password could not be changed.',
+  }))
+}
+
+export async function uploadProfileImage(file) {
+  const body = new FormData()
+  body.append('file', file)
+  return parseCurrentUser(await apiRequest('/api/auth/profile-image', {
+    method: 'POST', body,
+    errorMessage: 'Your profile image could not be uploaded.',
+  }))
+}
+
+export async function getProfileImage() {
+  const response = await apiRequest('/api/auth/profile-image', {
+    parse: 'response',
+    errorMessage: 'Your profile image could not be loaded.',
+  })
+  return response.blob()
+}

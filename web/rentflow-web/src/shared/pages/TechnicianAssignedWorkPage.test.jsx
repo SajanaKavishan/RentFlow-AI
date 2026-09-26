@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -29,17 +29,33 @@ beforeEach(() => {
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals() })
 
 describe('Technician Assigned Work page', () => {
-  it('renders a dedicated, accessible Technician work area without requesting or inventing maintenance records', () => {
+  it('loads the signed-in technician work queue and renders live maintenance items', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{
+        id: 'request-1',
+        title: 'Kitchen sink leak',
+        description: 'Water is leaking under the sink cabinet.',
+        status: 'Assigned',
+        priority: 'High',
+        category: 'Plumbing',
+        propertyId: 'property-1',
+      }],
+    })
+
     renderRoute()
     const main = screen.getByRole('main')
     expect(within(main).getByRole('heading', { name: 'Assigned Work', level: 1 })).toBeInTheDocument()
     expect(within(main).getByText('Technician workspace')).toBeInTheDocument()
-    const workArea = within(main).getByRole('region', { name: 'Your work queue' })
-    expect(workArea).toHaveTextContent('Integration pending')
-    expect(workArea).toHaveTextContent('Work queue integration required')
-    expect(workArea).toHaveTextContent('does not currently provide an authenticated collection')
-    expect(workArea).not.toHaveTextContent(/\b[0-9]+ (jobs|requests|assignments)\b/i)
-    expect(fetch).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(screen.getByText('Kitchen sink leak')).toBeInTheDocument()
+    })
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/maintenance-requests/technician/11111111-1111-1111-1111-111111111111'),
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer technician-token' }) }),
+    )
   })
 
   it('keeps navigation active and exposes only real shared destinations', () => {

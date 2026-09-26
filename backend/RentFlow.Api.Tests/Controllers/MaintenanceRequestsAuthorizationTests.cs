@@ -87,6 +87,43 @@ public sealed class MaintenanceRequestsAuthorizationTests
     }
 
     [Fact]
+    public async Task GetByTechnician_UsesAuthenticatedTechnicianIdentity()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        var technicianId = await AuthenticateAsync(
+            client,
+            "technician-worklist@example.com",
+            UserRole.MaintenanceTechnician,
+            factory);
+
+        var requestId = await SeedRequestAsync(
+            factory,
+            tenantId: Guid.NewGuid(),
+            status: MaintenanceRequestStatus.Assigned,
+            technicianId: technicianId);
+
+        var response = await client.GetAsync($"/api/maintenance-requests/technician/{technicianId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await ParseAsync(response);
+        Assert.Equal(1, body.RootElement.GetArrayLength());
+        Assert.Equal(requestId, body.RootElement[0].GetProperty("id").GetGuid());
+    }
+
+    [Fact]
+    public async Task GetByTechnician_WithAnotherTechnicianId_ReturnsForbidden()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        await AuthenticateAsync(client, "technician-forbidden@example.com", UserRole.MaintenanceTechnician, factory);
+
+        var response = await client.GetAsync($"/api/maintenance-requests/technician/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task SubmitEstimate_WithTenantRole_ReturnsForbidden()
     {
         using var factory = new AuthApiFactory();

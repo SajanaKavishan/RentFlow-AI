@@ -18,6 +18,14 @@ class MaintenanceApiService {
     return _parseList(response.body);
   }
 
+  Future<List<MaintenanceRequest>> getAssignedWork({
+    required String technicianId,
+  }) async {
+    final uri = apiClient.buildUri('/api/maintenance-requests/technician/$technicianId');
+    final response = await _send(() => apiClient.get(uri));
+    return _parseList(response.body);
+  }
+
   Future<MaintenanceRequest> createMaintenanceRequest({
     required String tenantId,
     required String propertyId,

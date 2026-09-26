@@ -25,7 +25,7 @@
 .application-list-card__identity p:last-child { margin: 5px 0 0; color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
 .application-list-card__identity code { color: var(--ink); font-size: .8rem; }
 .application-list-card__top > .application-status { margin-left: auto; }
-.application-list-card__facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 20px 0 0; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--cream-100); }
+.application-list-card__facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 20px 0 0; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--cream-100); }
 .application-list-card__facts div { min-width: 0; }
 .application-list-card__facts dt { color: var(--muted); font-size: .72rem; }
 .application-list-card__facts dd { margin: 4px 0 0; color: var(--ink); font-size: .84rem; font-weight: 700; overflow-wrap: anywhere; }

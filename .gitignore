@@ -494,3 +494,4 @@ pnpm-debug.log*
 # Keep Flutter Android debug source files
 !mobile/rentflow_mobile/android/app/src/debug/
 !mobile/rentflow_mobile/android/app/src/debug/**
+Notepad/

@@ -93,6 +93,21 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         return requests.Select(MapToSummary).ToList();
     }
 
+    public async Task<IReadOnlyList<MaintenanceRequestSummaryDto>> GetByTechnicianAsync(
+        Guid technicianId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateTechnicianId(technicianId);
+
+        var requests = await dbContext.MaintenanceRequests
+            .AsNoTracking()
+            .Where(item => item.TechnicianId == technicianId)
+            .OrderByDescending(item => item.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return requests.Select(MapToSummary).ToList();
+    }
+
     public async Task<IReadOnlyList<MaintenanceStatusHistoryResponseDto>> GetHistoryAsync(
         Guid requestId,
         CancellationToken cancellationToken = default)

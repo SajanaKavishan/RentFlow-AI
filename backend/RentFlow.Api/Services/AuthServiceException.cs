@@ -4,7 +4,8 @@ public enum AuthServiceError
 {
     Validation,
     DuplicateEmail,
-    InvalidCredentials
+    InvalidCredentials,
+    IncorrectCurrentPassword
 }
 
 public sealed class AuthServiceException(AuthServiceError error, string message) : Exception(message)
@@ -19,4 +20,7 @@ public sealed class AuthServiceException(AuthServiceError error, string message)
 
     public static AuthServiceException InvalidCredentials() =>
         new(AuthServiceError.InvalidCredentials, "Invalid email or password.");
+
+    public static AuthServiceException IncorrectCurrentPassword() =>
+        new(AuthServiceError.IncorrectCurrentPassword, "Current password is incorrect.");
 }

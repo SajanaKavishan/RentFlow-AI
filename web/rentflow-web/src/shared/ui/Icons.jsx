@@ -11,6 +11,8 @@ const paths = {
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   close: <path d="M5 5l14 14M19 5 5 19" />,
   arrow: <path d="M5 12h14m-6-6 6 6-6 6" />,
+  arrowLeft: <path d="M19 12H5m6 6-6-6 6-6" />,
+  shield: <><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6z" /><path d="m9 12 2 2 4-4" /></>,
   eye: <><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="2.5" /></>,
   eyeOff: <><path d="M3 3l18 18M9 6.5A11 11 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3.3 3.7M6 8.4A17 17 0 0 0 2 12s4 6 10 6a11 11 0 0 0 4-.8" /></>,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5m0-8h.01" /></>,
