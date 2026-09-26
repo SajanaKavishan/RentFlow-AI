@@ -40,9 +40,9 @@ describe('Technician and Admin dashboards', () => {
     expect(within(main).getByText('Technician workspace')).toBeInTheDocument()
 
     const assignedWork = within(main).getByRole('region', { name: 'Assigned Work' })
-    expect(assignedWork).toHaveTextContent('Integration pending')
-    expect(assignedWork).toHaveTextContent('Maintenance module required')
-    expect(within(assignedWork).getByRole('link', { name: /View integration status/ })).toHaveAttribute('href', '/modules/assigned-work')
+    expect(assignedWork).toHaveTextContent('Connected')
+    expect(assignedWork).toHaveTextContent('Assigned work ready')
+    expect(within(assignedWork).getByRole('link', { name: /View assigned work/ })).toHaveAttribute('href', '/modules/assigned-work')
 
     expect(await within(main).findByRole('heading', { name: '3 unread notifications' })).toBeInTheDocument()
     expect(within(main).getAllByRole('link', { name: /Notifications|Open notifications/ }).every((link) => link.getAttribute('href') === '/notifications')).toBe(true)
@@ -118,7 +118,7 @@ describe('Technician and Admin dashboards', () => {
   })
 
   it.each([
-    ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work', /View integration status/],
+    ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work', /View assigned work/],
     ['Admin', 'AI Workflows', 'AI / System Monitoring Platform', /View integration details/],
   ])('opens the explicit workspace for %s %s', async (role, label, pageTitle, linkName) => {
     renderDashboard(role)
@@ -126,7 +126,11 @@ describe('Technician and Admin dashboards', () => {
     const region = within(main).getByRole('region', { name: label })
     await userEvent.click(within(region).getByRole('link', { name: linkName }))
     expect(screen.getByRole('heading', { name: pageTitle })).toBeInTheDocument()
-    expect(screen.getAllByText('Integration pending').length).toBeGreaterThan(0)
+    if (role === 'MaintenanceTechnician') {
+      expect(screen.queryByText('Integration pending')).not.toBeInTheDocument()
+    } else {
+      expect(screen.getAllByText('Integration pending').length).toBeGreaterThan(0)
+    }
   })
 
   it('opens the working Technician provisioning page from Admin Quick Access', async () => {
