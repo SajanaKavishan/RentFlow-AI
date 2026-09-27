@@ -2,16 +2,18 @@ import Icon from '../../../shared/ui/Icons.jsx'
 import {
   getGoogleMapsEmbedUrl,
   getGoogleMapsSearchUrl,
+  getPropertyMapQuery,
   getPropertyLocation,
 } from '../propertyMap.js'
 
-export default function PropertyLocationMap({ address, city }) {
+export default function PropertyLocationMap({ address, city, latitude = null, longitude = null, googlePlaceId = null }) {
   const location = getPropertyLocation(address, city)
+  const mapQuery = getPropertyMapQuery({ address, city, latitude, longitude })
   const embedUrl = getGoogleMapsEmbedUrl(
     import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    location,
+    mapQuery,
   )
-  const mapsUrl = getGoogleMapsSearchUrl(location)
+  const mapsUrl = getGoogleMapsSearchUrl(mapQuery, googlePlaceId)
 
   return (
     <section className="property-details-section property-location" aria-labelledby="property-location-title">
@@ -35,7 +37,7 @@ export default function PropertyLocationMap({ address, city }) {
       {embedUrl ? (
         <div className="property-location__map">
           <iframe
-            title={`Map showing ${location}`}
+            title={`Map showing ${location || mapQuery}`}
             src={embedUrl}
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"

@@ -19,6 +19,12 @@ public class Property
 
     public string City { get; set; } = string.Empty;
 
+    public double? Latitude { get; set; }
+
+    public double? Longitude { get; set; }
+
+    public string? GooglePlaceId { get; set; }
+
     public decimal MonthlyRent { get; set; }
 
     public int Bedrooms { get; set; }

@@ -57,6 +57,9 @@ public class PropertyService : IPropertyService
             Description = dto.Description.Trim(),
             Address = dto.Address.Trim(),
             City = dto.City.Trim(),
+            Latitude = dto.Latitude,
+            Longitude = dto.Longitude,
+            GooglePlaceId = NormalizeGooglePlaceId(dto.GooglePlaceId),
             MonthlyRent = dto.MonthlyRent,
             Bedrooms = dto.Bedrooms,
             Bathrooms = dto.Bathrooms,
@@ -106,6 +109,9 @@ public class PropertyService : IPropertyService
         property.Description = dto.Description.Trim();
         property.Address = dto.Address.Trim();
         property.City = dto.City.Trim();
+        property.Latitude = dto.Latitude;
+        property.Longitude = dto.Longitude;
+        property.GooglePlaceId = NormalizeGooglePlaceId(dto.GooglePlaceId);
         property.MonthlyRent = dto.MonthlyRent;
         property.Bedrooms = dto.Bedrooms;
         property.Bathrooms = dto.Bathrooms;
@@ -200,6 +206,13 @@ public class PropertyService : IPropertyService
             : areaUnit.Trim().ToLowerInvariant();
     }
 
+    private static string? NormalizeGooglePlaceId(string? googlePlaceId)
+    {
+        return string.IsNullOrWhiteSpace(googlePlaceId)
+            ? null
+            : googlePlaceId.Trim();
+    }
+
     // Convert Property entity to PropertyResponseDto.
     private static PropertyResponseDto MapToResponseDto(
         Property property)
@@ -212,6 +225,9 @@ public class PropertyService : IPropertyService
             Description = property.Description,
             Address = property.Address,
             City = property.City,
+            Latitude = property.Latitude,
+            Longitude = property.Longitude,
+            GooglePlaceId = property.GooglePlaceId,
             MonthlyRent = property.MonthlyRent,
             Bedrooms = property.Bedrooms,
             Bathrooms = property.Bathrooms,

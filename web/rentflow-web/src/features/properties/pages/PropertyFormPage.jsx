@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
+import PropertyLocationPicker from '../components/PropertyLocationPicker.jsx'
 import {
   createProperty,
   getMyProperties,
@@ -24,6 +25,9 @@ const initialForm = {
   description: '',
   address: '',
   city: '',
+  latitude: null,
+  longitude: null,
+  googlePlaceId: null,
   monthlyRent: '',
   bedrooms: '',
   bathrooms: '',
@@ -39,6 +43,9 @@ function propertyToForm(property) {
     description: property.description || '',
     address: property.address || '',
     city: property.city || '',
+    latitude: Number.isFinite(property.latitude) ? property.latitude : null,
+    longitude: Number.isFinite(property.longitude) ? property.longitude : null,
+    googlePlaceId: property.googlePlaceId || null,
     monthlyRent: property.monthlyRent ?? '',
     bedrooms: property.bedrooms ?? '',
     bathrooms: property.bathrooms ?? '',
@@ -55,6 +62,9 @@ function formToRequest(form) {
     description: form.description.trim(),
     address: form.address.trim(),
     city: form.city.trim(),
+    latitude: Number.isFinite(form.latitude) ? form.latitude : null,
+    longitude: Number.isFinite(form.longitude) ? form.longitude : null,
+    googlePlaceId: form.googlePlaceId?.trim() || null,
     monthlyRent: Number(form.monthlyRent),
     bedrooms: Number(form.bedrooms),
     bathrooms: Number(form.bathrooms),
@@ -76,6 +86,9 @@ function formSnapshot(form) {
     description: form.description.trim(),
     address: form.address.trim(),
     city: form.city.trim(),
+    latitude: Number.isFinite(form.latitude) ? form.latitude : null,
+    longitude: Number.isFinite(form.longitude) ? form.longitude : null,
+    googlePlaceId: form.googlePlaceId?.trim() || null,
     monthlyRent: normalizeNumber(form.monthlyRent),
     bedrooms: normalizeNumber(form.bedrooms),
     bathrooms: normalizeNumber(form.bathrooms),
@@ -89,17 +102,24 @@ function formSnapshot(form) {
   })
 }
 
-function validateStep(step, form) {
+function validateStep(step, form, locationMode) {
   const errors = {}
 
   if (step === 0) {
     for (const [field, label] of [
       ['title', 'Property title'],
       ['description', 'Description'],
-      ['address', 'Address'],
-      ['city', 'City'],
     ]) {
       if (!form[field].trim()) errors[field] = `${label} is required.`
+    }
+
+    if (locationMode === 'manual' || locationMode === 'legacy') {
+      if (!form.address.trim()) errors.address = 'Address is required.'
+      if (!form.city.trim()) errors.city = 'City is required.'
+    } else if (locationMode !== 'confirmed'
+      || !form.address.trim() || !form.city.trim()
+      || !Number.isFinite(form.latitude) || !Number.isFinite(form.longitude)) {
+      errors.location = 'Select a location from the suggestions or enter the address manually.'
     }
   }
 
@@ -137,6 +157,9 @@ export default function PropertyFormPage() {
   const navigate = useNavigate()
   const isEditing = Boolean(propertyId)
   const [form, setForm] = useState(initialForm)
+  const [locationMode, setLocationMode] = useState(
+    () => import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ? 'search' : 'manual',
+  )
   const [files, setFiles] = useState([])
   const [initialSnapshot, setInitialSnapshot] = useState(formSnapshot(initialForm))
   const [ownedPropertyId, setOwnedPropertyId] = useState(null)
@@ -169,6 +192,11 @@ export default function PropertyFormPage() {
 
         const populatedForm = propertyToForm(property)
         setForm(populatedForm)
+        setLocationMode(
+          Number.isFinite(populatedForm.latitude) && Number.isFinite(populatedForm.longitude)
+            ? 'confirmed'
+            : 'legacy',
+        )
         setInitialSnapshot(formSnapshot(populatedForm))
         setOwnedPropertyId(property.id)
         setStatus('ready')
@@ -243,7 +271,7 @@ export default function PropertyFormPage() {
   }
 
   function continueToNextStep() {
-    const errors = validateStep(step, form)
+    const errors = validateStep(step, form, locationMode)
     setFieldErrors(errors)
     if (Object.keys(errors).length > 0) return
     setStep((current) => Math.min(current + 1, STEPS.length - 1))
@@ -252,6 +280,44 @@ export default function PropertyFormPage() {
   function returnToPreviousStep() {
     setFieldErrors({})
     setStep((current) => Math.max(current - 1, 0))
+  }
+
+  function selectGoogleLocation(location) {
+    setForm((current) => ({ ...current, ...location }))
+    setLocationMode('confirmed')
+    setFieldErrors((current) => {
+      const next = { ...current }
+      delete next.location
+      delete next.address
+      delete next.city
+      return next
+    })
+  }
+
+  function useManualLocation() {
+    setForm((current) => ({
+      ...current,
+      latitude: null,
+      longitude: null,
+      googlePlaceId: null,
+    }))
+    setLocationMode('manual')
+    setFieldErrors((current) => {
+      if (!current.location) return current
+      const next = { ...current }
+      delete next.location
+      return next
+    })
+  }
+
+  function searchWithGoogle() {
+    setLocationMode('search')
+    setFieldErrors((current) => {
+      if (!current.location) return current
+      const next = { ...current }
+      delete next.location
+      return next
+    })
   }
 
   function leaveForm() {
@@ -270,7 +336,7 @@ export default function PropertyFormPage() {
     if (isEditing && !isDirty) return
 
     for (const candidateStep of [0, 1]) {
-      const errors = validateStep(candidateStep, form)
+      const errors = validateStep(candidateStep, form, locationMode)
       if (Object.keys(errors).length > 0) {
         setStep(candidateStep)
         setFieldErrors(errors)
@@ -438,29 +504,16 @@ export default function PropertyFormPage() {
                 />
               </PropertyField>
 
-              <PropertyField name="address" label="Address" error={fieldErrors.address} wide>
-                <input
-                  id="address"
-                  name="address"
-                  value={form.address}
-                  onChange={updateField}
-                  placeholder="Enter the property address"
-                  aria-invalid={Boolean(fieldErrors.address)}
-                  aria-describedby={fieldErrors.address ? 'address-error' : undefined}
-                />
-              </PropertyField>
-
-              <PropertyField name="city" label="City" error={fieldErrors.city}>
-                <input
-                  id="city"
-                  name="city"
-                  value={form.city}
-                  onChange={updateField}
-                  placeholder="e.g. Colombo"
-                  aria-invalid={Boolean(fieldErrors.city)}
-                  aria-describedby={fieldErrors.city ? 'city-error' : undefined}
-                />
-              </PropertyField>
+              <PropertyLocationPicker
+                form={form}
+                mode={locationMode}
+                errors={fieldErrors}
+                onFieldChange={updateField}
+                onLocationSelected={selectGoogleLocation}
+                onChangeLocation={searchWithGoogle}
+                onUseManual={useManualLocation}
+                onSearchWithGoogle={searchWithGoogle}
+              />
             </>
           )}
 

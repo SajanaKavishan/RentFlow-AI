@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace RentFlow.Api.DTOs;
 
-public class UpdatePropertyDto
+public class UpdatePropertyDto : IValidatableObject
 {
     [Required]
     [MaxLength(200)]
@@ -19,6 +19,15 @@ public class UpdatePropertyDto
     [Required]
     [MaxLength(100)]
     public string City { get; set; } = string.Empty;
+
+    [Range(-90d, 90d)]
+    public double? Latitude { get; set; }
+
+    [Range(-180d, 180d)]
+    public double? Longitude { get; set; }
+
+    [MaxLength(255)]
+    public string? GooglePlaceId { get; set; }
 
     [Range(0.01, double.MaxValue)]
     public decimal MonthlyRent { get; set; }
@@ -38,4 +47,22 @@ public class UpdatePropertyDto
     public bool IsAvailable { get; set; }
 
     public List<string> Amenities { get; set; } = new();
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (Latitude.HasValue != Longitude.HasValue)
+        {
+            yield return new ValidationResult(
+                "Latitude and longitude must be provided together.",
+                new[] { nameof(Latitude), nameof(Longitude) });
+        }
+
+        if (!string.IsNullOrWhiteSpace(GooglePlaceId) &&
+            (!Latitude.HasValue || !Longitude.HasValue))
+        {
+            yield return new ValidationResult(
+                "A Google place ID requires latitude and longitude.",
+                new[] { nameof(GooglePlaceId) });
+        }
+    }
 }

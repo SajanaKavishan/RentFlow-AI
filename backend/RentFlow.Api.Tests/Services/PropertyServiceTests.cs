@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs;
@@ -25,6 +26,9 @@ public class PropertyServiceTests
             Description = "Modern apartment",
             Address = "Galle Road",
             City = "Colombo",
+            Latitude = 6.927079,
+            Longitude = 79.861244,
+            GooglePlaceId = "  ChIJ-colombo-property  ",
             MonthlyRent = 85000m,
             Bedrooms = 2,
             Bathrooms = 1,
@@ -45,6 +49,9 @@ public class PropertyServiceTests
         Assert.Equal(landlordId, result.LandlordId);
         Assert.Equal("Colombo Apartment", result.Title);
         Assert.Equal("Colombo", result.City);
+        Assert.Equal(6.927079, result.Latitude);
+        Assert.Equal(79.861244, result.Longitude);
+        Assert.Equal("ChIJ-colombo-property", result.GooglePlaceId);
         Assert.Equal(85000m, result.MonthlyRent);
         Assert.Equal(1250m, result.Area);
         Assert.Equal("sqft", result.AreaUnit);
@@ -56,6 +63,9 @@ public class PropertyServiceTests
             .SingleAsync();
 
         Assert.Equal(result.Id, storedProperty.Id);
+        Assert.Equal(result.Latitude, storedProperty.Latitude);
+        Assert.Equal(result.Longitude, storedProperty.Longitude);
+        Assert.Equal(result.GooglePlaceId, storedProperty.GooglePlaceId);
         Assert.Equal(2, storedProperty.Amenities.Count);
     }
 
@@ -79,6 +89,9 @@ public class PropertyServiceTests
         Assert.Equal(property.Id, result.Id);
         Assert.Equal(property.Title, result.Title);
         Assert.Equal(property.City, result.City);
+        Assert.Null(result.Latitude);
+        Assert.Null(result.Longitude);
+        Assert.Null(result.GooglePlaceId);
     }
 
     [Fact]
@@ -121,6 +134,9 @@ public class PropertyServiceTests
             Description = "Updated description",
             Address = "Updated Address",
             City = "Kandy",
+            Latitude = 7.290572,
+            Longitude = 80.633728,
+            GooglePlaceId = "ChIJ-kandy-property",
             MonthlyRent = 95000m,
             Bedrooms = 3,
             Bathrooms = 2,
@@ -142,6 +158,9 @@ public class PropertyServiceTests
         Assert.NotNull(result);
         Assert.Equal("Updated Apartment", result.Title);
         Assert.Equal("Kandy", result.City);
+        Assert.Equal(7.290572, result.Latitude);
+        Assert.Equal(80.633728, result.Longitude);
+        Assert.Equal("ChIJ-kandy-property", result.GooglePlaceId);
         Assert.Equal(95000m, result.MonthlyRent);
         Assert.Equal(3, result.Bedrooms);
         Assert.Equal(2, result.Bathrooms);
@@ -149,6 +168,59 @@ public class PropertyServiceTests
         Assert.Equal("perch", result.AreaUnit);
         Assert.False(result.IsAvailable);
         Assert.Equal(2, result.Amenities.Count);
+    }
+
+    [Theory]
+    [InlineData(-90.01, 79.0)]
+    [InlineData(90.01, 79.0)]
+    [InlineData(7.0, -180.01)]
+    [InlineData(7.0, 180.01)]
+    public void CreateDto_RejectsCoordinatesOutsideSupportedRanges(
+        double latitude,
+        double longitude)
+    {
+        var dto = ValidCreateDto();
+        dto.Latitude = latitude;
+        dto.Longitude = longitude;
+
+        Assert.False(Validate(dto).IsValid);
+    }
+
+    [Fact]
+    public void UpdateDto_RejectsIncompleteCoordinatePair()
+    {
+        var dto = new UpdatePropertyDto
+        {
+            Title = "Updated Apartment",
+            Description = "Updated description",
+            Address = "Updated Address",
+            City = "Kandy",
+            Latitude = 7.290572,
+            Longitude = null,
+            MonthlyRent = 95000m,
+            Bedrooms = 3,
+            Bathrooms = 2,
+            IsAvailable = true
+        };
+
+        var validation = Validate(dto);
+
+        Assert.False(validation.IsValid);
+        Assert.Contains(validation.Results, result =>
+            result.ErrorMessage == "Latitude and longitude must be provided together.");
+    }
+
+    [Fact]
+    public void CreateDto_AcceptsLegacyAddressWithoutLocationMetadata()
+    {
+        var dto = ValidCreateDto();
+
+        var validation = Validate(dto);
+
+        Assert.True(validation.IsValid);
+        Assert.Null(dto.Latitude);
+        Assert.Null(dto.Longitude);
+        Assert.Null(dto.GooglePlaceId);
     }
 
     [Fact]
@@ -316,6 +388,34 @@ public class PropertyServiceTests
                 .Options;
 
         return new ApplicationDbContext(options);
+    }
+
+    private static CreatePropertyDto ValidCreateDto()
+    {
+        return new CreatePropertyDto
+        {
+            Title = "Legacy Property",
+            Description = "A property with a textual location.",
+            Address = "12 Lake Road",
+            City = "Colombo",
+            MonthlyRent = 75000m,
+            Bedrooms = 2,
+            Bathrooms = 1,
+            Area = 900m,
+            AreaUnit = "sqft"
+        };
+    }
+
+    private static (bool IsValid, List<ValidationResult> Results) Validate(object instance)
+    {
+        var results = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(
+            instance,
+            new ValidationContext(instance),
+            results,
+            validateAllProperties: true);
+
+        return (isValid, results);
     }
 
     private static Property AddProperty(

@@ -32,6 +32,25 @@ describe('PropertyLocationMap', () => {
     expect(screen.queryByTitle(/Map showing/)).not.toBeInTheDocument()
   })
 
+  it('prefers saved coordinates for the map and place ID for the external action', () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+
+    render(
+      <PropertyLocationMap
+        address="18 Marine Drive"
+        city="Colombo"
+        latitude={6.927079}
+        longitude={79.861244}
+        googlePlaceId="ChIJ-real-place"
+      />,
+    )
+
+    const frameUrl = new URL(screen.getByTitle('Map showing 18 Marine Drive, Colombo').getAttribute('src'))
+    expect(frameUrl.searchParams.get('q')).toBe('6.927079,79.861244')
+    const actionUrl = new URL(screen.getByRole('link', { name: /Open in Google Maps/ }).getAttribute('href'))
+    expect(actionUrl.searchParams.get('query_place_id')).toBe('ChIJ-real-place')
+  })
+
   it('does not offer fabricated navigation when no location is available', () => {
     vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
 

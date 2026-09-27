@@ -37,7 +37,7 @@ describe('shared React shell', () => {
 
   it('renders a role dashboard and a landlord sidebar with working workflow links', async () => {
     renderApp('Landlord')
-    expect(await screen.findByRole('heading', { name: 'Welcome, Taylor' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Good (morning|afternoon|evening), Taylor/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'RentFlow dashboard' }).querySelector('img')).toHaveAttribute('src', expect.stringContaining('rentflow-wordmark'))
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
     await userEvent.click(within(nav).getByRole('link', { name: 'Viewing Requests' }))
@@ -181,7 +181,7 @@ describe('shared React shell', () => {
 
   it('closes the drawer when a route is selected and keeps logout available', async () => {
     renderApp('Landlord')
-    await screen.findByRole('heading', { name: 'Welcome, Taylor' })
+    await screen.findByRole('heading', { name: /Good (morning|afternoon|evening), Taylor/ })
     await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
     expect(within(nav).queryByRole('link', { name: 'Profile' })).not.toBeInTheDocument()

@@ -11,6 +11,7 @@ import {
   updateProperty,
   uploadPropertyImages,
 } from '../services/propertyApiService.js'
+import { loadGooglePlaces } from '../googleMapsLoader.js'
 
 vi.mock('../../notifications/notificationsApi.js', async (importOriginal) => ({
   ...(await importOriginal()), getUnreadCount: vi.fn().mockResolvedValue(0),
@@ -25,6 +26,10 @@ vi.mock('../services/propertyApiService.js', async (importOriginal) => ({
   uploadPropertyImages: vi.fn(),
 }))
 
+vi.mock('../googleMapsLoader.js', () => ({
+  loadGooglePlaces: vi.fn(),
+}))
+
 const propertyId = '11111111-1111-1111-1111-111111111111'
 const newPropertyId = '77777777-7777-7777-7777-777777777777'
 const property = {
@@ -34,6 +39,9 @@ const property = {
   description: 'A bright apartment near the coast.',
   address: '18 Marine Drive',
   city: 'Colombo',
+  latitude: null,
+  longitude: null,
+  googlePlaceId: null,
   monthlyRent: 185000,
   bedrooms: 3,
   bathrooms: 2,
@@ -41,6 +49,36 @@ const property = {
   areaUnit: 'sqft',
   isAvailable: true,
   amenities: ['Parking', 'Security'],
+}
+
+let autocompleteElement
+
+function configureGoogleAutocomplete() {
+  loadGooglePlaces.mockResolvedValue({
+    PlaceAutocompleteElement: class {
+      constructor() {
+        autocompleteElement = document.createElement('div')
+        return autocompleteElement
+      }
+    },
+  })
+}
+
+async function selectGooglePlace(overrides = {}) {
+  await waitFor(() => expect(autocompleteElement).toBeInTheDocument())
+  const place = {
+    id: 'ChIJ-lake-house',
+    formattedAddress: '25 Lake Road, Kandy, Sri Lanka',
+    addressComponents: [{ longText: 'Kandy', types: ['locality'] }],
+    location: { lat: () => 7.290572, lng: () => 80.633728 },
+    fetchFields: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  }
+  const event = new Event('gmp-select')
+  event.placePrediction = { toPlace: () => place }
+  autocompleteElement.dispatchEvent(event)
+  await waitFor(() => expect(place.fetchFields).toHaveBeenCalled())
+  return place
 }
 
 function renderApp(entry) {
@@ -83,6 +121,9 @@ async function completePropertyDetails() {
 }
 
 beforeEach(() => {
+  vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', '')
+  loadGooglePlaces.mockReset()
+  autocompleteElement = null
   getMyProperties.mockReset().mockResolvedValue([property])
   getPropertyImages.mockReset().mockResolvedValue([])
   createProperty.mockReset().mockResolvedValue({ id: newPropertyId })
@@ -92,6 +133,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.unstubAllEnvs()
 })
 
 describe('property form wizard', () => {
@@ -144,6 +186,9 @@ describe('property form wizard', () => {
       description: 'A quiet lakeside home.',
       address: '25 Lake Road',
       city: 'Kandy',
+      latitude: null,
+      longitude: null,
+      googlePlaceId: null,
       monthlyRent: 95000,
       bedrooms: 2,
       bathrooms: 1,
@@ -203,6 +248,9 @@ describe('property form wizard', () => {
       description: property.description,
       address: property.address,
       city: property.city,
+      latitude: null,
+      longitude: null,
+      googlePlaceId: null,
       monthlyRent: property.monthlyRent,
       bedrooms: property.bedrooms,
       bathrooms: property.bathrooms,
@@ -214,6 +262,134 @@ describe('property form wizard', () => {
     expect(uploadPropertyImages).not.toHaveBeenCalled()
     const updatedMessage = await screen.findByText('Harbour View Residence was updated successfully.')
     expect(updatedMessage.closest('.property-toast')).toHaveClass('property-toast--success')
+  })
+
+  it('requires an actual Google suggestion selection and preserves it across wizard navigation', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    renderApp('/properties/new')
+
+    await userEvent.type(screen.getByLabelText('Property title'), 'Lake House')
+    await userEvent.type(screen.getByLabelText('Description'), 'A quiet lakeside home.')
+    expect(await screen.findByLabelText('Search address, building or place')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByText('Select a location from the suggestions or enter the address manually.')).toBeInTheDocument()
+
+    await selectGooglePlace()
+
+    expect(await screen.findByText('25 Lake Road, Kandy, Sri Lanka')).toBeInTheDocument()
+    const preview = screen.getByTitle('Map preview for 25 Lake Road, Kandy, Sri Lanka')
+    expect(new URL(preview.getAttribute('src')).searchParams.get('q')).toBe('7.290572,80.633728')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByRole('heading', { name: 'Property Details' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByTitle('Map preview for 25 Lake Road, Kandy, Sri Lanka')).toBeInTheDocument()
+    expect(screen.getByText('Kandy')).toBeInTheDocument()
+  })
+
+  it('submits authoritative Google location metadata after a selected place', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    renderApp('/properties/new')
+
+    await userEvent.type(screen.getByLabelText('Property title'), 'Lake House')
+    await userEvent.type(screen.getByLabelText('Description'), 'A quiet lakeside home.')
+    await selectGooglePlace()
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await completePropertyDetails()
+    await userEvent.click(screen.getByRole('button', { name: 'Create Property' }))
+
+    await waitFor(() => expect(createProperty).toHaveBeenCalledWith(expect.objectContaining({
+      address: '25 Lake Road, Kandy, Sri Lanka',
+      city: 'Kandy',
+      latitude: 7.290572,
+      longitude: 80.633728,
+      googlePlaceId: 'ChIJ-lake-house',
+    })))
+  })
+
+  it('clears authoritative metadata when a selected place is replaced by manual entry', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    renderApp('/properties/new')
+
+    await userEvent.type(screen.getByLabelText('Property title'), 'Lake House')
+    await userEvent.type(screen.getByLabelText('Description'), 'A quiet lakeside home.')
+    await selectGooglePlace()
+    await userEvent.click(screen.getByRole('button', { name: 'Enter address manually' }))
+    expect(screen.getByLabelText('Address')).toHaveValue('25 Lake Road, Kandy, Sri Lanka')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await completePropertyDetails()
+    await userEvent.click(screen.getByRole('button', { name: 'Create Property' }))
+
+    await waitFor(() => expect(createProperty).toHaveBeenCalledWith(expect.objectContaining({
+      latitude: null,
+      longitude: null,
+      googlePlaceId: null,
+    })))
+  })
+
+  it('uses the manual fallback without fabricating location metadata when no key is configured', async () => {
+    renderApp('/properties/new')
+
+    expect(screen.getByLabelText('Address')).toBeInTheDocument()
+    expect(screen.getByLabelText('City')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Search address, building or place')).not.toBeInTheDocument()
+    await completeBasicDetails()
+    await completePropertyDetails()
+    await userEvent.click(screen.getByRole('button', { name: 'Create Property' }))
+
+    await waitFor(() => expect(createProperty).toHaveBeenCalledWith(expect.objectContaining({
+      latitude: null,
+      longitude: null,
+      googlePlaceId: null,
+    })))
+  })
+
+  it('offers the manual fallback when the Google Places library is unavailable', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    loadGooglePlaces.mockRejectedValue(new Error('network unavailable'))
+    renderApp('/properties/new')
+
+    expect(await screen.findByText('Google location search is unavailable right now. Enter the address manually to continue.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Enter address manually' }))
+    expect(screen.getByLabelText('Address')).toBeInTheDocument()
+    expect(screen.getByLabelText('City')).toBeInTheDocument()
+  })
+
+  it('shows a stored coordinate location when editing and allows it to be changed', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    getMyProperties.mockResolvedValue([{
+      ...property,
+      latitude: 6.927079,
+      longitude: 79.861244,
+      googlePlaceId: 'ChIJ-harbour-view',
+    }])
+
+    renderApp(`/properties/${propertyId}/edit`)
+
+    expect(await screen.findByTitle(`Map preview for ${property.address}`)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Change location' }))
+    expect(await screen.findByLabelText('Search address, building or place')).toBeInTheDocument()
+    await selectGooglePlace({
+      id: 'ChIJ-new-location',
+      formattedAddress: '1 Temple Street, Kandy, Sri Lanka',
+    })
+    expect(await screen.findByText('1 Temple Street, Kandy, Sri Lanka')).toBeInTheDocument()
+  })
+
+  it('keeps a legacy edit address valid without inventing a map coordinate', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    renderApp(`/properties/${propertyId}/edit`)
+
+    expect(await screen.findByText('Legacy address — exact coordinates have not been saved.')).toBeInTheDocument()
+    expect(screen.queryByTitle(/Map preview/)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByRole('heading', { name: 'Property Details' })).toBeInTheDocument()
   })
 
   it('does not expose a property outside the authenticated owned collection', async () => {

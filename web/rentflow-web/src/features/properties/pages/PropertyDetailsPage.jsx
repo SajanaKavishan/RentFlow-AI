@@ -86,6 +86,9 @@ export default function PropertyDetailsPage() {
         description: property.description,
         address: property.address,
         city: property.city,
+        latitude: property.latitude ?? null,
+        longitude: property.longitude ?? null,
+        googlePlaceId: property.googlePlaceId ?? null,
         monthlyRent: Number(property.monthlyRent),
         bedrooms: Number(property.bedrooms),
         bathrooms: Number(property.bathrooms),
@@ -240,7 +243,13 @@ export default function PropertyDetailsPage() {
             )}
           </section>
 
-          <PropertyLocationMap address={property.address} city={property.city} />
+          <PropertyLocationMap
+            address={property.address}
+            city={property.city}
+            latitude={property.latitude}
+            longitude={property.longitude}
+            googlePlaceId={property.googlePlaceId}
+          />
         </div>
 
         {isOwner && (

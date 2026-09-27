@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getGoogleMapsEmbedUrl,
   getGoogleMapsSearchUrl,
+  getPropertyMapQuery,
   getPropertyLocation,
 } from './propertyMap.js'
 
@@ -35,5 +36,20 @@ describe('property map URLs', () => {
     expect(`${url.origin}${url.pathname}`).toBe('https://www.google.com/maps/search/')
     expect(url.searchParams.get('api')).toBe('1')
     expect(url.searchParams.get('query')).toBe('18 Marine Drive, Colombo')
+  })
+
+  it('prefers stored coordinates and otherwise falls back to address and city', () => {
+    expect(getPropertyMapQuery({
+      address: '18 Marine Drive', city: 'Colombo', latitude: 6.927079, longitude: 79.861244,
+    })).toBe('6.927079,79.861244')
+    expect(getPropertyMapQuery({
+      address: '18 Marine Drive', city: 'Colombo', latitude: null, longitude: null,
+    })).toBe('18 Marine Drive, Colombo')
+  })
+
+  it('adds a real Google place ID to the external Maps action when available', () => {
+    const url = new URL(getGoogleMapsSearchUrl('6.927079,79.861244', 'ChIJ-real-place'))
+    expect(url.searchParams.get('query')).toBe('6.927079,79.861244')
+    expect(url.searchParams.get('query_place_id')).toBe('ChIJ-real-place')
   })
 })

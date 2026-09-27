@@ -369,6 +369,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasMaxLength(100)
                 .IsRequired();
 
+            entity.Property(property => property.Latitude)
+                .IsRequired(false);
+
+            entity.Property(property => property.Longitude)
+                .IsRequired(false);
+
+            entity.Property(property => property.GooglePlaceId)
+                .HasMaxLength(255)
+                .IsRequired(false);
+
             entity.Property(property => property.MonthlyRent)
                 .HasPrecision(18, 2)
                 .IsRequired();
