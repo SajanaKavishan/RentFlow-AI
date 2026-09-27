@@ -6,6 +6,7 @@ import RentalApplicationCard from './RentalApplicationCard.jsx'
 import RentalApplicationStatusBadge from './RentalApplicationStatusBadge.jsx'
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
+const dateTimeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 const incomeFormatter = new Intl.NumberFormat(undefined, {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -13,7 +14,7 @@ const incomeFormatter = new Intl.NumberFormat(undefined, {
 
 function displayDate(value) {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'Date unavailable' : dateFormatter.format(date)
+  return Number.isNaN(date.getTime()) ? 'Date unavailable' : dateTimeFormatter.format(date)
 }
 
 function displayDateOnly(value) {
@@ -39,8 +40,9 @@ export default function RentalApplicationListCard({
     <div className="application-list-card__top">
       <span className="application-list-card__avatar" aria-hidden="true"><Icon name="user" size={22} /></span>
       <div className="application-list-card__identity">
-        <p className="application-list-card__eyebrow">Tenant reference</p>
-        <h2>{application.tenantId}</h2>
+        <p className="application-list-card__eyebrow">Application reference</p>
+        <h2>{application.id}</h2>
+        <p className="application-list-card__tenant">Tenant reference <code>{application.tenantId}</code></p>
         {property
           ? <p>Property <strong>{property.title}</strong><span className="application-list-card__property-location">{[property.address, property.city].filter(Boolean).join(', ')}</span></p>
           : <p>Property reference <code>{application.propertyId}</code></p>}
@@ -70,7 +72,10 @@ export default function RentalApplicationListCard({
           <Icon name="trend" size={17} />AI Validation
         </Link>
       </div>
-      {application.submittedAt && <p className="application-list-card__submitted">Submitted <time dateTime={application.submittedAt}>{displayDate(application.submittedAt)}</time></p>}
+      {(application.submittedAt || application.updatedAt) && <dl className="application-list-card__timeline">
+        {application.submittedAt && <div><dt>Submitted</dt><dd><time dateTime={application.submittedAt}>{displayDate(application.submittedAt)}</time></dd></div>}
+        {application.updatedAt && <div><dt>Updated</dt><dd><time dateTime={application.updatedAt}>{displayDate(application.updatedAt)}</time></dd></div>}
+      </dl>}
     </div>
     {actionError && <p className="application-list-card__error" role="alert">{actionError}</p>}
     {detailsExpanded && <div id={detailsPanelId} className="application-list-card__detail">
