@@ -1,0 +1,15 @@
+.payments-page .shared-page-header { margin-bottom: 28px; }
+.payments-page .shared-card { height: auto; margin-bottom: 18px; }
+.payments-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.payments-heading h2 { margin: 0; }
+.payments-table-wrap { overflow-x: auto; margin-top: 16px; }
+.payments-table { width: 100%; border-collapse: collapse; text-align: left; }
+.payments-table th, .payments-table td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.payments-table th { color: var(--muted); font-size: .78rem; }
+.payments-table td:nth-child(2) { overflow-wrap: anywhere; }
+.payments-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.payments-facts div { min-width: 0; padding: 12px; border-radius: var(--radius-sm); background: var(--olive-50); }
+.payments-facts dt { color: var(--muted); font-size: .78rem; }
+.payments-facts dd { margin: 5px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.payments-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+@media (max-width: 560px) { .payments-facts { grid-template-columns: 1fr; } }

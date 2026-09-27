@@ -24,6 +24,7 @@ import PricingAnalysisPage from './features/pricingAnalysis/pages/PricingAnalysi
 import RentalOffersPage from './features/rentalOffers/pages/RentalOffersPage.jsx'
 import LeaseAgreementsPage from './features/leaseAgreements/pages/LeaseAgreementsPage.jsx'
 import RentSchedulesPage from './features/rentSchedules/pages/RentSchedulesPage.jsx'
+import PaymentsPage from './features/payments/pages/PaymentsPage.jsx'
 import LandingPage from './features/landing/pages/LandingPage.jsx'
 
 import AppShell from './shared/layout/AppShell.jsx'
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="/modules/pricing-lease/offers" element={<RentalOffersPage />} />
           <Route path="/modules/pricing-lease/leases" element={<LeaseAgreementsPage />} />
           <Route path="/modules/pricing-lease/schedules" element={<RentSchedulesPage />} />
+          <Route path="/modules/payments" element={<PaymentsPage />} />
           <Route path="/notifications/viewing-request/:id" element={<NotificationResourcePage resourceType="ViewingRequest" />} />
         </Route>
 

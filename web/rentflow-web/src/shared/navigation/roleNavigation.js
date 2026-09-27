@@ -131,10 +131,9 @@ export const NAV_ITEMS = Object.freeze([
     label: 'Payments',
     path: '/modules/payments',
     roles: [L],
-    available: false,
+    available: true,
     owner: 'Payments',
-    description:
-      'Payment management will be connected when that module is merged.',
+    description: 'Review and manage payments for your rentals.',
   },
 
   {

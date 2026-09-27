@@ -82,6 +82,18 @@ describe('shared React shell', () => {
     expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
   })
 
+  it('opens the existing Payments sidebar route for landlords and blocks tenants', async () => {
+    renderApp('Landlord', '/dashboard')
+    const nav = await screen.findByRole('navigation', { name: 'Primary navigation' })
+    const paymentsLink = within(nav).getByRole('link', { name: 'Payments' })
+    expect(paymentsLink).toHaveAttribute('href', '/modules/payments')
+    await userEvent.click(paymentsLink)
+    expect(await screen.findByRole('heading', { name: 'Payments' })).toBeInTheDocument()
+    cleanup()
+    renderApp('Tenant', '/modules/payments')
+    expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
+  })
+
   it('switches Pricing / Lease sections for landlords and blocks tenants', async () => {
     renderApp('Landlord', '/modules/pricing-lease')
     expect(await screen.findByRole('heading', { name: 'Rental Price Analysis' })).toBeInTheDocument()
