@@ -22,6 +22,7 @@ import PropertyMatchingPage from './features/properties/pages/PropertyMatchingPa
 import ManagePropertiesPage from './features/properties/pages/ManagePropertiesPage.jsx'
 import PricingAnalysisPage from './features/pricingAnalysis/pages/PricingAnalysisPage.jsx'
 import RentalOffersPage from './features/rentalOffers/pages/RentalOffersPage.jsx'
+import LeaseAgreementsPage from './features/leaseAgreements/pages/LeaseAgreementsPage.jsx'
 import LandingPage from './features/landing/pages/LandingPage.jsx'
 
 import AppShell from './shared/layout/AppShell.jsx'
@@ -55,6 +56,7 @@ export default function App() {
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
           <Route path="/modules/pricing-lease" element={<PricingAnalysisPage />} />
           <Route path="/modules/pricing-lease/offers" element={<RentalOffersPage />} />
+          <Route path="/modules/pricing-lease/leases" element={<LeaseAgreementsPage />} />
           <Route path="/notifications/viewing-request/:id" element={<NotificationResourcePage resourceType="ViewingRequest" />} />
         </Route>
 

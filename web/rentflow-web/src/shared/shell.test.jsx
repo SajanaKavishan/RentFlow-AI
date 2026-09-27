@@ -88,9 +88,11 @@ describe('shared React shell', () => {
     const sections = screen.getByRole('navigation', { name: 'Pricing and lease sections' })
     await userEvent.click(within(sections).getByRole('link', { name: 'Rental Offers' }))
     expect(await screen.findByRole('heading', { name: 'Rental Offers' })).toBeInTheDocument()
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Pricing and lease sections' })).getByRole('link', { name: 'Lease Agreements' }))
+    expect(await screen.findByRole('heading', { name: 'Lease Agreements' })).toBeInTheDocument()
     expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Pricing / Lease' })).toHaveAttribute('href', '/modules/pricing-lease')
     cleanup()
-    renderApp('Tenant', '/modules/pricing-lease/offers')
+    renderApp('Tenant', '/modules/pricing-lease/leases')
     expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
   })
 
