@@ -16,6 +16,10 @@ public interface ILeaseAgreementService
         Guid tenantId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<LeaseAgreementResponseDto>> GetByLandlordAsync(
+        Guid landlordId,
+        CancellationToken cancellationToken = default);
+
     Task<LeaseAgreementResponseDto> ActivateAsync(
         Guid leaseId,
         CancellationToken cancellationToken = default);

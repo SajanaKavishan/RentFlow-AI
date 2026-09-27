@@ -151,6 +151,34 @@ public class LeaseAgreementsControllerTests
     }
 
     [Fact]
+    public async Task GetByLandlord_UsesAuthenticatedLandlordId()
+    {
+        var landlordId = Guid.NewGuid();
+        var expectedLeases = new List<LeaseAgreementResponseDto>
+        {
+            CreateLeaseResponse(LeaseAgreementStatus.Active)
+        };
+        var service = new StubLeaseAgreementService
+        {
+            GetByLandlordResult = expectedLeases
+        };
+        var controller = new LeaseAgreementsController(
+            service,
+            new StubCurrentUserService
+            {
+                UserIdValue = landlordId,
+                RoleValue = UserRole.Landlord
+            },
+            new StubPropertyAccessGuard());
+
+        var result = await controller.GetByLandlord(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Same(expectedLeases, ok.Value);
+        Assert.Equal(landlordId, service.LastLandlordId);
+    }
+
+    [Fact]
     public async Task Activate_WhenSuccessful_ReturnsOk()
     {
         var expectedLease = CreateLeaseResponse(
@@ -281,6 +309,8 @@ public class LeaseAgreementsControllerTests
 
         public IReadOnlyList<LeaseAgreementResponseDto>? GetByTenantResult { get; set; }
 
+        public IReadOnlyList<LeaseAgreementResponseDto>? GetByLandlordResult { get; set; }
+
         public LeaseAgreementResponseDto? ActivateResult { get; set; }
 
         public LeaseAgreementResponseDto? TerminateResult { get; set; }
@@ -290,6 +320,8 @@ public class LeaseAgreementsControllerTests
         public LeaseAgreementServiceException? ActivateException { get; set; }
 
         public Guid? LastTenantId { get; private set; }
+
+        public Guid? LastLandlordId { get; private set; }
 
         public Task<LeaseAgreementResponseDto> CreateAsync(
             CreateLeaseAgreementDto dto,
@@ -313,6 +345,15 @@ public class LeaseAgreementsControllerTests
 
             return Task.FromResult(
                 GetByTenantResult ?? Array.Empty<LeaseAgreementResponseDto>());
+        }
+
+        public Task<IReadOnlyList<LeaseAgreementResponseDto>> GetByLandlordAsync(
+            Guid landlordId,
+            CancellationToken cancellationToken = default)
+        {
+            LastLandlordId = landlordId;
+            return Task.FromResult(
+                GetByLandlordResult ?? (IReadOnlyList<LeaseAgreementResponseDto>)[]);
         }
 
         public Task<LeaseAgreementResponseDto> ActivateAsync(

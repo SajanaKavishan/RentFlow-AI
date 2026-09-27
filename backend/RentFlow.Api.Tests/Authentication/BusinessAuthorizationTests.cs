@@ -1066,6 +1066,52 @@ public sealed class BusinessAuthorizationTests
         Status = status
     };
 
+    [Fact]
+    public async Task LeaseAgreement_LandlordList_ContainsOnlyOwnedPropertyLeases()
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+        var owned = CreateLeaseAgreement(ownedProperty.Id, LeaseAgreementStatus.Pending);
+        var other = CreateLeaseAgreement(otherProperty.Id, LeaseAgreementStatus.Active);
+        await SeedAsync(factory, context => context.LeaseAgreements.AddRange(owned, other));
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        using var response = await landlord.GetAsync("/api/lease-agreements/landlord");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var leases = await response.Content.ReadFromJsonAsync<List<LeaseAgreementResponseDto>>();
+        Assert.NotNull(leases);
+        Assert.Equal(owned.Id, Assert.Single(leases).Id);
+        Assert.DoesNotContain(leases, item => item.Id == other.Id);
+    }
+
+    [Fact]
+    public async Task LeaseAgreement_LandlordList_ReturnsEmptyCollectionWhenNoLeases()
+    {
+        using var factory = new AuthApiFactory();
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        using var response = await landlord.GetAsync("/api/lease-agreements/landlord");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty((await response.Content.ReadFromJsonAsync<List<LeaseAgreementResponseDto>>())!);
+    }
+
+    [Fact]
+    public async Task LeaseAgreement_LandlordList_RejectsAnonymousAndTenant()
+    {
+        using var factory = new AuthApiFactory();
+        using var anonymous = factory.CreateHttpsClient();
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+
+        using var anonymousResponse = await anonymous.GetAsync("/api/lease-agreements/landlord");
+        using var tenantResponse = await tenant.GetAsync("/api/lease-agreements/landlord");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, tenantResponse.StatusCode);
+    }
+
     private static Task<HttpResponseMessage> CallLeaseActionAsync(
         HttpClient client,
         string action,
