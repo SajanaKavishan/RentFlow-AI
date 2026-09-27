@@ -73,7 +73,8 @@ describe('tenant dashboard', () => {
     renderApp()
     expect(await screen.findByText('No applications yet.')).toBeInTheDocument()
     expect(await screen.findByText('No viewings yet.')).toBeInTheDocument()
-    expect(screen.getAllByText('Integration pending')).toHaveLength(3)
+    expect(screen.getAllByText('Integration pending')).toHaveLength(2)
+    expect(screen.getByRole('link', { name: /Open Lease & Payments/ })).toHaveAttribute('href', '/modules/lease-payments')
     expect(screen.queryByText(/\$|match score|Recent Activity|Sarah Chen/)).not.toBeInTheDocument()
   })
 
@@ -166,10 +167,17 @@ describe('tenant dashboard', () => {
     expect(sidebarLink).not.toHaveTextContent('Soon')
   })
 
-  it.each(['Lease & Payments', 'Maintenance'])('provides a pending tenant destination for %s', async (label) => {
+  it('opens the tenant lease and payments workspace from the sidebar', async () => {
     renderApp()
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: new RegExp(`^${label}`) }))
-    expect(screen.getByRole('heading', { name: label })).toBeInTheDocument()
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Lease & Payments' }))
+    expect(screen.getByRole('heading', { name: 'Lease & Payments' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Lease and payment sections' })).toBeInTheDocument()
+  })
+
+  it('keeps the maintenance destination pending', async () => {
+    renderApp()
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: /Maintenance/ }))
+    expect(screen.getByRole('heading', { name: 'Maintenance' })).toBeInTheDocument()
     expect(screen.getByText('Integration pending')).toBeInTheDocument()
   })
 

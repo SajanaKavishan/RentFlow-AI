@@ -1,0 +1,22 @@
+.tenant-lease-page .shared-page-header { margin-bottom: 28px; }
+.tenant-lease-page .shared-card { height: auto; margin-bottom: 18px; }
+.tenant-lease-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: -16px 0 24px; }
+.tenant-lease-tabs button { padding: 10px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--olive-900); font: inherit; font-size: .83rem; font-weight: 800; cursor: pointer; }
+.tenant-lease-tabs button:hover, .tenant-lease-tabs .tenant-lease-tabs__active { border-color: var(--olive-900); background: var(--olive-900); color: var(--surface); }
+.tenant-lease-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.tenant-lease-heading h2 { margin: 0; }
+.tenant-lease-list { padding: 0; margin: 16px 0 0; list-style: none; }
+.tenant-lease-list li { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding: 15px 0; border-top: 1px solid var(--border); }
+.tenant-lease-list li div { display: grid; gap: 4px; min-width: 0; }
+.tenant-lease-list li span, .tenant-lease-list li small { color: var(--muted); overflow-wrap: anywhere; }
+.tenant-lease-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.tenant-lease-facts div { padding: 12px; min-width: 0; border-radius: var(--radius-sm); background: var(--olive-50); }
+.tenant-lease-facts dt { color: var(--muted); font-size: .78rem; }
+.tenant-lease-facts dd { margin: 5px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.tenant-lease-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.tenant-lease-selector label, .tenant-lease-form label { display: grid; gap: 6px; font-size: .82rem; font-weight: 700; }
+.tenant-lease-selector select, .tenant-lease-form select, .tenant-lease-form input { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font: inherit; }
+.tenant-lease-selector select { margin-top: 8px; }
+.tenant-lease-form { display: grid; gap: 14px; margin-top: 18px; }
+.tenant-lease-form .shared-button { justify-self: start; }
+@media (max-width: 560px) { .tenant-lease-facts { grid-template-columns: 1fr; } }

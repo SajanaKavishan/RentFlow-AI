@@ -64,12 +64,15 @@ describe('shared React shell', () => {
     expect(account.children[1]).toHaveClass('shared-topbar__identity')
   })
 
-  it('labels missing modules honestly', async () => {
+  it('opens the tenant Lease & Payments page and blocks landlords', async () => {
     renderApp('Tenant', '/modules/lease-payments')
     expect(await screen.findByRole('heading', { name: 'Lease & Payments' })).toBeInTheDocument()
-    expect(screen.getByText('Integration pending')).toBeInTheDocument()
-    expect(screen.getByText(/lease details and payment schedule/)).toBeInTheDocument()
-    expect(screen.getByText('Owning area: Lease and payment management')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Lease and payment sections' })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Lease & Payments' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByText('Integration pending')).not.toBeInTheDocument()
+    cleanup()
+    renderApp('Landlord', '/modules/lease-payments')
+    expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
   })
 
   it('opens the landlord property management route without inventing property context', async () => {
@@ -83,6 +86,52 @@ describe('shared React shell', () => {
   it('keeps landlord AI review on the real rental application workflow', async () => {
     renderApp('Landlord', '/ai-review')
     expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
+  })
+
+  it('opens the existing Payments sidebar route for landlords and blocks tenants', async () => {
+    renderApp('Landlord', '/dashboard')
+    const nav = await screen.findByRole('navigation', { name: 'Primary navigation' })
+    const paymentsLink = within(nav).getByRole('link', { name: 'Payments' })
+    expect(paymentsLink).toHaveAttribute('href', '/modules/payments')
+    await userEvent.click(paymentsLink)
+    expect(await screen.findByRole('heading', { name: 'Payments' })).toBeInTheDocument()
+    cleanup()
+    renderApp('Tenant', '/modules/payments')
+    expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
+  })
+
+  it.each([
+    ['/modules/pricing-lease', 'Rental Price Analysis', 'Pricing / Lease'],
+    ['/modules/pricing-lease/offers', 'Rental Offers', 'Pricing / Lease'],
+    ['/modules/pricing-lease/leases', 'Lease Agreements', 'Pricing / Lease'],
+    ['/modules/pricing-lease/schedules', 'Rent Schedules', 'Pricing / Lease'],
+    ['/modules/payments', 'Payments', 'Payments'],
+  ])('opens %s directly for landlords with active navigation and blocks tenants', async (path, title, sidebarLabel) => {
+    renderApp('Landlord', path)
+    expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: sidebarLabel })).toHaveAttribute('aria-current', 'page')
+    if (sidebarLabel === 'Pricing / Lease') {
+      expect(within(screen.getByRole('navigation', { name: 'Pricing and lease sections' })).getByRole('link', { name: title })).toHaveAttribute('aria-current', 'page')
+    }
+    cleanup()
+    renderApp('Tenant', path)
+    expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
+  })
+
+  it('switches Pricing / Lease sections for landlords and blocks tenants', async () => {
+    renderApp('Landlord', '/modules/pricing-lease')
+    expect(await screen.findByRole('heading', { name: 'Rental Price Analysis' })).toBeInTheDocument()
+    const sections = screen.getByRole('navigation', { name: 'Pricing and lease sections' })
+    await userEvent.click(within(sections).getByRole('link', { name: 'Rental Offers' }))
+    expect(await screen.findByRole('heading', { name: 'Rental Offers' })).toBeInTheDocument()
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Pricing and lease sections' })).getByRole('link', { name: 'Lease Agreements' }))
+    expect(await screen.findByRole('heading', { name: 'Lease Agreements' })).toBeInTheDocument()
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Pricing and lease sections' })).getByRole('link', { name: 'Rent Schedules' }))
+    expect(await screen.findByRole('heading', { name: 'Rent Schedules' })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Pricing / Lease' })).toHaveAttribute('href', '/modules/pricing-lease')
+    cleanup()
+    renderApp('Tenant', '/modules/pricing-lease/schedules')
+    expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
   })
 
   it('shows profile details and logs out', async () => {

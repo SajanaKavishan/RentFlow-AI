@@ -56,7 +56,12 @@ export default function TenantDashboard({ user }) {
         {nextViewing ? <p>Next confirmed viewing<br /><time dateTime={nextViewing.requestedDateTime}>{new Date(nextViewing.requestedDateTime).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}</time></p> : <p>{viewings.data.length === 0 ? 'No viewings yet.' : 'No upcoming confirmed viewings.'}</p>}
         {pendingViewings > 0 && <p>{pendingViewings} awaiting confirmation</p>}
       </SummaryCard>
-      <PendingCard title="Lease & Payments" icon="document" tone="green">Your lease and payment schedule will appear here when available.</PendingCard>
+      <section className="shared-card tenant-summary tenant-summary--green" aria-label="Lease & Payments">
+        <span className="tenant-dashboard__icon"><Icon name="document" size={24} /></span>
+        <h2>Lease & Payments</h2>
+        <p>Review your offers, leases, rent schedules and payments.</p>
+        <Link className="tenant-text-link" to="/modules/lease-payments">Open Lease & Payments <Icon name="arrow" size={18} /></Link>
+      </section>
       <PendingCard title="Maintenance" icon="tools" tone="amber">Request repairs and track their progress once this feature is available.</PendingCard>
     </div>
 

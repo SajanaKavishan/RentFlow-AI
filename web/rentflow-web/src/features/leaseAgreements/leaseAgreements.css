@@ -1,0 +1,21 @@
+.lease-page .shared-page-header { margin-bottom: 28px; }
+.lease-page .shared-card { height: auto; }
+.lease-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.lease-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lease-heading h2 { margin: 0 0 12px; }
+.lease-list { padding: 0; margin: 12px 0 0; list-style: none; }
+.lease-list li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 15px 0; border-top: 1px solid var(--border); }
+.lease-list li div { display: grid; gap: 4px; min-width: 0; }
+.lease-list li span, .lease-list li small { color: var(--muted); overflow-wrap: anywhere; }
+.lease-form { display: grid; gap: 14px; margin-top: 18px; }
+.lease-form label { display: grid; gap: 6px; font-size: .82rem; font-weight: 700; }
+.lease-form select { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font: inherit; }
+.lease-form .shared-button { justify-self: start; }
+.lease-selected { margin-top: 20px; }
+.lease-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.lease-facts div { min-width: 0; padding: 12px; border-radius: var(--radius-sm); background: var(--olive-50); }
+.lease-facts dt { color: var(--muted); font-size: .78rem; }
+.lease-facts dd { margin: 5px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.lease-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+@media (max-width: 800px) { .lease-layout { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .lease-facts { grid-template-columns: 1fr; } }

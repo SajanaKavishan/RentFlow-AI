@@ -1,0 +1,28 @@
+.pricing-lease-nav { display: flex; flex-wrap: wrap; gap: 8px; margin: -16px 0 24px; }
+.pricing-lease-nav a { padding: 10px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--olive-900); background: var(--surface); text-decoration: none; font-size: .83rem; font-weight: 800; }
+.pricing-lease-nav a:hover, .pricing-lease-nav .pricing-lease-nav__active { border-color: var(--olive-900); color: var(--surface); background: var(--olive-900); }
+.rental-offers-page .shared-page-header { margin-bottom: 28px; }
+.rental-offers-page .shared-card { height: auto; }
+.rental-offers-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.rental-offer-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rental-offer-heading h2 { margin: 0 0 12px; }
+.rental-offer-list { padding: 0; margin: 12px 0 0; list-style: none; }
+.rental-offer-list li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 15px 0; border-top: 1px solid var(--border); }
+.rental-offer-list li div { display: grid; gap: 4px; min-width: 0; }
+.rental-offer-list li span, .rental-offer-list li small { color: var(--muted); overflow-wrap: anywhere; }
+.rental-offer-form { display: grid; gap: 14px; margin-top: 18px; }
+.rental-offer-form label { display: grid; gap: 6px; font-size: .82rem; font-weight: 700; }
+.rental-offer-form input, .rental-offer-form select, .rental-offer-form textarea { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font: inherit; }
+.rental-offer-form textarea { min-height: 84px; resize: vertical; }
+.rental-offer-form__two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.rental-offer-form__context { margin: 0; color: var(--muted); font-size: .82rem; }
+.rental-offer-form .shared-button { justify-self: start; }
+.rental-offer-selected { margin-top: 20px; }
+.rental-offer-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.rental-offer-facts div { padding: 12px; border-radius: var(--radius-sm); background: var(--olive-50); min-width: 0; }
+.rental-offer-facts dt { color: var(--muted); font-size: .78rem; }
+.rental-offer-facts dd { margin: 5px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.rental-offer-note { margin-bottom: 20px; }
+.rental-offer-note p { overflow-wrap: anywhere; }
+@media (max-width: 800px) { .rental-offers-layout { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .rental-offer-form__two, .rental-offer-facts { grid-template-columns: 1fr; } }

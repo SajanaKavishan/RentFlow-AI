@@ -244,6 +244,8 @@ public class PaymentsControllerTests
 
         public IReadOnlyList<PaymentResponseDto>? GetByTenantResult { get; set; }
 
+        public IReadOnlyList<PaymentResponseDto>? GetByLandlordResult { get; set; }
+
         public PaymentResponseDto? CompleteResult { get; set; }
 
         public PaymentResponseDto? FailResult { get; set; }
@@ -275,6 +277,16 @@ public class PaymentsControllerTests
 
             return Task.FromResult(
                 GetByTenantResult ?? Array.Empty<PaymentResponseDto>());
+        }
+
+        public Task<IReadOnlyList<PaymentResponseDto>> GetByLandlordAsync(
+            Guid landlordId,
+            CancellationToken cancellationToken = default)
+        {
+            LastTenantId = landlordId;
+
+            return Task.FromResult(
+                GetByLandlordResult ?? Array.Empty<PaymentResponseDto>());
         }
 
         public Task<PaymentResponseDto> CompleteAsync(

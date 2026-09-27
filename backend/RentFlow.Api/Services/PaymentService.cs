@@ -116,6 +116,21 @@ public class PaymentService : IPaymentService
             .ToList();
     }
 
+    public async Task<IReadOnlyList<PaymentResponseDto>> GetByLandlordAsync(
+        Guid landlordId,
+        CancellationToken cancellationToken = default)
+    {
+        var payments = await _dbContext.Payments
+            .AsNoTracking()
+            .Where(payment => _dbContext.Properties.Any(property =>
+                property.Id == payment.RentScheduleItem.LeaseAgreement.PropertyId
+                && property.LandlordId == landlordId))
+            .OrderByDescending(payment => payment.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return payments.Select(MapToResponseDto).ToList();
+    }
+
     public async Task<PaymentResponseDto> CompleteAsync(
         Guid paymentId,
         CancellationToken cancellationToken = default)
