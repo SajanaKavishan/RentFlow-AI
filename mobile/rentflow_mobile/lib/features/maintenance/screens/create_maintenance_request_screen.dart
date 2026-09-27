@@ -216,7 +216,7 @@ class _CreateMaintenanceRequestScreenState
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<MaintenanceCategory>(
-                          value: _selectedCategory,
+                          initialValue: _selectedCategory,
                           decoration: const InputDecoration(
                             labelText: 'Category',
                             border: OutlineInputBorder(),
@@ -240,7 +240,7 @@ class _CreateMaintenanceRequestScreenState
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<MaintenancePriority>(
-                          value: _selectedPriority,
+                          initialValue: _selectedPriority,
                           decoration: const InputDecoration(
                             labelText: 'Priority',
                             border: OutlineInputBorder(),

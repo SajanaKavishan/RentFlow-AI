@@ -28,6 +28,9 @@ public interface IMaintenanceRequestService
         Guid technicianId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<MaintenanceTechnicianChoiceDto>> GetTechnicianChoicesAsync(
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<MaintenanceStatusHistoryResponseDto>> GetHistoryAsync(
         Guid requestId,
         CancellationToken cancellationToken = default);

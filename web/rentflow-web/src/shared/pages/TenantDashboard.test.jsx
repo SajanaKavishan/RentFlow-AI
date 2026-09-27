@@ -73,8 +73,12 @@ describe('tenant dashboard', () => {
     renderApp()
     expect(await screen.findByText('No applications yet.')).toBeInTheDocument()
     expect(await screen.findByText('No viewings yet.')).toBeInTheDocument()
-    expect(screen.getAllByText('Integration pending')).toHaveLength(2)
+    expect(screen.getAllByText('Integration pending')).toHaveLength(1)
     expect(screen.getByRole('link', { name: /Open Lease & Payments/ })).toHaveAttribute('href', '/modules/lease-payments')
+    const maintenanceLink = within(screen.getByRole('main')).getByRole('link', { name: 'Maintenance' })
+    expect(maintenanceLink).toHaveAttribute('href', '/modules/maintenance')
+    expect(maintenanceLink).toHaveTextContent('Request repairs and track their progress.')
+    expect(maintenanceLink).not.toHaveTextContent('Integration pending')
     expect(screen.queryByText(/\$|match score|Recent Activity|Sarah Chen/)).not.toBeInTheDocument()
   })
 
@@ -174,11 +178,12 @@ describe('tenant dashboard', () => {
     expect(screen.getByRole('navigation', { name: 'Lease and payment sections' })).toBeInTheDocument()
   })
 
-  it('keeps the maintenance destination pending', async () => {
+  it('navigates the Maintenance card to the tenant maintenance page', async () => {
     renderApp()
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: /Maintenance/ }))
-    expect(screen.getByRole('heading', { name: 'Maintenance' })).toBeInTheDocument()
-    expect(screen.getByText('Integration pending')).toBeInTheDocument()
+    const maintenanceLink = within(screen.getByRole('main')).getByRole('link', { name: 'Maintenance' })
+    expect(maintenanceLink).toHaveAttribute('href', '/modules/maintenance')
+    expect(maintenanceLink).toHaveTextContent('Request repairs and track their progress.')
+    expect(maintenanceLink).not.toHaveTextContent('Integration pending')
   })
 
   it.each(['Landlord', 'Admin', 'MaintenanceTechnician'])('does not call tenant APIs for %s', async (role) => {

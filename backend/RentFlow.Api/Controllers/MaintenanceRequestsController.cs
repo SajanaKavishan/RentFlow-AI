@@ -68,6 +68,25 @@ public class MaintenanceRequestsController(
             result => Ok(result));
     }
 
+    [HttpGet("technicians")]
+    [ProducesResponseType<IReadOnlyList<MaintenanceTechnicianChoiceDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<MaintenanceTechnicianChoiceDto>>> GetTechnicians(
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId(
+                [UserRole.Landlord, UserRole.Admin],
+                out _,
+                out var authResult))
+        {
+            return authResult;
+        }
+
+        var technicians = await maintenanceRequestService.GetTechnicianChoicesAsync(cancellationToken);
+        return Ok(technicians);
+    }
+
     [HttpPost("{id:guid}/coordination-analysis")]
     [ProducesResponseType<MaintenanceCoordinationResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

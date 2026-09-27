@@ -17,15 +17,6 @@ function SummaryCard({ title, icon, tone, summary, children }) {
   </section>
 }
 
-function PendingCard({ title, icon, tone, children }) {
-  return <section className={`shared-card tenant-summary tenant-summary--${tone}`} aria-label={title}>
-    <span className="tenant-dashboard__icon"><Icon name={icon} size={24} /></span>
-    <h2>{title}</h2>
-    <StatusBadge tone="warning">Integration pending</StatusBadge>
-    <p>{children}</p>
-  </section>
-}
-
 export default function TenantDashboard({ user }) {
   const applications = useTenantSummary(getMyApplications)
   const viewings = useTenantSummary(getMyViewings)
@@ -62,7 +53,11 @@ export default function TenantDashboard({ user }) {
         <p>Review your offers, leases, rent schedules and payments.</p>
         <Link className="tenant-text-link" to="/modules/lease-payments">Open Lease & Payments <Icon name="arrow" size={18} /></Link>
       </section>
-      <PendingCard title="Maintenance" icon="tools" tone="amber">Request repairs and track their progress once this feature is available.</PendingCard>
+      <Link className="shared-card tenant-summary tenant-summary--amber" to="/modules/maintenance" aria-label="Maintenance">
+        <span className="tenant-dashboard__icon"><Icon name="tools" size={24} /></span>
+        <h2>Maintenance</h2>
+        <p>Request repairs and track their progress.</p>
+      </Link>
     </div>
 
     <div className="tenant-dashboard__lower">
