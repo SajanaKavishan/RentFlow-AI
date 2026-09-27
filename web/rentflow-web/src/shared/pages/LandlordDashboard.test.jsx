@@ -54,6 +54,17 @@ const applications = [0, 1, 1, 2, 3, 4, 5, 6].map((status, index) => ({
   createdAt: `2026-09-${String(index + 1).padStart(2, '0')}T12:00:00Z`,
   status,
 }))
+const otherViewings = [{ id: 'other-viewing-0', propertyId: otherPropertyId, status: 0 }]
+const otherApplications = [
+  {
+    id: 'other-application-0', tenantId: 'other-tenant-0', propertyId: otherPropertyId,
+    monthlyIncome: 140000, createdAt: '2026-10-01T12:00:00Z', status: 1,
+  },
+  {
+    id: 'other-application-1', tenantId: 'other-tenant-1', propertyId: otherPropertyId,
+    monthlyIncome: 160000, createdAt: '2026-10-02T12:00:00Z', status: 4,
+  },
+]
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const scopedDashboard = (id = propertyId) => `/dashboard?propertyId=${id}`
 const isViewing = (url) => url.includes('/api/viewings/property/')
@@ -82,19 +93,15 @@ afterEach(() => {
 })
 
 describe('landlord dashboard redesign', () => {
-  it('uses the requested welcome copy, compact property selector, and quick actions', async () => {
+  it('uses a time-aware greeting and places the property filter with Needs Attention', async () => {
     renderApp()
 
-    expect(screen.getByRole('heading', { name: 'Welcome, Nila' })).toBeInTheDocument()
-    expect(screen.getByText('Manage your properties, review tenant activity, and keep your rental workflow moving.')).toBeInTheDocument()
-    expect(await screen.findByRole('combobox', { name: 'Currently viewing' })).toHaveValue(propertyId)
-    expect(screen.getByText('Choose one of your properties to review its current activity.')).toBeInTheDocument()
-
-    const actions = screen.getByRole('navigation', { name: 'Quick actions' })
-    expect(within(actions).getByRole('link', { name: 'Manage Properties' })).toHaveAttribute('href', '/modules/manage-properties')
-    expect(within(actions).getByRole('link', { name: 'Viewing Requests' })).toHaveAttribute('href', `/viewing-requests?propertyId=${propertyId}`)
-    expect(within(actions).getByRole('link', { name: 'Rental Applications' })).toHaveAttribute('href', `/rental-applications?propertyId=${propertyId}`)
-    expect(within(actions).getByRole('link', { name: 'AI Review' })).toHaveAttribute('href', `/ai-review?propertyId=${propertyId}`)
+    expect(screen.getByRole('heading', { name: /Good (morning|afternoon|evening), Nila/ })).toBeInTheDocument()
+    expect(screen.getByText("Here's what's happening across your rental portfolio today.")).toBeInTheDocument()
+    const attention = screen.getByRole('region', { name: 'Needs Attention' })
+    expect(await within(attention).findByRole('combobox', { name: 'Filter dashboard by property' })).toHaveValue(propertyId)
+    expect(within(attention).getByText('Filter by property')).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Quick actions' })).not.toBeInTheDocument()
   })
 
   it('shows truthful summary cards and integration-pending revenue copy', async () => {
@@ -167,7 +174,7 @@ describe('landlord dashboard redesign', () => {
     const attention = screen.getByRole('region', { name: 'Needs Attention' })
 
     expect(await within(attention).findByText("You're all caught up")).toBeInTheDocument()
-    expect(within(attention).getByText('No urgent landlord actions for this property right now.')).toBeInTheDocument()
+    expect(within(attention).getByText('No urgent landlord actions for Lake View Apartment right now.')).toBeInTheDocument()
     expect(getApplicationValidationRuns).not.toHaveBeenCalled()
   })
 
@@ -210,24 +217,38 @@ describe('landlord dashboard redesign', () => {
     )
   })
 
-  it.each(['/dashboard', '/dashboard?propertyId=invalid'])('shows selection-required states at %s without scoped requests', async (entry) => {
+  it.each(['/dashboard', '/dashboard?propertyId=invalid'])('defaults to an all-properties summary at %s', async (entry) => {
+    fetch.mockImplementation((url) => {
+      const isOtherProperty = url.endsWith(otherPropertyId)
+      if (isViewing(url)) return Promise.resolve(json(isOtherProperty ? otherViewings : viewings))
+      return Promise.resolve(json(isOtherProperty ? otherApplications : applications))
+    })
     renderApp(entry)
-    expect(await screen.findByRole('combobox', { name: 'Currently viewing' })).toHaveValue('')
-    expect(screen.getAllByText('Select a property').length).toBeGreaterThanOrEqual(3)
-    expect(screen.getAllByText('Choose one of your properties above to view applications and landlord activity.')).toHaveLength(2)
+    const selector = await screen.findByRole('combobox', { name: 'Filter dashboard by property' })
+    expect(selector).toHaveValue('')
+    expect(within(selector).getByRole('option', { name: 'All properties' }).selected).toBe(true)
 
     const viewing = screen.getByRole('region', { name: 'Pending Viewings' })
     const application = screen.getByRole('region', { name: 'Applications' })
-    expect(within(viewing).getByText('Choose a property to view pending requests.')).toBeInTheDocument()
-    expect(within(application).getByText('Choose a property to review applications.')).toBeInTheDocument()
-    expect(fetch).not.toHaveBeenCalled()
-    expect(getApplicationValidationRuns).not.toHaveBeenCalled()
+    expect(await within(viewing).findByText('3')).toBeInTheDocument()
+    expect(within(viewing).getByText('Across all properties')).toBeInTheDocument()
+    expect(await within(application).findByText('10')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Needs Attention' })).getByText('Review submitted applications for all properties.')).toBeInTheDocument()
+    expect(screen.getByText('Showing applications for all properties')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Recent Applications' })).getAllByText('Garden House')).toHaveLength(2)
+    expect(fetch).toHaveBeenCalledTimes(4)
+    expect(fetch.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname).sort()).toEqual([
+      `/api/rental-applications/property/${propertyId}`,
+      `/api/rental-applications/property/${otherPropertyId}`,
+      `/api/viewings/property/${propertyId}`,
+      `/api/viewings/property/${otherPropertyId}`,
+    ].sort())
   })
 
   it('changes the selected property from the dashboard selector and reloads only scoped endpoints', async () => {
     fetch.mockImplementation(() => Promise.resolve(json([])))
     const { router } = renderApp()
-    const selector = await screen.findByRole('combobox', { name: 'Currently viewing' })
+    const selector = await screen.findByRole('combobox', { name: 'Filter dashboard by property' })
     await userEvent.selectOptions(selector, otherPropertyId)
 
     expect(router.state.location.pathname).toBe('/dashboard')
@@ -241,9 +262,7 @@ describe('landlord dashboard redesign', () => {
     getMyProperties.mockResolvedValue([])
     renderApp('/dashboard')
 
-    expect(await screen.findByRole('heading', { name: 'No properties yet' })).toBeInTheDocument()
-    expect(screen.getByText('Add your first property to start receiving viewing requests and rental applications.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Add Property' })).toHaveAttribute('href', '/properties/new')
+    expect(await screen.findByRole('link', { name: 'Add your first property' })).toHaveAttribute('href', '/properties/new')
     const active = screen.getByRole('region', { name: 'Active Properties' })
     expect(within(active).getByText('0')).toBeInTheDocument()
     expect(within(active).getByText('No properties yet')).toBeInTheDocument()
@@ -259,7 +278,7 @@ describe('landlord dashboard redesign', () => {
     const recent = screen.getByRole('region', { name: 'Recent Applications' })
 
     expect(await within(recent).findByText('No applications yet')).toBeInTheDocument()
-    expect(within(recent).getByText('Rental applications for this property will appear here.')).toBeInTheDocument()
+    expect(within(recent).getByText('Rental applications for Lake View Apartment will appear here.')).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'Needs Attention' })).getByText("You're all caught up")).toBeInTheDocument()
   })
 

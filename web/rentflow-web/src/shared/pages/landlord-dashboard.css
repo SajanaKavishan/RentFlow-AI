@@ -3,9 +3,12 @@
   padding-top: 30px;
 }
 
-.landlord-dashboard .shared-page-header { margin-bottom: 20px; }
+.landlord-dashboard .shared-page-header { margin-bottom: 26px; }
 .landlord-dashboard .shared-page-header h1 { font-size: clamp(1.75rem, 2.5vw, 2.2rem); letter-spacing: -.045em; }
-.landlord-dashboard .shared-page-header__intro { max-width: 760px; margin-top: 7px; font-size: .84rem; }
+.landlord-dashboard .shared-page-header__intro { max-width: 760px; margin-top: 8px; font-size: .84rem; }
+.landlord-dashboard .shared-page-header__intro p { margin: 0; }
+.landlord-dashboard .shared-page-header__intro p + p { margin-top: 4px; }
+.landlord-dashboard .shared-page-header__intro .landlord-dashboard__date { color: var(--olive-700); font-size: .7rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
 .landlord-dashboard .shared-card { border-radius: 16px; box-shadow: 0 2px 8px rgb(48 60 31 / 7%); }
 
 .landlord-dashboard__icon {
@@ -19,69 +22,54 @@
   background: var(--olive-100);
 }
 
-.landlord-property-selector {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(230px, 340px);
-  align-items: center;
-  gap: 18px 28px;
-  height: auto !important;
-  margin-bottom: 10px;
-  padding: 16px 18px !important;
-  border-color: var(--olive-100) !important;
-  background: color-mix(in srgb, var(--olive-50) 64%, var(--surface));
-}
-
-.landlord-property-selector h2,
-.landlord-property-selector p { margin: 0; }
-.landlord-property-selector h2 { color: var(--olive-900); font-size: .98rem; letter-spacing: -.015em; }
-.landlord-property-selector p { margin-top: 4px; color: var(--muted); font-size: .75rem; line-height: 1.5; }
-.landlord-property-selector__control { display: grid; gap: 5px; color: var(--olive-700); font-size: .66rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
-.landlord-property-selector__control select { width: 100%; min-height: 42px; padding: 8px 38px 8px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--surface); font-size: .78rem; font-weight: 650; text-transform: none; }
-.landlord-property-selector__control select:hover,
-.landlord-property-selector__control select:focus { border-color: var(--olive-700); }
-.landlord-property-selector__loading { justify-self: end; color: var(--olive-700) !important; font-weight: 700; }
-.landlord-property-selector--empty { grid-template-columns: auto minmax(0, 1fr) auto; }
-.landlord-property-selector--empty .shared-button { min-height: 40px; padding: 8px 15px; }
-.landlord-property-selector > .landlord-section-state { grid-column: 1 / -1; }
-
-.landlord-quick-actions {
+.landlord-property-filter {
   display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin: 0 0 16px;
+  align-items: center;
+  gap: 9px;
+  min-width: 270px;
+  min-height: 42px;
+  padding: 5px 7px 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--olive-700);
+  background: var(--surface);
 }
-.landlord-quick-actions a { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 7px 10px; border-radius: 9px; color: var(--olive-700); text-decoration: none; font-size: .7rem; font-weight: 750; }
-.landlord-quick-actions a:hover { color: var(--olive-900); background: var(--olive-50); }
+.landlord-property-filter > svg { flex: none; }
+.landlord-property-filter label { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; }
+.landlord-property-filter label > span { flex: none; color: var(--muted); font-size: .64rem; font-weight: 750; }
+.landlord-property-filter select { min-width: 0; flex: 1; padding: 6px 28px 6px 8px; border: 0; border-radius: 7px; color: var(--ink); background: var(--cream-50); font: inherit; font-size: .7rem; font-weight: 750; }
+.landlord-property-filter:focus-within { border-color: var(--olive-700); box-shadow: 0 0 0 3px rgb(90 108 57 / 10%); }
+.landlord-property-filter--state { justify-content: center; color: var(--muted); font-size: .67rem; font-weight: 700; }
+.landlord-property-filter--state .landlord-dashboard__spinner { width: 14px; height: 14px; }
+.landlord-property-filter--empty { justify-content: center; color: var(--olive-700); font-size: .69rem; font-weight: 800; text-decoration: none; }
+.landlord-property-filter--empty:hover { border-color: var(--olive-700); background: var(--olive-50); }
 
-.landlord-dashboard__summaries { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; }
-.landlord-dashboard .landlord-summary { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; gap: 5px 11px; min-height: 148px; padding: 16px 17px; overflow: hidden; transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.landlord-dashboard__summaries { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.landlord-dashboard .landlord-summary { position: relative; display: flex; flex-direction: column; align-items: flex-start; min-height: 178px; padding: 22px 24px; overflow: hidden; transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
 .landlord-summary:not(.landlord-summary--integration):hover,
 .landlord-summary:focus-within { border-color: var(--olive-100); box-shadow: 0 7px 18px rgb(48 60 31 / 11%); transform: translateY(-1px); }
-.landlord-summary .landlord-dashboard__icon { grid-column: 1; grid-row: 1 / span 2; width: 34px; height: 34px; }
+.landlord-summary .landlord-dashboard__icon { width: 46px; height: 46px; border-radius: 13px; }
 .landlord-summary--calendar .landlord-dashboard__icon { color: #4c57c2; background: #edf0ff; }
 .landlord-summary--document .landlord-dashboard__icon { color: #a55e13; background: #fff4df; }
 .landlord-summary--trend .landlord-dashboard__icon { color: #18805a; background: #e8f7ee; }
-.landlord-summary__value { grid-column: 2; color: var(--ink); font-size: 1.42rem; font-weight: 800; line-height: 1; letter-spacing: -.04em; overflow-wrap: anywhere; }
+.landlord-summary__value { margin-top: 18px; color: var(--ink); font-size: 1.65rem; font-weight: 800; line-height: 1; letter-spacing: -.04em; overflow-wrap: anywhere; }
 .landlord-summary__value--message { font-size: .91rem; line-height: 1.35; letter-spacing: -.02em; }
-.landlord-summary h2 { grid-column: 2; margin: 0; color: var(--ink); font-size: .8rem; line-height: 1.35; }
+.landlord-summary h2 { margin: 6px 0 0; color: var(--ink); font-size: .84rem; line-height: 1.35; }
 .landlord-summary > p,
-.landlord-summary__error { grid-column: 1 / -1; align-self: end; margin: auto 0 0; padding-top: 5px; color: var(--muted); font-size: .7rem; line-height: 1.45; overflow-wrap: anywhere; }
+.landlord-summary__error { margin: 5px 0 0; color: var(--muted); font-size: .7rem; line-height: 1.45; overflow-wrap: anywhere; }
 .landlord-summary__error p { margin: 0; }
 .landlord-summary__loading { color: var(--olive-700) !important; font-weight: 700; }
 .landlord-summary__link { position: absolute; inset: 0; border-radius: inherit; }
 .landlord-summary__error .landlord-dashboard__text-button { position: relative; z-index: 1; }
 .landlord-dashboard__text-button { padding: 3px 0; border: 0; color: var(--olive-700); background: transparent; font: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
-.landlord-summary--integration { grid-template-rows: auto auto 1fr; }
-.landlord-summary--integration .landlord-dashboard__badge { grid-column: 2; align-self: start; justify-self: start; }
-.landlord-summary--integration h2 { align-self: start; }
-.landlord-summary--integration > p { grid-row: 3; }
+.landlord-summary--integration .landlord-dashboard__badge { position: absolute; top: 30px; left: 82px; }
+.landlord-summary--integration h2 { margin-top: 18px; }
 .landlord-dashboard__badge { display: inline-flex; align-items: center; max-width: 100%; padding: 4px 7px; border-radius: 999px; color: var(--warning); background: var(--warning-bg); font-size: .61rem; font-weight: 800; line-height: 1.25; white-space: normal; }
 
 .landlord-dashboard__content { display: grid; grid-template-columns: minmax(0, 2.05fr) minmax(270px, .95fr); gap: 20px; margin-top: 26px; }
 .landlord-dashboard__primary,
 .landlord-dashboard__aside { min-width: 0; display: grid; align-content: start; gap: 22px; }
-.landlord-dashboard__section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; min-height: 27px; margin-bottom: 9px; }
+.landlord-dashboard__section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 42px; margin-bottom: 10px; }
 .landlord-dashboard__section-heading h2 { margin: 0; color: var(--ink); font-size: 1rem; letter-spacing: -.025em; }
 .landlord-dashboard__section-heading p { margin: 4px 0 0; color: var(--muted); font-size: .68rem; }
 .landlord-dashboard__section-heading > span { color: var(--muted); font-size: .65rem; font-weight: 700; }
@@ -159,15 +147,11 @@
 @media (max-width: 720px) {
   .landlord-dashboard { width: calc(100% - 28px); padding-top: 22px; }
   .landlord-dashboard .shared-page-header { margin-bottom: 17px; }
-  .landlord-property-selector { grid-template-columns: minmax(0, 1fr); padding: 15px !important; }
-  .landlord-property-selector--empty { grid-template-columns: auto minmax(0, 1fr); }
-  .landlord-property-selector--empty .shared-button { grid-column: 1 / -1; width: 100%; }
-  .landlord-property-selector__loading { justify-self: start; }
-  .landlord-quick-actions { justify-content: flex-start; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 3px; }
-  .landlord-quick-actions a { flex: none; }
   .landlord-dashboard__summaries { grid-template-columns: minmax(0, 1fr); }
-  .landlord-dashboard .landlord-summary { min-height: 138px; }
+  .landlord-dashboard .landlord-summary { min-height: 164px; }
   .landlord-dashboard__aside { grid-template-columns: minmax(0, 1fr); }
+  .landlord-attention .landlord-dashboard__section-heading { align-items: stretch; flex-direction: column; }
+  .landlord-property-filter { width: 100%; min-width: 0; }
   .landlord-attention__row { align-items: flex-start; flex-wrap: wrap; }
   .landlord-attention__row > div { flex-basis: calc(100% - 43px); }
   .landlord-attention__row .shared-button { width: 100%; }
