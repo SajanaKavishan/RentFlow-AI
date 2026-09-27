@@ -115,6 +115,21 @@ Public registration remains limited to Tenant and Landlord. Technician and Admin
 accounts require an authorized administrative workflow or controlled development
 seed; the web UI does not provide public staff registration.
 
+## Google Maps configuration
+
+The Property Details page can show a Google Maps Embed preview for the real
+property address and city. Copy `.env.example` to a local Vite environment file
+and set `VITE_GOOGLE_MAPS_API_KEY`. Never commit the real browser key.
+
+In Google Cloud, restrict this browser key to:
+
+- the **Maps Embed API** only; and
+- approved frontend **HTTP referrers/domains** only (including the exact local
+  development origin when needed).
+
+If the variable is unset or the property has no usable address/city, the page
+keeps showing the textual location and an honest map-unavailable state.
+
 ## Validation commands
 
 From `web/rentflow-web` run:

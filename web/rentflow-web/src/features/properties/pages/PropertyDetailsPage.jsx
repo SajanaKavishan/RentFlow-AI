@@ -4,7 +4,7 @@ import { USER_ROLES } from '../../auth/authModel.js'
 import { useAuth } from '../../auth/useAuth.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
-import { formatPropertyArea } from '../propertyArea.js'
+import PropertyLocationMap from '../components/PropertyLocationMap.jsx'
 import {
   deleteProperty,
   getProperty,
@@ -179,7 +179,7 @@ export default function PropertyDetailsPage() {
       </header>
 
       <section className="property-details-gallery" aria-label="Property photos">
-        <PropertyImageGallery propertyId={property.id} alt={property.title} />
+        <PropertyImageGallery propertyId={property.id} alt={property.title} variant="details" />
       </section>
 
       <div className={`property-details-layout${isOwner ? '' : ' property-details-layout--public'}`}>
@@ -196,13 +196,8 @@ export default function PropertyDetailsPage() {
               <dd>{property.bathrooms}</dd>
             </div>
             <div>
-              <Icon name="ruler" size={22} />
-              <dt>Property / land size</dt>
-              <dd>{formatPropertyArea(property.area, property.areaUnit)}</dd>
-            </div>
-            <div>
               <Icon name={property.isAvailable ? 'eye' : 'eyeOff'} size={22} />
-              <dt>Status</dt>
+              <dt>Availability</dt>
               <dd>{property.isAvailable ? 'Available' : 'Unavailable'}</dd>
             </div>
           </dl>
@@ -226,6 +221,8 @@ export default function PropertyDetailsPage() {
               <p>No amenities have been added yet.</p>
             )}
           </section>
+
+          <PropertyLocationMap address={property.address} city={property.city} />
         </div>
 
         {isOwner && (

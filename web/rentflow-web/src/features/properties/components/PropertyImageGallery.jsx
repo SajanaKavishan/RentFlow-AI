@@ -75,13 +75,19 @@ export default function PropertyImageGallery({
     return <div className="property-image-state">No property photos uploaded yet.</div>
   }
 
+  const displayedImages = variant === 'cover'
+    ? images.slice(0, 1)
+    : variant === 'details'
+      ? images.slice(0, 3)
+      : images
+
   return (
-    <div className={`property-image-gallery${variant === 'cover' ? ' property-image-gallery--cover' : ''}`}>
-      {(variant === 'cover' ? images.slice(0, 1) : images).map((image) => (
+    <div className={`property-image-gallery property-image-gallery--${variant} property-image-gallery--count-${displayedImages.length}`}>
+      {displayedImages.map((image, index) => (
         <img
           key={image.id}
           src={image.url}
-          alt={alt === 'Property' ? alt : `${alt} property`}
+          alt={alt === 'Property' ? alt : `${alt} property photo ${index + 1}`}
           loading="lazy"
         />
       ))}

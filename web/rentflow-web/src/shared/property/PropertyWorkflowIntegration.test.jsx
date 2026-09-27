@@ -81,10 +81,15 @@ function mockOwnedPropertyCollection(collection) {
   })
 }
 
-function renderApp(entry) {
+function renderApp(entry, user = {
+  id: property.landlordId,
+  fullName: 'Nila Perera',
+  email: 'nila@example.com',
+  role: 'Landlord',
+}) {
   const router = createMemoryRouter([{ path: '*', element: <App /> }], { initialEntries: [entry] })
   render(<AuthContext.Provider value={{
-    user: { id: property.landlordId, fullName: 'Nila Perera', email: 'nila@example.com', role: 'Landlord' },
+    user,
     isAuthenticated: true,
     isLoading: false,
     logout: vi.fn(),
@@ -164,7 +169,15 @@ describe('owned property landlord workflow integration', () => {
     await userEvent.click(within(card).getByRole('link', { name: 'View property' }))
     expect(router.state.location.pathname).toBe(`/properties/${propertyId}`)
     expect(await screen.findByRole('heading', { name: property.title })).toBeInTheDocument()
-    expect(screen.getByText('1,450 sq ft')).toBeInTheDocument()
+    expect(screen.getAllByText('18 Marine Drive, Colombo')).toHaveLength(2)
+    expect(screen.getByText('A real owned property fixture.')).toBeInTheDocument()
+    expect(screen.getByText('✓ Parking')).toBeInTheDocument()
+    expect(screen.getByText('Availability').parentElement).toHaveTextContent('Available')
+    expect(screen.queryByText('Property / land size')).not.toBeInTheDocument()
+    expect(screen.queryByText('1,450 sq ft')).not.toBeInTheDocument()
+    expect(screen.getByText('Map preview unavailable')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Open in Google Maps/ }))
+      .toHaveAttribute('href', expect.stringContaining('query=18+Marine+Drive%2C+Colombo'))
     const management = screen.getByRole('complementary', { name: 'Manage property' })
     expect(within(management).getByRole('link', { name: 'Viewing Requests' }))
       .toHaveAttribute('href', `/properties/${propertyId}/viewing-requests`)
@@ -174,6 +187,25 @@ describe('owned property landlord workflow integration', () => {
       .toHaveAttribute('href', `/properties/${propertyId}/edit`)
     expect(within(management).getByRole('button', { name: 'Mark unavailable' })).toBeInTheDocument()
     expect(within(management).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+  })
+
+  it('keeps the public property read available to an authenticated tenant without landlord tools', async () => {
+    renderApp(`/properties/${propertyId}`, {
+      id: viewing.tenantId,
+      fullName: 'Ravi Silva',
+      email: 'ravi@example.com',
+      role: 'Tenant',
+    })
+
+    expect(await screen.findByRole('heading', { name: property.title })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to properties' }))
+      .toHaveAttribute('href', '/modules/properties')
+    expect(screen.queryByRole('complementary', { name: 'Manage property' })).not.toBeInTheDocument()
+
+    const propertyRead = fetch.mock.calls.find(([url]) => (
+      new URL(url, 'http://localhost').pathname === `/api/properties/${propertyId}`
+    ))
+    expect(propertyRead[1].headers.Authorization).toBeUndefined()
   })
 
   it('shows toast feedback for property updates and deletion', async () => {
