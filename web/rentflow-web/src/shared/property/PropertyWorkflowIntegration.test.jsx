@@ -98,6 +98,7 @@ function renderApp(entry, user = {
 }
 
 beforeEach(() => {
+  vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', '')
   tokenStorage.setToken('landlord-token')
   vi.stubGlobal('fetch', vi.fn((url) => {
     const path = new URL(url, 'http://localhost').pathname
@@ -113,6 +114,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
 })
 
 describe('owned property landlord workflow integration', () => {

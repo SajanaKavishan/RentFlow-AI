@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import { useOwnedPropertySelection } from '../../../shared/property/useOwnedProperties.js'
+import Icon from '../../../shared/ui/Icons.jsx'
 import ViewingCard from '../components/ViewingCard.jsx'
 import {
   approveViewing,
@@ -32,23 +34,15 @@ const STATUS_FILTERS = [
   { value: VIEWING_STATUS.PENDING, label: 'Pending' },
   { value: VIEWING_STATUS.APPROVED, label: 'Approved' },
   { value: VIEWING_STATUS.REJECTED, label: 'Rejected' },
-  { value: VIEWING_STATUS.CANCELLED, label: 'Cancelled' },
-  { value: VIEWING_STATUS.COMPLETED, label: 'Completed' },
 ]
 
-function optionalSearchFields(viewing, property) {
+function requestSearchFields(viewing) {
   return [
-    viewing.tenantName,
-    viewing.tenantEmail,
-    viewing.propertyName,
-    viewing.propertyLocation,
     viewing.tenantId,
-    viewing.propertyId,
     viewing.tenantMessage,
     viewing.landlordResponse,
-    property?.title,
-    property?.address,
-    property?.city,
+    viewing.requestedDateTime,
+    viewing.createdAt,
   ].filter((value) => typeof value === 'string')
 }
 
@@ -74,11 +68,11 @@ function ViewingRequestsPage() {
     const normalizedSearch = search.trim().toLowerCase()
     return orderedViewings.filter((viewing) => {
       const matchesStatus = statusFilter === 'all' || viewing.status === statusFilter
-      const matchesSearch = !normalizedSearch || optionalSearchFields(viewing, selection.property)
+      const matchesSearch = !normalizedSearch || requestSearchFields(viewing)
         .some((value) => value.toLowerCase().includes(normalizedSearch))
       return matchesStatus && matchesSearch
     })
-  }, [orderedViewings, search, selection.property, statusFilter])
+  }, [orderedViewings, search, statusFilter])
   const pageStatus = selection.status !== 'selected'
     ? 'property-context'
     : pageState.propertyId === propertyId
@@ -193,27 +187,58 @@ function ViewingRequestsPage() {
       className="viewings-page"
       aria-busy={pageStatus === 'loading' || selection.status === 'loading'}
     >
+      {selection.property && (
+        <Link
+          className="viewings-page__back"
+          to={`/properties/${encodeURIComponent(selection.property.id)}`}
+        >
+          <Icon name="arrowLeft" size={16} /> Back to Property
+        </Link>
+      )}
+
       <header className="viewings-page__header">
-        <div>
+        <div className="viewings-page__intro">
           <h1>Viewing Requests</h1>
           <p>
             Review requested appointments and respond to tenants interested in
             your property.
           </p>
-          {selection.property && <p className="viewings-page__property">
-            <strong>{selection.property.title}</strong>
-            <span>{[selection.property.address, selection.property.city].filter(Boolean).join(', ')}</span>
-          </p>}
+          {selection.property && (
+            <div className="viewings-page__property" role="group" aria-label="Selected property">
+              <span>Selected property</span>
+              <strong>{selection.property.title}</strong>
+              {[selection.property.address, selection.property.city].filter(Boolean).length > 0 && (
+                <small>
+                  <Icon name="pin" size={15} />
+                  {[selection.property.address, selection.property.city].filter(Boolean).join(', ')}
+                </small>
+              )}
+            </div>
+          )}
         </div>
-        <button
-          type="button"
-          className="button button--quiet viewings-page__refresh"
-          onClick={loadViewings}
-          disabled={selection.status !== 'selected' || pageStatus === 'loading'}
-        >
-          <span aria-hidden="true">↻</span>
-          {pageStatus === 'loading' ? 'Refreshing...' : 'Refresh'}
-        </button>
+        <div className="viewings-page__header-actions">
+          {pageStatus === 'success' && (
+            <dl className="viewings-page__counts" role="group" aria-label="Viewing request counts">
+              <div>
+                <dt>Total</dt>
+                <dd>{pageState.viewings.length}</dd>
+              </div>
+              <div className={pendingCount > 0 ? 'is-pending' : ''}>
+                <dt>Pending</dt>
+                <dd>{pendingCount}</dd>
+              </div>
+            </dl>
+          )}
+          <button
+            type="button"
+            className="button button--quiet viewings-page__refresh"
+            onClick={loadViewings}
+            disabled={selection.status !== 'selected' || pageStatus === 'loading'}
+          >
+            <span aria-hidden="true">↻</span>
+            {pageStatus === 'loading' ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
       </header>
 
       {pageStatus === 'property-context' && (
@@ -263,93 +288,64 @@ function ViewingRequestsPage() {
       )}
 
       {pageStatus === 'success' && pageState.viewings.length > 0 && (
-        <>
-          <section className="viewings-summary" aria-label="Request summary">
-            <div
-              className={`viewings-summary__item${
-                pendingCount > 0 ? ' viewings-summary__item--priority' : ''
-              }`}
-            >
-              <span className="viewings-summary__number">{pendingCount}</span>
-              <span>
-                <strong>Pending response</strong>
-                <small>
-                  {pendingCount > 0
-                    ? 'Review these requests first'
-                    : 'No requests need a decision'}
-                </small>
-              </span>
+        <section
+          className="viewings-results"
+          aria-labelledby="viewings-results-title"
+        >
+          <div className="viewings-results__heading">
+            <div>
+              <p className="viewings-page__eyebrow">Request queue</p>
+              <h2 id="viewings-results-title">All viewing requests</h2>
             </div>
-            <div className="viewings-summary__item">
-              <span className="viewings-summary__number">
-                {pageState.viewings.length}
-              </span>
-              <span>
-                <strong>Total requests</strong>
-                <small>Across all current statuses</small>
-              </span>
-            </div>
-          </section>
-
-          <section
-            className="viewings-results"
-            aria-labelledby="viewings-results-title"
-          >
-            <div className="viewings-results__heading">
-              <div>
-                <p className="viewings-page__eyebrow">Request queue</p>
-                <h2 id="viewings-results-title">All viewing requests</h2>
-              </div>
-              <p>{filteredViewings.length} of {pageState.viewings.length} requests shown</p>
-            </div>
-            <div className="viewings-filters" aria-label="Filter viewing requests">
-              <label className="viewings-filters__search">
-                <span className="sr-only">Search viewing requests</span>
-                <span aria-hidden="true">⌕</span>
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search requests"
-                />
-              </label>
-              <div className="viewings-filters__statuses" role="group" aria-label="Request status">
-                {STATUS_FILTERS.map((filter) => (
-                  <button
-                    key={filter.label}
-                    type="button"
-                    className={`viewings-filter${statusFilter === filter.value ? ' viewings-filter--active' : ''}`}
-                    aria-pressed={statusFilter === filter.value}
-                    onClick={() => setStatusFilter(filter.value)}
-                  >
-                    {filter.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="viewings-list">
-              {filteredViewings.map((viewing) => (
-                <ViewingCard
-                  key={viewing.id}
-                  viewing={viewing}
-                  property={selection.property}
-                  isUpdating={updatingId === viewing.id}
-                  actionError={
-                    actionError.id === viewing.id ? actionError.message : ''
-                  }
-                  onApprove={handleApprove}
-                  onReject={handleReject}
-                />
+            <p>{filteredViewings.length} of {pageState.viewings.length} requests shown</p>
+          </div>
+          <div className="viewings-filters" aria-label="Filter viewing requests">
+            <label className="viewings-filters__search">
+              <span className="sr-only">Search viewing requests</span>
+              <Icon name="search" size={17} />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by tenant ID or message"
+              />
+            </label>
+            <div className="viewings-filters__statuses" role="group" aria-label="Request status">
+              {STATUS_FILTERS.map((filter) => (
+                <button
+                  key={filter.label}
+                  type="button"
+                  className={`viewings-filter${statusFilter === filter.value ? ' viewings-filter--active' : ''}`}
+                  aria-pressed={statusFilter === filter.value}
+                  onClick={() => setStatusFilter(filter.value)}
+                >
+                  {filter.label}
+                </button>
               ))}
             </div>
-            {filteredViewings.length === 0 && (
-              <div className="viewings-filter-empty" role="status">
-                <h3>No matching viewing requests</h3>
-                <p>Try a different search or status filter.</p>
-              </div>
-            )}
-          </section>
-        </>
+          </div>
+          <div className="viewings-list">
+            {filteredViewings.map((viewing) => (
+              <ViewingCard
+                key={viewing.id}
+                viewing={viewing}
+                property={selection.property}
+                isUpdating={updatingId === viewing.id}
+                actionError={
+                  actionError.id === viewing.id ? actionError.message : ''
+                }
+                onApprove={handleApprove}
+                onReject={handleReject}
+              />
+            ))}
+          </div>
+          {filteredViewings.length === 0 && (
+            <div className="viewings-filter-empty" role="status">
+              <h3>No matching viewing requests</h3>
+              <p>Try a different search or status filter.</p>
+            </div>
+          )}
+        </section>
       )}
     </main>
   )
