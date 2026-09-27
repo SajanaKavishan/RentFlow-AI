@@ -91,7 +91,7 @@ export const NAV_ITEMS = Object.freeze([
   },
 
   // =========================================================
-  // LEASE / PAYMENT / MAINTENANCE PLACEHOLDERS
+  // LEASE / PAYMENT / MAINTENANCE
   // =========================================================
 
   {
@@ -99,10 +99,9 @@ export const NAV_ITEMS = Object.freeze([
     label: 'Lease & Payments',
     path: '/modules/lease-payments',
     roles: [T],
-    available: false,
+    available: true,
     owner: 'Lease and payment management',
-    description:
-      'Your lease details and payment schedule will appear here when these features are available.',
+    description: 'Review your offers, leases, rent schedules and payments.',
   },
 
   {

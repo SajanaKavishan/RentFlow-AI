@@ -25,6 +25,7 @@ import RentalOffersPage from './features/rentalOffers/pages/RentalOffersPage.jsx
 import LeaseAgreementsPage from './features/leaseAgreements/pages/LeaseAgreementsPage.jsx'
 import RentSchedulesPage from './features/rentSchedules/pages/RentSchedulesPage.jsx'
 import PaymentsPage from './features/payments/pages/PaymentsPage.jsx'
+import TenantLeasePaymentsPage from './features/tenantLeasePayments/pages/TenantLeasePaymentsPage.jsx'
 import LandingPage from './features/landing/pages/LandingPage.jsx'
 
 import AppShell from './shared/layout/AppShell.jsx'
@@ -65,6 +66,7 @@ export default function App() {
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT]} />}>
+          <Route path="/modules/lease-payments" element={<TenantLeasePaymentsPage />} />
           <Route path="/modules/my-viewings" element={<MyViewingsPage />} />
           <Route path="/modules/my-applications" element={<MyApplicationsPage />} />
           <Route path="/modules/properties" element={<PropertiesPage />} />

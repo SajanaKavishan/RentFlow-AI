@@ -61,12 +61,15 @@ describe('shared React shell', () => {
     expect(labels).toEqual(expectedLabels)
   })
 
-  it('labels missing modules honestly', async () => {
+  it('opens the tenant Lease & Payments page and blocks landlords', async () => {
     renderApp('Tenant', '/modules/lease-payments')
     expect(await screen.findByRole('heading', { name: 'Lease & Payments' })).toBeInTheDocument()
-    expect(screen.getByText('Integration pending')).toBeInTheDocument()
-    expect(screen.getByText(/lease details and payment schedule/)).toBeInTheDocument()
-    expect(screen.getByText('Owning area: Lease and payment management')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Lease and payment sections' })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Lease & Payments' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByText('Integration pending')).not.toBeInTheDocument()
+    cleanup()
+    renderApp('Landlord', '/modules/lease-payments')
+    expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
   })
 
   it('opens the landlord property management route without inventing property context', async () => {
