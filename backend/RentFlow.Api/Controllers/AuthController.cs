@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using RentFlow.Api.DTOs.Auth;
 using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
@@ -10,8 +11,10 @@ namespace RentFlow.Api.Controllers;
 [Route("api/auth")]
 public sealed class AuthController(
     IAuthService authService,
+    PasswordResetService passwordResetService,
     ICurrentUserService currentUserService) : ControllerBase
 {
+    private const long MaximumProfileImageRequestBytes = 5 * 1024 * 1024 + 64 * 1024;
     [AllowAnonymous]
     [HttpPost("register")]
     [ProducesResponseType<AuthResponseDto>(StatusCodes.Status201Created)]
@@ -50,6 +53,89 @@ public sealed class AuthController(
         }
     }
 
+    [AllowAnonymous]
+    [HttpPost("forgot-password")]
+    [EnableRateLimiting("forgot-password")]
+    [ProducesResponseType<ForgotPasswordResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<ForgotPasswordResponseDto>> ForgotPassword(
+        [FromBody] ForgotPasswordRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await passwordResetService.RequestAsync(request, cancellationToken));
+        }
+        catch (PasswordResetException exception)
+        {
+            return MapPasswordResetException(exception, "Invalid password reset request.");
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("reset-password")]
+    [EnableRateLimiting("password-reset")]
+    [ProducesResponseType<ResetPasswordResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<ResetPasswordResponseDto>> ResetPassword(
+        [FromBody] ResetPasswordRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await passwordResetService.ResetAsync(request, cancellationToken));
+        }
+        catch (PasswordResetException exception)
+        {
+            return MapPasswordResetException(exception, "Password reset failed.");
+        }
+    }
+
+    [Authorize]
+    [HttpPut("change-password")]
+    [ProducesResponseType<ChangePasswordResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ChangePasswordResponseDto>> ChangePassword(
+        [FromBody] ChangePasswordRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (currentUserService.UserId is not { } userId)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var response = await authService.ChangePasswordAsync(
+                userId,
+                request,
+                cancellationToken);
+            return response is not null
+                ? Ok(response)
+                : Unauthorized();
+        }
+        catch (AuthServiceException exception)
+        {
+            if (exception.Error is AuthServiceError.IncorrectCurrentPassword
+                or AuthServiceError.Validation)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = exception.Error == AuthServiceError.IncorrectCurrentPassword
+                        ? "Password change failed."
+                        : "Invalid password change request.",
+                    Detail = exception.Message
+                });
+            }
+
+            return MapException(exception);
+        }
+    }
+
     [Authorize]
     [HttpGet("me")]
     [ProducesResponseType<UserProfileDto>(StatusCodes.Status200OK)]
@@ -63,6 +149,71 @@ public sealed class AuthController(
 
         var user = await authService.GetUserAsync(userId, cancellationToken);
         return user is null ? Unauthorized() : Ok(user);
+    }
+
+    [Authorize]
+    [HttpPut("profile")]
+    [ProducesResponseType<UserProfileDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<UserProfileDto>> UpdateProfile(
+        [FromBody] UpdateProfileRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (currentUserService.UserId is not { } userId) return Unauthorized();
+        try
+        {
+            var profile = await authService.UpdateProfileAsync(userId, request, cancellationToken);
+            return profile is null ? Unauthorized() : Ok(profile);
+        }
+        catch (AuthServiceException exception)
+        {
+            return MapException(exception);
+        }
+    }
+
+    [Authorize]
+    [HttpPost("profile-image")]
+    [RequestSizeLimit(MaximumProfileImageRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaximumProfileImageRequestBytes)]
+    [ProducesResponseType<UserProfileDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<UserProfileDto>> UploadProfileImage(
+        [FromForm] UploadProfileImageRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (currentUserService.UserId is not { } userId) return Unauthorized();
+        try
+        {
+            await using var stream = new MemoryStream();
+            await request.File.CopyToAsync(stream, cancellationToken);
+            var profile = await authService.UploadProfileImageAsync(
+                userId,
+                stream.ToArray(),
+                request.File.ContentType,
+                cancellationToken);
+            return profile is null ? Unauthorized() : Ok(profile);
+        }
+        catch (AuthServiceException exception)
+        {
+            return MapException(exception);
+        }
+    }
+
+    [Authorize]
+    [HttpGet("profile-image")]
+    [Produces("image/jpeg", "image/png", "image/webp")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetProfileImage(CancellationToken cancellationToken)
+    {
+        if (currentUserService.UserId is not { } userId) return Unauthorized();
+        var image = await authService.GetProfileImageAsync(userId, cancellationToken);
+        if (image is null) return NotFound();
+        Response.Headers.CacheControl = "private, no-store";
+        return File(image.Content, image.ContentType);
     }
 
     private ActionResult MapException(AuthServiceException exception)
@@ -79,6 +230,23 @@ public sealed class AuthController(
                 (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
         };
 
+        return StatusCode(statusCode, new ProblemDetails
+        {
+            Status = statusCode,
+            Title = title,
+            Detail = statusCode == StatusCodes.Status500InternalServerError
+                ? "The request could not be completed."
+                : exception.Message
+        });
+    }
+
+    private ActionResult MapPasswordResetException(
+        PasswordResetException exception,
+        string title)
+    {
+        var statusCode = exception.Error == PasswordResetError.Persistence
+            ? StatusCodes.Status500InternalServerError
+            : StatusCodes.Status400BadRequest;
         return StatusCode(statusCode, new ProblemDetails
         {
             Status = statusCode,

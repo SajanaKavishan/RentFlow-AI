@@ -1,11 +1,23 @@
 import { useEffect, useState } from 'react'
+import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import { useAuth } from '../../auth/useAuth.js'
 import {
   createMaintenanceRequest,
+  deleteMaintenanceAttachment,
+  getMaintenanceAttachmentDownload,
+  getMaintenanceAttachments,
   getMaintenanceRequestById,
+  getTenantProperties,
   getTenantMaintenanceRequests,
   MaintenanceApiError,
+  uploadMaintenanceAttachment,
 } from '../services/maintenanceApiService.js'
+import {
+  MAINTENANCE_CATEGORY,
+  MAINTENANCE_PRIORITY,
+  MAINTENANCE_STATUS,
+  maintenanceEnumLabel,
+} from '../services/maintenanceEnums.js'
 import '../maintenance.css'
 
 const DEFAULT_FORM = {
@@ -17,21 +29,9 @@ const DEFAULT_FORM = {
   tenantAccessNotes: '',
 }
 
-const MAINTENANCE_CATEGORIES = [
-  'Plumbing',
-  'Electrical',
-  'Appliance',
-  'Structural',
-  'Security',
-  'Pest',
-  'Other',
-]
-
-const MAINTENANCE_PRIORITIES = ['Low', 'Normal', 'High', 'Emergency']
-
-function isValidGuid(value) {
-  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(value)
-}
+const MAINTENANCE_CATEGORIES = Object.keys(MAINTENANCE_CATEGORY.byName)
+const MAINTENANCE_PRIORITIES = Object.keys(MAINTENANCE_PRIORITY.byName)
+const ATTACHMENT_TYPES = ['Photo', 'Invoice', 'Receipt', 'Other']
 
 function safeErrorMessage(error, fallback) {
   return error instanceof MaintenanceApiError ? error.message : fallback
@@ -48,11 +48,7 @@ function formatDate(value) {
 }
 
 function formatStatusLabel(value) {
-  if (!value) return 'Unknown'
-  return value
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/_/g, ' ')
-    .trim()
+  return maintenanceEnumLabel(value, MAINTENANCE_STATUS)
 }
 
 function statusClass(value) {
@@ -64,6 +60,7 @@ function statusClass(value) {
 
 function TenantMaintenancePage() {
   const { user } = useAuth()
+  const { propertyId: contextualPropertyId } = usePropertyContext()
   const tenantId = user?.id
 
   const [requests, setRequests] = useState([])
@@ -77,25 +74,87 @@ function TenantMaintenancePage() {
   const [form, setForm] = useState(DEFAULT_FORM)
   const [formError, setFormError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [properties, setProperties] = useState([])
+  const [propertyState, setPropertyState] = useState('loading')
+  const [propertyError, setPropertyError] = useState('')
+  const [attachments, setAttachments] = useState([])
+  const [attachmentState, setAttachmentState] = useState('idle')
+  const [attachmentError, setAttachmentError] = useState('')
+  const [attachmentNotice, setAttachmentNotice] = useState('')
+  const [attachmentFile, setAttachmentFile] = useState(null)
+  const [attachmentType, setAttachmentType] = useState('Photo')
+  const [attachmentPending, setAttachmentPending] = useState(false)
+
+  useEffect(() => {
+    if (!tenantId) return undefined
+
+    let active = true
+    getTenantProperties()
+      .then((nextProperties) => {
+        if (!active) return
+        const available = Array.isArray(nextProperties)
+          ? nextProperties.filter((property) => property?.id)
+          : []
+        setProperties(available)
+        setPropertyState(available.length ? 'success' : 'empty')
+        setForm((current) => {
+          const contextualChoice = available.some((property) => property.id === contextualPropertyId)
+            ? contextualPropertyId
+            : ''
+          const currentChoice = available.some((property) => property.id === current.propertyId)
+            ? current.propertyId
+            : ''
+          return {
+            ...current,
+            propertyId: contextualChoice || currentChoice || (available.length === 1 ? available[0].id : ''),
+          }
+        })
+      })
+      .catch((loadError) => {
+        if (!active) return
+        setProperties([])
+        setPropertyState('error')
+        setPropertyError(safeErrorMessage(loadError, 'Unable to load your associated properties.'))
+      })
+    return () => {
+      active = false
+    }
+  }, [tenantId, contextualPropertyId])
 
   async function loadRequestDetails(id) {
     if (!id) {
       setSelectedRequest(null)
       setDetailState('idle')
       setDetailError('')
+      setAttachments([])
+      setAttachmentState('idle')
       return
     }
 
     setDetailState('loading')
     setDetailError('')
+    setAttachmentState('loading')
+    setAttachmentError('')
+    setAttachmentNotice('')
 
     try {
       const nextRequest = await getMaintenanceRequestById(id)
       setSelectedRequest(nextRequest)
       setDetailState('success')
+      try {
+        const nextAttachments = await getMaintenanceAttachments(id, tenantId)
+        setAttachments(Array.isArray(nextAttachments) ? nextAttachments : [])
+        setAttachmentState('success')
+      } catch (loadError) {
+        setAttachments([])
+        setAttachmentState('error')
+        setAttachmentError(safeErrorMessage(loadError, 'Unable to load request attachments.'))
+      }
     } catch (requestError) {
       setSelectedRequest(null)
       setDetailState('error')
+      setAttachments([])
+      setAttachmentState('idle')
       setDetailError(
         safeErrorMessage(
           requestError,
@@ -167,6 +226,7 @@ function TenantMaintenancePage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    const propertyId = form.propertyId || ''
 
     if (!tenantId) {
       setFormError('Please sign in to submit a maintenance request.')
@@ -174,7 +234,7 @@ function TenantMaintenancePage() {
     }
 
     if (
-      !form.propertyId.trim() ||
+      !propertyId ||
       !form.title.trim() ||
       !form.description.trim()
     ) {
@@ -182,9 +242,8 @@ function TenantMaintenancePage() {
       return
     }
 
-    const normalizedPropertyId = form.propertyId.trim()
-    if (!isValidGuid(normalizedPropertyId)) {
-      setFormError('Property ID must be a valid GUID/UUID in the format xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.')
+    if (!properties.some((property) => property.id === propertyId)) {
+      setFormError('Choose one of your associated properties.')
       return
     }
 
@@ -194,7 +253,7 @@ function TenantMaintenancePage() {
 
     try {
       const payload = {
-        propertyId: normalizedPropertyId,
+        propertyId,
         title: form.title.trim(),
         description: form.description.trim(),
         category: form.category,
@@ -217,6 +276,73 @@ function TenantMaintenancePage() {
       )
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  async function handleAttachmentUpload(event) {
+    event.preventDefault()
+    if (!selectedRequest || !tenantId || !attachmentFile || attachmentPending) return
+    const attachmentForm = event.currentTarget
+    setAttachmentPending(true)
+    setAttachmentError('')
+    setAttachmentNotice('')
+    try {
+      await uploadMaintenanceAttachment(
+        selectedRequest.id,
+        tenantId,
+        attachmentFile,
+        attachmentType,
+      )
+      setAttachmentFile(null)
+      attachmentForm.reset()
+      const updated = await getMaintenanceAttachments(selectedRequest.id, tenantId)
+      setAttachments(Array.isArray(updated) ? updated : [])
+      setAttachmentState('success')
+      setAttachmentNotice('Attachment uploaded.')
+    } catch (uploadError) {
+      setAttachmentError(safeErrorMessage(uploadError, 'Unable to upload this attachment.'))
+    } finally {
+      setAttachmentPending(false)
+    }
+  }
+
+  async function handleAttachmentDelete(attachmentId) {
+    if (!selectedRequest || !tenantId || attachmentPending) return
+    setAttachmentPending(true)
+    setAttachmentError('')
+    setAttachmentNotice('')
+    try {
+      await deleteMaintenanceAttachment(selectedRequest.id, attachmentId, tenantId)
+      setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+      setAttachmentNotice('Attachment removed.')
+    } catch (deleteError) {
+      setAttachmentError(safeErrorMessage(deleteError, 'Unable to remove this attachment.'))
+    } finally {
+      setAttachmentPending(false)
+    }
+  }
+
+  async function handleAttachmentDownload(attachment) {
+    if (!selectedRequest || !tenantId) return
+    const downloadWindow = window.open('', '_blank')
+    if (!downloadWindow) {
+      setAttachmentError('Allow pop-ups to open the attachment.')
+      return
+    }
+    downloadWindow.opener = null
+    setAttachmentError('')
+    try {
+      const response = await getMaintenanceAttachmentDownload(
+        selectedRequest.id,
+        attachment.id,
+        tenantId,
+      )
+      const objectUrl = URL.createObjectURL(await response.blob())
+      downloadWindow.location.replace(objectUrl)
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+    } catch (downloadError) {
+      downloadWindow.close()
+      setAttachmentError(safeErrorMessage(downloadError, 'Unable to open this attachment.'))
     }
   }
 
@@ -308,8 +434,8 @@ function TenantMaintenancePage() {
                       </span>
                     </div>
                     <div className="maintenance-request-card__meta">
-                      <span>{request.category}</span>
-                      <span>{request.priority}</span>
+                      <span>{maintenanceEnumLabel(request.category, MAINTENANCE_CATEGORY)}</span>
+                      <span>{maintenanceEnumLabel(request.priority, MAINTENANCE_PRIORITY)}</span>
                     </div>
                     <small>Submitted {formatDate(request.createdAt)}</small>
                   </button>
@@ -328,14 +454,31 @@ function TenantMaintenancePage() {
 
             <form className="maintenance-form" onSubmit={handleSubmit}>
               <label>
-                Property ID
-                <input
-                  type="text"
+                Associated property
+                <select
                   name="propertyId"
                   value={form.propertyId}
                   onChange={handleChange}
-                  placeholder="e.g. 9b1040b3-f45d-4f2a-b91d-2d8f4ec6b4fd"
-                />
+                  disabled={propertyState !== 'success'}
+                  required
+                >
+                  <option value="">
+                    {propertyState === 'loading' ? 'Loading your properties…' :
+                      propertyState === 'empty' ? 'No associated properties' : 'Choose a property'}
+                  </option>
+                  {properties.map((property) => (
+                    <option key={property.id} value={property.id}>
+                      {[
+                        property.title || property.name || property.addressLine1 || property.address,
+                        property.city,
+                      ].filter(Boolean).join(' — ') || property.id}
+                    </option>
+                  ))}
+                </select>
+                {propertyState === 'error' && <span role="alert">{propertyError}</span>}
+                {propertyState === 'empty' && (
+                  <span>Your active lease properties will appear here.</span>
+                )}
               </label>
 
               <label>
@@ -401,7 +544,11 @@ function TenantMaintenancePage() {
                 </div>
               )}
 
-              <button type="submit" className="button button--primary" disabled={isSubmitting}>
+              <button
+                type="submit"
+                className="button button--primary"
+                disabled={isSubmitting || propertyState !== 'success'}
+              >
                 {isSubmitting ? 'Submitting...' : 'Submit request'}
               </button>
             </form>
@@ -447,11 +594,11 @@ function TenantMaintenancePage() {
                   </div>
                   <div>
                     <dt>Category</dt>
-                    <dd>{selectedRequest.category}</dd>
+                    <dd>{maintenanceEnumLabel(selectedRequest.category, MAINTENANCE_CATEGORY)}</dd>
                   </div>
                   <div>
                     <dt>Priority</dt>
-                    <dd>{selectedRequest.priority}</dd>
+                    <dd>{maintenanceEnumLabel(selectedRequest.priority, MAINTENANCE_PRIORITY)}</dd>
                   </div>
                   <div>
                     <dt>Created</dt>
@@ -486,6 +633,69 @@ function TenantMaintenancePage() {
                     <p>{selectedRequest.assignmentNotes}</p>
                   </section>
                 )}
+
+                <section className="maintenance-detail__section" aria-label="Request attachments">
+                  <h4>Attachments</h4>
+                  {attachmentState === 'loading' && <p role="status">Loading attachments…</p>}
+                  {attachmentState === 'error' && <p role="alert">{attachmentError}</p>}
+                  {attachmentState === 'success' && attachments.length === 0 && (
+                    <p>No attachments have been added to this request.</p>
+                  )}
+                  {attachments.length > 0 && (
+                    <ul className="maintenance-attachment-list">
+                      {attachments.map((attachment) => (
+                        <li key={attachment.id}>
+                          <div>
+                            <strong>{attachment.fileName}</strong>
+                            <small>
+                              {attachment.attachmentType || 'Attachment'}
+                              {Number.isFinite(attachment.fileSize)
+                                ? ` · ${(attachment.fileSize / 1024).toFixed(1)} KB`
+                                : ''}
+                            </small>
+                          </div>
+                          <div className="maintenance-review-actions">
+                            <button
+                              type="button"
+                              className="button button--quiet"
+                              onClick={() => handleAttachmentDownload(attachment)}
+                            >
+                              Open
+                            </button>
+                            <button
+                              type="button"
+                              className="button button--quiet"
+                              onClick={() => handleAttachmentDelete(attachment.id)}
+                              disabled={attachmentPending}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <form className="maintenance-form" onSubmit={handleAttachmentUpload}>
+                    <label>
+                      File
+                      <input
+                        type="file"
+                        onChange={(event) => setAttachmentFile(event.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    <label>
+                      Attachment type
+                      <select value={attachmentType} onChange={(event) => setAttachmentType(event.target.value)}>
+                        {ATTACHMENT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                      </select>
+                    </label>
+                    <button type="submit" className="button button--primary" disabled={attachmentPending || !attachmentFile}>
+                      {attachmentPending ? 'Saving…' : 'Upload attachment'}
+                    </button>
+                  </form>
+                  {attachmentError && <p role="alert" className="form-message form-message--error">{attachmentError}</p>}
+                  {attachmentNotice && <p role="status" className="page-notice">{attachmentNotice}</p>}
+                </section>
               </article>
             )}
 

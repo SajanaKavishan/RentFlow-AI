@@ -23,6 +23,9 @@ public sealed class JwtTokenService(
             new System.Security.Claims.Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new System.Security.Claims.Claim(JwtRegisteredClaimNames.Email, user.Email),
             new System.Security.Claims.Claim("role", user.Role.ToString()),
+            new System.Security.Claims.Claim(
+                JwtClaimNames.TokenVersion,
+                user.TokenVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             new System.Security.Claims.Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
         var signingCredentials = new SigningCredentials(

@@ -1,18 +1,30 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../auth/useAuth.js'
 import { USER_ROLES } from '../../auth/authModel.js'
-import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import {
   approveCoordinationWorkflow,
+  assignMaintenanceTechnician,
+  getMaintenanceTechnicians,
+  getLandlordMaintenanceProperties,
   getCoordinationWorkflow,
   getLatestEstimate,
   getMaintenanceHistory,
   getMaintenanceRequestById,
   getPropertyMaintenanceRequests,
+  markMaintenanceEstimatePending,
   MaintenanceApiError,
   rejectCoordinationWorkflow,
+  reviewRepairEstimate,
+  startCoordinationWorkflow,
+  triageMaintenanceRequest,
 } from '../services/maintenanceApiService.js'
+import {
+  MAINTENANCE_CATEGORY,
+  MAINTENANCE_PRIORITY,
+  MAINTENANCE_STATUS,
+  maintenanceEnumLabel,
+} from '../services/maintenanceEnums.js'
 import '../maintenance.css'
 
 function safeErrorMessage(error, fallback) {
@@ -30,61 +42,11 @@ function formatDate(value) {
 }
 
 const STATUS_LABELS = {
-  0: 'Submitted',
-  1: 'Triaged',
-  2: 'Assigned',
-  3: 'Estimate Pending',
-  4: 'Estimate Submitted',
-  5: 'Awaiting Landlord Approval',
-  6: 'Approved',
-  7: 'Rejected',
-  8: 'In Progress',
-  9: 'Completed',
-  10: 'Cancelled',
-  Submitted: 'Submitted',
-  Triaged: 'Triaged',
-  Assigned: 'Assigned',
-  EstimatePending: 'Estimate Pending',
-  EstimateSubmitted: 'Estimate Submitted',
-  AwaitingLandlordApproval: 'Awaiting Landlord Approval',
-  Approved: 'Approved',
-  Rejected: 'Rejected',
-  InProgress: 'In Progress',
-  Completed: 'Completed',
-  Cancelled: 'Cancelled',
   AwaitingHumanReview: 'Awaiting Human Review',
   Pending: 'Pending',
   Running: 'Running',
   Failed: 'Failed',
   Completed: 'Completed',
-}
-
-const CATEGORY_LABELS = {
-  0: 'Plumbing',
-  1: 'Electrical',
-  2: 'Appliance',
-  3: 'Structural',
-  4: 'Security',
-  5: 'Pest',
-  6: 'Other',
-  Plumbing: 'Plumbing',
-  Electrical: 'Electrical',
-  Appliance: 'Appliance',
-  Structural: 'Structural',
-  Security: 'Security',
-  Pest: 'Pest',
-  Other: 'Other',
-}
-
-const PRIORITY_LABELS = {
-  0: 'Low',
-  1: 'Normal',
-  2: 'High',
-  3: 'Emergency',
-  Low: 'Low',
-  Normal: 'Normal',
-  High: 'High',
-  Emergency: 'Emergency',
 }
 
 const ESTIMATE_STATUS_LABELS = {
@@ -94,13 +56,9 @@ const ESTIMATE_STATUS_LABELS = {
   3: 'Approved',
   4: 'Rejected',
   5: 'Superseded',
-  Draft: 'Draft',
-  Submitted: 'Submitted',
-  RevisionRequested: 'Revision Requested',
-  Approved: 'Approved',
-  Rejected: 'Rejected',
-  Superseded: 'Superseded',
 }
+
+const WORKFLOW_STORAGE_PREFIX = 'rentflow.maintenance.workflow.'
 
 function formatLabel(value, labels = {}) {
   if (value == null || value === '') return 'Unknown'
@@ -150,6 +108,11 @@ export default function LandlordMaintenancePage() {
   const { propertyId } = usePropertyContext()
   const { user } = useAuth()
 
+  const [properties, setProperties] = useState([])
+  const [selectedPropertyId, setSelectedPropertyId] = useState('')
+  const [propertyState, setPropertyState] = useState('loading')
+  const [propertyError, setPropertyError] = useState('')
+  const [propertyLoadVersion, setPropertyLoadVersion] = useState(0)
   const [requests, setRequests] = useState([])
   const [selectedRequestId, setSelectedRequestId] = useState(null)
   const [selectedRequest, setSelectedRequest] = useState(null)
@@ -169,8 +132,53 @@ export default function LandlordMaintenancePage() {
   const [decisionNotes, setDecisionNotes] = useState('')
   const [decisionPending, setDecisionPending] = useState(false)
   const [decisionNotice, setDecisionNotice] = useState('')
+  const [technicians, setTechnicians] = useState([])
+  const [technicianState, setTechnicianState] = useState('idle')
+  const [technicianError, setTechnicianError] = useState('')
+  const [selectedTechnicianId, setSelectedTechnicianId] = useState('')
+  const [assignmentNotes, setAssignmentNotes] = useState('')
+  const [triageCategory, setTriageCategory] = useState('')
+  const [triagePriority, setTriagePriority] = useState('')
+  const [triageNotes, setTriageNotes] = useState('')
+  const [requestActionPending, setRequestActionPending] = useState(false)
+  const [requestActionError, setRequestActionError] = useState('')
+  const [requestActionNotice, setRequestActionNotice] = useState('')
+  const [estimateReviewPending, setEstimateReviewPending] = useState(false)
+  const [estimateReviewNotes, setEstimateReviewNotes] = useState('')
 
   const isLandlord = user && [USER_ROLES.LANDLORD, USER_ROLES.ADMIN].includes(user.role)
+  const activePropertyId = propertyId || selectedPropertyId
+
+  useEffect(() => {
+    if (!isLandlord || propertyId) return undefined
+
+    let active = true
+
+    getLandlordMaintenanceProperties()
+      .then((nextProperties) => {
+        if (!active) return
+        if (!Array.isArray(nextProperties)) {
+          throw new TypeError('The property service returned an invalid property list.')
+        }
+        setProperties(nextProperties)
+        setPropertyState(nextProperties.length ? 'success' : 'empty')
+      })
+      .catch((error) => {
+        if (!active) return
+        setPropertyState('error')
+        setPropertyError(error.message || 'Unable to load your properties.')
+      })
+
+    return () => {
+      active = false
+    }
+  }, [isLandlord, propertyId, propertyLoadVersion])
+
+  function retryPropertyLoad() {
+    setPropertyState('loading')
+    setPropertyError('')
+    setPropertyLoadVersion((version) => version + 1)
+  }
 
   async function loadRequestDetails(requestId) {
     if (!requestId) {
@@ -188,6 +196,9 @@ export default function LandlordMaintenancePage() {
       setWorkflowError('')
       setDecisionNotes('')
       setDecisionNotice('')
+      setEstimateReviewNotes('')
+      setRequestActionError('')
+      setRequestActionNotice('')
       return
     }
 
@@ -202,11 +213,35 @@ export default function LandlordMaintenancePage() {
     setWorkflowError('')
     setDecisionNotes('')
     setDecisionNotice('')
+    setEstimateReviewNotes('')
+    setRequestActionError('')
+    setRequestActionNotice('')
 
     try {
       const request = await getMaintenanceRequestById(requestId)
       setSelectedRequest(request)
       setDetailState('success')
+      setTriageCategory(request.category)
+      setTriagePriority(request.priority)
+      setTriageNotes(request.triageNotes ?? '')
+      setAssignmentNotes(request.assignmentNotes ?? '')
+      setSelectedTechnicianId(request.technicianId ?? '')
+      setTechnicianError('')
+      if (request.status === 'Triaged') {
+        setTechnicianState('loading')
+        try {
+          const nextTechnicians = await getMaintenanceTechnicians()
+          setTechnicians(Array.isArray(nextTechnicians) ? nextTechnicians : [])
+          setTechnicianState(nextTechnicians?.length ? 'success' : 'empty')
+        } catch (technicianLoadError) {
+          setTechnicians([])
+          setTechnicianState('error')
+          setTechnicianError(technicianLoadError.message || 'Unable to load maintenance technicians.')
+        }
+      } else {
+        setTechnicians([])
+        setTechnicianState('idle')
+      }
 
       try {
         const nextHistory = await getMaintenanceHistory(requestId)
@@ -229,20 +264,32 @@ export default function LandlordMaintenancePage() {
         setEstimateState(latest ? 'success' : 'empty')
       } catch (estimateError) {
         setLatestEstimate(null)
-        setEstimateState('error')
-        setEstimateError(
-          safeErrorMessage(
-            estimateError,
-            'Unable to load the latest estimate. Please try again.',
-          ),
-        )
+        if (estimateError instanceof MaintenanceApiError && estimateError.statusCode === 404) {
+          setEstimateState('empty')
+          setEstimateError('')
+        } else {
+          setEstimateState('error')
+          setEstimateError(
+            safeErrorMessage(
+              estimateError,
+              'Unable to load the latest estimate. Please try again.',
+            ),
+          )
+        }
       }
 
-      const workflowId = extractWorkflowId(request)
+      let workflowId = extractWorkflowId(request)
+      if (!workflowId) {
+        try {
+          workflowId = window.localStorage.getItem(`${WORKFLOW_STORAGE_PREFIX}${requestId}`)
+        } catch {
+          workflowId = null
+        }
+      }
       if (!workflowId) {
         setWorkflow(null)
         setWorkflowState('none')
-        setWorkflowError('No coordination workflow available for this request.')
+        setWorkflowError('')
         return
       }
 
@@ -282,7 +329,7 @@ export default function LandlordMaintenancePage() {
   }
 
   async function loadRequests() {
-    if (!propertyId) {
+    if (!activePropertyId) {
       setRequests([])
       setSelectedRequestId(null)
       setSelectedRequest(null)
@@ -295,7 +342,7 @@ export default function LandlordMaintenancePage() {
     setPageError('')
 
     try {
-      const nextRequests = await getPropertyMaintenanceRequests(propertyId)
+      const nextRequests = await getPropertyMaintenanceRequests(activePropertyId)
       const safeRequests = Array.isArray(nextRequests) ? nextRequests : []
       setRequests(safeRequests)
 
@@ -346,7 +393,7 @@ export default function LandlordMaintenancePage() {
 
     loadRequests()
     return undefined
-  }, [propertyId, isLandlord])
+  }, [activePropertyId, isLandlord])
 
   async function handleWorkflowDecision(action) {
     if (!selectedRequest || !workflow || decisionPending) return
@@ -385,6 +432,92 @@ export default function LandlordMaintenancePage() {
     }
   }
 
+  async function beginCoordinationWorkflow() {
+    if (!selectedRequest || decisionPending) return
+    setDecisionPending(true)
+    setWorkflowError('')
+    setDecisionNotice('')
+    setWorkflowState('loading')
+    try {
+      const started = await startCoordinationWorkflow(selectedRequest.id)
+      if (!started?.id) throw new Error('The workflow service did not return a workflow ID.')
+      try {
+        window.localStorage.setItem(
+          `${WORKFLOW_STORAGE_PREFIX}${selectedRequest.id}`,
+          started.id,
+        )
+      } catch {
+        // The server remains the source of truth; this only saves the lookup ID locally.
+      }
+      const persistedWorkflow = await getCoordinationWorkflow(selectedRequest.id, started.id)
+      setWorkflow(persistedWorkflow)
+      setWorkflowState('success')
+      setDecisionNotice('AI coordination started and saved.')
+    } catch (error) {
+      setWorkflowState('error')
+      setWorkflowError(
+        safeErrorMessage(error, 'Unable to start or read the coordination workflow. Please try again.'),
+      )
+    } finally {
+      setDecisionPending(false)
+    }
+  }
+
+  async function handleRequestTransition(action) {
+    if (!selectedRequest || requestActionPending) return
+    setRequestActionPending(true)
+    setRequestActionError('')
+    setRequestActionNotice('')
+    try {
+      if (action === 'triage') {
+        await triageMaintenanceRequest(selectedRequest.id, {
+          category: triageCategory,
+          priority: triagePriority,
+          triageNotes,
+        })
+      } else if (action === 'assign') {
+        await assignMaintenanceTechnician(selectedRequest.id, {
+          technicianId: selectedTechnicianId,
+          assignmentNotes,
+        })
+      } else {
+        await markMaintenanceEstimatePending(selectedRequest.id)
+      }
+      await loadRequests()
+      setRequestActionNotice(
+        action === 'triage' ? 'Request triaged.' :
+          action === 'assign' ? 'Technician assigned.' : 'Estimate requested from the technician.',
+      )
+    } catch (error) {
+      setRequestActionError(
+        safeErrorMessage(error, 'Unable to update the maintenance request. Please try again.'),
+      )
+    } finally {
+      setRequestActionPending(false)
+    }
+  }
+
+  async function handleEstimateReview(action) {
+    if (!selectedRequest || !latestEstimate || estimateReviewPending) return
+    setEstimateReviewPending(true)
+    setRequestActionError('')
+    setRequestActionNotice('')
+    try {
+      await reviewRepairEstimate(selectedRequest.id, latestEstimate.id, action, estimateReviewNotes)
+      await loadRequests()
+      setRequestActionNotice(
+        action === 'approve' ? 'Repair estimate approved.' :
+          action === 'reject' ? 'Repair estimate rejected.' : 'Revision requested from the technician.',
+      )
+    } catch (error) {
+      setRequestActionError(
+        safeErrorMessage(error, 'Unable to review the estimate. Please try again.'),
+      )
+    } finally {
+      setEstimateReviewPending(false)
+    }
+  }
+
   const workflowRequiresDecision =
     workflow && workflow.status === 'AwaitingHumanReview' && workflow.requiresHumanApproval !== false
 
@@ -417,9 +550,52 @@ export default function LandlordMaintenancePage() {
         </section>
       )}
 
-      {isLandlord && !propertyId && <PropertySelectionState className="page-state" />}
+      {isLandlord && !activePropertyId && propertyState === 'loading' && (
+        <section className="page-state" role="status" aria-live="polite">
+          <span className="loading-spinner" aria-hidden="true" />
+          <h2>Loading your properties</h2>
+          <p>Select one of your properties to review its maintenance requests.</p>
+        </section>
+      )}
 
-      {isLandlord && propertyId && pageState === 'loading' && (
+      {isLandlord && !activePropertyId && propertyState === 'error' && (
+        <section className="page-state page-state--error" role="alert">
+          <h2>We could not load your properties</h2>
+          <p>{propertyError}</p>
+          <button type="button" className="button button--primary" onClick={retryPropertyLoad}>
+            Try again
+          </button>
+        </section>
+      )}
+
+      {isLandlord && !activePropertyId && propertyState === 'empty' && (
+        <section className="page-state">
+          <h2>No properties available</h2>
+          <p>Create or manage a property before reviewing property-scoped maintenance requests.</p>
+        </section>
+      )}
+
+      {isLandlord && !propertyId && propertyState === 'success' && (
+        <section className="maintenance-panel maintenance-property-selector">
+          <label>
+            Property
+            <select
+              aria-label="Property"
+              value={selectedPropertyId}
+              onChange={(event) => setSelectedPropertyId(event.target.value)}
+            >
+              <option value="">Choose a property</option>
+              {properties.map((property) => (
+                <option key={property.id} value={property.id}>
+                  {[property.title, property.address, property.city].filter(Boolean).join(' — ')}
+                </option>
+              ))}
+            </select>
+          </label>
+        </section>
+      )}
+
+      {isLandlord && activePropertyId && pageState === 'loading' && (
         <section className="page-state" aria-live="polite">
           <span className="loading-spinner" aria-hidden="true" />
           <h2>Loading maintenance requests</h2>
@@ -427,7 +603,7 @@ export default function LandlordMaintenancePage() {
         </section>
       )}
 
-      {isLandlord && propertyId && pageState === 'error' && (
+      {isLandlord && activePropertyId && pageState === 'error' && (
         <section className="page-state page-state--error" role="alert">
           <div className="page-state__icon" aria-hidden="true">!</div>
           <h2>We could not load maintenance requests</h2>
@@ -438,7 +614,7 @@ export default function LandlordMaintenancePage() {
         </section>
       )}
 
-      {isLandlord && propertyId && pageState === 'empty' && (
+      {isLandlord && activePropertyId && pageState === 'empty' && (
         <section className="page-state">
           <div className="page-state__icon" aria-hidden="true">✓</div>
           <h2>No maintenance requests yet</h2>
@@ -446,7 +622,7 @@ export default function LandlordMaintenancePage() {
         </section>
       )}
 
-      {isLandlord && propertyId && pageState === 'success' && (
+      {isLandlord && activePropertyId && pageState === 'success' && (
         <div className="maintenance-layout">
           <aside className="maintenance-panel">
             <div className="maintenance-panel__header">
@@ -472,12 +648,12 @@ export default function LandlordMaintenancePage() {
                     <div className="maintenance-request-card__topline">
                       <strong>{request.title}</strong>
                       <span className={`status-badge status-badge--${toBadgeClass(request.status)}`}>
-                        {formatLabel(request.status, STATUS_LABELS)}
+                        {maintenanceEnumLabel(request.status, MAINTENANCE_STATUS)}
                       </span>
                     </div>
                     <div className="maintenance-request-card__meta">
-                      <span>{formatLabel(request.category, CATEGORY_LABELS)}</span>
-                      <span>{formatLabel(request.priority, PRIORITY_LABELS)}</span>
+                      <span>{maintenanceEnumLabel(request.category, MAINTENANCE_CATEGORY)}</span>
+                      <span>{maintenanceEnumLabel(request.priority, MAINTENANCE_PRIORITY)}</span>
                     </div>
                     <small>Created {formatDate(request.createdAt)}</small>
                   </button>
@@ -510,18 +686,18 @@ export default function LandlordMaintenancePage() {
                     <h3>{selectedRequest.title}</h3>
                   </div>
                   <span className={`status-badge status-badge--${toBadgeClass(selectedRequest.status)}`}>
-                    {formatLabel(selectedRequest.status, STATUS_LABELS)}
+                    {maintenanceEnumLabel(selectedRequest.status, MAINTENANCE_STATUS)}
                   </span>
                 </div>
 
                 <dl className="maintenance-detail__meta">
                   <div>
                     <dt>Category</dt>
-                    <dd>{formatLabel(selectedRequest.category, CATEGORY_LABELS)}</dd>
+                    <dd>{maintenanceEnumLabel(selectedRequest.category, MAINTENANCE_CATEGORY)}</dd>
                   </div>
                   <div>
                     <dt>Priority</dt>
-                    <dd>{formatLabel(selectedRequest.priority, PRIORITY_LABELS)}</dd>
+                    <dd>{maintenanceEnumLabel(selectedRequest.priority, MAINTENANCE_PRIORITY)}</dd>
                   </div>
                   <div>
                     <dt>Tenant ID</dt>
@@ -568,6 +744,102 @@ export default function LandlordMaintenancePage() {
                 )}
               </div>
             )}
+
+            {detailState === 'success' && selectedRequest?.status === 'Submitted' && (
+              <section className="maintenance-detail__section" aria-label="Triage request">
+                <h4>Triage request</h4>
+                <div className="maintenance-form">
+                  <div className="maintenance-form__row">
+                    <label>
+                      Category
+                      <select value={triageCategory} onChange={(event) => setTriageCategory(event.target.value)}>
+                        {Object.keys(MAINTENANCE_CATEGORY.byName).map((category) => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Priority
+                      <select value={triagePriority} onChange={(event) => setTriagePriority(event.target.value)}>
+                        {Object.keys(MAINTENANCE_PRIORITY.byName).map((priority) => (
+                          <option key={priority} value={priority}>{priority}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <label>
+                    Triage notes
+                    <textarea value={triageNotes} onChange={(event) => setTriageNotes(event.target.value)} rows={3} />
+                  </label>
+                  <button
+                    type="button"
+                    className="button button--primary"
+                    onClick={() => handleRequestTransition('triage')}
+                    disabled={requestActionPending}
+                  >
+                    {requestActionPending ? 'Saving...' : 'Triage request'}
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {detailState === 'success' && selectedRequest?.status === 'Triaged' && (
+              <section className="maintenance-detail__section" aria-label="Assign technician">
+                <h4>Assign a maintenance technician</h4>
+                {technicianState === 'loading' && <p role="status">Loading active technicians…</p>}
+                {technicianState === 'error' && <p role="alert">{technicianError}</p>}
+                {technicianState === 'empty' && <p>No active maintenance technicians are available.</p>}
+                {technicianState === 'success' && (
+                  <div className="maintenance-form">
+                    <label>
+                      Technician
+                      <select
+                        aria-label="Maintenance technician"
+                        value={selectedTechnicianId}
+                        onChange={(event) => setSelectedTechnicianId(event.target.value)}
+                      >
+                        <option value="">Choose a technician</option>
+                        {technicians.map((technician) => (
+                          <option key={technician.id} value={technician.id}>
+                            {technician.name || technician.fullName || technician.id}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Assignment notes
+                      <textarea value={assignmentNotes} onChange={(event) => setAssignmentNotes(event.target.value)} rows={3} />
+                    </label>
+                    <button
+                      type="button"
+                      className="button button--primary"
+                      onClick={() => handleRequestTransition('assign')}
+                      disabled={requestActionPending || !selectedTechnicianId}
+                    >
+                      {requestActionPending ? 'Assigning…' : 'Assign technician'}
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {detailState === 'success' && selectedRequest?.status === 'Assigned' && (
+              <section className="maintenance-detail__section">
+                <h4>Estimate workflow</h4>
+                <p>Request a repair estimate from the assigned technician to continue.</p>
+                <button
+                  type="button"
+                  className="button button--primary"
+                  onClick={() => handleRequestTransition('estimate-pending')}
+                  disabled={requestActionPending}
+                >
+                  {requestActionPending ? 'Requesting…' : 'Request estimate'}
+                </button>
+              </section>
+            )}
+
+            {requestActionError && <p role="alert" className="form-message form-message--error">{requestActionError}</p>}
+            {requestActionNotice && <p role="status" className="page-notice">{requestActionNotice}</p>}
           </section>
 
           <aside className="maintenance-panel">
@@ -603,9 +875,9 @@ export default function LandlordMaintenancePage() {
                 {history.map((entry) => (
                   <div className="maintenance-request-card" key={entry.id}>
                     <div className="maintenance-request-card__topline">
-                      <strong>{formatLabel(entry.toStatus)}</strong>
-                      <span className={`status-badge status-badge--${toBadgeClass(entry.toStatus)}`}>
-                        {formatLabel(entry.toStatus)}
+                      <strong>{maintenanceEnumLabel(entry.toStatus, MAINTENANCE_STATUS)}</strong>
+                      <span className={`status-badge status-badge--${toBadgeClass(maintenanceEnumLabel(entry.toStatus, MAINTENANCE_STATUS))}`}>
+                        {maintenanceEnumLabel(entry.toStatus, MAINTENANCE_STATUS)}
                       </span>
                     </div>
                     <div className="maintenance-request-card__meta">
@@ -647,7 +919,7 @@ export default function LandlordMaintenancePage() {
 
             {estimateState === 'success' && latestEstimate && (
               <div className="maintenance-detail__section">
-                <p><strong>Status:</strong> {formatLabel(latestEstimate.status)}</p>
+                <p><strong>Status:</strong> {formatLabel(latestEstimate.status, ESTIMATE_STATUS_LABELS)}</p>
                 <p><strong>Total cost:</strong> {money(latestEstimate.totalCost)}</p>
                 <p><strong>Labor:</strong> {money(latestEstimate.laborCost)}</p>
                 <p><strong>Parts:</strong> {money(latestEstimate.partsCost)}</p>
@@ -655,6 +927,45 @@ export default function LandlordMaintenancePage() {
                 {latestEstimate.notes && <p><strong>Notes:</strong> {latestEstimate.notes}</p>}
                 <p><strong>Technician ID:</strong> {latestEstimate.technicianId}</p>
                 <p><strong>Submitted:</strong> {formatDate(latestEstimate.submittedAt || latestEstimate.createdAt)}</p>
+                {selectedRequest?.status === 'AwaitingLandlordApproval' &&
+                  (latestEstimate.status === 1 || latestEstimate.status === 'Submitted') && (
+                    <div className="maintenance-form" style={{ marginTop: '14px' }}>
+                      <label>
+                        Review notes
+                        <textarea
+                          value={estimateReviewNotes}
+                          onChange={(event) => setEstimateReviewNotes(event.target.value)}
+                          rows={3}
+                        />
+                      </label>
+                      <div className="maintenance-review-actions">
+                        <button
+                          type="button"
+                          className="button button--primary"
+                          onClick={() => handleEstimateReview('approve')}
+                          disabled={estimateReviewPending}
+                        >
+                          {estimateReviewPending ? 'Saving…' : 'Approve estimate'}
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--quiet"
+                          onClick={() => handleEstimateReview('reject')}
+                          disabled={estimateReviewPending}
+                        >
+                          Reject estimate
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--quiet"
+                          onClick={() => handleEstimateReview('request-revision')}
+                          disabled={estimateReviewPending}
+                        >
+                          Request revision
+                        </button>
+                      </div>
+                    </div>
+                  )}
               </div>
             )}
 
@@ -666,7 +977,15 @@ export default function LandlordMaintenancePage() {
             {workflowState === 'none' && (
               <div className="page-state page-state--inline">
                 <h3>No coordination workflow available</h3>
-                <p>No coordination workflow ID was included in the current maintenance request response.</p>
+                <p>Start AI coordination to create and save a workflow for this maintenance request.</p>
+                <button
+                  type="button"
+                  className="button button--primary"
+                  onClick={beginCoordinationWorkflow}
+                  disabled={decisionPending}
+                >
+                  {decisionPending ? 'Starting…' : 'Start AI coordination'}
+                </button>
               </div>
             )}
 
@@ -682,6 +1001,14 @@ export default function LandlordMaintenancePage() {
                 <div className="page-state__icon" aria-hidden="true">!</div>
                 <h3>Workflow unavailable</h3>
                 <p>{workflowError}</p>
+                <button
+                  type="button"
+                  className="button button--quiet"
+                  onClick={beginCoordinationWorkflow}
+                  disabled={decisionPending}
+                >
+                  Start a new workflow
+                </button>
               </div>
             )}
 

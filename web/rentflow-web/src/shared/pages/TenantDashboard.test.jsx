@@ -73,7 +73,12 @@ describe('tenant dashboard', () => {
     renderApp()
     expect(await screen.findByText('No applications yet.')).toBeInTheDocument()
     expect(await screen.findByText('No viewings yet.')).toBeInTheDocument()
-    expect(screen.getAllByText('Integration pending')).toHaveLength(3)
+    expect(screen.getAllByText('Integration pending')).toHaveLength(1)
+    expect(screen.getByRole('link', { name: /Open Lease & Payments/ })).toHaveAttribute('href', '/modules/lease-payments')
+    const maintenanceLink = within(screen.getByRole('main')).getByRole('link', { name: 'Maintenance' })
+    expect(maintenanceLink).toHaveAttribute('href', '/modules/maintenance')
+    expect(maintenanceLink).toHaveTextContent('Request repairs and track their progress.')
+    expect(maintenanceLink).not.toHaveTextContent('Integration pending')
     expect(screen.queryByText(/\$|match score|Recent Activity|Sarah Chen/)).not.toBeInTheDocument()
   })
 
@@ -166,17 +171,45 @@ describe('tenant dashboard', () => {
     expect(sidebarLink).not.toHaveTextContent('Soon')
   })
 
-  it.each(['Lease & Payments', 'Maintenance'])('provides a pending tenant destination for %s', async (label) => {
+  it('opens the tenant lease and payments workspace from the sidebar', async () => {
     renderApp()
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: new RegExp(`^${label}`) }))
-    expect(screen.getByRole('heading', { name: label })).toBeInTheDocument()
-    expect(screen.getByText('Integration pending')).toBeInTheDocument()
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Lease & Payments' }))
+    expect(screen.getByRole('heading', { name: 'Lease & Payments' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Lease and payment sections' })).toBeInTheDocument()
   })
 
-  it.each(['Landlord', 'Admin', 'MaintenanceTechnician'])('does not call tenant APIs for %s', (role) => {
+  it('navigates the Maintenance card to the tenant maintenance page', async () => {
+    renderApp()
+    const maintenanceLink = within(screen.getByRole('main')).getByRole('link', { name: 'Maintenance' })
+    expect(maintenanceLink).toHaveAttribute('href', '/modules/maintenance')
+    expect(maintenanceLink).toHaveTextContent('Request repairs and track their progress.')
+    expect(maintenanceLink).not.toHaveTextContent('Integration pending')
+  })
+
+  it.each(['Landlord', 'Admin', 'MaintenanceTechnician'])('does not call tenant APIs for %s', async (role) => {
+    if (role === 'Admin') {
+      fetch.mockResolvedValue(json({
+        items: [],
+        pagination: {
+          page: 1, pageSize: 1, totalCount: 0, totalPages: 0,
+          hasNextPage: false, hasPreviousPage: false,
+        },
+      }))
+    }
     renderApp({ ...tenant, role })
-    expect(screen.getByRole('heading', { name: 'Welcome, Amara Silva' })).toBeInTheDocument()
-    expect(fetch).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: role === 'Admin' ? 'System Overview' : 'Welcome, Amara Silva' })).toBeInTheDocument()
+    await act(async () => {})
+    const requestedPaths = fetch.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname)
+    expect(requestedPaths).not.toContain('/api/rental-applications')
+    expect(requestedPaths).not.toContain('/api/viewings')
+    expect(requestedPaths).toEqual(role === 'Admin' ? Array(5).fill('/api/admin/users') : [])
+    if (role === 'Admin') {
+      const roleFilters = fetch.mock.calls
+        .map(([url]) => new URL(url, 'http://localhost').searchParams.get('role'))
+        .filter(Boolean)
+        .sort()
+      expect(roleFilters).toEqual(['Admin', 'Landlord', 'MaintenanceTechnician', 'Tenant'])
+    }
   })
 
   it('uses the existing session expiry handling when a summary returns 401', async () => {

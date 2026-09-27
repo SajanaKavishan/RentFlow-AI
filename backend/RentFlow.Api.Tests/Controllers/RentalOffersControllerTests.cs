@@ -137,6 +137,28 @@ public class RentalOffersControllerTests
     }
 
     [Fact]
+    public async Task GetByLandlord_UsesAuthenticatedLandlordId()
+    {
+        var landlordId = Guid.NewGuid();
+        var offers = new List<RentalOfferResponseDto> { CreateOfferResponse() };
+        var service = new StubRentalOfferService
+        {
+            GetByLandlordHandler = (_, _) => Task.FromResult<IReadOnlyList<RentalOfferResponseDto>>(offers)
+        };
+        var controller = CreateController(service, new StubCurrentUserService
+        {
+            UserId = landlordId,
+            Role = UserRole.Landlord
+        });
+
+        var response = await controller.GetByLandlord(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        Assert.Same(offers, ok.Value);
+        Assert.Equal(landlordId, service.RequestedLandlordId);
+    }
+
+    [Fact]
     public async Task Accept_UsesAuthenticatedTenantId()
     {
         var tenantId = Guid.NewGuid();
@@ -275,6 +297,10 @@ public class RentalOffersControllerTests
         public Task<bool> CanAccessWorkflowAsync(
             Guid landlordId, Guid workflowId, CancellationToken cancellationToken = default)
             => Task.FromResult(false);
+
+        public Task<bool> CanAccessPricingAnalysisWorkflowAsync(
+            Guid landlordId, Guid workflowId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
     }
 
     private sealed class StubRentalOfferService : IRentalOfferService
@@ -289,6 +315,10 @@ public class RentalOffersControllerTests
             Task<IReadOnlyList<RentalOfferResponseDto>>>?
             GetByTenantHandler { get; init; }
 
+        public Func<Guid, CancellationToken,
+            Task<IReadOnlyList<RentalOfferResponseDto>>>?
+            GetByLandlordHandler { get; init; }
+
         public Func<Guid, Guid, CancellationToken,
             Task<RentalOfferResponseDto>>? AcceptHandler { get; init; }
 
@@ -299,6 +329,7 @@ public class RentalOffersControllerTests
             Task<RentalOfferResponseDto>>? WithdrawHandler { get; init; }
 
         public Guid? RequestedTenantId { get; private set; }
+        public Guid? RequestedLandlordId { get; private set; }
 
         public Guid? RequestedOfferId { get; private set; }
 
@@ -337,6 +368,15 @@ public class RentalOffersControllerTests
                     cancellationToken)
                 ?? Task.FromResult<IReadOnlyList<RentalOfferResponseDto>>(
                     Array.Empty<RentalOfferResponseDto>());
+        }
+
+        public Task<IReadOnlyList<RentalOfferResponseDto>> GetByLandlordAsync(
+            Guid landlordId,
+            CancellationToken cancellationToken = default)
+        {
+            RequestedLandlordId = landlordId;
+            return GetByLandlordHandler?.Invoke(landlordId, cancellationToken)
+                ?? Task.FromResult<IReadOnlyList<RentalOfferResponseDto>>([]);
         }
 
         public Task<RentalOfferResponseDto> AcceptAsync(

@@ -273,7 +273,7 @@ describe('landlord dashboard', () => {
     fetch.mockImplementation(() => Promise.resolve(json([])))
     renderApp(scopedDashboard(), { ...landlord, role })
     await act(async () => {})
-    expect(screen.getByRole('heading', { name: 'Welcome, Nila Perera' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: role === 'Admin' ? 'System Overview' : 'Welcome, Nila Perera' })).toBeInTheDocument()
     expect(fetch.mock.calls.some(([url]) => url.includes('/property/'))).toBe(false)
     expect(screen.queryByRole('link', { name: 'Open AI Review' })).not.toBeInTheDocument()
   })

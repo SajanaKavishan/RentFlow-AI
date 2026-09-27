@@ -17,6 +17,10 @@ public interface IPaymentService
         Guid tenantId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<PaymentResponseDto>> GetByLandlordAsync(
+        Guid landlordId,
+        CancellationToken cancellationToken = default);
+
     Task<PaymentResponseDto> CompleteAsync(
         Guid paymentId,
         CancellationToken cancellationToken = default);

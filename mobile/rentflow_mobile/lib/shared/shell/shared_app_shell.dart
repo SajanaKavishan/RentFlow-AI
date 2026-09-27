@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../features/auth/models/current_user.dart';
 import '../../features/maintenance/screens/assigned_work_screen.dart';
+import '../../features/maintenance/screens/my_maintenance_requests_screen.dart';
 import '../../features/maintenance/services/maintenance_api_service.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/notifications/services/notification_api_service.dart';
-import '../../features/rental_applications/screens/my_rental_applications_screen.dart';
+import '../../features/properties/screens/property_list_screen.dart';
+import '../../features/properties/services/property_api_service.dart';
 import '../../features/rental_applications/screens/landlord_rental_applications_screen.dart';
+import '../../features/rental_applications/screens/my_rental_applications_screen.dart';
 import '../../features/rental_applications/services/rental_application_api_service.dart';
 import '../../features/viewings/screens/landlord_viewing_requests_screen.dart';
 import '../../features/viewings/screens/my_viewings_screen.dart';
@@ -23,6 +26,7 @@ class SharedAppShell extends StatefulWidget {
   const SharedAppShell({
     super.key,
     required this.user,
+    this.propertyApiService,
     this.viewingsContent,
     this.applicationsContent,
     this.viewingApiService,
@@ -43,6 +47,7 @@ class SharedAppShell extends StatefulWidget {
   final NotificationApiService? notificationApiService;
   final MaintenanceApiService? maintenanceApiService;
   final String? landlordPropertyId;
+  final PropertyApiService? propertyApiService;
 
   @override
   State<SharedAppShell> createState() => _SharedAppShellState();
@@ -81,6 +86,7 @@ class _SharedAppShellState extends State<SharedAppShell>
     final index = _destinations.indexWhere(
       (destination) => destination.id == id,
     );
+
     if (index >= 0) _select(index);
   }
 
@@ -89,6 +95,7 @@ class _SharedAppShellState extends State<SharedAppShell>
       context,
       message: 'Open an application to view or manage its documents.',
     );
+
     _selectDestination(RoleDestinationId.applications);
   }
 
@@ -104,18 +111,27 @@ class _SharedAppShellState extends State<SharedAppShell>
 
   Future<void> _refreshUnreadCount() async {
     final service = widget.notificationApiService;
+
     if (service == null) return;
+
     try {
       final count = await service.getUnreadCount();
-      if (mounted) setState(() => _unreadCount = count > 0 ? count : null);
+
+      if (mounted) {
+        setState(() => _unreadCount = count > 0 ? count : null);
+      }
     } catch (_) {
-      if (mounted) setState(() => _unreadCount = null);
+      if (mounted) {
+        setState(() => _unreadCount = null);
+      }
     }
   }
 
   Future<void> _openNotifications() async {
     final service = widget.notificationApiService;
+
     if (service == null) return;
+
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => NotificationsScreen(
@@ -126,6 +142,7 @@ class _SharedAppShellState extends State<SharedAppShell>
         ),
       ),
     );
+
     await _refreshUnreadCount();
   }
 
@@ -171,10 +188,12 @@ class _SharedAppShellState extends State<SharedAppShell>
   @override
   Widget build(BuildContext context) {
     final selected = _selected;
+
     final contentOwnsAppBar =
         selected.experience == DestinationExperience.feature ||
         (selected.id == RoleDestinationId.home &&
             widget.user.role == UserRole.tenant);
+
     return Scaffold(
       appBar: contentOwnsAppBar ? null : _appBar(selected),
       body: _contentFor(selected),
@@ -277,18 +296,22 @@ class _SharedAppShellState extends State<SharedAppShell>
   Widget _contentFor(RoleDestination destination) {
     return switch (destination.experience) {
       DestinationExperience.dashboard => _dashboard(),
+
       DestinationExperience.profile => SharedProfileContent(
         user: widget.user,
         onOpenApplications: widget.user.role == UserRole.tenant
             ? _openDocuments
             : null,
       ),
+
       DestinationExperience.feature => _featureFor(destination.id),
+
       DestinationExperience.unavailable => ModuleUnavailableState(
         title: destination.label,
         explanation: destination.explanation!,
         owner: destination.owner,
       ),
+
       DestinationExperience.webWorkspace => WebWorkspaceState(
         title: destination.label,
         explanation: destination.explanation!,
@@ -297,14 +320,26 @@ class _SharedAppShellState extends State<SharedAppShell>
   }
 
   Widget _featureFor(RoleDestinationId id) => switch (id) {
+    RoleDestinationId.properties =>
+      widget.propertyApiService == null
+          ? const ModuleUnavailableState(
+              title: 'Properties',
+              explanation: 'Property discovery is currently unavailable.',
+              owner: 'Property management',
+            )
+          : PropertyListScreen(propertyApiService: widget.propertyApiService!),
+
     RoleDestinationId.viewings =>
-      widget.viewingsContent ?? const MyViewingsScreen(),
+      widget.viewingsContent ??
+          MyViewingsScreen(viewingApiService: widget.viewingApiService),
+
     RoleDestinationId.viewingRequests =>
       widget.viewingsContent ??
           LandlordViewingRequestsScreen(
             propertyId: widget.landlordPropertyId,
             viewingApiService: widget.viewingApiService,
           ),
+
     RoleDestinationId.applications =>
       widget.applicationsContent ??
           (widget.user.role == UserRole.landlord
@@ -317,9 +352,16 @@ class _SharedAppShellState extends State<SharedAppShell>
                   rentalApplicationApiService:
                       widget.rentalApplicationApiService,
                 )),
-    RoleDestinationId.assignedWork => AssignedWorkScreen(
+
+    RoleDestinationId.maintenance => MyMaintenanceRequestsScreen(
       maintenanceApiService: widget.maintenanceApiService,
     ),
+
+    RoleDestinationId.assignedWork => AssignedWorkScreen(
+      maintenanceApiService: widget.maintenanceApiService,
+      technicianId: widget.user.id,
+    ),
+
     _ => const SizedBox.shrink(),
   };
 
@@ -338,12 +380,14 @@ class _SharedAppShellState extends State<SharedAppShell>
         onOpenNotifications: _openNotifications,
       );
     }
+
     if (widget.user.role == UserRole.landlord) {
       return LandlordHome(
         user: widget.user,
         onDestinationSelected: _selectDestination,
       );
     }
+
     return _RoleHome(
       user: widget.user,
       destinations: _destinations,
@@ -385,6 +429,7 @@ class _RoleHome extends StatelessWidget {
         .entries
         .where((entry) => entry.value.id != RoleDestinationId.home)
         .toList(growable: false);
+
     return AuthenticatedPage(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -441,6 +486,7 @@ class _QuickLinkCard extends StatelessWidget {
       ),
       _ => ('Available', StatusTone.success),
     };
+
     return AppCard(
       onTap: onTap,
       child: Row(

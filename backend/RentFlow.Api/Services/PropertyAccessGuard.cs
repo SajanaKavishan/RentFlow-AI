@@ -130,4 +130,24 @@ public sealed class PropertyAccessGuard(ApplicationDbContext dbContext) : IPrope
                             && property.LandlordId == landlordId)),
                 cancellationToken);
     }
+
+    public Task<bool> CanAccessPricingAnalysisWorkflowAsync(
+        Guid landlordId,
+        Guid workflowId,
+        CancellationToken cancellationToken = default)
+    {
+        if (landlordId == Guid.Empty || workflowId == Guid.Empty)
+        {
+            return Task.FromResult(false);
+        }
+
+        return dbContext.PricingAnalysisWorkflows
+            .AsNoTracking()
+            .AnyAsync(
+                workflow => workflow.Id == workflowId
+                    && dbContext.Properties.Any(property =>
+                        property.Id == workflow.PropertyId
+                        && property.LandlordId == landlordId),
+                cancellationToken);
+    }
 }

@@ -34,4 +34,9 @@ public interface IPropertyAccessGuard
         Guid landlordId,
         Guid workflowId,
         CancellationToken cancellationToken = default);
+
+    Task<bool> CanAccessPricingAnalysisWorkflowAsync(
+        Guid landlordId,
+        Guid workflowId,
+        CancellationToken cancellationToken = default);
 }

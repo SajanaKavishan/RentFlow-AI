@@ -80,6 +80,20 @@ public class LeaseAgreementsController : ControllerBase
         });
     }
 
+    [HttpGet("landlord")]
+    [Authorize(Roles = "Landlord")]
+    public async Task<IActionResult> GetByLandlord(
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var leases = await _leaseAgreementService.GetByLandlordAsync(
+                GetRequiredUserId(), cancellationToken);
+
+            return Ok(leases);
+        });
+    }
+
     [HttpGet("{id:guid}")]
     [Authorize(Roles = "Tenant,Landlord,Admin")]
     public async Task<IActionResult> GetById(

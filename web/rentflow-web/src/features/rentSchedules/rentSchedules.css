@@ -1,0 +1,15 @@
+.rent-schedules-page .shared-page-header { margin-bottom: 28px; }
+.rent-schedules-page .shared-card { height: auto; margin-bottom: 18px; }
+.rent-schedule-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.rent-schedule-heading h2 { margin: 0; }
+.rent-schedule-selector { display: grid; gap: 6px; margin-top: 18px; font-size: .82rem; font-weight: 700; }
+.rent-schedule-selector select { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font: inherit; }
+.rent-schedule-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.rent-schedule-facts div { min-width: 0; padding: 12px; border-radius: var(--radius-sm); background: var(--olive-50); }
+.rent-schedule-facts dt { color: var(--muted); font-size: .78rem; }
+.rent-schedule-facts dd { margin: 5px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.rent-schedule-table-wrap { overflow-x: auto; margin-top: 16px; }
+.rent-schedule-table { width: 100%; border-collapse: collapse; text-align: left; }
+.rent-schedule-table th, .rent-schedule-table td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.rent-schedule-table th { color: var(--muted); font-size: .78rem; }
+@media (max-width: 560px) { .rent-schedule-facts { grid-template-columns: 1fr; } }

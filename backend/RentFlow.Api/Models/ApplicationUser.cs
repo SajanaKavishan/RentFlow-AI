@@ -12,13 +12,17 @@ public sealed class ApplicationUser
 
     public string PhoneNumber { get; set; } = string.Empty;
 
-    public string PasswordHash { get; set; } = string.Empty;
+    public string? PasswordHash { get; set; }
 
     public UserRole Role { get; set; }
 
     public bool IsActive { get; set; } = true;
 
+    public int TokenVersion { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    public UserProfileImage? ProfileImage { get; set; }
 }

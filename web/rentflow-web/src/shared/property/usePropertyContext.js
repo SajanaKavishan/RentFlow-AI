@@ -11,7 +11,7 @@ function validPropertyId(value) {
 }
 
 export function propertyIdFromLocation(location, routePropertyId) {
-  const scopedRouteId = /^\/properties\/([^/]+)\/(?:viewing-requests|rental-applications|ai-review)\/?$/.exec(location.pathname)?.[1]
+  const scopedRouteId = /^\/properties\/([^/]+)\/(?:viewing-requests|ai-review|rental-applications(?:\/[^/]+\/validation)?)\/?$/.exec(location.pathname)?.[1]
   const queryPropertyId = new URLSearchParams(location.search).get('propertyId')
   return [routePropertyId, scopedRouteId, queryPropertyId, location.state?.propertyId]
     .map(validPropertyId)

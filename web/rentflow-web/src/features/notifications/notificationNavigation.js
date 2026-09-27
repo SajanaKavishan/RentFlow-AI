@@ -12,23 +12,27 @@ export class NotificationDestinationError extends Error {
 }
 
 export async function notificationDestination(notification, role) {
+  if (notification.eventType === 'maintenance_technician.activated') return null
+
   const { relatedResourceType: type, relatedResourceId: id } = notification
+  const supportsApplication = type === 'RentalApplication' && [USER_ROLES.TENANT, USER_ROLES.LANDLORD].includes(role)
+  const supportsViewing = type === 'ViewingRequest' && [USER_ROLES.TENANT, USER_ROLES.LANDLORD].includes(role)
+  if (!supportsApplication && !supportsViewing) return null
+
   if (typeof id !== 'string' || !GUID.test(id)) {
     throw new NotificationDestinationError('This notification has no supported destination.')
   }
 
   let resource
   let path
-  if (type === 'RentalApplication' && [USER_ROLES.TENANT, USER_ROLES.LANDLORD].includes(role)) {
+  if (supportsApplication) {
     resource = await getApplicationById(id)
     path = `/notifications/rental-application/${encodeURIComponent(id)}`
-  } else if (type === 'ViewingRequest' && [USER_ROLES.TENANT, USER_ROLES.LANDLORD].includes(role)) {
+  } else {
     resource = await getViewingById(id)
     path = role === USER_ROLES.TENANT
       ? '/modules/my-viewings'
       : `/notifications/viewing-request/${encodeURIComponent(id)}`
-  } else {
-    throw new NotificationDestinationError('This notification has no supported destination.')
   }
 
   if (!resource || typeof resource.id !== 'string' || resource.id.toLowerCase() !== id.toLowerCase()) {

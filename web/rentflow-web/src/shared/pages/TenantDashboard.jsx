@@ -17,15 +17,6 @@ function SummaryCard({ title, icon, tone, summary, children }) {
   </section>
 }
 
-function PendingCard({ title, icon, tone, children }) {
-  return <section className={`shared-card tenant-summary tenant-summary--${tone}`} aria-label={title}>
-    <span className="tenant-dashboard__icon"><Icon name={icon} size={24} /></span>
-    <h2>{title}</h2>
-    <StatusBadge tone="warning">Integration pending</StatusBadge>
-    <p>{children}</p>
-  </section>
-}
-
 export default function TenantDashboard({ user }) {
   const applications = useTenantSummary(getMyApplications)
   const viewings = useTenantSummary(getMyViewings)
@@ -56,8 +47,17 @@ export default function TenantDashboard({ user }) {
         {nextViewing ? <p>Next confirmed viewing<br /><time dateTime={nextViewing.requestedDateTime}>{new Date(nextViewing.requestedDateTime).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}</time></p> : <p>{viewings.data.length === 0 ? 'No viewings yet.' : 'No upcoming confirmed viewings.'}</p>}
         {pendingViewings > 0 && <p>{pendingViewings} awaiting confirmation</p>}
       </SummaryCard>
-      <PendingCard title="Lease & Payments" icon="document" tone="green">Your lease and payment schedule will appear here when available.</PendingCard>
-      <PendingCard title="Maintenance" icon="tools" tone="amber">Request repairs and track their progress once this feature is available.</PendingCard>
+      <section className="shared-card tenant-summary tenant-summary--green" aria-label="Lease & Payments">
+        <span className="tenant-dashboard__icon"><Icon name="document" size={24} /></span>
+        <h2>Lease & Payments</h2>
+        <p>Review your offers, leases, rent schedules and payments.</p>
+        <Link className="tenant-text-link" to="/modules/lease-payments">Open Lease & Payments <Icon name="arrow" size={18} /></Link>
+      </section>
+      <Link className="shared-card tenant-summary tenant-summary--amber" to="/modules/maintenance" aria-label="Maintenance">
+        <span className="tenant-dashboard__icon"><Icon name="tools" size={24} /></span>
+        <h2>Maintenance</h2>
+        <p>Request repairs and track their progress.</p>
+      </Link>
     </div>
 
     <div className="tenant-dashboard__lower">

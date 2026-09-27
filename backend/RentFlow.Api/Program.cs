@@ -1,11 +1,18 @@
 using System.Text;
 using System.Security.Claims;
+using System.Threading.RateLimiting;
+
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+
 using RentFlow.Api.Configuration;
+using RentFlow.Api.Commands;
+using RentFlow.Api.Authorization;
 using RentFlow.Api.Data;
 using RentFlow.Api.Models;
 using RentFlow.Api.Services;
@@ -64,6 +71,32 @@ builder.Services.AddOptions<JwtOptions>()
         "Configure it with user-secrets or an environment variable.")
     .ValidateOnStart();
 
+builder.Services.AddOptions<StaffProvisioningOptions>()
+    .Bind(builder.Configuration.GetSection(
+        StaffProvisioningOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddOptions<PasswordResetOptions>()
+    .Bind(builder.Configuration.GetSection(PasswordResetOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+var emailOptions = builder.Services.AddOptions<EmailOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOptions.SectionName));
+var frontendOptions = builder.Services.AddOptions<FrontendOptions>()
+    .Bind(builder.Configuration.GetSection(FrontendOptions.SectionName));
+
+if (!builder.Environment.IsDevelopment())
+{
+    emailOptions
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    frontendOptions
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+}
+
 // =========================================================
 // JWT AUTHENTICATION
 // =========================================================
@@ -104,7 +137,7 @@ builder.Services
 
         options.Events = new JwtBearerEvents
         {
-            OnTokenValidated = context =>
+            OnTokenValidated = async context =>
             {
                 var subject =
                     context.Principal?
@@ -114,6 +147,10 @@ builder.Services
                     context.Principal?
                         .FindFirstValue("role");
 
+                var tokenVersionValue =
+                    context.Principal?
+                        .FindFirstValue(JwtClaimNames.TokenVersion);
+
                 if (!Guid.TryParse(
                         subject,
                         out var userId)
@@ -122,18 +159,96 @@ builder.Services
                         roleValue,
                         ignoreCase: false,
                         out var role)
-                    || !Enum.IsDefined(role))
+                    || !Enum.IsDefined(role)
+                    || !int.TryParse(
+                        tokenVersionValue,
+                        System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var tokenVersion)
+                    || tokenVersion < 0)
                 {
                     context.Fail(
                         "The token identity claims are invalid.");
+                    return;
                 }
 
-                return Task.CompletedTask;
+                var dbContext = context.HttpContext.RequestServices
+                    .GetRequiredService<ApplicationDbContext>();
+                var storedUser = await dbContext.Users
+                    .AsNoTracking()
+                    .Where(user => user.Id == userId)
+                    .Select(user => new
+                    {
+                        user.IsActive,
+                        user.Role,
+                        user.TokenVersion
+                    })
+                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+
+                if (storedUser is null
+                    || !storedUser.IsActive
+                    || storedUser.Role != role
+                    || storedUser.TokenVersion != tokenVersion)
+                {
+                    context.Fail("The token is no longer valid.");
+                }
             }
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(
+        AuthorizationPolicies.ActiveAdmin,
+        policy =>
+        {
+            policy.RequireAuthenticatedUser();
+            policy.RequireRole(nameof(UserRole.Admin));
+            policy.AddRequirements(
+                new ActiveAdminRequirement());
+        });
+});
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode =
+        StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy(
+        "technician-activation",
+        context => RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy(
+        "forgot-password",
+        context => RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy(
+        "password-reset",
+        context => RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
 
 // =========================================================
 // CORE SERVICES
@@ -163,10 +278,24 @@ builder.Services.AddScoped<
     IPasswordHasher<ApplicationUser>,
     PasswordHasher<ApplicationUser>>();
 
+builder.Services.AddScoped<AdminBootstrapService>();
+builder.Services.AddScoped<AdminBootstrapCommand>();
+
+builder.Services.AddSingleton<
+    IAdminBootstrapConsole,
+    SystemAdminBootstrapConsole>();
+
+builder.Services.AddScoped<TechnicianProvisioningService>();
+builder.Services.AddScoped<PasswordResetService>();
+builder.Services.AddTransient<IEmailSender, SmtpEmailSender>();
+builder.Services.AddScoped<
+    IAuthorizationHandler,
+    ActiveAdminAuthorizationHandler>();
+
 builder.Services.AddHttpContextAccessor();
 
 // =========================================================
-// PROPERTY MANAGEMENT
+// PROPERTY MANAGEMENT / PROPERTY MATCHING AI
 // =========================================================
 
 builder.Services.AddScoped<
@@ -180,6 +309,22 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IPropertyImageService,
     PropertyImageService>();
+
+builder.Services.AddScoped<
+    IPropertyMatchingRuleTool,
+    PropertyMatchingRuleTool>();
+
+builder.Services.AddScoped<
+    IPropertyMatchingOrchestrator,
+    PropertyMatchingOrchestrator>();
+
+builder.Services.AddHttpClient<
+    IPropertyMatchingAgentClient,
+    PropertyMatchingAgentClient>(
+        client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
 
 // =========================================================
 // RENTAL APPLICATION SERVICES
@@ -200,6 +345,29 @@ builder.Services.AddScoped<
 // =========================================================
 // RENTAL PRICING / LEASE / PAYMENT SERVICES
 // =========================================================
+
+builder.Services.AddScoped<
+    IPricingPropertyFactsTool,
+    PricingPropertyFactsTool>();
+
+builder.Services.AddScoped<
+    IPricingComparableRentalsTool,
+    PricingComparableRentalsTool>();
+
+builder.Services.AddScoped<
+    IPricingEvidenceAssessmentTool,
+    PricingEvidenceAssessmentTool>();
+
+builder.Services.AddHttpClient<
+    IPricingAnalysisAgentClient,
+    PricingAnalysisAgentClient>(
+        client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+
+builder.Services.AddScoped<IPricingAnalysisOrchestrator, PricingAnalysisOrchestrator>();
+builder.Services.AddScoped<IPricingAnalysisQueryService, PricingAnalysisQueryService>();
 
 builder.Services.AddScoped<
     IRentalOfferService,
@@ -310,6 +478,14 @@ builder.Services.AddScoped<
     NotificationService>();
 
 builder.Services.AddScoped<
+    INotificationPreferenceService,
+    NotificationPreferenceService>();
+
+builder.Services.AddScoped<
+    ISupportTicketService,
+    SupportTicketService>();
+
+builder.Services.AddScoped<
     IPasswordHasher<ApplicationUser>,
     PasswordHasher<ApplicationUser>>();
 
@@ -318,6 +494,7 @@ builder.Services.AddSingleton<
     CloudflareR2StorageService>();
 
 builder.Services.AddSingleton(TimeProvider.System);
+
 builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
@@ -366,8 +543,22 @@ if (builder.Environment.IsDevelopment())
             policy =>
             {
                 policy
-                    .WithOrigins(
-                        "http://localhost:5173")
+                    .SetIsOriginAllowed(origin =>
+                    {
+                        if (!Uri.TryCreate(
+                                origin,
+                                UriKind.Absolute,
+                                out var uri))
+                        {
+                            return false;
+                        }
+
+                        return
+                            (uri.Host == "localhost"
+                                || uri.Host == "127.0.0.1")
+                            && (uri.Scheme == "http"
+                                || uri.Scheme == "https");
+                    })
                     .AllowAnyHeader()
                     .AllowAnyMethod();
             });
@@ -379,6 +570,21 @@ if (builder.Environment.IsDevelopment())
 // =========================================================
 
 var app = builder.Build();
+
+if (AdminBootstrapCommand.IsRequested(args))
+{
+    await using var scope =
+        app.Services.CreateAsyncScope();
+
+    var command =
+        scope.ServiceProvider
+            .GetRequiredService<AdminBootstrapCommand>();
+
+    Environment.ExitCode =
+        await command.ExecuteAsync(args);
+
+    return;
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -395,6 +601,8 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+app.UseRateLimiter();
 
 app.MapControllers();
 

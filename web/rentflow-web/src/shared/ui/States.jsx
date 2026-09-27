@@ -1,5 +1,8 @@
 import { Link, useParams } from 'react-router-dom'
+import { USER_ROLES } from '../../features/auth/authModel.js'
 import { useAuth } from '../../features/auth/useAuth.js'
+import TenantMaintenancePage from '../../features/maintenance/pages/TenantMaintenancePage.jsx'
+import LandlordMaintenancePage from '../../features/maintenance/pages/LandlordMaintenancePage.jsx'
 import { navigationItemForPath } from '../navigation/roleNavigation.js'
 import Icon from './Icons.jsx'
 import './shared-ui.css'
@@ -18,6 +21,12 @@ export function ModuleUnavailableState({ title, explanation, owner, status = 'In
 export function UnavailableState() {
   const { module } = useParams()
   const { user } = useAuth()
+  if (module === 'maintenance' && user.role === USER_ROLES.TENANT) {
+    return <TenantMaintenancePage />
+  }
+  if (module === 'maintenance' && user.role === USER_ROLES.LANDLORD) {
+    return <LandlordMaintenancePage />
+  }
   const item = navigationItemForPath(user.role, `/modules/${module}`)
   if (!item || item.available) return <NotFoundState />
   return <ModuleUnavailableState title={item.label} explanation={item.description} owner={item.owner} />

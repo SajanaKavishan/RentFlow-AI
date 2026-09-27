@@ -80,6 +80,30 @@ public class PaymentsController : ControllerBase
         });
     }
 
+    [HttpGet("landlord")]
+    [Authorize(Roles = "Landlord")]
+    public async Task<IActionResult> GetByLandlord(
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var landlordId = _currentUserService.UserId;
+            if (landlordId is null)
+            {
+                return Unauthorized(new
+                {
+                    message = "Authenticated user ID was not found."
+                });
+            }
+
+            var payments = await _paymentService.GetByLandlordAsync(
+                landlordId.Value,
+                cancellationToken);
+
+            return Ok(payments);
+        });
+    }
+
     [HttpGet("{id:guid}")]
     [Authorize(Roles = "Tenant,Landlord,Admin")]
     public async Task<IActionResult> GetById(

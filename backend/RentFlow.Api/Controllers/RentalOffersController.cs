@@ -67,6 +67,21 @@ public class RentalOffersController(
             result => Ok(result));
     }
 
+    [HttpGet("landlord")]
+    [Authorize(Roles = nameof(UserRole.Landlord))]
+    [ProducesResponseType<IReadOnlyList<RentalOfferResponseDto>>(StatusCodes.Status200OK)]
+    public Task<ActionResult<IReadOnlyList<RentalOfferResponseDto>>> GetByLandlord(
+        CancellationToken cancellationToken)
+    {
+        var landlordId = GetRequiredUserId();
+
+        return ExecuteAsync(
+            async () => await rentalOfferService.GetByLandlordAsync(
+                landlordId,
+                cancellationToken),
+            result => Ok(result));
+    }
+
     [HttpPatch("{id:guid}/accept")]
     [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType<RentalOfferResponseDto>(StatusCodes.Status200OK)]

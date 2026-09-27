@@ -82,7 +82,7 @@ public sealed class AuthEndpointsTests
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<ApplicationUser>>();
         Assert.NotEqual(
             PasswordVerificationResult.Failed,
-            hasher.VerifyHashedPassword(user, user.PasswordHash, ValidPassword));
+            hasher.VerifyHashedPassword(user, user.PasswordHash!, ValidPassword));
     }
 
     [Fact]
@@ -118,6 +118,7 @@ public sealed class AuthEndpointsTests
         Assert.Equal(userId.ToString(), token.Claims.Single(claim => claim.Type == "sub").Value);
         Assert.Equal("Landlord", token.Claims.Single(claim => claim.Type == "role").Value);
         Assert.Equal("login@example.com", token.Claims.Single(claim => claim.Type == "email").Value);
+        Assert.Equal("0", token.Claims.Single(claim => claim.Type == "token_version").Value);
     }
 
     [Fact]
@@ -184,6 +185,70 @@ public sealed class AuthEndpointsTests
         Assert.Equal(expectedId, body.RootElement.GetProperty("id").GetGuid());
         Assert.Equal("me@example.com", body.RootElement.GetProperty("email").GetString());
         Assert.Equal("Tenant", body.RootElement.GetProperty("role").GetString());
+        Assert.False(body.RootElement.GetProperty("hasProfileImage").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Profile_UpdateAndImageUpload_PersistForAuthenticatedUser()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        var registration = await RegisterAsync(client, "profile@example.com", "Tenant");
+        var token = (await ParseAsync(registration)).RootElement.GetProperty("accessToken").GetString();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var update = await client.PutAsJsonAsync("/api/auth/profile", new
+        {
+            fullName = "Updated Person",
+            phoneNumber = "+94 71 234 5678"
+        });
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        var updated = await ParseAsync(update);
+        Assert.Equal("Updated Person", updated.RootElement.GetProperty("fullName").GetString());
+        Assert.Equal("+94 71 234 5678", updated.RootElement.GetProperty("phoneNumber").GetString());
+
+        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
+        using var form = new MultipartFormDataContent();
+        using var imageContent = new ByteArrayContent(png);
+        imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(imageContent, "file", "avatar.png");
+        var upload = await client.PostAsync("/api/auth/profile-image", form);
+
+        Assert.Equal(HttpStatusCode.OK, upload.StatusCode);
+        Assert.True((await ParseAsync(upload)).RootElement.GetProperty("hasProfileImage").GetBoolean());
+        var image = await client.GetAsync("/api/auth/profile-image");
+        Assert.Equal(HttpStatusCode.OK, image.StatusCode);
+        Assert.Equal("image/png", image.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(png, await image.Content.ReadAsByteArrayAsync());
+
+        var me = await client.GetFromJsonAsync<JsonElement>("/api/auth/me");
+        Assert.Equal("Updated Person", me.GetProperty("fullName").GetString());
+        Assert.True(me.GetProperty("hasProfileImage").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Profile_RejectsInvalidInputAndSpoofedImageContent()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        var registration = await RegisterAsync(client, "invalid-profile@example.com", "Landlord");
+        var token = (await ParseAsync(registration)).RootElement.GetProperty("accessToken").GetString();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var update = await client.PutAsJsonAsync("/api/auth/profile", new
+        {
+            fullName = "X",
+            phoneNumber = "bad"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, update.StatusCode);
+
+        using var form = new MultipartFormDataContent();
+        using var imageContent = new ByteArrayContent("not a png"u8.ToArray());
+        imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(imageContent, "file", "avatar.png");
+        var upload = await client.PostAsync("/api/auth/profile-image", form);
+        Assert.Equal(HttpStatusCode.BadRequest, upload.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/auth/profile-image")).StatusCode);
     }
 
     [Theory]

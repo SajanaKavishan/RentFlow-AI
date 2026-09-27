@@ -288,7 +288,7 @@ function CrossDocumentConsistency({ consistency }) {
   )
 }
 
-function ValidationStep({ step }) {
+function StepResult({ step }) {
   const entries =
     step.result && typeof step.result === 'object' && !Array.isArray(step.result)
       ? Object.entries(step.result).filter(([, value]) =>
@@ -297,16 +297,7 @@ function ValidationStep({ step }) {
         )
       : []
 
-  return (
-    <li className="validation-step">
-      <div className="validation-step__heading">
-        <span className="validation-step__number">{step.stepOrder}</span>
-        <div>
-          <h5>{step.agentName}</h5>
-          <p>{enumLabel(step.status, STEP_STATUS)}</p>
-        </div>
-      </div>
-
+  return <>
       {entries.length > 0 && (
         <dl className="validation-step__result">
           {entries.map(([key, value]) => (
@@ -331,23 +322,126 @@ function ValidationStep({ step }) {
             ? `Started ${formatDateTime(step.startedAt)}`
             : 'Not started'}
       </p>
-    </li>
+    </>
+}
+
+function WorkflowStepContent({ step, summary }) {
+  if (!summary) return <StepResult step={step} />
+
+  if (step.stepOrder === 1) {
+    return <>
+      <div className="validation-step__outcome">
+        <span>Application data status</span>
+        <strong>{summary.applicationData?.isValid ? 'Valid' : 'Requires review'}</strong>
+        {summary.applicationData?.completenessScore !== null
+          && summary.applicationData?.completenessScore !== undefined
+          && <span>{formatScore(summary.applicationData.completenessScore)} complete</span>}
+      </div>
+      <div className="validation-findings">
+        <FindingList title="Missing application information" items={summary.applicationData?.missingFields}
+          emptyMessage="No required application information is missing."
+          tone={summary.applicationData?.missingFields?.length ? 'warning' : 'success'} />
+        <FindingList title="Warnings" items={summary.applicationData?.warnings}
+          emptyMessage="No application-data warnings were reported."
+          tone={summary.applicationData?.warnings?.length ? 'warning' : 'success'} />
+      </div>
+      <StepResult step={step} />
+    </>
+  }
+
+  if (step.stepOrder === 2) {
+    return <>
+      <div className="validation-step__outcome"><span>Document validation status</span>
+        <strong>{summary.documents?.isValid ? 'Valid' : 'Requires review'}</strong></div>
+      <div className="validation-findings">
+        <FindingList title="Present document types" items={summary.documents?.presentDocumentTypes}
+          emptyMessage="No present document types were reported." tone="success" />
+        <FindingList title="Missing required documents" items={summary.documents?.missingDocumentTypes}
+          emptyMessage="No required documents are missing."
+          tone={summary.documents?.missingDocumentTypes?.length ? 'danger' : 'success'} />
+        <FindingList title="Warnings" items={summary.documents?.warnings}
+          emptyMessage="No document warnings were reported."
+          tone={summary.documents?.warnings?.length ? 'warning' : 'success'} />
+      </div>
+      <StepResult step={step} />
+    </>
+  }
+
+  if (step.stepOrder === 3) {
+    return <>
+      <div className="validation-step__outcome"><span>Deterministic rule status</span>
+        <strong>{summary.deterministicRules?.passed ? 'Passed' : 'Requires review'}</strong></div>
+      <div className="validation-findings">
+        <FindingList title="Checks passed" items={summary.deterministicRules?.passedRules}
+          emptyMessage="No passing rule results were reported." tone="success" />
+        <FindingList title="Checks requiring attention" items={summary.deterministicRules?.failedRules}
+          emptyMessage="No deterministic rules failed."
+          tone={summary.deterministicRules?.failedRules?.length ? 'danger' : 'success'} />
+        <FindingList title="Warnings" items={summary.deterministicRules?.warnings}
+          emptyMessage="No deterministic warnings were reported."
+          tone={summary.deterministicRules?.warnings?.length ? 'warning' : 'success'} />
+      </div>
+      <StepResult step={step} />
+    </>
+  }
+
+  if (step.stepOrder === 4 && summary.agenticReview) {
+    return <>
+      <AgenticReviewOverview review={summary.agenticReview} />
+      <SupportingDocumentVerification documents={summary.agenticReview.supportingDocumentVerification} />
+      <CrossDocumentConsistency consistency={summary.agenticReview.crossDocumentConsistency} />
+      <StepResult step={step} />
+    </>
+  }
+
+  return <StepResult step={step} />
+}
+
+function WorkflowStep({ step, summary, currentStep }) {
+  const status = enumLabel(step.status, STEP_STATUS)
+  const statusKey = enumKey(step.status, STEP_STATUS)
+  const [isOpen, setIsOpen] = useState(
+    step.stepOrder === currentStep || statusKey === 'failed',
   )
+  return <details className="validation-step-accordion"
+    open={isOpen} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
+    <summary>
+      <span className={`validation-step__number validation-step__number--${statusKey}`}>{step.stepOrder}</span>
+      <span className="validation-step-accordion__identity">
+        <strong>{step.agentName}</strong>
+        <small>{step.completedAt ? `Completed ${formatDateTime(step.completedAt)}`
+          : step.startedAt ? `Started ${formatDateTime(step.startedAt)}` : 'Not started'}</small>
+      </span>
+      <span className={`validation-step-accordion__status validation-step-accordion__status--${statusKey}`}>{status}</span>
+    </summary>
+    <div className="validation-step-accordion__body">
+      <WorkflowStepContent step={step} summary={summary} />
+    </div>
+  </details>
 }
 
 function WorkflowResult({ workflow, applicationUpdatedAt, canRun }) {
   const summary = workflow.summary
-  const warnings = summary
+  const reviewItems = summary
     ? [
+        ...(summary.applicationData?.missingFields || []),
         ...(summary.applicationData?.warnings || []),
+        ...(summary.documents?.missingDocumentTypes || []),
         ...(summary.documents?.warnings || []),
+        ...(summary.deterministicRules?.failedRules || []),
         ...(summary.deterministicRules?.warnings || []),
-      ].filter((warning, index, all) => all.indexOf(warning) === index)
+        ...(summary.agenticReview?.warnings || []),
+        ...(summary.agenticReview?.supportingDocumentVerification || [])
+          .flatMap((document) => document.warnings || []),
+        ...(summary.agenticReview?.crossDocumentConsistency?.mismatches || []),
+        ...(summary.agenticReview?.crossDocumentConsistency?.warnings || []),
+      ].map(displayFinding).filter(Boolean)
+        .filter((item, index, all) => all.indexOf(item) === index)
     : []
+  const recommendation = workflow.recommendation || summary?.agenticReview?.recommendation
   const orderedSteps = [...(workflow.steps || [])].sort(
     (left, right) => left.stepOrder - right.stepOrder,
   )
-  const agenticReview = summary?.agenticReview
   const workflowStatus = enumLabel(workflow.status, WORKFLOW_STATUS)
   const workflowStatusKey = enumKey(workflow.status, WORKFLOW_STATUS)
   const isAwaitingHumanReview = workflowStatusKey === 'awaiting-human-review'
@@ -385,17 +479,13 @@ function WorkflowResult({ workflow, applicationUpdatedAt, canRun }) {
 
       <div className="validation-workflow__summary">
         <div>
-          <span>Completeness score</span>
-          <strong>{formatScore(workflow.completenessScore)}</strong>
+          <span>Steps complete</span>
+          <strong>{orderedSteps.filter((step) => enumKey(step.status, STEP_STATUS) === 'completed').length}/{orderedSteps.length}</strong>
         </div>
-        <div>
-          <span>Automated recommendation</span>
-          <strong>{workflow.recommendation || 'Validation incomplete'}</strong>
-        </div>
-        <div>
-          <span>Current step</span>
-          <strong>{workflow.currentStep ?? 'Not reported'}</strong>
-        </div>
+        {workflow.completenessScore !== null && workflow.completenessScore !== undefined && <div>
+          <span>Completeness score</span><strong>{formatScore(workflow.completenessScore)}</strong>
+        </div>}
+        <div><span>Items to review</span><strong>{reviewItems.length}</strong></div>
         <div>
           <span>Human review</span>
           <strong>
@@ -404,100 +494,18 @@ function WorkflowResult({ workflow, applicationUpdatedAt, canRun }) {
         </div>
       </div>
 
-      {summary && (
-        <>
-          <section className="structured-validation-section">
-            <div className="structured-validation-section__header">
-              <div>
-                <p>Completeness</p>
-                <h4>Required items and warnings</h4>
-              </div>
-            </div>
-            <div
-              className="validation-findings"
-              aria-label="Required items and validation warnings"
-            >
-              <FindingList
-                title="Missing application information"
-                items={summary.applicationData?.missingFields}
-                emptyMessage="No required application information is missing."
-                tone={
-                  summary.applicationData?.missingFields?.length
-                    ? 'warning'
-                    : 'success'
-                }
-              />
-              <FindingList
-                title="Missing required documents"
-                items={summary.documents?.missingDocumentTypes}
-                emptyMessage="No required documents are missing."
-                tone={
-                  summary.documents?.missingDocumentTypes?.length
-                    ? 'danger'
-                    : 'success'
-                }
-              />
-              <FindingList
-                title="Warnings"
-                items={warnings}
-                emptyMessage="No warnings were reported."
-                tone={warnings.length ? 'warning' : 'success'}
-              />
-            </div>
-          </section>
+      <section className="validation-workflow__steps" aria-label="Validation workflow steps">
+        <h4>Validation workflow</h4>
+        {orderedSteps.length ? orderedSteps.map((step) => <WorkflowStep
+          key={`${step.stepOrder}-${step.agentName}`} step={step} summary={summary}
+          currentStep={workflow.currentStep} />) : <p className="application-validation__empty">No workflow steps were reported.</p>}
+      </section>
 
-          <section className="structured-validation-section">
-            <div className="structured-validation-section__header">
-              <div>
-                <p>Rule-based checks</p>
-                <h4>Deterministic checks</h4>
-              </div>
-            </div>
-            <div
-              className="validation-findings"
-              aria-label="Deterministic validation checks"
-            >
-              <FindingList
-                title="Checks passed"
-                items={summary.deterministicRules?.passedRules}
-                emptyMessage="No passing rule results were reported."
-                tone="success"
-              />
-              <FindingList
-                title="Checks requiring attention"
-                items={summary.deterministicRules?.failedRules}
-                emptyMessage="No deterministic rules failed."
-                tone={
-                  summary.deterministicRules?.failedRules?.length
-                    ? 'danger'
-                    : 'success'
-                }
-              />
-            </div>
-          </section>
-        </>
-      )}
-
-      {agenticReview && (
-        <>
-          <AgenticReviewOverview review={agenticReview} />
-          <SupportingDocumentVerification
-            documents={agenticReview.supportingDocumentVerification}
-          />
-          <CrossDocumentConsistency
-            consistency={agenticReview.crossDocumentConsistency}
-          />
-        </>
-      )}
-
-      <details className="validation-steps">
-        <summary>View workflow steps ({orderedSteps.length})</summary>
-        <ol>
-          {orderedSteps.map((step) => (
-            <ValidationStep key={`${step.stepOrder}-${step.agentName}`} step={step} />
-          ))}
-        </ol>
-      </details>
+      {recommendation && <section className="validation-workflow__recommendation">
+        <div><span>AI recommendation</span><strong>{recommendation}</strong></div>
+        {reviewItems.length > 0 && <FindingList title="Items requiring human review" items={reviewItems}
+          emptyMessage="No warnings were reported." tone="warning" />}
+      </section>}
     </div>
   )
 }

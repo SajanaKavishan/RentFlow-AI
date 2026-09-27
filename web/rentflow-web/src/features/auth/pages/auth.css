@@ -38,8 +38,20 @@
 .auth-password input { padding-right: 52px; }
 .auth-password button { position: absolute; right: 5px; top: 3px; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 9px; color: var(--muted); background: transparent; }
 .auth-password button:hover { color: var(--olive-900); background: var(--olive-50); }
+.auth-password-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.auth-password-heading a { color: var(--olive-900); font-size: .8rem; font-weight: 800; text-decoration: none; }
+.auth-password-heading a:hover, .auth-password-heading a:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 .auth-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
 .auth-error { margin: 0 0 20px; padding: 13px 16px; border: 1px solid var(--danger); border-radius: var(--radius-sm); color: var(--danger); background: var(--danger-bg); font-size: .86rem; overflow-wrap: anywhere; }
+.auth-success { margin: 20px 0 0; padding: 13px 16px; border: 1px solid var(--olive-100); border-radius: var(--radius-sm); color: var(--olive-900); background: var(--olive-50); font-size: .86rem; line-height: 1.55; }
+.auth-setup-missing { margin-top: 28px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--cream-50); }
+.auth-setup-missing h2 { margin: 0 0 8px; color: var(--ink); font-size: 1.05rem; }
+.auth-setup-missing p { margin: 0 0 18px; color: var(--muted); font-size: .83rem; line-height: 1.65; }
+.auth-recovery-confirmed { margin-top: 28px; }
+.auth-recovery-confirmed h2 { margin: 0 0 8px; color: var(--ink); font-size: 1.05rem; }
+.auth-recovery-confirmed > p { margin: 0 0 18px; color: var(--muted); font-size: .86rem; line-height: 1.65; }
+.auth-recovery-confirmed .auth-development-link { padding: 12px 14px; border: 1px solid var(--olive-100); border-radius: var(--radius-sm); background: var(--olive-50); overflow-wrap: anywhere; }
+.auth-development-link a { color: var(--olive-900); font-weight: 800; text-underline-offset: 3px; }
 .auth-submit { width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 12px; border: 0; border-radius: var(--radius-sm); color: var(--surface); background: var(--olive-900); font-size: .9rem; font-weight: 800; transition: background-color 160ms ease, transform 160ms ease; }
 .auth-submit:hover:not(:disabled) { background: var(--olive-hover); transform: translateY(-1px); }
 .auth-submit:disabled { opacity: .65; }

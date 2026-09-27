@@ -1,0 +1,19 @@
+.validation-report-page { width: min(1080px, calc(100% - 48px)); margin: 0 auto; padding: clamp(28px, 4vw, 48px) 0 72px; min-width: 0; }
+.validation-report-page__back { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 28px; color: var(--olive-700); font-size: .88rem; font-weight: 800; text-decoration: none; }
+.validation-report-page__back:hover { color: var(--olive-900); }
+.validation-report-page__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+.validation-report-page__eyebrow { margin: 0 0 6px !important; color: var(--olive-700) !important; font-size: .72rem !important; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.validation-report-page__header h1 { margin: 0; font-size: clamp(1.8rem, 3.4vw, 2.65rem); letter-spacing: -.045em; }
+.validation-report-page__header p:last-child { margin: 8px 0 0; color: var(--muted); font-size: .82rem; overflow-wrap: anywhere; }
+.validation-report-page__references { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 0 0 22px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--border); box-shadow: var(--card-shadow); }
+.validation-report-page__references div { min-width: 0; padding: 16px 18px; background: var(--surface); }
+.validation-report-page__references dt { color: var(--muted); font-size: .7rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.validation-report-page__references dd { margin: 6px 0 0; color: var(--ink); font-size: .82rem; font-weight: 700; overflow-wrap: anywhere; }
+.validation-report-page .application-validation { margin-top: 0; }
+.validation-report-page__advisory { display: flex; align-items: flex-start; gap: 12px; margin: 22px 0; padding: 18px 20px; border: 1px solid var(--border); border-radius: var(--radius-card); color: var(--olive-800); background: var(--cream-100); }
+.validation-report-page__advisory svg { flex: none; margin-top: 2px; }
+.validation-report-page__advisory p { margin: 0; color: var(--muted); font-size: .84rem; line-height: 1.6; }
+.validation-report-page__advisory strong { color: var(--ink); }
+.validation-report-page > .application-card__decision-panel { margin-top: 0; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--card-shadow); }
+@media (max-width: 900px) { .validation-report-page__references { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) { .validation-report-page { width: min(100% - 32px, 1080px); padding: 24px 0 52px; } .validation-report-page__header { flex-direction: column; gap: 14px; } .validation-report-page__references { grid-template-columns: 1fr; } }

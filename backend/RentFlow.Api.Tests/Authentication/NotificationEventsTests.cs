@@ -180,11 +180,83 @@ public sealed class NotificationEventsTests
         Assert.Empty(unrelatedTenantNotifications!.Items);
     }
 
+    [Fact]
+    public async Task DisabledViewingUpdates_SuppressFutureEventsButKeepStoredNotifications()
+    {
+        using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        var viewing = await SeedViewingAsync(factory, TenantA, property.Id);
+        var existing = new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientId = TenantA,
+            EventType = "viewing.created",
+            RelatedResourceType = "ViewingRequest",
+            RelatedResourceId = Guid.NewGuid(),
+            Title = "Existing viewing update",
+            Message = "This notification existed before the preference changed.",
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-5)
+        };
+        await SeedAsync(factory, context =>
+        {
+            context.Notifications.Add(existing);
+            context.NotificationPreferences.Add(new NotificationPreference
+            {
+                UserId = TenantA,
+                ViewingUpdatesEnabled = false,
+                RentalApplicationUpdatesEnabled = true
+            });
+        });
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        Assert.Equal(HttpStatusCode.OK, (await landlord.PatchAsJsonAsync(
+            $"/api/viewings/{viewing.Id}/approve",
+            new { landlordResponse = "Approved." })).StatusCode);
+
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+        var page = await tenant.GetFromJsonAsync<NotificationPageResponseDto>(
+            "/api/notifications?pageSize=100");
+        Assert.NotNull(page);
+        var delivered = Assert.Single(page!.Items);
+        Assert.Equal(existing.Id, delivered.Id);
+    }
+
+    [Fact]
+    public async Task DisabledRentalApplicationUpdates_SuppressFutureDecisionEvents()
+    {
+        using var factory = new AuthApiFactory();
+        var property = await SeedPropertyAsync(factory, LandlordA);
+        var application = await SeedApplicationAsync(
+            factory,
+            TenantA,
+            property.Id,
+            RentalApplicationStatus.UnderReview);
+        await SeedAsync(factory, context => context.NotificationPreferences.Add(
+            new NotificationPreference
+            {
+                UserId = TenantA,
+                ViewingUpdatesEnabled = true,
+                RentalApplicationUpdatesEnabled = false
+            }));
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        Assert.Equal(HttpStatusCode.OK, (await landlord.PatchAsJsonAsync(
+            $"/api/rental-applications/{application.Id}/approve",
+            new { landlordResponse = "Approved." })).StatusCode);
+
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+        var page = await tenant.GetFromJsonAsync<NotificationPageResponseDto>(
+            "/api/notifications");
+        Assert.NotNull(page);
+        Assert.Empty(page!.Items);
+    }
+
     private static HttpClient AuthorizedClient(
         AuthApiFactory factory,
         Guid userId,
         UserRole role)
     {
+        factory.EnsureActiveUser(userId, role);
         var client = factory.CreateHttpsClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(userId, role));
@@ -200,7 +272,8 @@ public sealed class NotificationEventsTests
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
-            new Claim("role", role.ToString())
+            new Claim("role", role.ToString()),
+            new Claim("token_version", "0")
         };
         var token = new JwtSecurityToken(
             issuer: "RentFlow.Api.Tests",

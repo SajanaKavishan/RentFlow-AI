@@ -60,6 +60,65 @@
   font-size: 1.4rem;
 }
 
+.maintenance-property-selector {
+  max-width: 520px;
+  margin-bottom: 20px;
+}
+
+.maintenance-property-selector label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.maintenance-property-selector select {
+  width: 100%;
+  border: 1px solid #d9dfeb;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  color: #0f172a;
+  background: #fff;
+}
+
+.maintenance-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.maintenance-attachment-list {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.maintenance-attachment-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #edf2f7;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.maintenance-attachment-list li > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.maintenance-attachment-list small {
+  color: #64748b;
+}
+
 .maintenance-request-list {
   display: flex;
   flex-direction: column;
@@ -375,5 +434,10 @@
   .maintenance-form__row,
   .maintenance-detail__meta {
     grid-template-columns: 1fr;
+  }
+
+  .maintenance-attachment-list li {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

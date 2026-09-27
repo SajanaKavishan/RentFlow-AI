@@ -30,6 +30,25 @@ public class MaintenanceRequestServiceTests
     }
 
     [Fact]
+    public async Task GetTechnicianChoicesAsync_ReturnsOnlyActiveTechniciansWithNames()
+    {
+        await using var context = CreateContext();
+        var activeTechnicianId = Guid.NewGuid();
+        context.Users.AddRange(
+            CreateUser(activeTechnicianId, UserRole.MaintenanceTechnician, true, "Active Tech"),
+            CreateUser(Guid.NewGuid(), UserRole.MaintenanceTechnician, false, "Inactive Tech"),
+            CreateUser(Guid.NewGuid(), UserRole.Tenant, true, "Tenant"));
+        await context.SaveChangesAsync();
+
+        var choices = await new MaintenanceRequestService(context)
+            .GetTechnicianChoicesAsync();
+
+        var choice = Assert.Single(choices);
+        Assert.Equal(activeTechnicianId, choice.Id);
+        Assert.Equal("Active Tech", choice.Name);
+    }
+
+    [Fact]
     public async Task CreateAsync_RejectsEmptyPropertyId()
     {
         await using var context = CreateContext();
@@ -733,6 +752,27 @@ public class MaintenanceRequestServiceTests
             .Options;
 
         return new ApplicationDbContext(options);
+    }
+
+    private static ApplicationUser CreateUser(
+        Guid id,
+        UserRole role,
+        bool isActive,
+        string fullName)
+    {
+        var email = $"{id:N}@example.test";
+        return new ApplicationUser
+        {
+            Id = id,
+            FullName = fullName,
+            Email = email,
+            NormalizedEmail = email.ToUpperInvariant(),
+            PhoneNumber = "+94770000000",
+            Role = role,
+            IsActive = isActive,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
     }
 
     private static CreateMaintenanceRequestDto CreateValidRequest() =>

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-
+import 'features/properties/services/property_api_service.dart';
 import 'core/auth/token_storage.dart';
 import 'core/network/api_client.dart';
 import 'features/auth/controllers/auth_controller.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/services/auth_service.dart';
 import 'features/landing/screens/public_landing_screen.dart';
+import 'features/maintenance/services/maintenance_api_service.dart';
 import 'features/notifications/services/notification_api_service.dart';
 import 'features/rental_applications/services/rental_application_api_service.dart';
 import 'features/viewings/services/viewing_api_service.dart';
@@ -94,6 +95,12 @@ class _MyAppState extends State<MyApp> {
       notificationApiService: apiClient == null
           ? null
           : NotificationApiService(apiClient),
+      propertyApiService: apiClient == null
+          ? null
+          : PropertyApiService(apiClient),
+      maintenanceApiService: apiClient == null
+          ? null
+          : MaintenanceApiService(apiClient),
     );
   }
 }

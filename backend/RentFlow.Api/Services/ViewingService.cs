@@ -68,8 +68,10 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
         };
 
         dbContext.ViewingRequests.Add(viewing);
-        dbContext.Notifications.Add(
-            NotificationEventFactory.ForViewingCreated(viewing, landlordId.Value));
+        await NotificationDeliveryPolicy.QueueAsync(
+            dbContext,
+            NotificationEventFactory.ForViewingCreated(viewing, landlordId.Value),
+            cancellationToken);
 
         await using var transaction = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
@@ -146,8 +148,10 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
         viewing.LandlordResponse = landlordResponse;
         viewing.UpdatedAt = DateTimeOffset.UtcNow;
 
-        dbContext.Notifications.Add(
-            NotificationEventFactory.ForViewing(viewing, ViewingStatus.Approved));
+        await NotificationDeliveryPolicy.QueueAsync(
+            dbContext,
+            NotificationEventFactory.ForViewing(viewing, ViewingStatus.Approved),
+            cancellationToken);
 
         await using var transaction = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
@@ -178,8 +182,10 @@ public class ViewingService(ApplicationDbContext dbContext) : IViewingService
         viewing.LandlordResponse = landlordResponse.Trim();
         viewing.UpdatedAt = DateTimeOffset.UtcNow;
 
-        dbContext.Notifications.Add(
-            NotificationEventFactory.ForViewing(viewing, ViewingStatus.Rejected));
+        await NotificationDeliveryPolicy.QueueAsync(
+            dbContext,
+            NotificationEventFactory.ForViewing(viewing, ViewingStatus.Rejected),
+            cancellationToken);
 
         await using var transaction = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)

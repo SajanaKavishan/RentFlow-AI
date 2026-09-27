@@ -93,6 +93,37 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         return requests.Select(MapToSummary).ToList();
     }
 
+    public async Task<IReadOnlyList<MaintenanceRequestSummaryDto>> GetByTechnicianAsync(
+        Guid technicianId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateTechnicianId(technicianId);
+
+        var requests = await dbContext.MaintenanceRequests
+            .AsNoTracking()
+            .Where(item => item.TechnicianId == technicianId)
+            .OrderByDescending(item => item.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return requests.Select(MapToSummary).ToList();
+    }
+
+    public async Task<IReadOnlyList<MaintenanceTechnicianChoiceDto>> GetTechnicianChoicesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Users
+            .AsNoTracking()
+            .Where(user =>
+                user.Role == UserRole.MaintenanceTechnician
+                && user.IsActive)
+            .OrderBy(user => user.FullName)
+            .ThenBy(user => user.Id)
+            .Select(user => new MaintenanceTechnicianChoiceDto(
+                user.Id,
+                user.FullName))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<MaintenanceStatusHistoryResponseDto>> GetHistoryAsync(
         Guid requestId,
         CancellationToken cancellationToken = default)

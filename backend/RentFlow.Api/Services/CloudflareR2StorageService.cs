@@ -8,7 +8,7 @@ using RentFlow.Api.Services.Interfaces;
 namespace RentFlow.Api.Services;
 
 /// <summary>
-/// Stores private application documents in Cloudflare R2 through its S3-compatible API.
+/// Stores private files in Cloudflare R2 through its S3-compatible API.
 /// </summary>
 public sealed class CloudflareR2StorageService : IFileStorageService, IDisposable
 {
@@ -45,7 +45,9 @@ public sealed class CloudflareR2StorageService : IFileStorageService, IDisposabl
 
         if (!content.CanRead)
         {
-            throw new ArgumentException("The upload stream must be readable.", nameof(content));
+            throw new ArgumentException(
+                "The upload stream must be readable.",
+                nameof(content));
         }
 
         var request = new PutObjectRequest
@@ -91,11 +93,16 @@ public sealed class CloudflareR2StorageService : IFileStorageService, IDisposabl
                 Key = storageKey
             },
             cancellationToken);
+
         using var content = new MemoryStream();
         var buffer = new byte[81920];
+
         while (true)
         {
-            var read = await response.ResponseStream.ReadAsync(buffer, cancellationToken);
+            var read = await response.ResponseStream.ReadAsync(
+                buffer,
+                cancellationToken);
+
             if (read == 0)
             {
                 return content.ToArray();
@@ -103,10 +110,13 @@ public sealed class CloudflareR2StorageService : IFileStorageService, IDisposabl
 
             if (content.Length + read > maximumBytes)
             {
-                throw new InvalidDataException("The private object exceeds the permitted retrieval size.");
+                throw new InvalidDataException(
+                    "The private object exceeds the permitted retrieval size.");
             }
 
-            await content.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            await content.WriteAsync(
+                buffer.AsMemory(0, read),
+                cancellationToken);
         }
     }
 
@@ -120,21 +130,10 @@ public sealed class CloudflareR2StorageService : IFileStorageService, IDisposabl
         ArgumentException.ThrowIfNullOrWhiteSpace(originalFileName);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentType);
 
-        if (contentType.Contains('\r') || contentType.Contains('\n'))
-        {
-            throw new ArgumentException(
-                "The content type cannot contain newline characters.",
-                nameof(contentType));
-        }
-
-        if (lifetime <= TimeSpan.Zero || lifetime > MaximumSignedUrlLifetime)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(lifetime),
-                "The signed URL lifetime must be greater than zero and no more than seven days.");
-        }
+        ValidateContentTypeAndLifetime(contentType, lifetime);
 
         var safeFileName = SanitizeDownloadFileName(originalFileName);
+
         var request = new GetPreSignedUrlRequest
         {
             BucketName = options.BucketName,
@@ -150,18 +149,65 @@ public sealed class CloudflareR2StorageService : IFileStorageService, IDisposabl
         return client.GetPreSignedURLAsync(request);
     }
 
-    private static string SanitizeDownloadFileName(string originalFileName)
+    public Task<string> GenerateInlineUrlAsync(
+        string storageKey,
+        string contentType,
+        TimeSpan lifetime)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(contentType);
+
+        ValidateContentTypeAndLifetime(contentType, lifetime);
+
+        var request = new GetPreSignedUrlRequest
+        {
+            BucketName = options.BucketName,
+            Key = storageKey,
+            Verb = HttpVerb.GET,
+            Expires = DateTime.UtcNow.Add(lifetime)
+        };
+
+        request.ResponseHeaderOverrides.ContentType = contentType;
+        request.ResponseHeaderOverrides.ContentDisposition = "inline";
+
+        return client.GetPreSignedURLAsync(request);
+    }
+
+    private static void ValidateContentTypeAndLifetime(
+        string contentType,
+        TimeSpan lifetime)
+    {
+        if (contentType.Contains('\r') || contentType.Contains('\n'))
+        {
+            throw new ArgumentException(
+                "The content type cannot contain newline characters.",
+                nameof(contentType));
+        }
+
+        if (lifetime <= TimeSpan.Zero ||
+            lifetime > MaximumSignedUrlLifetime)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(lifetime),
+                "The signed URL lifetime must be greater than zero and no more than seven days.");
+        }
+    }
+
+    private static string SanitizeDownloadFileName(
+        string originalFileName)
     {
         var normalized = originalFileName.Replace('\\', '/');
         var fileName = normalized[(normalized.LastIndexOf('/') + 1)..];
-        var sanitized = new string(fileName
-            .Select(character => character is >= 'a' and <= 'z'
-                or >= 'A' and <= 'Z'
-                or >= '0' and <= '9'
-                or '.' or '-' or '_' or ' '
-                    ? character
-                    : '_')
-            .ToArray())
+
+        var sanitized = new string(
+            fileName
+                .Select(character => character is >= 'a' and <= 'z'
+                    or >= 'A' and <= 'Z'
+                    or >= '0' and <= '9'
+                    or '.' or '-' or '_' or ' '
+                        ? character
+                        : '_')
+                .ToArray())
             .Trim(' ', '.');
 
         if (string.IsNullOrWhiteSpace(sanitized))
@@ -169,7 +215,9 @@ public sealed class CloudflareR2StorageService : IFileStorageService, IDisposabl
             sanitized = "document";
         }
 
-        return sanitized.Length <= 255 ? sanitized : sanitized[..255];
+        return sanitized.Length <= 255
+            ? sanitized
+            : sanitized[..255];
     }
 
     public void Dispose()

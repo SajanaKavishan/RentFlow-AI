@@ -24,5 +24,6 @@ export function parseCurrentUser(value) {
     throw new TypeError('The server returned an unsupported user profile.')
   }
   return { id: value.id, fullName: value.fullName, email: value.email,
-    phoneNumber: value.phoneNumber, role: value.role }
+    phoneNumber: value.phoneNumber, role: value.role,
+    hasProfileImage: value.hasProfileImage === true }
 }
