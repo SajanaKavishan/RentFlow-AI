@@ -1338,6 +1338,13 @@
   background: var(--cream-50);
 }
 
+.property-form-page .property-form-field input::placeholder,
+.property-form-page .property-editor-form textarea::placeholder {
+  color: #9a968d;
+  font-style: italic;
+  opacity: 1;
+}
+
 .property-form-page .property-form-field input:focus,
 .property-form-page .property-editor-form textarea:focus {
   border-color: var(--olive-700);

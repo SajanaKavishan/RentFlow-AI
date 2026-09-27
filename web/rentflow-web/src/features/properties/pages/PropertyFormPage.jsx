@@ -379,7 +379,7 @@ export default function PropertyFormPage() {
                   name="title"
                   value={form.title}
                   onChange={updateField}
-                  placeholder="Harbour View Residence"
+                  placeholder="e.g. Harbour View Residence"
                   aria-invalid={Boolean(fieldErrors.title)}
                   aria-describedby={fieldErrors.title ? 'title-error' : undefined}
                 />
@@ -404,7 +404,7 @@ export default function PropertyFormPage() {
                   name="address"
                   value={form.address}
                   onChange={updateField}
-                  placeholder="Property address"
+                  placeholder="Enter the property address"
                   aria-invalid={Boolean(fieldErrors.address)}
                   aria-describedby={fieldErrors.address ? 'address-error' : undefined}
                 />
@@ -416,7 +416,7 @@ export default function PropertyFormPage() {
                   name="city"
                   value={form.city}
                   onChange={updateField}
-                  placeholder="Colombo"
+                  placeholder="e.g. Colombo"
                   aria-invalid={Boolean(fieldErrors.city)}
                   aria-describedby={fieldErrors.city ? 'city-error' : undefined}
                 />
@@ -436,7 +436,7 @@ export default function PropertyFormPage() {
                     name="monthlyRent"
                     value={form.monthlyRent}
                     onChange={updateField}
-                    placeholder="85000"
+                    placeholder="e.g. 85000"
                     aria-invalid={Boolean(fieldErrors.monthlyRent)}
                     aria-describedby={fieldErrors.monthlyRent ? 'monthlyRent-error' : undefined}
                   />
@@ -451,7 +451,7 @@ export default function PropertyFormPage() {
                   name="bedrooms"
                   value={form.bedrooms}
                   onChange={updateField}
-                  placeholder="2"
+                  placeholder="e.g. 2"
                   aria-invalid={Boolean(fieldErrors.bedrooms)}
                   aria-describedby={fieldErrors.bedrooms ? 'bedrooms-error' : undefined}
                 />
@@ -465,7 +465,7 @@ export default function PropertyFormPage() {
                   name="bathrooms"
                   value={form.bathrooms}
                   onChange={updateField}
-                  placeholder="2"
+                  placeholder="e.g. 2"
                   aria-invalid={Boolean(fieldErrors.bathrooms)}
                   aria-describedby={fieldErrors.bathrooms ? 'bathrooms-error' : undefined}
                 />
@@ -477,7 +477,7 @@ export default function PropertyFormPage() {
                   name="amenities"
                   value={form.amenities}
                   onChange={updateField}
-                  placeholder="Parking, Air Conditioning, Security"
+                  placeholder="e.g. Parking, Air Conditioning, Security"
                 />
                 <small>Separate multiple amenities with commas.</small>
               </PropertyField>
