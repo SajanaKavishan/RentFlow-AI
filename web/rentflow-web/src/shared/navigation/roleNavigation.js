@@ -121,10 +121,9 @@ export const NAV_ITEMS = Object.freeze([
     label: 'Pricing / Lease',
     path: '/modules/pricing-lease',
     roles: [L],
-    available: false,
+    available: true,
     owner: 'Pricing and lease management',
-    description:
-      'Pricing and lease tools will be connected when that module is merged.',
+    description: 'Analyze rental prices for your properties.',
   },
 
   {
