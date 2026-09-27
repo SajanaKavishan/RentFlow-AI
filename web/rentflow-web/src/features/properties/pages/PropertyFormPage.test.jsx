@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -37,6 +37,8 @@ const property = {
   monthlyRent: 185000,
   bedrooms: 3,
   bathrooms: 2,
+  area: 1450,
+  areaUnit: 'sqft',
   isAvailable: true,
   amenities: ['Parking', 'Security'],
 }
@@ -75,6 +77,7 @@ async function completePropertyDetails() {
   await userEvent.type(screen.getByLabelText('Monthly rent'), '95000')
   await userEvent.type(screen.getByLabelText('Bedrooms'), '2')
   await userEvent.type(screen.getByLabelText('Bathrooms'), '1')
+  await userEvent.type(screen.getByLabelText('Property / land size'), '1250')
   await userEvent.type(screen.getByLabelText('Amenities'), 'Parking, Garden')
   await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
 }
@@ -144,13 +147,31 @@ describe('property form wizard', () => {
       monthlyRent: 95000,
       bedrooms: 2,
       bathrooms: 1,
+      area: 1250,
+      areaUnit: 'sqft',
       isAvailable: true,
       amenities: ['Parking', 'Garden'],
     })
     expect(uploadPropertyImages).toHaveBeenCalledWith(newPropertyId, [photo])
     expect(createProperty.mock.invocationCallOrder[0])
       .toBeLessThan(uploadPropertyImages.mock.invocationCallOrder[0])
-    expect(await screen.findByText('Property created with 1 photo(s).')).toBeInTheDocument()
+    const createdMessage = await screen.findByText('Lake House was created successfully with 1 photo.')
+    expect(createdMessage.closest('.property-toast')).toHaveClass('property-toast--success')
+  })
+
+  it('treats an early form submit as Continue instead of creating the property', async () => {
+    renderApp('/properties/new')
+    await completeBasicDetails()
+
+    await userEvent.type(screen.getByLabelText('Monthly rent'), '95000')
+    await userEvent.type(screen.getByLabelText('Bedrooms'), '2')
+    await userEvent.type(screen.getByLabelText('Bathrooms'), '1')
+    await userEvent.type(screen.getByLabelText('Property / land size'), '1250')
+
+    fireEvent.submit(screen.getByLabelText('Monthly rent').closest('form'))
+
+    expect(screen.getByRole('heading', { name: 'Photos & Availability' })).toBeInTheDocument()
+    expect(createProperty).not.toHaveBeenCalled()
   })
 
   it('loads an owned property into the edit route and saves through the existing update flow', async () => {
@@ -166,8 +187,15 @@ describe('property form wizard', () => {
     expect(screen.getByLabelText('Amenities')).toHaveValue('Parking, Security')
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
+    expect(screen.getByRole('heading', { name: 'Photos & Availability' })).toBeInTheDocument()
+    expect(updateProperty).not.toHaveBeenCalled()
     expect(await screen.findByText('No property photos uploaded yet.')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+    const saveButton = screen.getByRole('button', { name: 'Save Changes' })
+    expect(saveButton).toBeDisabled()
+
+    await userEvent.click(screen.getByLabelText(/Available for rent/))
+    expect(saveButton).toBeEnabled()
+    await userEvent.click(saveButton)
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/modules/manage-properties'))
     expect(updateProperty).toHaveBeenCalledWith(propertyId, {
@@ -178,10 +206,14 @@ describe('property form wizard', () => {
       monthlyRent: property.monthlyRent,
       bedrooms: property.bedrooms,
       bathrooms: property.bathrooms,
-      isAvailable: true,
+      area: property.area,
+      areaUnit: property.areaUnit,
+      isAvailable: false,
       amenities: property.amenities,
     })
     expect(uploadPropertyImages).not.toHaveBeenCalled()
+    const updatedMessage = await screen.findByText('Harbour View Residence was updated successfully.')
+    expect(updatedMessage.closest('.property-toast')).toHaveClass('property-toast--success')
   })
 
   it('does not expose a property outside the authenticated owned collection', async () => {

@@ -28,6 +28,8 @@ public class PropertyServiceTests
             MonthlyRent = 85000m,
             Bedrooms = 2,
             Bathrooms = 1,
+            Area = 1250m,
+            AreaUnit = "sqft",
             Amenities = new List<string>
             {
                 "Parking",
@@ -44,6 +46,8 @@ public class PropertyServiceTests
         Assert.Equal("Colombo Apartment", result.Title);
         Assert.Equal("Colombo", result.City);
         Assert.Equal(85000m, result.MonthlyRent);
+        Assert.Equal(1250m, result.Area);
+        Assert.Equal("sqft", result.AreaUnit);
         Assert.True(result.IsAvailable);
         Assert.Equal(2, result.Amenities.Count);
 
@@ -120,6 +124,8 @@ public class PropertyServiceTests
             MonthlyRent = 95000m,
             Bedrooms = 3,
             Bathrooms = 2,
+            Area = 14.5m,
+            AreaUnit = "perch",
             IsAvailable = false,
             Amenities = new List<string>
             {
@@ -139,6 +145,8 @@ public class PropertyServiceTests
         Assert.Equal(95000m, result.MonthlyRent);
         Assert.Equal(3, result.Bedrooms);
         Assert.Equal(2, result.Bathrooms);
+        Assert.Equal(14.5m, result.Area);
+        Assert.Equal("perch", result.AreaUnit);
         Assert.False(result.IsAvailable);
         Assert.Equal(2, result.Amenities.Count);
     }

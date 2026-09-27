@@ -379,6 +379,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(property => property.Bathrooms)
                 .IsRequired();
 
+            entity.Property(property => property.Area)
+                .HasPrecision(18, 2)
+                .IsRequired(false);
+
+            entity.Property(property => property.AreaUnit)
+                .HasMaxLength(20)
+                .IsRequired(false);
+
             entity.Property(property => property.IsAvailable)
                 .IsRequired();
 

@@ -8,13 +8,14 @@ import {
   uploadPropertyImages,
 } from '../services/propertyApiService.js'
 import Icon from '../../../shared/ui/Icons.jsx'
+import { PROPERTY_AREA_UNITS } from '../propertyArea.js'
 import '../properties.css'
 
 const MANAGE_PROPERTIES_PATH = '/modules/manage-properties'
 const UNSAVED_MESSAGE = 'You have unsaved property changes. Leave without saving them?'
 const STEPS = [
   { title: 'Basic Details', description: 'Name and locate the property.' },
-  { title: 'Property Details', description: 'Add rent, rooms and amenities.' },
+  { title: 'Property Details', description: 'Add rent, rooms, size and amenities.' },
   { title: 'Photos & Availability', description: 'Finish the listing and publish.' },
 ]
 
@@ -26,6 +27,8 @@ const initialForm = {
   monthlyRent: '',
   bedrooms: '',
   bathrooms: '',
+  area: '',
+  areaUnit: 'sqft',
   amenities: '',
   isAvailable: true,
 }
@@ -39,6 +42,8 @@ function propertyToForm(property) {
     monthlyRent: property.monthlyRent ?? '',
     bedrooms: property.bedrooms ?? '',
     bathrooms: property.bathrooms ?? '',
+    area: property.area ?? '',
+    areaUnit: property.areaUnit || 'sqft',
     amenities: (property.amenities || []).join(', '),
     isAvailable: property.isAvailable ?? true,
   }
@@ -53,12 +58,35 @@ function formToRequest(form) {
     monthlyRent: Number(form.monthlyRent),
     bedrooms: Number(form.bedrooms),
     bathrooms: Number(form.bathrooms),
+    area: Number(form.area),
+    areaUnit: form.areaUnit,
     isAvailable: Boolean(form.isAvailable),
     amenities: form.amenities
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean),
   }
+}
+
+function formSnapshot(form) {
+  const normalizeNumber = (value) => value === '' ? '' : Number(value)
+
+  return JSON.stringify({
+    title: form.title.trim(),
+    description: form.description.trim(),
+    address: form.address.trim(),
+    city: form.city.trim(),
+    monthlyRent: normalizeNumber(form.monthlyRent),
+    bedrooms: normalizeNumber(form.bedrooms),
+    bathrooms: normalizeNumber(form.bathrooms),
+    area: normalizeNumber(form.area),
+    areaUnit: form.areaUnit,
+    amenities: form.amenities
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+    isAvailable: Boolean(form.isAvailable),
+  })
 }
 
 function validateStep(step, form) {
@@ -80,9 +108,12 @@ function validateStep(step, form) {
       ['monthlyRent', 'Enter a valid monthly rent.'],
       ['bedrooms', 'Enter a valid number of bedrooms.'],
       ['bathrooms', 'Enter a valid number of bathrooms.'],
+      ['area', 'Enter a valid property or land size.'],
     ]) {
       const value = form[field]
-      if (value === '' || !Number.isFinite(Number(value)) || Number(value) < 0) {
+      const numericValue = Number(value)
+      if (value === '' || !Number.isFinite(numericValue)
+        || numericValue < 0 || (field === 'area' && numericValue <= 0)) {
         errors[field] = message
       }
     }
@@ -107,7 +138,7 @@ export default function PropertyFormPage() {
   const isEditing = Boolean(propertyId)
   const [form, setForm] = useState(initialForm)
   const [files, setFiles] = useState([])
-  const [initialSnapshot, setInitialSnapshot] = useState(JSON.stringify(initialForm))
+  const [initialSnapshot, setInitialSnapshot] = useState(formSnapshot(initialForm))
   const [ownedPropertyId, setOwnedPropertyId] = useState(null)
   const [step, setStep] = useState(0)
   const [fieldErrors, setFieldErrors] = useState({})
@@ -138,7 +169,7 @@ export default function PropertyFormPage() {
 
         const populatedForm = propertyToForm(property)
         setForm(populatedForm)
-        setInitialSnapshot(JSON.stringify(populatedForm))
+        setInitialSnapshot(formSnapshot(populatedForm))
         setOwnedPropertyId(property.id)
         setStatus('ready')
       })
@@ -152,7 +183,7 @@ export default function PropertyFormPage() {
   }, [isEditing, loadAttempt, propertyId])
 
   const isDirty = status === 'ready' && (
-    JSON.stringify(form) !== initialSnapshot || files.length > 0
+    formSnapshot(form) !== initialSnapshot || files.length > 0
   )
 
   useEffect(() => {
@@ -231,6 +262,13 @@ export default function PropertyFormPage() {
   async function handleSubmit(event) {
     event.preventDefault()
 
+    if (step < STEPS.length - 1) {
+      continueToNextStep()
+      return
+    }
+
+    if (isEditing && !isDirty) return
+
     for (const candidateStep of [0, 1]) {
       const errors = validateStep(candidateStep, form)
       if (Object.keys(errors).length > 0) {
@@ -258,15 +296,17 @@ export default function PropertyFormPage() {
         await uploadPropertyImages(savedPropertyId, files)
       }
 
+      const propertyName = form.title.trim()
+      const photoLabel = `${files.length} ${files.length === 1 ? 'photo' : 'photos'}`
       const successMessage = isEditing
         ? files.length > 0
-          ? `Property updated and ${files.length} new photo(s) uploaded.`
-          : 'Property updated successfully.'
+          ? `${propertyName} was updated successfully with ${photoLabel} added.`
+          : `${propertyName} was updated successfully.`
         : files.length > 0
-          ? `Property created with ${files.length} photo(s).`
-          : 'Property created successfully.'
+          ? `${propertyName} was created successfully with ${photoLabel}.`
+          : `${propertyName} was created successfully.`
 
-      setInitialSnapshot(JSON.stringify(form))
+      setInitialSnapshot(formSnapshot(form))
       setFiles([])
       navigate(MANAGE_PROPERTIES_PATH, {
         replace: true,
@@ -471,6 +511,35 @@ export default function PropertyFormPage() {
                 />
               </PropertyField>
 
+              <PropertyField name="area" label="Property / land size" error={fieldErrors.area} wide>
+                <div className="property-size-input">
+                  <input
+                    id="area"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    name="area"
+                    value={form.area}
+                    onChange={updateField}
+                    placeholder="e.g. 1250"
+                    aria-invalid={Boolean(fieldErrors.area)}
+                    aria-describedby={fieldErrors.area ? 'area-error' : undefined}
+                  />
+                  <label className="visually-hidden" htmlFor="areaUnit">Size unit</label>
+                  <select
+                    id="areaUnit"
+                    name="areaUnit"
+                    value={form.areaUnit}
+                    onChange={updateField}
+                  >
+                    {PROPERTY_AREA_UNITS.map((unit) => (
+                      <option key={unit.value} value={unit.value}>{unit.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <small>Choose the unit that matches the building or land measurement.</small>
+              </PropertyField>
+
               <PropertyField name="amenities" label="Amenities" wide>
                 <input
                   id="amenities"
@@ -562,9 +631,9 @@ export default function PropertyFormPage() {
 
             {step < STEPS.length - 1 ? (
               <button
-                type="button"
+                type="submit"
                 className="property-button property-button--primary"
-                onClick={continueToNextStep}
+                disabled={saving}
               >
                 Continue
               </button>
@@ -572,7 +641,7 @@ export default function PropertyFormPage() {
               <button
                 type="submit"
                 className="property-button property-button--primary"
-                disabled={saving}
+                disabled={saving || (isEditing && !isDirty)}
               >
                 {saving
                   ? isEditing ? 'Saving changes...' : 'Creating property...'

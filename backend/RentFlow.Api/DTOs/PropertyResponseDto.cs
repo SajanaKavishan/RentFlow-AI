@@ -20,6 +20,10 @@ public class PropertyResponseDto
 
     public int Bathrooms { get; set; }
 
+    public decimal? Area { get; set; }
+
+    public string? AreaUnit { get; set; }
+
     public bool IsAvailable { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import {
-  deleteProperty,
-  getMyProperties,
-  updateProperty,
-} from '../services/propertyApiService.js'
+import { getMyProperties } from '../services/propertyApiService.js'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import Icon from '../../../shared/ui/Icons.jsx'
+import { formatPropertyArea } from '../propertyArea.js'
 import '../properties.css'
 
 const PAGE_SIZE = 6
@@ -19,7 +16,9 @@ export default function ManagePropertiesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [message, setMessage] = useState(location.state?.propertyMessage || '')
+  const [toast, setToast] = useState(() => location.state?.propertyMessage
+    ? { tone: 'success', message: location.state.propertyMessage }
+    : null)
 
   async function loadProperties() {
     setLoading(true)
@@ -55,54 +54,11 @@ export default function ManagePropertiesPage() {
     navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
   }, [location.pathname, location.search, location.state, navigate])
 
-  async function handleAvailability(property) {
-    setError('')
-    setMessage('')
-
-    try {
-      await updateProperty(property.id, {
-        title: property.title,
-        description: property.description,
-        address: property.address,
-        city: property.city,
-        monthlyRent: Number(property.monthlyRent),
-        bedrooms: Number(property.bedrooms),
-        bathrooms: Number(property.bathrooms),
-        isAvailable: !property.isAvailable,
-        amenities: property.amenities || [],
-      })
-
-      setMessage(
-        property.isAvailable
-          ? 'Property marked as unavailable.'
-          : 'Property marked as available.',
-      )
-
-      await loadProperties()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleDelete(propertyId) {
-    const confirmed = window.confirm(
-      'Are you sure you want to permanently delete this property?',
-    )
-
-    if (!confirmed) return
-
-    setError('')
-    setMessage('')
-
-    try {
-      await deleteProperty(propertyId)
-
-      setMessage('Property deleted successfully.')
-      await loadProperties()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
+  useEffect(() => {
+    if (!toast) return undefined
+    const timer = window.setTimeout(() => setToast(null), 3000)
+    return () => window.clearTimeout(timer)
+  }, [toast])
 
   function handleSearchChange(event) {
     setSearchQuery(event.target.value)
@@ -136,6 +92,20 @@ export default function ManagePropertiesPage() {
 
   return (
     <main className="manage-properties-page">
+      {toast && (
+        <div
+          className={`property-toast property-toast--${toast.tone}`}
+          role={toast.tone === 'error' ? 'alert' : 'status'}
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <span className="property-toast__mark" aria-hidden="true">
+            {toast.tone === 'success' ? '✓' : '×'}
+          </span>
+          <p>{toast.message}</p>
+        </div>
+      )}
+
       <header className="manage-properties-header">
         <div>
           <h1>My Properties</h1>
@@ -154,13 +124,6 @@ export default function ManagePropertiesPage() {
         <div className="property-management-alert property-management-alert--error" role="alert">
           <strong>Something went wrong</strong>
           <span>{error}</span>
-        </div>
-      )}
-
-      {message && (
-        <div className="property-management-alert property-management-alert--success" role="status">
-          <strong>Success</strong>
-          <span>{message}</span>
         </div>
       )}
 
@@ -244,121 +207,77 @@ export default function ManagePropertiesPage() {
                 key={property.id}
                 className="managed-property-card"
               >
-                <div className="managed-property-card__images">
-                  <PropertyImageGallery
-                    propertyId={property.id}
-                    variant="cover"
-                    alt={property.title}
-                  />
-                  <span
-                    className={
-                      property.isAvailable
-                        ? 'managed-property-status managed-property-status--available'
-                        : 'managed-property-status managed-property-status--unavailable'
-                    }
-                  >
-                    {property.isAvailable
-                      ? 'Available'
-                      : 'Unavailable'}
-                  </span>
-                </div>
-
-                <div className="managed-property-card__body">
-                  <div className="managed-property-card__top">
-                    <span className="managed-property-city">
-                      {property.city}
-                    </span>
-                  </div>
-
-                  <h3>{property.title}</h3>
-
-                  <p className="managed-property-address">
-                    {[property.address, property.city]
-                      .filter(Boolean)
-                      .join(', ')}
-                  </p>
-
-                  <div className="managed-property-price">
-                    <strong>
-                      Rs.{' '}
-                      {Number(
-                        property.monthlyRent,
-                      ).toLocaleString()}
-                    </strong>
-                    <span>per month</span>
-                  </div>
-
-                  <dl className="managed-property-facts">
-                    <div>
-                      <dt>Bedrooms</dt>
-                      <dd>{property.bedrooms}</dd>
-                    </div>
-
-                    <div>
-                      <dt>Bathrooms</dt>
-                      <dd>{property.bathrooms}</dd>
-                    </div>
-                  </dl>
-
-                  <div className="managed-property-workflows">
-                    <Link
-                      className="property-workflow-link"
-                      to={`/properties/${encodeURIComponent(property.id)}/viewing-requests`}
-                    >
-                      <Icon name="calendar" size={18} />
-                      <span>Viewing Requests</span>
-                      <Icon name="arrow" size={16} />
-                    </Link>
-
-                    <Link
-                      className="property-workflow-link"
-                      to={`/properties/${encodeURIComponent(property.id)}/rental-applications`}
-                    >
-                      <Icon name="document" size={18} />
-                      <span>Rental Applications</span>
-                      <Icon name="arrow" size={16} />
-                    </Link>
-                  </div>
-
-                  <div className="managed-property-actions">
-                    <Link
-                      className="property-button property-button--quiet"
-                      to={`/properties/${encodeURIComponent(property.id)}`}
-                    >
-                      <Icon name="eye" size={17} />
-                      View property
-                    </Link>
-
-                    <Link
-                      className="property-button property-button--quiet"
-                      to={`/properties/${encodeURIComponent(property.id)}/edit`}
-                    >
-                      Edit property
-                    </Link>
-
-                    <button
-                      type="button"
-                      className="property-button property-button--quiet"
-                      onClick={() =>
-                        handleAvailability(property)
+                <Link
+                  className="managed-property-card__primary"
+                  to={`/properties/${encodeURIComponent(property.id)}`}
+                  aria-label="View property"
+                >
+                  <div className="managed-property-card__images">
+                    <PropertyImageGallery
+                      propertyId={property.id}
+                      variant="cover"
+                      alt={property.title}
+                    />
+                    <span
+                      className={
+                        property.isAvailable
+                          ? 'managed-property-status managed-property-status--available'
+                          : 'managed-property-status managed-property-status--unavailable'
                       }
                     >
                       {property.isAvailable
-                        ? 'Mark unavailable'
-                        : 'Mark available'}
-                    </button>
-
-                    <button
-                      type="button"
-                      className="property-delete-button"
-                      onClick={() =>
-                        handleDelete(property.id)
-                      }
-                    >
-                      Delete
-                    </button>
+                        ? 'Available'
+                        : 'Unavailable'}
+                    </span>
                   </div>
-                </div>
+
+                  <div className="managed-property-card__body">
+                    <div className="managed-property-card__summary">
+                      <div>
+                        <h3>{property.title}</h3>
+                        <p className="managed-property-address">
+                          <Icon name="pin" size={15} />
+                          <span>{[property.address, property.city]
+                            .filter(Boolean)
+                            .join(', ')}</span>
+                        </p>
+                      </div>
+
+                      <div className="managed-property-price">
+                        <strong>
+                          Rs.{' '}
+                          {Number(
+                            property.monthlyRent,
+                          ).toLocaleString()}
+                        </strong>
+                        <span>/month</span>
+                      </div>
+                    </div>
+
+                    <dl className="managed-property-facts">
+                      <div>
+                        <Icon name="bed" size={17} />
+                        <dt className="visually-hidden">Bedrooms</dt>
+                        <dd>{property.bedrooms} {Number(property.bedrooms) === 1 ? 'bed' : 'beds'}</dd>
+                      </div>
+
+                      <div>
+                        <Icon name="bath" size={17} />
+                        <dt className="visually-hidden">Bathrooms</dt>
+                        <dd>{property.bathrooms} {Number(property.bathrooms) === 1 ? 'bath' : 'baths'}</dd>
+                      </div>
+
+                      {property.area && (
+                        <div className="managed-property-facts__area">
+                          <Icon name="ruler" size={17} />
+                          <dt className="visually-hidden">Property size</dt>
+                          <dd>{formatPropertyArea(property.area, property.areaUnit)}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+                </Link>
+
               </article>
             ))}
             </div>

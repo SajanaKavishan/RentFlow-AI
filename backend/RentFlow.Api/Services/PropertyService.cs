@@ -60,6 +60,8 @@ public class PropertyService : IPropertyService
             MonthlyRent = dto.MonthlyRent,
             Bedrooms = dto.Bedrooms,
             Bathrooms = dto.Bathrooms,
+            Area = dto.Area,
+            AreaUnit = NormalizeAreaUnit(dto.Area, dto.AreaUnit),
             IsAvailable = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -107,6 +109,8 @@ public class PropertyService : IPropertyService
         property.MonthlyRent = dto.MonthlyRent;
         property.Bedrooms = dto.Bedrooms;
         property.Bathrooms = dto.Bathrooms;
+        property.Area = dto.Area;
+        property.AreaUnit = NormalizeAreaUnit(dto.Area, dto.AreaUnit);
         property.IsAvailable = dto.IsAvailable;
         property.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -184,6 +188,18 @@ public class PropertyService : IPropertyService
             .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
+    private static string? NormalizeAreaUnit(decimal? area, string? areaUnit)
+    {
+        if (!area.HasValue)
+        {
+            return null;
+        }
+
+        return string.IsNullOrWhiteSpace(areaUnit)
+            ? "sqft"
+            : areaUnit.Trim().ToLowerInvariant();
+    }
+
     // Convert Property entity to PropertyResponseDto.
     private static PropertyResponseDto MapToResponseDto(
         Property property)
@@ -199,6 +215,8 @@ public class PropertyService : IPropertyService
             MonthlyRent = property.MonthlyRent,
             Bedrooms = property.Bedrooms,
             Bathrooms = property.Bathrooms,
+            Area = property.Area,
+            AreaUnit = property.AreaUnit,
             IsAvailable = property.IsAvailable,
             CreatedAt = property.CreatedAt,
             UpdatedAt = property.UpdatedAt,

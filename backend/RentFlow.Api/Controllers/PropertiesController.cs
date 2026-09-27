@@ -331,6 +331,8 @@ public class PropertiesController : ControllerBase
             MonthlyRent = property.MonthlyRent,
             Bedrooms = property.Bedrooms,
             Bathrooms = property.Bathrooms,
+            Area = property.Area,
+            AreaUnit = property.AreaUnit,
             IsAvailable = property.IsAvailable,
             CreatedAt = property.CreatedAt,
             UpdatedAt = property.UpdatedAt,

@@ -25,6 +25,10 @@ public class Property
 
     public int Bathrooms { get; set; }
 
+    public decimal? Area { get; set; }
+
+    public string? AreaUnit { get; set; }
+
     public bool IsAvailable { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

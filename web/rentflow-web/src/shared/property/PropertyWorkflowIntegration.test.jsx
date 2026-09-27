@@ -22,6 +22,8 @@ const property = {
   monthlyRent: 185000,
   bedrooms: 3,
   bathrooms: 2,
+  area: 1450,
+  areaUnit: 'sqft',
   isAvailable: true,
   createdAt: '2026-09-01T00:00:00Z',
   updatedAt: null,
@@ -95,6 +97,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn((url) => {
     const path = new URL(url, 'http://localhost').pathname
     if (path === '/api/properties/mine') return Promise.resolve(json([property]))
+    if (path === `/api/properties/${propertyId}`) return Promise.resolve(json(property))
     if (path === `/api/viewings/property/${propertyId}`) return Promise.resolve(json([viewing]))
     if (path === `/api/rental-applications/${applicationId}`) return Promise.resolve(json(application))
     if (path.startsWith(`/api/properties/${propertyId}/images`)) return Promise.resolve(json([]))
@@ -138,7 +141,7 @@ describe('owned property landlord workflow integration', () => {
   })
 
   it('exposes canonical viewing and application navigation from Manage Properties', async () => {
-    renderApp('/modules/manage-properties')
+    const router = renderApp('/modules/manage-properties')
 
     expect(await screen.findByRole('heading', { name: 'My Properties' })).toBeInTheDocument()
     expect(screen.getByText('1 property listed')).toBeInTheDocument()
@@ -149,16 +152,65 @@ describe('owned property landlord workflow integration', () => {
     expect(within(card).getByText('Available')).toBeInTheDocument()
     expect(within(card).getByText('Bedrooms').parentElement).toHaveTextContent('3')
     expect(within(card).getByText('Bathrooms').parentElement).toHaveTextContent('2')
-    expect(within(card).getByRole('link', { name: 'Viewing Requests' }))
-      .toHaveAttribute('href', `/properties/${propertyId}/viewing-requests`)
-    expect(within(card).getByRole('link', { name: 'Rental Applications' }))
-      .toHaveAttribute('href', `/properties/${propertyId}/rental-applications`)
     expect(within(card).getByRole('link', { name: 'View property' }))
       .toHaveAttribute('href', `/properties/${propertyId}`)
-    expect(within(card).getByRole('link', { name: 'Edit property' }))
-      .toHaveAttribute('href', `/properties/${propertyId}/edit`)
+    expect(within(card).queryByRole('link', { name: 'Viewing Requests' })).not.toBeInTheDocument()
+    expect(within(card).queryByRole('link', { name: 'Rental Applications' })).not.toBeInTheDocument()
+    expect(within(card).queryByRole('link', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     expect(within(card).queryByText('Parking')).not.toBeInTheDocument()
     expect(within(card).queryByRole('button', { name: /favorite|heart/i })).not.toBeInTheDocument()
+
+    await userEvent.click(within(card).getByRole('link', { name: 'View property' }))
+    expect(router.state.location.pathname).toBe(`/properties/${propertyId}`)
+    expect(await screen.findByRole('heading', { name: property.title })).toBeInTheDocument()
+    expect(screen.getByText('1,450 sq ft')).toBeInTheDocument()
+    const management = screen.getByRole('complementary', { name: 'Manage property' })
+    expect(within(management).getByRole('link', { name: 'Viewing Requests' }))
+      .toHaveAttribute('href', `/properties/${propertyId}/viewing-requests`)
+    expect(within(management).getByRole('link', { name: 'Rental Applications' }))
+      .toHaveAttribute('href', `/properties/${propertyId}/rental-applications`)
+    expect(within(management).getByRole('link', { name: 'Edit' }))
+      .toHaveAttribute('href', `/properties/${propertyId}/edit`)
+    expect(within(management).getByRole('button', { name: 'Mark unavailable' })).toBeInTheDocument()
+    expect(within(management).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+  })
+
+  it('shows toast feedback for property updates and deletion', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    fetch.mockImplementation((url, options = {}) => {
+      const path = new URL(url, 'http://localhost').pathname
+      if (path === `/api/properties/${propertyId}` && options.method === 'PUT') {
+        return Promise.resolve(json({ ...property, isAvailable: false }))
+      }
+      if (path === `/api/properties/${propertyId}` && options.method === 'DELETE') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (path === `/api/properties/${propertyId}`) return Promise.resolve(json(property))
+      if (path === '/api/properties/mine') return Promise.resolve(json([property]))
+      if (path.startsWith(`/api/properties/${propertyId}/images`)) return Promise.resolve(json([]))
+      return Promise.resolve(json([]))
+    })
+    renderApp(`/properties/${propertyId}`)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Mark unavailable' }))
+
+    const updateMessage = await screen.findByText('Harbour View Residence is now unavailable.')
+    expect(updateMessage.closest('.property-toast')).toHaveClass('property-toast--success')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`/api/properties/${propertyId}$`)),
+      expect.objectContaining({ method: 'PUT' }),
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    expect(confirm).toHaveBeenCalledWith(`Are you sure you want to permanently delete ${property.title}?`)
+    const deleteMessage = await screen.findByText('Harbour View Residence was deleted successfully.')
+    expect(deleteMessage.closest('.property-toast')).toHaveClass('property-toast--success')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`/api/properties/${propertyId}$`)),
+      expect.objectContaining({ method: 'DELETE' }),
+    )
   })
 
   it('keeps My Properties list-only and navigates to the dedicated create route', async () => {

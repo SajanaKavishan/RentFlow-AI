@@ -28,5 +28,14 @@ public class CreatePropertyDto
 
     [Range(0, int.MaxValue)]
     public int Bathrooms { get; set; }
+
+    [Required]
+    [Range(0.01, double.MaxValue)]
+    public decimal? Area { get; set; }
+
+    [Required]
+    [RegularExpression("^(sqft|sqm|perch|acre)$")]
+    public string AreaUnit { get; set; } = "sqft";
+
     public List<string> Amenities { get; set; } = new();
 }

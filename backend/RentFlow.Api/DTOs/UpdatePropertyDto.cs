@@ -29,6 +29,12 @@ public class UpdatePropertyDto
     [Range(0, int.MaxValue)]
     public int Bathrooms { get; set; }
 
+    [Range(0.01, double.MaxValue)]
+    public decimal? Area { get; set; }
+
+    [RegularExpression("^(sqft|sqm|perch|acre)$")]
+    public string? AreaUnit { get; set; }
+
     public bool IsAvailable { get; set; }
 
     public List<string> Amenities { get; set; } = new();

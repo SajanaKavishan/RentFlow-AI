@@ -20,6 +20,12 @@ const paths = {
   refresh: <><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9A7 7 0 0 1 18 7l2 5M4 12l2 5a7 7 0 0 0 12.4-2" /></>,
   alert: <><path d="m12 3 10 18H2z" /><path d="M12 9v5m0 3h.01" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="m16 16 5 5" /></>,
+  pin: <><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0z" /><circle cx="12" cy="10" r="2.5" /></>,
+  bed: <><path d="M3 19v-8m18 8v-6a2 2 0 0 0-2-2H9a3 3 0 0 0-3 3v1" /><path d="M3 15h18M7 11V8h4a2 2 0 0 1 2 2v1" /></>,
+  bath: <><path d="M4 12h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z" /><path d="M7 12V6a3 3 0 0 1 6 0M6 21l1-2m11 2-1-2" /></>,
+  edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z" /></>,
+  trash: <><path d="M4 7h16m-11 4v6m6-6v6M9 4h6l1 3H8z" /><path d="m6 7 1 14h10l1-14" /></>,
+  ruler: <><path d="m4 17 13-13 3 3L7 20H4z" /><path d="m14 7 3 3m-6 0 2 2m-5 1 2 2" /></>,
 }
 
 export default function Icon({ name, size = 20, className = '' }) {
