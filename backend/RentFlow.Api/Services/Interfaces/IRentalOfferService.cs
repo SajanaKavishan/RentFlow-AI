@@ -20,6 +20,10 @@ public interface IRentalOfferService
         Guid tenantId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<RentalOfferResponseDto>> GetByLandlordAsync(
+        Guid landlordId,
+        CancellationToken cancellationToken = default);
+
     Task<RentalOfferResponseDto> AcceptAsync(
         Guid offerId,
         Guid tenantId,

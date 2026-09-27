@@ -117,6 +117,20 @@ public class LeaseAgreementService : ILeaseAgreementService
             .ToList();
     }
 
+    public async Task<IReadOnlyList<LeaseAgreementResponseDto>> GetByLandlordAsync(
+        Guid landlordId,
+        CancellationToken cancellationToken = default)
+    {
+        var leaseAgreements = await _dbContext.LeaseAgreements
+            .AsNoTracking()
+            .Where(lease => _dbContext.Properties.Any(property =>
+                property.Id == lease.PropertyId && property.LandlordId == landlordId))
+            .OrderByDescending(lease => lease.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return leaseAgreements.Select(MapToResponseDto).ToList();
+    }
+
     public async Task<LeaseAgreementResponseDto> ActivateAsync(
         Guid leaseId,
         CancellationToken cancellationToken = default)

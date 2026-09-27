@@ -600,6 +600,95 @@ public sealed class BusinessAuthorizationTests
     }
 
     [Fact]
+    public async Task Payment_LandlordList_ReturnsOwnedPaymentsAndExcludesOtherLandlords()
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+
+        (LeaseAgreement Lease, RentScheduleItem Schedule, Payment Payment) CreatePayment(
+            Guid propertyId, Guid tenantId, PaymentStatus status)
+        {
+            var lease = CreateLeaseAgreement(propertyId, LeaseAgreementStatus.Active);
+            lease.TenantId = tenantId;
+            var schedule = new RentScheduleItem
+            {
+                LeaseAgreementId = lease.Id,
+                DueDate = lease.StartDate,
+                Amount = lease.MonthlyRent
+            };
+            var payment = new Payment
+            {
+                RentScheduleItemId = schedule.Id,
+                TenantId = tenantId,
+                Amount = schedule.Amount,
+                PaymentMethod = "BankTransfer",
+                Status = status
+            };
+            return (lease, schedule, payment);
+        }
+
+        var ownedPending = CreatePayment(ownedProperty.Id, TenantA, PaymentStatus.Pending);
+        var ownedCompleted = CreatePayment(ownedProperty.Id, TenantB, PaymentStatus.Completed);
+        var other = CreatePayment(otherProperty.Id, TenantA, PaymentStatus.Failed);
+        await SeedAsync(factory, context =>
+        {
+            context.LeaseAgreements.AddRange(
+                ownedPending.Lease, ownedCompleted.Lease, other.Lease);
+            context.RentScheduleItems.AddRange(
+                ownedPending.Schedule, ownedCompleted.Schedule, other.Schedule);
+            context.Payments.AddRange(
+                ownedPending.Payment, ownedCompleted.Payment, other.Payment);
+        });
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+        using var otherLandlord = AuthorizedClient(factory, LandlordB, UserRole.Landlord);
+
+        using var response = await landlord.GetAsync("/api/payments/landlord");
+        using var otherResponse = await otherLandlord.GetAsync("/api/payments/landlord");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payments = await response.Content.ReadFromJsonAsync<List<PaymentResponseDto>>();
+        Assert.NotNull(payments);
+        Assert.Equal(2, payments.Count);
+        Assert.Contains(payments, payment => payment.Id == ownedPending.Payment.Id
+            && payment.RentScheduleItemId == ownedPending.Schedule.Id
+            && payment.Status == PaymentStatus.Pending);
+        Assert.Contains(payments, payment => payment.Id == ownedCompleted.Payment.Id
+            && payment.Status == PaymentStatus.Completed);
+        Assert.DoesNotContain(payments, payment => payment.Id == other.Payment.Id);
+
+        Assert.Equal(HttpStatusCode.OK, otherResponse.StatusCode);
+        var otherPayments = await otherResponse.Content.ReadFromJsonAsync<List<PaymentResponseDto>>();
+        Assert.Equal(other.Payment.Id, Assert.Single(otherPayments!).Id);
+    }
+
+    [Fact]
+    public async Task Payment_LandlordList_ReturnsEmptyCollectionWhenNoPayments()
+    {
+        using var factory = new AuthApiFactory();
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        using var response = await landlord.GetAsync("/api/payments/landlord");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty((await response.Content.ReadFromJsonAsync<List<PaymentResponseDto>>())!);
+    }
+
+    [Fact]
+    public async Task Payment_LandlordList_RejectsAnonymousAndTenant()
+    {
+        using var factory = new AuthApiFactory();
+        using var anonymous = factory.CreateHttpsClient();
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+
+        using var anonymousResponse = await anonymous.GetAsync("/api/payments/landlord");
+        using var tenantResponse = await tenant.GetAsync("/api/payments/landlord");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, tenantResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Payment_GetById_EnforcesTenantAndPropertyOwnership()
     {
         using var factory = new AuthApiFactory();
@@ -830,6 +919,52 @@ public sealed class BusinessAuthorizationTests
     }
 
     [Fact]
+    public async Task RentalOffer_LandlordList_ContainsOnlyOwnedPropertyOffers()
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+        var owned = CreateRentalOffer(TenantA, ownedProperty.Id);
+        var other = CreateRentalOffer(TenantB, otherProperty.Id);
+        await SeedAsync(factory, context => context.RentalOffers.AddRange(owned, other));
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        using var response = await landlord.GetAsync("/api/rental-offers/landlord");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var offers = await response.Content.ReadFromJsonAsync<List<RentalOfferResponseDto>>();
+        Assert.NotNull(offers);
+        Assert.Equal(owned.Id, Assert.Single(offers).Id);
+        Assert.DoesNotContain(offers, item => item.Id == other.Id);
+    }
+
+    [Fact]
+    public async Task RentalOffer_LandlordList_ReturnsEmptyCollectionWhenNoOffers()
+    {
+        using var factory = new AuthApiFactory();
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        using var response = await landlord.GetAsync("/api/rental-offers/landlord");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty((await response.Content.ReadFromJsonAsync<List<RentalOfferResponseDto>>())!);
+    }
+
+    [Fact]
+    public async Task RentalOffer_LandlordList_RejectsAnonymousAndTenant()
+    {
+        using var factory = new AuthApiFactory();
+        using var anonymous = factory.CreateHttpsClient();
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+
+        using var anonymousResponse = await anonymous.GetAsync("/api/rental-offers/landlord");
+        using var tenantResponse = await tenant.GetAsync("/api/rental-offers/landlord");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, tenantResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task RentalOffer_Create_RequiresLandlordPropertyAccessAndPreservesValidation()
     {
         using var factory = new AuthApiFactory();
@@ -1019,6 +1154,52 @@ public sealed class BusinessAuthorizationTests
         EndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12)),
         Status = status
     };
+
+    [Fact]
+    public async Task LeaseAgreement_LandlordList_ContainsOnlyOwnedPropertyLeases()
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+        var owned = CreateLeaseAgreement(ownedProperty.Id, LeaseAgreementStatus.Pending);
+        var other = CreateLeaseAgreement(otherProperty.Id, LeaseAgreementStatus.Active);
+        await SeedAsync(factory, context => context.LeaseAgreements.AddRange(owned, other));
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        using var response = await landlord.GetAsync("/api/lease-agreements/landlord");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var leases = await response.Content.ReadFromJsonAsync<List<LeaseAgreementResponseDto>>();
+        Assert.NotNull(leases);
+        Assert.Equal(owned.Id, Assert.Single(leases).Id);
+        Assert.DoesNotContain(leases, item => item.Id == other.Id);
+    }
+
+    [Fact]
+    public async Task LeaseAgreement_LandlordList_ReturnsEmptyCollectionWhenNoLeases()
+    {
+        using var factory = new AuthApiFactory();
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        using var response = await landlord.GetAsync("/api/lease-agreements/landlord");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty((await response.Content.ReadFromJsonAsync<List<LeaseAgreementResponseDto>>())!);
+    }
+
+    [Fact]
+    public async Task LeaseAgreement_LandlordList_RejectsAnonymousAndTenant()
+    {
+        using var factory = new AuthApiFactory();
+        using var anonymous = factory.CreateHttpsClient();
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+
+        using var anonymousResponse = await anonymous.GetAsync("/api/lease-agreements/landlord");
+        using var tenantResponse = await tenant.GetAsync("/api/lease-agreements/landlord");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, tenantResponse.StatusCode);
+    }
 
     private static Task<HttpResponseMessage> CallLeaseActionAsync(
         HttpClient client,
