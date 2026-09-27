@@ -4,6 +4,7 @@ import { getMyProperties } from '../../properties/services/propertyApiService.js
 import { AppCard, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../../../shared/ui/States.jsx'
 import { getPricingHistory, getPricingWorkflow, startPricingAnalysis } from '../services/pricingAnalysisApiService.js'
 import '../pricingAnalysis.css'
+import PricingLeaseNavigation from '../../rentalOffers/PricingLeaseNavigation.jsx'
 
 const workflowStatuses = ['Pending', 'Running', 'Completed', 'Failed']
 const stepStatuses = ['Pending', 'Running', 'Completed', 'Failed', 'Skipped']
@@ -130,6 +131,7 @@ export default function PricingAnalysisPage() {
   const detail = detailState.propertyId === propertyId ? detailState : { status: 'idle' }
   return <main className="shared-page pricing-page">
     <PageHeader eyebrow="Pricing / Lease" title="Rental Price Analysis"><p>Review evidence based rental price guidance for your properties.</p></PageHeader>
+    <PricingLeaseNavigation />
     {propertiesState.items.length === 0 ? <EmptyState title="No properties yet" message="Add a property in Manage Properties to run a rental price analysis." /> : <>
       <AppCard>
         <div className="pricing-controls"><label htmlFor="pricing-property">Property</label><select id="pricing-property" value={propertyId} disabled={submitting} onChange={(event) => { ++detailRequest.current; setPropertyId(event.target.value); setActionError(''); setDetailState({ propertyId: '', status: 'idle', workflow: null, error: '' }) }}><option value="">Select a property</option>{propertiesState.items.map((property) => <option key={property.id} value={property.id}>{property.title} — {property.city}</option>)}</select><button className="shared-button" type="button" onClick={start} disabled={!propertyId || submitting}>{submitting ? 'Analyzing…' : 'Start analysis'}</button></div>

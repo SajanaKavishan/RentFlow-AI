@@ -82,6 +82,18 @@ describe('shared React shell', () => {
     expect(await screen.findByRole('heading', { name: 'Rental applications workflow' })).toBeInTheDocument()
   })
 
+  it('switches Pricing / Lease sections for landlords and blocks tenants', async () => {
+    renderApp('Landlord', '/modules/pricing-lease')
+    expect(await screen.findByRole('heading', { name: 'Rental Price Analysis' })).toBeInTheDocument()
+    const sections = screen.getByRole('navigation', { name: 'Pricing and lease sections' })
+    await userEvent.click(within(sections).getByRole('link', { name: 'Rental Offers' }))
+    expect(await screen.findByRole('heading', { name: 'Rental Offers' })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Pricing / Lease' })).toHaveAttribute('href', '/modules/pricing-lease')
+    cleanup()
+    renderApp('Tenant', '/modules/pricing-lease/offers')
+    expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
+  })
+
   it('shows profile details and logs out', async () => {
     renderApp('Tenant', '/profile')
     expect(await screen.findByRole('heading', { name: 'Profile' })).toBeInTheDocument()

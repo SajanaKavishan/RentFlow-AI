@@ -1,5 +1,6 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { tokenStorage } from '../../../core/auth/tokenStorage.js'
 import PricingAnalysisPage from './PricingAnalysisPage.jsx'
@@ -35,10 +36,14 @@ async function selectSecondProperty() {
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); tokenStorage.clearToken() })
 
+function renderPage() {
+  return render(<MemoryRouter initialEntries={['/modules/pricing-lease']}><PricingAnalysisPage /></MemoryRouter>)
+}
+
 describe('rental price analysis', () => {
   it('shows a completed numeric recommendation and workflow steps', async () => {
     mockApi({ postResult: workflow({ evidenceSufficiency: 'MODERATE', confidence: 'MEDIUM', recommendedMinRent: 60000, recommendedMaxRent: 70000, rationale: 'Comparable rents support this range.', citedEvidenceRefs: ['listing:1'] }) })
-    render(<PricingAnalysisPage />)
+    renderPage()
     await selectSecondProperty()
     await userEvent.click(screen.getByRole('button', { name: 'Start analysis' }))
     expect(await screen.findByText('Comparable rents support this range.')).toBeInTheDocument()
@@ -51,7 +56,7 @@ describe('rental price analysis', () => {
 
   it('treats insufficient evidence without numbers as a completed outcome', async () => {
     mockApi({ postResult: workflow({ evidenceSufficiency: 'INSUFFICIENT', confidence: 'LOW', recommendedMinRent: null, recommendedMaxRent: null, rationale: 'More comparable evidence is needed.' }) })
-    render(<PricingAnalysisPage />)
+    renderPage()
     await selectSecondProperty()
     await userEvent.click(screen.getByRole('button', { name: 'Start analysis' }))
     expect(await screen.findByText(/completed with insufficient evidence/i)).toBeInTheDocument()
@@ -61,7 +66,7 @@ describe('rental price analysis', () => {
 
   it('shows a safe API error when starting fails', async () => {
     mockApi({ postResult: { title: 'An unexpected error occurred.', detail: 'Internal provider trace' }, postStatus: 500 })
-    render(<PricingAnalysisPage />)
+    renderPage()
     await selectSecondProperty()
     await userEvent.click(screen.getByRole('button', { name: 'Start analysis' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to complete the pricing analysis')
@@ -70,7 +75,7 @@ describe('rental price analysis', () => {
 
   it('posts to ASP.NET for the selected property with the stored bearer token', async () => {
     const fetchMock = mockApi({ postResult: workflow({ evidenceSufficiency: 'LIMITED', confidence: 'LOW', recommendedMinRent: 50000, recommendedMaxRent: 60000 }) })
-    render(<PricingAnalysisPage />)
+    renderPage()
     await selectSecondProperty()
     await userEvent.click(screen.getByRole('button', { name: 'Start analysis' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining(`/api/properties/${secondId}/pricing-analysis-workflows`), expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ Authorization: 'Bearer landlord-token' }) })))
@@ -80,7 +85,7 @@ describe('rental price analysis', () => {
   it('loads property history and opens a previous workflow through the detail endpoint', async () => {
     const prior = workflow({ evidenceSufficiency: 'STRONG', confidence: 'HIGH', recommendedMinRent: 80000, recommendedMaxRent: 90000, rationale: 'Prior analysis.' })
     const fetchMock = mockApi({ history: [prior], postResult: prior })
-    render(<PricingAnalysisPage />)
+    renderPage()
     await selectSecondProperty()
     await userEvent.click(await screen.findByRole('button', { name: 'View details' }))
     expect(await screen.findByText('Prior analysis.')).toBeInTheDocument()
@@ -90,7 +95,7 @@ describe('rental price analysis', () => {
   it('keeps failed workflows distinct from insufficient evidence', async () => {
     const failed = { ...workflow({}), status: 3, result: null, evidenceSufficiency: null, confidence: null, errorMessage: 'The pricing analysis agent timed out.' }
     mockApi({ postResult: failed })
-    render(<PricingAnalysisPage />)
+    renderPage()
     await selectSecondProperty()
     await userEvent.click(screen.getByRole('button', { name: 'Start analysis' }))
     expect(await screen.findByText('The pricing analysis agent timed out.')).toBeInTheDocument()
@@ -109,7 +114,7 @@ describe('rental price analysis', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
     tokenStorage.setToken('landlord-token')
-    render(<PricingAnalysisPage />)
+    renderPage()
     await userEvent.selectOptions(await screen.findByLabelText('Property'), firstId)
     expect(await screen.findByText('Loading analysis history…')).toBeInTheDocument()
     await userEvent.selectOptions(screen.getByLabelText('Property'), secondId)

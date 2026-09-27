@@ -18,6 +18,7 @@ import './shell.css'
 
 function navigationPath(pathname) {
   if (pathname.startsWith('/notifications/')) return '/notifications'
+  if (pathname.startsWith('/modules/pricing-lease/')) return '/modules/pricing-lease'
   const scoped = /^\/properties\/[^/]+\/(viewing-requests|ai-review|rental-applications)(?:\/[^/]+\/validation)?\/?$/.exec(pathname)
   if (/^\/rental-applications\/[^/]+\/validation\/?$/.test(pathname)) return '/rental-applications'
   return scoped ? `/${scoped[1]}` : pathname
