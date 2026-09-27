@@ -94,6 +94,24 @@ describe('shared React shell', () => {
     expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
   })
 
+  it.each([
+    ['/modules/pricing-lease', 'Rental Price Analysis', 'Pricing / Lease'],
+    ['/modules/pricing-lease/offers', 'Rental Offers', 'Pricing / Lease'],
+    ['/modules/pricing-lease/leases', 'Lease Agreements', 'Pricing / Lease'],
+    ['/modules/pricing-lease/schedules', 'Rent Schedules', 'Pricing / Lease'],
+    ['/modules/payments', 'Payments', 'Payments'],
+  ])('opens %s directly for landlords with active navigation and blocks tenants', async (path, title, sidebarLabel) => {
+    renderApp('Landlord', path)
+    expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: sidebarLabel })).toHaveAttribute('aria-current', 'page')
+    if (sidebarLabel === 'Pricing / Lease') {
+      expect(within(screen.getByRole('navigation', { name: 'Pricing and lease sections' })).getByRole('link', { name: title })).toHaveAttribute('aria-current', 'page')
+    }
+    cleanup()
+    renderApp('Tenant', path)
+    expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
+  })
+
   it('switches Pricing / Lease sections for landlords and blocks tenants', async () => {
     renderApp('Landlord', '/modules/pricing-lease')
     expect(await screen.findByRole('heading', { name: 'Rental Price Analysis' })).toBeInTheDocument()
