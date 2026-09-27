@@ -192,7 +192,9 @@ describe('tenant dashboard', () => {
       }))
     }
     renderApp({ ...tenant, role })
-    expect(screen.getByRole('heading', { name: role === 'Admin' ? 'System Overview' : 'Welcome, Amara Silva' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', {
+      name: role === 'Admin' ? 'System Overview' : role === 'Landlord' ? 'Welcome, Amara' : 'Welcome, Amara Silva',
+    })).toBeInTheDocument()
     await act(async () => {})
     const requestedPaths = fetch.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname)
     expect(requestedPaths).not.toContain('/api/rental-applications')
