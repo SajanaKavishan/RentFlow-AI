@@ -162,6 +162,24 @@ public class RentalOfferService : IRentalOfferService
             .ToList();
     }
 
+    public async Task<IReadOnlyList<RentalOfferResponseDto>> GetByLandlordAsync(
+        Guid landlordId,
+        CancellationToken cancellationToken = default)
+    {
+        var landlordOffers = _dbContext.RentalOffers
+            .Where(offer => _dbContext.Properties.Any(property =>
+                property.Id == offer.PropertyId && property.LandlordId == landlordId));
+
+        await ExpirePendingOffersAsync(landlordOffers, cancellationToken);
+
+        var rentalOffers = await landlordOffers
+            .AsNoTracking()
+            .OrderByDescending(offer => offer.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return rentalOffers.Select(MapToResponseDto).ToList();
+    }
+
     public async Task<RentalOfferResponseDto> AcceptAsync(
         Guid offerId,
         Guid tenantId,

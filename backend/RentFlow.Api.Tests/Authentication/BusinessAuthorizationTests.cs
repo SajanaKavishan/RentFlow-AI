@@ -830,6 +830,52 @@ public sealed class BusinessAuthorizationTests
     }
 
     [Fact]
+    public async Task RentalOffer_LandlordList_ContainsOnlyOwnedPropertyOffers()
+    {
+        using var factory = new AuthApiFactory();
+        var ownedProperty = await SeedPropertyAsync(factory, LandlordA);
+        var otherProperty = await SeedPropertyAsync(factory, LandlordB);
+        var owned = CreateRentalOffer(TenantA, ownedProperty.Id);
+        var other = CreateRentalOffer(TenantB, otherProperty.Id);
+        await SeedAsync(factory, context => context.RentalOffers.AddRange(owned, other));
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        using var response = await landlord.GetAsync("/api/rental-offers/landlord");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var offers = await response.Content.ReadFromJsonAsync<List<RentalOfferResponseDto>>();
+        Assert.NotNull(offers);
+        Assert.Equal(owned.Id, Assert.Single(offers).Id);
+        Assert.DoesNotContain(offers, item => item.Id == other.Id);
+    }
+
+    [Fact]
+    public async Task RentalOffer_LandlordList_ReturnsEmptyCollectionWhenNoOffers()
+    {
+        using var factory = new AuthApiFactory();
+        using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord);
+
+        using var response = await landlord.GetAsync("/api/rental-offers/landlord");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty((await response.Content.ReadFromJsonAsync<List<RentalOfferResponseDto>>())!);
+    }
+
+    [Fact]
+    public async Task RentalOffer_LandlordList_RejectsAnonymousAndTenant()
+    {
+        using var factory = new AuthApiFactory();
+        using var anonymous = factory.CreateHttpsClient();
+        using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+
+        using var anonymousResponse = await anonymous.GetAsync("/api/rental-offers/landlord");
+        using var tenantResponse = await tenant.GetAsync("/api/rental-offers/landlord");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, tenantResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task RentalOffer_Create_RequiresLandlordPropertyAccessAndPreservesValidation()
     {
         using var factory = new AuthApiFactory();
