@@ -210,6 +210,20 @@ describe('owned property landlord workflow integration', () => {
     expect(propertyRead[1].headers.Authorization).toBeUndefined()
   })
 
+  it('does not use public property details for an unavailable landlord property', async () => {
+    renderApp(`/properties/${otherPropertyId}`)
+
+    expect(await screen.findByRole('heading', { name: 'Property unavailable' })).toBeInTheDocument()
+    expect(screen.getByText(/not in your authenticated property portfolio/)).toBeInTheDocument()
+    expect(fetch.mock.calls.some(([url]) => (
+      new URL(url, 'http://localhost').pathname === `/api/properties/${otherPropertyId}`
+    ))).toBe(false)
+    const ownedRead = fetch.mock.calls.find(([url]) => (
+      new URL(url, 'http://localhost').pathname === '/api/properties/mine'
+    ))
+    expect(ownedRead[1].headers.Authorization).toBe('Bearer landlord-token')
+  })
+
   it('shows toast feedback for property updates and deletion', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     fetch.mockImplementation((url, options = {}) => {

@@ -254,13 +254,9 @@ function applicationDate(application) {
 }
 
 function applicantLabel(application) {
-  const providedName = [application.applicantName, application.tenantName]
-    .find((value) => typeof value === 'string' && value.trim())
-  if (providedName) return providedName.trim()
-  const reference = typeof application.tenantId === 'string' && application.tenantId.trim()
+  return typeof application.tenantId === 'string' && application.tenantId.trim()
     ? application.tenantId.trim()
     : application.id
-  return `Tenant ${reference.replaceAll('-', '').slice(0, 8)}`
 }
 
 function formatCurrency(value) {
@@ -293,14 +289,12 @@ function RecentApplications({ applications, validation, selectedProperty, select
           <tbody>{recent.map((application) => {
             const label = applicantLabel(application)
             const aiReady = aiReadyIds.has(application.id)
-            const to = aiReady
-              ? scopedPath(`/rental-applications/${encodeURIComponent(application.id)}/validation`, selectedPropertyId)
-              : scopedPath(`/notifications/rental-application/${encodeURIComponent(application.id)}`, selectedPropertyId)
+            const to = `/properties/${encodeURIComponent(selectedPropertyId)}/rental-applications/${encodeURIComponent(application.id)}/validation`
             return (
               <tr key={application.id}>
                 <th scope="row">
-                  <span className="landlord-recent__applicant-mark" aria-hidden="true">{label.replace('Tenant ', '').charAt(0).toLocaleUpperCase() || 'T'}</span>
-                  <span className="landlord-recent__applicant" title={label}>{label}</span>
+                  <span className="landlord-recent__applicant-mark" aria-hidden="true">{label.charAt(0).toLocaleUpperCase() || 'T'}</span>
+                  <span className="landlord-recent__applicant" title={label}><span>Tenant reference</span><code>{label}</code></span>
                 </th>
                 <td>{selectedProperty.title}</td>
                 <td>{formatCurrency(application.monthlyIncome)}</td>

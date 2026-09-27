@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import { useOwnedPropertySelection } from '../../../shared/property/useOwnedProperties.js'
+import { PendingViewingsContext } from '../../../shared/layout/PendingViewingsContext.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import ViewingCard from '../components/ViewingCard.jsx'
 import {
@@ -29,6 +30,29 @@ function prioritizePending(viewings) {
     .map(({ viewing }) => viewing)
 }
 
+function validPropertyViewing(viewing, propertyId, expectedId = null) {
+  return Boolean(
+    viewing
+    && typeof viewing.id === 'string'
+    && viewing.id.trim()
+    && (!expectedId || viewing.id.toLowerCase() === expectedId.toLowerCase())
+    && typeof viewing.tenantId === 'string'
+    && viewing.tenantId.trim()
+    && typeof viewing.propertyId === 'string'
+    && viewing.propertyId.toLowerCase() === propertyId.toLowerCase()
+    && Object.values(VIEWING_STATUS).includes(viewing.status),
+  )
+}
+
+function verifyPropertyViewings(viewings, propertyId) {
+  if (!Array.isArray(viewings)
+    || viewings.some((viewing) => !validPropertyViewing(viewing, propertyId))
+    || new Set(viewings.map((viewing) => viewing.id.toLowerCase())).size !== viewings.length) {
+    throw new TypeError('Invalid property viewing response')
+  }
+  return viewings
+}
+
 const STATUS_FILTERS = [
   { value: 'all', label: 'All' },
   { value: VIEWING_STATUS.PENDING, label: 'Pending' },
@@ -47,6 +71,7 @@ function requestSearchFields(viewing) {
 }
 
 function ViewingRequestsPage() {
+  const publishPendingViewings = useContext(PendingViewingsContext)
   const { propertyId } = usePropertyContext()
   const selection = useOwnedPropertySelection(propertyId)
   const [pageState, setPageState] = useState({
@@ -57,7 +82,7 @@ function ViewingRequestsPage() {
   })
   const [updatingId, setUpdatingId] = useState(null)
   const [actionError, setActionError] = useState({ id: null, message: '' })
-  const [notice, setNotice] = useState('')
+  const [notice, setNotice] = useState({ propertyId: null, message: '' })
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const pendingCount = pageState.viewings.filter(
@@ -80,6 +105,12 @@ function ViewingRequestsPage() {
       : 'loading'
 
   useEffect(() => {
+    if (selection.status === 'selected') {
+      publishPendingViewings?.(propertyId, pageStatus === 'success' ? pendingCount : null)
+    }
+  }, [pageStatus, propertyId, pendingCount, publishPendingViewings, selection.status])
+
+  useEffect(() => {
     if (!propertyId || selection.status !== 'selected') return undefined
 
     let isActive = true
@@ -87,7 +118,12 @@ function ViewingRequestsPage() {
     getViewingsByProperty(propertyId)
       .then((viewings) => {
         if (isActive) {
-          setPageState({ status: 'success', propertyId, viewings, error: '' })
+          setPageState({
+            status: 'success',
+            propertyId,
+            viewings: verifyPropertyViewings(viewings, propertyId),
+            error: '',
+          })
         }
       })
       .catch((error) => {
@@ -117,11 +153,16 @@ function ViewingRequestsPage() {
       propertyId,
       error: '',
     }))
-    setNotice('')
+    setNotice({ propertyId: null, message: '' })
 
     try {
       const viewings = await getViewingsByProperty(propertyId)
-      setPageState({ status: 'success', propertyId, viewings, error: '' })
+      setPageState({
+        status: 'success',
+        propertyId,
+        viewings: verifyPropertyViewings(viewings, propertyId),
+        error: '',
+      })
     } catch (error) {
       setPageState({
         status: 'error',
@@ -140,17 +181,22 @@ function ViewingRequestsPage() {
 
     setUpdatingId(id)
     setActionError({ id: null, message: '' })
-    setNotice('')
+    setNotice({ propertyId: null, message: '' })
 
     try {
       const updatedViewing = await operation()
+      if (!validPropertyViewing(updatedViewing, propertyId, id)) {
+        throw new TypeError('Invalid viewing update response')
+      }
       setPageState((current) => ({
         ...current,
-        viewings: current.viewings.map((viewing) =>
-          viewing.id === id ? updatedViewing : viewing,
-        ),
+        viewings: current.propertyId === propertyId
+          ? current.viewings.map((viewing) =>
+              viewing.id === id ? updatedViewing : viewing,
+            )
+          : current.viewings,
       }))
-      setNotice(successMessage)
+      setNotice({ propertyId, message: successMessage })
       return true
     } catch (error) {
       setActionError({
@@ -246,10 +292,10 @@ function ViewingRequestsPage() {
           selectedPropertyId={selection.status === 'unauthorized' ? propertyId : null} />
       )}
 
-      {pageStatus === 'success' && notice && (
+      {pageStatus === 'success' && notice.propertyId === propertyId && notice.message && (
         <div className="page-notice page-notice--success" role="status">
           <span className="page-notice__icon" aria-hidden="true">✓</span>
-          <span>{notice}</span>
+          <span>{notice.message}</span>
         </div>
       )}
 

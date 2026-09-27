@@ -7,6 +7,7 @@ import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import PropertyLocationMap from '../components/PropertyLocationMap.jsx'
 import {
   deleteProperty,
+  getMyProperties,
   getProperty,
   updateProperty,
 } from '../services/propertyApiService.js'
@@ -36,9 +37,26 @@ export default function PropertyDetailsPage() {
     async function loadProperty() {
       setLoading(true)
       setError('')
+      setProperty(null)
 
       try {
-        const result = await getProperty(propertyId)
+        let result
+        if (user?.role === USER_ROLES.LANDLORD) {
+          const properties = await getMyProperties()
+          if (!Array.isArray(properties)) {
+            throw new TypeError('Invalid owned property response')
+          }
+          result = properties.find((item) =>
+            typeof item?.id === 'string'
+            && item.id.toLowerCase() === propertyId.toLowerCase()
+            && typeof item.landlordId === 'string'
+            && item.landlordId.toLowerCase() === user.id.toLowerCase())
+          if (!result) {
+            throw new Error('This property is not in your authenticated property portfolio.')
+          }
+        } else {
+          result = await getProperty(propertyId)
+        }
         if (active) setProperty(result)
       } catch (err) {
         if (active) setError(err.message)
@@ -49,7 +67,7 @@ export default function PropertyDetailsPage() {
 
     loadProperty()
     return () => { active = false }
-  }, [propertyId])
+  }, [propertyId, user?.id, user?.role])
 
   useEffect(() => {
     if (!toast) return undefined

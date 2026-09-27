@@ -262,6 +262,39 @@ describe('Landlord viewing requests', () => {
     expect(screen.queryByRole('article')).not.toBeInTheDocument()
   })
 
+  it('rejects mismatched property records returned by the scoped endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse([{
+      ...pendingViewing,
+      propertyId: '99999999-9999-9999-9999-999999999999',
+    }])))
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: "We couldn't load the requests" })).toBeInTheDocument()
+    expect(screen.queryByRole('article')).not.toBeInTheDocument()
+  })
+
+  it('does not show a successful decision for a mismatched mutation response', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse([pendingViewing]))
+      .mockResolvedValueOnce(jsonResponse({
+        ...pendingViewing,
+        id: 'different-viewing',
+        status: 1,
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve request' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm approval' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Unable to update this viewing request. Please try again.',
+    )
+    expect(within(screen.getByRole('article')).getByText('Pending')).toBeInTheDocument()
+    expect(screen.queryByText('Viewing request approved.')).not.toBeInTheDocument()
+  })
+
   it('combines search and status filters over returned request data', async () => {
     vi.stubGlobal(
       'fetch',

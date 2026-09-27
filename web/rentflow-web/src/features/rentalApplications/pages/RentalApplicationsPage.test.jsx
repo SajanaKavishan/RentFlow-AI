@@ -303,6 +303,31 @@ describe('Landlord rental applications', () => {
     expect(screen.queryByRole('article')).not.toBeInTheDocument()
   })
 
+  it('rejects duplicate applications from the scoped endpoint', async () => {
+    const duplicate = application()
+    mockApplicationApi([duplicate, { ...duplicate }])
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'We could not load the applications' })).toBeInTheDocument()
+    expect(screen.queryByRole('article')).not.toBeInTheDocument()
+  })
+
+  it('does not show a successful transition for a mismatched mutation response', async () => {
+    const submitted = application()
+    mockApplicationApi([submitted], {
+      actionResponse: application({ id: 'different-application', status: 2 }),
+    })
+    renderPage()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Unable to update this rental application. Please try again.',
+    )
+    expect(screen.getByLabelText('Application status: Submitted')).toBeInTheDocument()
+    expect(screen.queryByText('Application marked as under review.')).not.toBeInTheDocument()
+  })
+
   it('keeps decision feedback and action availability aligned with API state', async () => {
     const submitted = application()
     const approved = application({ status: 4, landlordResponse: 'Application approved after review.' })

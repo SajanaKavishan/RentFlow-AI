@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import { useOwnedPropertySelection } from '../../../shared/property/useOwnedProperties.js'
+import { PendingApplicationsContext } from '../../../shared/layout/PendingApplicationsContext.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import { APPLICATION_STATUS_DETAILS } from '../components/applicationStatus.js'
 import RentalApplicationListCard from '../components/RentalApplicationListCard.jsx'
@@ -66,18 +67,31 @@ function applicationSearchValues(application) {
   ].filter((value) => value !== null && value !== undefined)
 }
 
+function validPropertyApplication(application, propertyId, expectedId = null) {
+  return Boolean(
+    application
+    && typeof application.id === 'string'
+    && application.id.trim()
+    && (!expectedId || application.id.toLowerCase() === expectedId.toLowerCase())
+    && typeof application.tenantId === 'string'
+    && application.tenantId.trim()
+    && typeof application.propertyId === 'string'
+    && application.propertyId.toLowerCase() === propertyId.toLowerCase()
+    && Object.hasOwn(APPLICATION_STATUS_DETAILS, application.status),
+  )
+}
+
 function verifyPropertyApplications(applications, propertyId) {
-  if (!Array.isArray(applications) || applications.some((application) =>
-    !application || typeof application.id !== 'string' || !application.id.trim()
-    || typeof application.tenantId !== 'string' || !application.tenantId.trim()
-    || typeof application.propertyId !== 'string'
-    || application.propertyId.toLowerCase() !== propertyId.toLowerCase()
-    || !Object.hasOwn(APPLICATION_STATUS_DETAILS, application.status)
-  )) throw new TypeError('Invalid property application response')
+  if (!Array.isArray(applications)
+    || applications.some((application) => !validPropertyApplication(application, propertyId))
+    || new Set(applications.map((application) => application.id.toLowerCase())).size !== applications.length) {
+    throw new TypeError('Invalid property application response')
+  }
   return sortApplications(applications)
 }
 
 function RentalApplicationsPage() {
+  const publishPendingApplications = useContext(PendingApplicationsContext)
   const { propertyId } = usePropertyContext()
   const selection = useOwnedPropertySelection(propertyId)
   const { pathname } = useLocation()
@@ -157,6 +171,9 @@ function RentalApplicationsPage() {
 
     try {
       const updatedApplication = await operation()
+      if (!validPropertyApplication(updatedApplication, propertyId, id)) {
+        throw new TypeError('Invalid application update response')
+      }
       setPageState((current) => ({
         ...current,
         applications: current.propertyId === propertyId ? sortApplications(
@@ -216,6 +233,11 @@ function RentalApplicationsPage() {
   const applications = pageStatus === 'success' ? pageState.applications : []
   const awaitingReview = applications.filter((application) =>
     [RENTAL_APPLICATION_STATUS.SUBMITTED, RENTAL_APPLICATION_STATUS.UNDER_REVIEW].includes(application.status)).length
+  useEffect(() => {
+    if (selection.status === 'selected') {
+      publishPendingApplications?.(propertyId, pageStatus === 'success' ? awaitingReview : null)
+    }
+  }, [pageStatus, propertyId, awaitingReview, publishPendingApplications, selection.status])
   const query = search.trim().toLocaleLowerCase()
   const visibleApplications = applications.filter((application) =>
     (statusFilter === 'all' || application.status === Number(statusFilter))

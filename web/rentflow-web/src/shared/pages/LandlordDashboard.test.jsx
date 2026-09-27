@@ -182,14 +182,15 @@ describe('landlord dashboard redesign', () => {
     expect(await within(recent).findByText('Showing applications for Lake View Apartment')).toBeInTheDocument()
     const rows = (await within(recent).findAllByRole('row')).slice(1)
     expect(rows).toHaveLength(5)
-    expect(within(rows[0]).getByText('Ayesha Fernando')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('tenant-7-reference')).toBeInTheDocument()
+    expect(within(rows[0]).queryByText('Ayesha Fernando')).not.toBeInTheDocument()
     expect(within(rows[0]).getByText('Rs. 110,000')).toBeInTheDocument()
     expect(within(rows[0]).getByLabelText('Application status: Withdrawn')).toBeInTheDocument()
-    expect(within(rows[1]).getByText('Tenant tenant6r')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('tenant-6-reference')).toBeInTheDocument()
     expect(rows.every((row) => within(row).getByText('Lake View Apartment'))).toBe(true)
     expect(within(rows[0]).getByRole('link', { name: 'Review application application-7' })).toHaveAttribute(
       'href',
-      `/notifications/rental-application/application-7?propertyId=${propertyId}`,
+      `/properties/${propertyId}/rental-applications/application-7/validation`,
     )
   })
 
@@ -205,7 +206,7 @@ describe('landlord dashboard redesign', () => {
     const recent = screen.getByRole('region', { name: 'Recent Applications' })
     expect(within(recent).getByRole('link', { name: 'AI Review application application-3' })).toHaveAttribute(
       'href',
-      `/rental-applications/application-3/validation?propertyId=${propertyId}`,
+      `/properties/${propertyId}/rental-applications/application-3/validation`,
     )
   })
 
