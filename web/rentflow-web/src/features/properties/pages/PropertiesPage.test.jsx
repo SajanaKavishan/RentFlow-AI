@@ -69,6 +69,7 @@ describe('tenant property matching', () => {
     expect(screen.queryByText(/% Match/)).not.toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Best Match' })).not.toBeInTheDocument()
     expect(getSavedPropertyMatches).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('button', { name: 'Set match preferences' })).toHaveLength(1)
 
     expect(screen.queryByLabelText('City')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
@@ -114,10 +115,30 @@ describe('tenant property matching', () => {
     expect(await screen.findByLabelText('100 percent match')).toBeInTheDocument()
     expect(getSavedPropertyMatches).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('combobox', { name: 'Sort properties' })).toHaveValue('bestMatch')
+    expect(screen.getAllByRole('button', { name: 'Edit preferences' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Edit Match Preferences' })).not.toBeInTheDocument()
     const cards = screen.getAllByRole('article')
     expect(within(cards[0]).getByRole('heading', { name: 'Garden House' })).toBeInTheDocument()
     await userEvent.click(within(cards[0]).getByRole('button', { name: /Why this matches/ }))
     expect(within(cards[0]).getByText('Preferred city matches.')).toBeInTheDocument()
+  })
+
+  it('only enables saving when match preferences have changed', async () => {
+    getMatchPreferences.mockResolvedValue(preferences)
+    renderPage()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit preferences' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit match preferences' })
+    const saveButton = within(dialog).getByRole('button', { name: 'Save preferences' })
+    const cityInput = within(dialog).getByLabelText('Preferred city')
+
+    expect(saveButton).toBeDisabled()
+    await userEvent.clear(cityInput)
+    await userEvent.type(cityInput, 'Colombo')
+    expect(saveButton).toBeEnabled()
+    await userEvent.clear(cityInput)
+    await userEvent.type(cityInput, 'Kurunegala')
+    expect(saveButton).toBeDisabled()
   })
 
   it('saves preferences before rematching and keeps filters working', async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../../../shared/ui/Icons.jsx'
 
 const emptyForm = {
@@ -38,6 +38,9 @@ export default function MatchPreferencesDialog({ preferences, onClose, onSave, o
   const [status, setStatus] = useState('idle')
   const [error, setError] = useState('')
   const cityRef = useRef(null)
+  const initialRequest = useMemo(() => requestFrom(preferenceForm(preferences)), [preferences])
+  const currentRequest = requestFrom(form)
+  const hasChanges = JSON.stringify(currentRequest) !== JSON.stringify(initialRequest)
 
   useEffect(() => {
     cityRef.current?.focus()
@@ -111,7 +114,7 @@ export default function MatchPreferencesDialog({ preferences, onClose, onSave, o
         {error && <p className="match-dialog__error" role="alert">{error}</p>}
         <footer className="match-dialog__actions">
           <button type="button" className="property-button property-button--danger-quiet" onClick={reset} disabled={status === 'saving'}>Reset preferences</button>
-          <div><button type="button" className="property-button property-button--quiet" onClick={onClose} disabled={status === 'saving'}>Cancel</button><button type="submit" className="property-button property-button--primary" disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : 'Save preferences'}</button></div>
+          <div><button type="button" className="property-button property-button--quiet" onClick={onClose} disabled={status === 'saving'}>Cancel</button><button type="submit" className="property-button property-button--primary" disabled={status === 'saving' || !hasChanges}>{status === 'saving' ? 'Saving…' : 'Save preferences'}</button></div>
         </footer>
       </form>
     </section>

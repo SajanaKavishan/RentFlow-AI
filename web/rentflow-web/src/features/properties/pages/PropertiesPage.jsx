@@ -36,7 +36,7 @@ export default function PropertiesPage() {
   const [sortBy, setSortBy] = useState('newest')
   const [editingPreferences, setEditingPreferences] = useState(searchParams.get('preferences') === 'edit')
   const [expandedReasons, setExpandedReasons] = useState(() => new Set())
-  const editButtonRef = useRef(null)
+  const preferenceActionRef = useRef(null)
 
   const loadMatches = useCallback(async () => {
     setMatchState({ status: 'loading', data: null, message: '' })
@@ -116,7 +116,7 @@ export default function PropertiesPage() {
   const closePreferences = () => {
     setEditingPreferences(false)
     setSearchParams({}, { replace: true })
-    window.requestAnimationFrame(() => editButtonRef.current?.focus())
+    window.requestAnimationFrame(() => preferenceActionRef.current?.focus())
   }
   const savePreferences = async (request) => {
     const saved = await saveMatchPreferences(request)
@@ -206,13 +206,12 @@ export default function PropertiesPage() {
   return <main className="properties-page" aria-busy={propertyState.status === 'loading' || preferenceState.status === 'loading'}>
     <header className="properties-page__header">
       <div><span className="properties-page__eyebrow">Property marketplace</span><h1>Find a home that fits</h1><p className="properties-page__description">Browse real available rentals and use your saved preferences to see the strongest matches first.</p>{propertyState.status === 'ready' && <p className="properties-page__count">{visibleProperties.length} {visibleProperties.length === 1 ? 'property' : 'properties'} available</p>}</div>
-      <button ref={editButtonRef} type="button" className="property-button property-button--primary properties-page__match-action" onClick={openPreferences}><Icon name="sparkles" size={18} />{hasPreferences ? 'Edit Match Preferences' : 'Set Match Preferences'}</button>
     </header>
 
     {preferenceState.status === 'loading' && <section className="match-preference-loading" role="status"><span className="property-spinner" aria-hidden="true" />Loading your match preferences…</section>}
     {preferenceState.status === 'error' && <section className="match-preference-error" role="alert"><div><strong>We couldn't load your match preferences.</strong><p>{preferenceState.message}</p></div><button type="button" className="property-button property-button--outline" onClick={loadPreferences}>Retry</button></section>}
-    {preferenceState.status === 'ready' && !hasPreferences && <section className="match-onboarding" aria-labelledby="match-onboarding-title"><span className="match-onboarding__icon"><Icon name="sparkles" size={25} /></span><div><h2 id="match-onboarding-title">Get personalized matches</h2><p>Tell us what you're looking for and RentFlow AI will rank suitable properties for you.</p></div><button type="button" className="property-button property-button--primary" onClick={openPreferences}>Set match preferences</button></section>}
-    {hasPreferences && <MatchPreferenceSummary preferences={preferenceState.data} onEdit={openPreferences} />}
+    {preferenceState.status === 'ready' && !hasPreferences && <section className="match-onboarding" aria-labelledby="match-onboarding-title"><span className="match-onboarding__icon"><Icon name="sparkles" size={25} /></span><div><h2 id="match-onboarding-title">Get personalized matches</h2><p>Tell us what you're looking for and RentFlow AI will rank suitable properties for you.</p></div><button ref={preferenceActionRef} type="button" className="property-button property-button--primary" onClick={openPreferences}>Set match preferences</button></section>}
+    {hasPreferences && <MatchPreferenceSummary preferences={preferenceState.data} onEdit={openPreferences} actionRef={preferenceActionRef} />}
     {hasPreferences && matchState.status === 'loading' && <div className="match-inline-state" role="status"><span className="property-spinner" aria-hidden="true" />Finding properties that match your preferences…</div>}
     {hasPreferences && matchState.status === 'error' && <section className="match-preference-error" role="alert"><div><strong>We couldn't calculate your matches.</strong><p>{matchState.message}</p></div><button type="button" className="property-button property-button--outline" onClick={loadMatches}>Retry</button></section>}
     {favoriteState.status === 'error' && <section className="match-preference-error" role="alert"><div><strong>We couldn't load your liked properties.</strong><p>{favoriteState.message}</p></div><button type="button" className="property-button property-button--outline" onClick={loadFavorites}>Retry</button></section>}
@@ -221,7 +220,7 @@ export default function PropertiesPage() {
     <section className={`property-filters${filtersOpen ? ' is-open' : ''}`} aria-label="Property search and filters">
       <div className="property-filters__top">
         <div className="property-filters__search"><Icon name="search" size={19} /><input type="search" name="search" value={filters.search} onChange={updateFilter} placeholder="Search by location or property name…" aria-label="Search properties" /></div>
-        <button type="button" className={`property-filter-toggle${activeFilterCount > 0 ? ' has-active-filters' : ''}`} aria-expanded={filtersOpen} aria-controls="property-filter-options" onClick={() => setFiltersOpen((open) => !open)}><Icon name="filters" size={18} /><span>Filters</span>{activeFilterCount > 0 && <strong aria-label={`${activeFilterCount} active filters`}>{activeFilterCount}</strong>}<Icon name="chevronDown" size={15} className="property-filter-toggle__chevron" /></button>
+        <button type="button" className={`property-filter-toggle${activeFilterCount > 0 ? ' has-active-filters' : ''}`} aria-expanded={filtersOpen} aria-controls="property-filter-options" onClick={() => setFiltersOpen((open) => !open)}><Icon name="filters" size={19} /><span>Filters</span>{activeFilterCount > 0 && <strong aria-label={`${activeFilterCount} active filters`}>{activeFilterCount}</strong>}</button>
         <label className="property-sort"><span className="sr-only">Sort by</span><select aria-label="Sort properties" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>{hasPreferences && <option value="bestMatch">Best Match</option>}<option value="liked">Liked</option><option value="lowestRent">Lowest Rent</option><option value="highestRent">Highest Rent</option><option value="newest">Newest</option></select></label>
       </div>
       {filtersOpen && <div id="property-filter-options" className="property-filter-options">
