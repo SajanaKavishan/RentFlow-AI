@@ -242,7 +242,7 @@ describe('tenant dashboard', () => {
     fetch.mockImplementation((url) => {
       const path = new URL(url, 'http://localhost').pathname
       if (path === '/api/tenant/property-preferences') return Promise.resolve(json({ isConfigured: true, preferredCity: 'Kurunegala', preferredAmenities: ['Parking'] }))
-      if (path === '/api/properties/matches') return Promise.resolve(json({ matches: [{ propertyId: recommended.id, matchScore: 92, matchReasons: ['Preferred city matches.'] }] }))
+      if (path === '/api/properties/matches') return Promise.resolve(json({ explanationAvailable: false, matches: [{ propertyId: recommended.id, matchScore: 92, matchReasons: ['Preferred city matches.'] }] }))
       if (path === '/api/properties') return Promise.resolve(json([recommended]))
       if (path === `/api/properties/${recommended.id}/images`) return Promise.resolve(json([]))
       return Promise.resolve(json(responseFor(url)))
@@ -254,6 +254,7 @@ describe('tenant dashboard', () => {
     expect(within(recommendations).getByLabelText('92 percent match')).toBeInTheDocument()
     expect(within(recommendations).getByText('Rs. 120,000/month')).toBeInTheDocument()
     expect(within(recommendations).getByRole('link', { name: /View property/ })).toHaveAttribute('href', '/properties/recommended-one')
+    expect(within(recommendations).queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it.each(['Landlord', 'Admin', 'MaintenanceTechnician'])('does not call tenant dashboard APIs for %s', async (role) => {

@@ -177,7 +177,7 @@ public class PropertiesController : ControllerBase
 
     // =========================================================
     // POST /api/properties/match
-    // AI-assisted property matching
+    // Deterministic matching with optional advisory explanation
     // =========================================================
 
     [HttpPost("match")]

@@ -105,14 +105,6 @@ export function deletePropertyImage(propertyId, imageId) {
   )
 }
 
-export function matchProperties(preferences) {
-  return apiRequest('/api/properties/match', {
-    method: 'POST',
-    body: JSON.stringify(preferences),
-    errorMessage: 'Unable to generate property recommendations.',
-  })
-}
-
 export function getMatchPreferences() {
   return apiRequest('/api/tenant/property-preferences', {
     errorMessage: "We couldn't load your match preferences.",

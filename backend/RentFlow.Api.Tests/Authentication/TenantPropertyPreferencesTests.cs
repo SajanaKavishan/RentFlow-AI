@@ -10,6 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.PropertyMatching;
 using RentFlow.Api.Models;
+using RentFlow.Api.Services.Interfaces;
 using Xunit;
 
 namespace RentFlow.Api.Tests.Authentication;
@@ -166,6 +167,51 @@ public sealed class TenantPropertyPreferencesTests
         Assert.False(reloaded!.IsConfigured);
     }
 
+    [Fact]
+    public async Task Matches_ReturnDeterministicResultsWithoutLeakingAgentFailure()
+    {
+        using var factory = new AuthApiFactory
+        {
+            PropertyMatchingAgentClient = new UnavailableMatchingAgentClient()
+        };
+        using var client = AuthorizedClient(factory, TenantA, UserRole.Tenant);
+        await client.PutAsJsonAsync(
+            "/api/tenant/property-preferences",
+            ValidRequest());
+        using (var scope = factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider
+                .GetRequiredService<ApplicationDbContext>();
+            context.Properties.Add(new Property
+            {
+                Id = Guid.NewGuid(),
+                LandlordId = Guid.NewGuid(),
+                Title = "Lake House",
+                Description = "Real property",
+                Address = "1 Lake Road",
+                City = "Kurunegala",
+                MonthlyRent = 120000,
+                Bedrooms = 2,
+                Bathrooms = 2,
+                IsAvailable = true
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var response = await client.GetAsync("/api/properties/matches");
+        var body = await response.Content.ReadAsStringAsync();
+        var result = await response.Content
+            .ReadFromJsonAsync<PropertyMatchingResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(result);
+        Assert.False(result!.ExplanationAvailable);
+        var match = Assert.Single(result.Matches);
+        Assert.Equal(80, match.MatchScore);
+        Assert.Contains("Preferred city matches.", match.MatchReasons);
+        Assert.DoesNotContain("provider-secret", body);
+    }
+
     private static object ValidRequest() => new
     {
         preferredCity = "Kurunegala",
@@ -206,5 +252,18 @@ public sealed class TenantPropertyPreferencesTests
             expires: DateTime.UtcNow.AddMinutes(10),
             signingCredentials: credentials);
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private sealed class UnavailableMatchingAgentClient
+        : IPropertyMatchingAgentClient
+    {
+        public Task<PropertyMatchingAgentResponse> AnalyzeAsync(
+            PropertyMatchingAgentRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromException<PropertyMatchingAgentResponse>(
+                new HttpRequestException(
+                    "provider-secret: model deployment unavailable"));
+        }
     }
 }

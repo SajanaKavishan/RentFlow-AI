@@ -7,7 +7,7 @@ namespace RentFlow.Api.Services;
 
 /// <summary>
 /// Loads real available properties, applies deterministic scoring,
-/// then requests advisory ranking and explanation from the AI agent.
+/// then optionally requests an advisory explanation from the AI agent.
 /// </summary>
 public sealed class PropertyMatchingOrchestrator(
     ApplicationDbContext dbContext,
@@ -50,49 +50,46 @@ public sealed class PropertyMatchingOrchestrator(
             };
         }
 
-        var agentRequest = new PropertyMatchingAgentRequest
-        {
-            Preferences = request,
-            Candidates = candidates
-        };
-
-        var agentResponse =
-            await propertyMatchingAgentClient.AnalyzeAsync(
-                agentRequest,
-                cancellationToken);
-
-        var candidateById = candidates.ToDictionary(
-            candidate => candidate.PropertyId);
-
-        var matches = agentResponse.Result.Matches
-            .Where(match => candidateById.ContainsKey(match.PropertyId))
-            .Select(match =>
-            {
-                var candidate = candidateById[match.PropertyId];
-
-                return new PropertyMatchCandidate
-                {
-                    PropertyId = candidate.PropertyId,
-                    Title = candidate.Title,
-                    City = candidate.City,
-                    MonthlyRent = candidate.MonthlyRent,
-                    Bedrooms = candidate.Bedrooms,
-                    Bathrooms = candidate.Bathrooms,
-                    Amenities = candidate.Amenities,
-                    MatchScore = candidate.MatchScore,
-                    // Explanations shown as match facts remain deterministic and
-                    // are never replaced with model-authored property claims.
-                    MatchReasons = candidate.MatchReasons
-                };
-            })
+        var matches = candidates
             .OrderByDescending(match => match.MatchScore)
             .ThenBy(match => match.MonthlyRent)
             .ToList();
+        var fallbackSummary =
+            "Properties ranked using your saved match preferences.";
+        PropertyMatchingAgentResponse? agentResponse = null;
+
+        try
+        {
+            agentResponse = await propertyMatchingAgentClient.AnalyzeAsync(
+                new PropertyMatchingAgentRequest
+                {
+                    Preferences = request,
+                    Candidates = matches
+                },
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            // Explanation enrichment is advisory. Deterministic scores,
+            // reasons, and ordering remain useful without the agent.
+        }
+
+        var explanationAvailable =
+            !string.IsNullOrWhiteSpace(agentResponse?.Result?.Summary);
 
         return new PropertyMatchingResponse
         {
             Matches = matches,
-            Summary = agentResponse.Result.Summary
+            Summary = explanationAvailable
+                ? agentResponse!.Result.Summary
+                : fallbackSummary,
+            ExplanationAvailable = explanationAvailable
         };
     }
 }

@@ -123,6 +123,36 @@ describe('tenant property matching', () => {
     expect(within(cards[0]).getByText('Preferred city matches.')).toBeInTheDocument()
   })
 
+  it('keeps deterministic matches usable when the advisory explanation is unavailable', async () => {
+    getMatchPreferences.mockResolvedValue(preferences)
+    getSavedPropertyMatches.mockResolvedValue({
+      ...matches,
+      explanationAvailable: false,
+      summary: 'Properties ranked using your saved match preferences.',
+    })
+    renderPage()
+
+    expect(await screen.findByLabelText('100 percent match')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Sort properties' })).toHaveValue('bestMatch')
+    expect(screen.getByText('AI explanation is temporarily unavailable. Match scores are based on your saved preferences.')).toBeInTheDocument()
+    expect(screen.queryByText("We couldn't calculate your matches.")).not.toBeInTheDocument()
+    const cards = screen.getAllByRole('article')
+    expect(within(cards[0]).getByRole('heading', { name: 'Garden House' })).toBeInTheDocument()
+    await userEvent.click(within(cards[0]).getByRole('button', { name: /Why this matches/ }))
+    expect(within(cards[0]).getByText('Preferred city matches.')).toBeInTheDocument()
+  })
+
+  it('shows a matching error only when the matching request itself fails', async () => {
+    getMatchPreferences.mockResolvedValue(preferences)
+    getSavedPropertyMatches.mockRejectedValue(new Error('Matching data is unavailable.'))
+    renderPage()
+
+    const error = await screen.findByRole('alert')
+    expect(error).toHaveTextContent("We couldn't calculate your matches.")
+    expect(error).toHaveTextContent('Matching data is unavailable.')
+    expect(screen.queryByText('AI explanation is temporarily unavailable. Match scores are based on your saved preferences.')).not.toBeInTheDocument()
+  })
+
   it('only enables saving when match preferences have changed', async () => {
     getMatchPreferences.mockResolvedValue(preferences)
     renderPage()
