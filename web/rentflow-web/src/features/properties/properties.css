@@ -2093,6 +2093,10 @@
   color: var(--ink);
 }
 
+.property-details-page .property-section-number {
+  color: var(--olive-700);
+}
+
 .property-details-back {
   display: inline-flex;
   align-items: center;
