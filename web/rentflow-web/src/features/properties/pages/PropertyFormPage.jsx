@@ -113,13 +113,20 @@ function validateStep(step, form, locationMode) {
       if (!form[field].trim()) errors[field] = `${label} is required.`
     }
 
+    const coordinatesValid = Number.isFinite(form.latitude) && form.latitude >= -90 && form.latitude <= 90
+      && Number.isFinite(form.longitude) && form.longitude >= -180 && form.longitude <= 180
+
     if (locationMode === 'manual' || locationMode === 'legacy') {
       if (!form.address.trim()) errors.address = 'Address is required.'
       if (!form.city.trim()) errors.city = 'City is required.'
-    } else if (locationMode !== 'confirmed'
-      || !form.address.trim() || !form.city.trim()
-      || !Number.isFinite(form.latitude) || !Number.isFinite(form.longitude)) {
-      errors.location = 'Select a location from the suggestions or enter the address manually.'
+    } else if (locationMode === 'confirmed') {
+      if (!coordinatesValid) {
+        errors.location = 'Select a Google place, use your current location, choose a point on the map, or enter the address manually.'
+      }
+      if (!form.address.trim()) errors.address = 'Address is required.'
+      if (!form.city.trim()) errors.city = 'City is required.'
+    } else {
+      errors.location = 'Select a Google place, use your current location, choose a point on the map, or enter the address manually.'
     }
   }
 
@@ -160,6 +167,7 @@ export default function PropertyFormPage() {
   const [locationMode, setLocationMode] = useState(
     () => import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ? 'search' : 'manual',
   )
+  const [locationSource, setLocationSource] = useState('manual')
   const [files, setFiles] = useState([])
   const [initialSnapshot, setInitialSnapshot] = useState(formSnapshot(initialForm))
   const [ownedPropertyId, setOwnedPropertyId] = useState(null)
@@ -196,6 +204,11 @@ export default function PropertyFormPage() {
           Number.isFinite(populatedForm.latitude) && Number.isFinite(populatedForm.longitude)
             ? 'confirmed'
             : 'legacy',
+        )
+        setLocationSource(
+          Number.isFinite(populatedForm.latitude) && Number.isFinite(populatedForm.longitude)
+            ? populatedForm.googlePlaceId ? 'google' : 'map'
+            : 'manual',
         )
         setInitialSnapshot(formSnapshot(populatedForm))
         setOwnedPropertyId(property.id)
@@ -282,9 +295,10 @@ export default function PropertyFormPage() {
     setStep((current) => Math.max(current - 1, 0))
   }
 
-  function selectGoogleLocation(location) {
+  function selectLocation(location, source = 'google') {
     setForm((current) => ({ ...current, ...location }))
     setLocationMode('confirmed')
+    setLocationSource(source)
     setFieldErrors((current) => {
       const next = { ...current }
       delete next.location
@@ -302,6 +316,7 @@ export default function PropertyFormPage() {
       googlePlaceId: null,
     }))
     setLocationMode('manual')
+    setLocationSource('manual')
     setFieldErrors((current) => {
       if (!current.location) return current
       const next = { ...current }
@@ -312,6 +327,26 @@ export default function PropertyFormPage() {
 
   function searchWithGoogle() {
     setLocationMode('search')
+    setFieldErrors((current) => {
+      if (!current.location) return current
+      const next = { ...current }
+      delete next.location
+      return next
+    })
+  }
+
+  function useCurrentLocation() {
+    setLocationMode('current')
+    setFieldErrors((current) => {
+      if (!current.location) return current
+      const next = { ...current }
+      delete next.location
+      return next
+    })
+  }
+
+  function pickOnMap() {
+    setLocationMode('map')
     setFieldErrors((current) => {
       if (!current.location) return current
       const next = { ...current }
@@ -507,12 +542,15 @@ export default function PropertyFormPage() {
               <PropertyLocationPicker
                 form={form}
                 mode={locationMode}
+                source={locationSource}
                 errors={fieldErrors}
                 onFieldChange={updateField}
-                onLocationSelected={selectGoogleLocation}
+                onLocationSelected={selectLocation}
                 onChangeLocation={searchWithGoogle}
                 onUseManual={useManualLocation}
                 onSearchWithGoogle={searchWithGoogle}
+                onUseCurrentLocation={useCurrentLocation}
+                onPickOnMap={pickOnMap}
               />
             </>
           )}

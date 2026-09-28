@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,7 +11,7 @@ import {
   updateProperty,
   uploadPropertyImages,
 } from '../services/propertyApiService.js'
-import { loadGooglePlaces } from '../googleMapsLoader.js'
+import { loadGoogleLocationTools, loadGooglePlaces } from '../googleMapsLoader.js'
 
 vi.mock('../../notifications/notificationsApi.js', async (importOriginal) => ({
   ...(await importOriginal()), getUnreadCount: vi.fn().mockResolvedValue(0),
@@ -27,6 +27,7 @@ vi.mock('../services/propertyApiService.js', async (importOriginal) => ({
 }))
 
 vi.mock('../googleMapsLoader.js', () => ({
+  loadGoogleLocationTools: vi.fn(),
   loadGooglePlaces: vi.fn(),
 }))
 
@@ -52,6 +53,16 @@ const property = {
 }
 
 let autocompleteElement
+let mapClickHandler
+let advancedMarker
+let placeFetchFields
+const originalGeolocation = navigator.geolocation
+
+const reverseGeocodeResult = {
+  formatted_address: '25 Lake Road, Kandy, Sri Lanka',
+  address_components: [{ long_name: 'Kandy', types: ['locality'] }],
+  place_id: 'ChIJ-reverse-geocoded',
+}
 
 function configureGoogleAutocomplete() {
   loadGooglePlaces.mockResolvedValue({
@@ -62,6 +73,62 @@ function configureGoogleAutocomplete() {
       }
     },
   })
+}
+
+function configureGoogleLocationTools({
+  result = reverseGeocodeResult,
+  geocodeError = null,
+  geocodeImplementation = null,
+  placeResult = null,
+  placeError = null,
+} = {}) {
+  const geocode = geocodeImplementation || (geocodeError
+    ? vi.fn().mockRejectedValue(geocodeError)
+    : vi.fn().mockResolvedValue({ results: result ? [result] : [] }))
+  placeFetchFields = placeError
+    ? vi.fn().mockRejectedValue(placeError)
+    : vi.fn().mockResolvedValue(undefined)
+
+  class MapMock {
+    addListener(name, handler) {
+      if (name === 'click') mapClickHandler = handler
+      return { remove: vi.fn() }
+    }
+
+    panTo() {}
+  }
+
+  class AdvancedMarkerElementMock {
+    constructor(options) {
+      Object.assign(this, options)
+      this.listeners = {}
+      advancedMarker = this
+    }
+
+    addEventListener(name, handler) { this.listeners[name] = handler }
+    removeEventListener(name) { delete this.listeners[name] }
+  }
+
+  class GeocoderMock {
+    geocode(request) { return geocode(request) }
+  }
+
+  class PlaceMock {
+    constructor({ id }) { this.id = id }
+
+    async fetchFields(options) {
+      await placeFetchFields(options)
+      if (placeResult) Object.assign(this, placeResult)
+    }
+  }
+
+  loadGoogleLocationTools.mockResolvedValue({
+    Map: MapMock,
+    AdvancedMarkerElement: AdvancedMarkerElementMock,
+    Geocoder: GeocoderMock,
+    Place: PlaceMock,
+  })
+  return geocode
 }
 
 async function selectGooglePlace(overrides = {}) {
@@ -123,7 +190,11 @@ async function completePropertyDetails() {
 beforeEach(() => {
   vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', '')
   loadGooglePlaces.mockReset()
+  loadGoogleLocationTools.mockReset()
   autocompleteElement = null
+  mapClickHandler = null
+  advancedMarker = null
+  placeFetchFields = null
   getMyProperties.mockReset().mockResolvedValue([property])
   getPropertyImages.mockReset().mockResolvedValue([])
   createProperty.mockReset().mockResolvedValue({ id: newPropertyId })
@@ -134,6 +205,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllEnvs()
+  Object.defineProperty(navigator, 'geolocation', { configurable: true, value: originalGeolocation })
 })
 
 describe('property form wizard', () => {
@@ -274,7 +346,7 @@ describe('property form wizard', () => {
     expect(await screen.findByLabelText('Search address, building or place')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    expect(screen.getByText('Select a location from the suggestions or enter the address manually.')).toBeInTheDocument()
+    expect(screen.getByText('Select a Google place, use your current location, choose a point on the map, or enter the address manually.')).toBeInTheDocument()
 
     await selectGooglePlace()
 
@@ -353,10 +425,241 @@ describe('property form wizard', () => {
     loadGooglePlaces.mockRejectedValue(new Error('network unavailable'))
     renderApp('/properties/new')
 
-    expect(await screen.findByText('Google location search is unavailable right now. Enter the address manually to continue.')).toBeInTheDocument()
+    expect(await screen.findByText('Google location search is unavailable right now. Choose another location method.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Enter address manually' }))
     expect(screen.getByLabelText('Address')).toBeInTheDocument()
     expect(screen.getByLabelText('City')).toBeInTheDocument()
+  })
+
+  it('requests current position only after explicit action and confirms reverse-geocoded metadata', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    const getCurrentPosition = vi.fn((success) => success({
+      coords: { latitude: 7.290572, longitude: 80.633728 },
+    }))
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: { getCurrentPosition },
+    })
+    const geocode = configureGoogleLocationTools()
+    renderApp('/properties/new')
+
+    expect(getCurrentPosition).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Use my current location' }))
+    expect(getCurrentPosition).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Find my location' }))
+
+    await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue(reverseGeocodeResult.formatted_address))
+    expect(geocode).toHaveBeenCalledWith({ location: { lat: 7.290572, lng: 80.633728 } })
+    expect(getCurrentPosition).toHaveBeenCalledWith(expect.any(Function), expect.any(Function), {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0,
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm current location' }))
+    expect(screen.getByText('Source: Current location')).toBeInTheDocument()
+    expect(screen.getByText('Latitude: 7.290572')).toBeInTheDocument()
+  })
+
+  it.each([
+    [1, 'Location permission was denied. Allow access in your browser or choose another method.'],
+    [2, 'Your current position is unavailable. Try again or choose another method.'],
+  ])('shows a useful geolocation error for browser code %s', async (code, message) => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: { getCurrentPosition: vi.fn((success, error) => error({ code })) },
+    })
+    renderApp('/properties/new')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use my current location' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Find my location' }))
+    expect(await screen.findByText(message)).toBeInTheDocument()
+  })
+
+  it('keeps current coordinates when reverse geocoding fails and accepts a manually confirmed address', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    configureGoogleLocationTools({ geocodeError: new Error('geocoder unavailable') })
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: { getCurrentPosition: vi.fn((success) => success({ coords: { latitude: 6.927079, longitude: 79.861244 } })) },
+    })
+    renderApp('/properties/new')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use my current location' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Find my location' }))
+    expect(await screen.findByText(/Google could not find a complete street address/)).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Address'), '18 Marine Drive')
+    await userEvent.type(screen.getByLabelText('City'), 'Colombo')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm current location' }))
+
+    expect(screen.getByText('Source: Current location')).toBeInTheDocument()
+    expect(screen.getByText('Latitude: 6.927079')).toBeInTheDocument()
+  })
+
+  it('uses Place Details for a POI map click and populates its structured address', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    const geocode = configureGoogleLocationTools({
+      placeResult: {
+        id: 'ChIJ-real-poi',
+        formattedAddress: 'Temple of the Tooth, Kandy, Sri Lanka',
+        addressComponents: [{ longText: 'Kandy', types: ['locality'] }],
+        location: { lat: () => 7.293609, lng: () => 80.641325 },
+      },
+    })
+    renderApp('/properties/new')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pick on map' }))
+    await waitFor(() => expect(mapClickHandler).toEqual(expect.any(Function)))
+    const stop = vi.fn()
+    await act(async () => mapClickHandler({
+      placeId: 'ChIJ-real-poi',
+      latLng: { lat: () => 7.2935, lng: () => 80.6412 },
+      stop,
+    }))
+
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(placeFetchFields).toHaveBeenCalledWith({
+      fields: ['id', 'location', 'formattedAddress', 'addressComponents'],
+    })
+    expect(geocode).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Address')).toHaveValue('Temple of the Tooth, Kandy, Sri Lanka')
+    expect(screen.getByLabelText('City')).toHaveValue('Kandy')
+    expect(screen.getByText('Latitude: 7.293609')).toBeInTheDocument()
+    expect(screen.getByText('Longitude: 80.641325')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use this pin' }))
+    await userEvent.type(screen.getByLabelText('Property title'), 'Temple View')
+    await userEvent.type(screen.getByLabelText('Description'), 'A home near a known point of interest.')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await completePropertyDetails()
+    await userEvent.click(screen.getByRole('button', { name: 'Create Property' }))
+    await waitFor(() => expect(createProperty).toHaveBeenCalledWith(expect.objectContaining({
+      googlePlaceId: 'ChIJ-real-poi',
+      latitude: 7.293609,
+      longitude: 80.641325,
+    })))
+  })
+
+  it('selects and moves a map pin, reverse geocodes it, and keeps a nullable place ID valid', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    configureGoogleLocationTools({ result: { ...reverseGeocodeResult, place_id: undefined } })
+    renderApp('/properties/new')
+    await userEvent.type(screen.getByLabelText('Property title'), 'Map House')
+    await userEvent.type(screen.getByLabelText('Description'), 'Selected precisely on the map.')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pick on map' }))
+    await screen.findByRole('application', { name: /Interactive property location map/ })
+    await waitFor(() => expect(mapClickHandler).toEqual(expect.any(Function)))
+    await act(async () => mapClickHandler({ latLng: { lat: () => 7.290572, lng: () => 80.633728 } }))
+    await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue(reverseGeocodeResult.formatted_address))
+
+    advancedMarker.position = { lat: 7.291, lng: 80.634 }
+    await act(async () => advancedMarker.listeners['gmp-dragend']())
+    await waitFor(() => expect(screen.getByText('Latitude: 7.291000')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Use this pin' }))
+    expect(screen.getByText('Source: Map pin')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await completePropertyDetails()
+    await userEvent.click(screen.getByRole('button', { name: 'Create Property' }))
+    await waitFor(() => expect(createProperty).toHaveBeenCalledWith(expect.objectContaining({
+      latitude: 7.291,
+      longitude: 80.634,
+      googlePlaceId: null,
+    })))
+  })
+
+  it('keeps an exact map pin while the landlord refines an address after no geocoder result', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    configureGoogleLocationTools({ result: null })
+    renderApp('/properties/new')
+    await userEvent.type(screen.getByLabelText('Property title'), 'Remote Cottage')
+    await userEvent.type(screen.getByLabelText('Description'), 'A rural property with an exact map pin.')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pick on map' }))
+    await screen.findByRole('application', { name: /Interactive property location map/ })
+    await waitFor(() => expect(mapClickHandler).toEqual(expect.any(Function)))
+    await act(async () => mapClickHandler({
+      latLng: { lat: () => 7.123456, lng: () => 80.654321 },
+    }))
+
+    expect(await screen.findByText('Exact location selected. Google could not find a complete address. Enter or confirm the address details below.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Address')).toHaveValue('')
+    expect(screen.getByLabelText('City')).toHaveValue('')
+    expect(screen.getByText('Latitude: 7.123456')).toBeInTheDocument()
+    expect(screen.getByText('Longitude: 80.654321')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Use this pin' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Use this pin' }))
+
+    expect(screen.getByText('Source: Map pin')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByText('Address is required.')).toBeInTheDocument()
+    expect(screen.getByText('City is required.')).toBeInTheDocument()
+    expect(screen.getByText('Latitude: 7.123456')).toBeInTheDocument()
+    expect(screen.getByText('Longitude: 80.654321')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Address'), 'Near the Meemure trail entrance')
+    await userEvent.type(screen.getByLabelText('City'), 'Meemure')
+    expect(screen.getByText('Near the Meemure trail entrance')).toBeInTheDocument()
+    expect(screen.getByText('Latitude: 7.123456')).toBeInTheDocument()
+    expect(screen.getByText('Longitude: 80.654321')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByRole('heading', { name: 'Property Details' })).toBeInTheDocument()
+  })
+
+  it('preserves the pin and surfaces a configuration error when geocoding is denied', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    configureGoogleLocationTools({ geocodeError: { code: 'REQUEST_DENIED' } })
+    renderApp('/properties/new')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pick on map' }))
+    await waitFor(() => expect(mapClickHandler).toEqual(expect.any(Function)))
+    await act(async () => mapClickHandler({
+      latLng: { lat: () => 6.812345, lng: () => 80.112233 },
+    }))
+
+    expect(await screen.findByText('Location lookup is unavailable. Check the Google Geocoding API configuration.')).toBeInTheDocument()
+    expect(screen.getByText('Latitude: 6.812345')).toBeInTheDocument()
+    expect(screen.getByText('Longitude: 80.112233')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Use this pin' })).toBeEnabled()
+  })
+
+  it('does not let an older geocoder response overwrite a newer map click', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-browser-key')
+    configureGoogleAutocomplete()
+    let resolveFirst
+    let resolveSecond
+    const geocode = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve }))
+    configureGoogleLocationTools({ geocodeImplementation: geocode })
+    renderApp('/properties/new')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pick on map' }))
+    await waitFor(() => expect(mapClickHandler).toEqual(expect.any(Function)))
+    act(() => mapClickHandler({ latLng: { lat: () => 7.1, lng: () => 80.1 } }))
+    act(() => mapClickHandler({ latLng: { lat: () => 7.2, lng: () => 80.2 } }))
+
+    await act(async () => resolveSecond({ results: [{
+      formatted_address: 'Newer location, Kandy',
+      address_components: [{ long_name: 'Kandy', types: ['locality'] }],
+    }] }))
+    await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue('Newer location, Kandy'))
+
+    await act(async () => resolveFirst({ results: [{
+      formatted_address: 'Older location, Colombo',
+      address_components: [{ long_name: 'Colombo', types: ['locality'] }],
+    }] }))
+    expect(screen.getByLabelText('Address')).toHaveValue('Newer location, Kandy')
+    expect(screen.getByText('Latitude: 7.200000')).toBeInTheDocument()
+    expect(screen.getByText('Longitude: 80.200000')).toBeInTheDocument()
   })
 
   it('shows a stored coordinate location when editing and allows it to be changed', async () => {

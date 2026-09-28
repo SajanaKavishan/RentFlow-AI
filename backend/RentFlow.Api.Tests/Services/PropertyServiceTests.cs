@@ -224,6 +224,30 @@ public class PropertyServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_PersistsCoordinateSelectedLocationWithoutGooglePlaceId()
+    {
+        await using var context = CreateContext();
+        var service = new PropertyService(context, new FakePropertyImageService());
+        var dto = ValidCreateDto();
+        dto.Latitude = 6.927079;
+        dto.Longitude = 79.861244;
+        dto.GooglePlaceId = null;
+
+        Assert.True(Validate(dto).IsValid);
+
+        var result = await service.CreateAsync(Guid.NewGuid(), dto);
+
+        Assert.Equal(6.927079, result.Latitude);
+        Assert.Equal(79.861244, result.Longitude);
+        Assert.Null(result.GooglePlaceId);
+
+        var storedProperty = await context.Properties.SingleAsync();
+        Assert.Equal(result.Latitude, storedProperty.Latitude);
+        Assert.Equal(result.Longitude, storedProperty.Longitude);
+        Assert.Null(storedProperty.GooglePlaceId);
+    }
+
+    [Fact]
     public async Task UpdateAsync_ReturnsNull_WhenLandlordDoesNotOwnProperty()
     {
         await using var context = CreateContext();

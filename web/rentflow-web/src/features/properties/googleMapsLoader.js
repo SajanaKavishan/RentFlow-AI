@@ -1,6 +1,6 @@
 let googleMapsPromise
 
-export async function loadGooglePlaces(apiKey) {
+async function loadGoogleMaps(apiKey) {
   const normalizedKey = typeof apiKey === 'string' ? apiKey.trim() : ''
   if (!normalizedKey) throw new Error('Google Maps is not configured.')
 
@@ -33,5 +33,22 @@ export async function loadGooglePlaces(apiKey) {
     await googleMapsPromise
   }
 
-  return window.google.maps.importLibrary('places')
+  return window.google.maps
+}
+
+export async function loadGooglePlaces(apiKey) {
+  const maps = await loadGoogleMaps(apiKey)
+  return maps.importLibrary('places')
+}
+
+export async function loadGoogleLocationTools(apiKey) {
+  const maps = await loadGoogleMaps(apiKey)
+  const [{ Map }, { AdvancedMarkerElement }, { Geocoder }, { Place }] = await Promise.all([
+    maps.importLibrary('maps'),
+    maps.importLibrary('marker'),
+    maps.importLibrary('geocoding'),
+    maps.importLibrary('places'),
+  ])
+
+  return { Map, AdvancedMarkerElement, Geocoder, Place }
 }
