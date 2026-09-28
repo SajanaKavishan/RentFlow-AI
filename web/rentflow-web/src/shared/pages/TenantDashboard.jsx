@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getNotifications } from '../../features/notifications/notificationsApi.js'
 import { notificationTime } from '../../features/notifications/notificationFormat.js'
-import { getProperty } from '../../features/properties/services/propertyApiService.js'
+import {
+  getMatchPreferences,
+  getProperties,
+  getProperty,
+  getPropertyImages,
+  getPropertyImageUrl,
+  getSavedPropertyMatches,
+} from '../../features/properties/services/propertyApiService.js'
 import RentalApplicationStatusBadge from '../../features/rentalApplications/components/RentalApplicationStatusBadge.jsx'
 import { getMyApplications, RENTAL_APPLICATION_STATUS } from '../../features/rentalApplications/services/rentalApplicationApiService.js'
 import { getMyLeases, getScheduleByLease } from '../../features/tenantLeasePayments/services/tenantLeasePaymentsApi.js'
@@ -158,22 +165,70 @@ function NotificationIcon({ type }) {
   return <span className="tenant-activity__icon"><Icon name={icon} size={18} /></span>
 }
 
-function RecommendedSection() {
+function RecommendedSection({ userId }) {
+  const [state, setState] = useState({ status: 'loading', items: [], configured: false, message: '' })
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    async function loadRecommendations() {
+      setState({ status: 'loading', items: [], configured: false, message: '' })
+      try {
+        const preferences = await getMatchPreferences()
+        if (!preferences.isConfigured) {
+          if (active) setState({ status: 'ready', items: [], configured: false, message: '' })
+          return
+        }
+        const [matches, properties] = await Promise.all([
+          getSavedPropertyMatches(),
+          getProperties({ isAvailable: true }),
+        ])
+        const propertyById = new Map(properties.map((property) => [property.id, property]))
+        const ranked = (matches.matches || []).slice(0, 3).map((match) => ({
+          ...propertyById.get(match.propertyId),
+          ...match,
+          id: match.propertyId,
+        })).filter((property) => property.title)
+        const withImages = await Promise.all(ranked.map(async (property) => {
+          try {
+            const images = await getPropertyImages(property.id)
+            if (!images?.length) return property
+            const image = await getPropertyImageUrl(property.id, images[0].id)
+            return { ...property, imageUrl: image?.url || null }
+          } catch {
+            return property
+          }
+        }))
+        if (active) setState({ status: 'ready', items: withImages, configured: true, message: '' })
+      } catch (error) {
+        if (active) setState({ status: 'error', items: [], configured: false, message: error.message || 'Unable to load recommendations.' })
+      }
+    }
+    loadRecommendations()
+    return () => { active = false }
+  }, [attempt, userId])
+
   return <section className="tenant-dashboard__section" aria-labelledby="tenant-recommended-title">
     <div className="tenant-section-heading">
       <h2 id="tenant-recommended-title">Recommended for You</h2>
       <Link to="/modules/properties">View all <Icon name="arrow" size={16} /></Link>
     </div>
-    <div className="tenant-recommendations-empty">
+    {state.status === 'loading' && <div className="tenant-recommendations-empty" role="status"><span className="shared-spinner" aria-hidden="true" /><h3>Finding your best matches</h3><p>Ranking currently available properties from your saved preferences.</p></div>}
+    {state.status === 'error' && <div className="tenant-recommendations-empty" role="alert"><span className="tenant-recommendations-empty__icon"><Icon name="building" size={32} /></span><h3>Recommendations could not be loaded</h3><p>{state.message}</p><button className="shared-button shared-button--outline" type="button" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div>}
+    {state.status === 'ready' && !state.configured && <div className="tenant-recommendations-empty">
       <span className="tenant-recommendations-empty__icon"><Icon name="building" size={32} /></span>
-      <StatusBadge tone="warning">Dashboard integration pending</StatusBadge>
-      <h3>Your matches will appear here</h3>
-      <p>Personalized recommendations need matching preferences. Browse live property availability or start a supported property match.</p>
+      <h3>Get personalized property recommendations</h3>
+      <p>Set your preferences to see real available properties ranked for you.</p>
       <div className="tenant-recommendations-empty__actions">
-        <Link className="shared-button" to="/modules/property-matching">Set matching preferences</Link>
+        <Link className="shared-button" to="/modules/properties?preferences=edit">Set match preferences</Link>
         <Link className="shared-button shared-button--outline" to="/modules/properties">Browse properties</Link>
       </div>
-    </div>
+    </div>}
+    {state.status === 'ready' && state.configured && state.items.length === 0 && <div className="tenant-recommendations-empty"><span className="tenant-recommendations-empty__icon"><Icon name="building" size={32} /></span><h3>No available matches right now</h3><p>New recommendations will appear as suitable properties become available.</p><Link className="shared-button shared-button--outline" to="/modules/properties?preferences=edit">Adjust preferences</Link></div>}
+    {state.status === 'ready' && state.items.length > 0 && <div className="tenant-recommendation-grid">{state.items.map((property) => <article className="tenant-recommendation-card" key={property.id}>
+      <Link className="tenant-recommendation-card__image" to={`/properties/${property.id}`} aria-label={`View ${property.title}`}>{property.imageUrl ? <img src={property.imageUrl} alt="" /> : <span><Icon name="home" size={28} />No property photo</span>}<strong aria-label={`${property.matchScore} percent match`}>{property.matchScore}% Match</strong></Link>
+      <div><p><Icon name="location" size={14} />{property.city}</p><h3>{property.title}</h3><dl><div><dt className="sr-only">Rent</dt><dd>Rs. {moneyFormatter.format(Number(property.monthlyRent))}/month</dd></div><div><dt className="sr-only">Bedrooms and bathrooms</dt><dd>{property.bedrooms} bed · {property.bathrooms} bath</dd></div></dl><Link to={`/properties/${property.id}`}>View property <Icon name="arrow" size={14} /></Link></div>
+    </article>)}</div>}
   </section>
 }
 
@@ -297,7 +352,7 @@ export default function TenantDashboard({ user }) {
     </div>
 
     <div className="tenant-dashboard__middle">
-      <RecommendedSection />
+      <RecommendedSection userId={user.id} />
       <div className="tenant-dashboard__side">
         <RecentActivity activity={activity} />
         <UpcomingViewing summary={viewings} viewing={nextViewing} property={properties[nextViewing?.propertyId]} />

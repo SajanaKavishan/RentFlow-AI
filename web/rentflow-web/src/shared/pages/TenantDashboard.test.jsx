@@ -54,6 +54,7 @@ function responseFor(url, overrides = {}) {
   if (path === '/api/lease-agreements/mine') return overrides.leases ?? [lease]
   if (path === `/api/rent-schedules/lease/${lease.id}`) return overrides.schedule ?? schedule
   if (path === `/api/properties/${propertyId}`) return overrides.property ?? property
+  if (path === '/api/tenant/property-preferences') return overrides.matchPreferences ?? { isConfigured: false, preferredAmenities: [] }
   if (path === '/api/rental-offers/mine' || path === '/api/payments/mine') return []
   return []
 }
@@ -117,7 +118,7 @@ describe('tenant dashboard', () => {
     expect(screen.getByText('No recent activity')).toBeInTheDocument()
     expect(screen.getByText('No upcoming viewing scheduled')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Open Request' })).toHaveTextContent('Integration pending')
-    expect(screen.getByRole('region', { name: 'Recommended for You' })).toHaveTextContent('Dashboard integration pending')
+    expect(screen.getByRole('region', { name: 'Recommended for You' })).toHaveTextContent('Get personalized property recommendations')
     expect(screen.queryByText(/Sarah Chen|match score|\$/)).not.toBeInTheDocument()
   })
 
@@ -217,13 +218,42 @@ describe('tenant dashboard', () => {
   it('keeps recommendation, property discovery, and maintenance destinations honest', async () => {
     renderApp()
     expect(within(document.querySelector('.tenant-dashboard__greeting')).queryByRole('link', { name: 'Browse properties' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Set matching preferences' })).toHaveAttribute('href', '/modules/property-matching')
+    expect(await screen.findByRole('link', { name: 'Set match preferences' })).toHaveAttribute('href', '/modules/properties?preferences=edit')
     expect(screen.getByRole('link', { name: 'Browse properties' })).toHaveAttribute('href', '/modules/properties')
     expect(screen.getByRole('region', { name: 'Open Request' })).toHaveTextContent('Maintenance request summaries are not yet available')
 
     await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: /Maintenance/ }))
     expect(screen.getByRole('heading', { name: 'Maintenance' })).toBeInTheDocument()
     expect(screen.getByText('Integration pending')).toBeInTheDocument()
+  })
+
+  it('shows the highest-ranked real available property recommendations', async () => {
+    const recommended = {
+      id: 'recommended-one',
+      title: 'Garden House',
+      address: '2 Lake Road',
+      city: 'Kurunegala',
+      monthlyRent: 120000,
+      bedrooms: 3,
+      bathrooms: 2,
+      amenities: ['Parking'],
+      isAvailable: true,
+    }
+    fetch.mockImplementation((url) => {
+      const path = new URL(url, 'http://localhost').pathname
+      if (path === '/api/tenant/property-preferences') return Promise.resolve(json({ isConfigured: true, preferredCity: 'Kurunegala', preferredAmenities: ['Parking'] }))
+      if (path === '/api/properties/matches') return Promise.resolve(json({ matches: [{ propertyId: recommended.id, matchScore: 92, matchReasons: ['Preferred city matches.'] }] }))
+      if (path === '/api/properties') return Promise.resolve(json([recommended]))
+      if (path === `/api/properties/${recommended.id}/images`) return Promise.resolve(json([]))
+      return Promise.resolve(json(responseFor(url)))
+    })
+    renderApp()
+
+    const recommendations = screen.getByRole('region', { name: 'Recommended for You' })
+    expect(await within(recommendations).findByRole('heading', { name: 'Garden House' })).toBeInTheDocument()
+    expect(within(recommendations).getByLabelText('92 percent match')).toBeInTheDocument()
+    expect(within(recommendations).getByText('Rs. 120,000/month')).toBeInTheDocument()
+    expect(within(recommendations).getByRole('link', { name: /View property/ })).toHaveAttribute('href', '/properties/recommended-one')
   })
 
   it.each(['Landlord', 'Admin', 'MaintenanceTechnician'])('does not call tenant dashboard APIs for %s', async (role) => {

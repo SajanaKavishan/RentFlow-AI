@@ -107,9 +107,36 @@ export function deletePropertyImage(propertyId, imageId) {
 
 export function matchProperties(preferences) {
   return apiRequest('/api/properties/match', {
-    authenticated: false,
     method: 'POST',
     body: JSON.stringify(preferences),
     errorMessage: 'Unable to generate property recommendations.',
+  })
+}
+
+export function getMatchPreferences() {
+  return apiRequest('/api/tenant/property-preferences', {
+    errorMessage: "We couldn't load your match preferences.",
+  })
+}
+
+export function saveMatchPreferences(preferences) {
+  return apiRequest('/api/tenant/property-preferences', {
+    method: 'PUT',
+    body: JSON.stringify(preferences),
+    errorMessage: "We couldn't save your match preferences.",
+  })
+}
+
+export function resetMatchPreferences() {
+  return apiRequest('/api/tenant/property-preferences', {
+    method: 'DELETE',
+    parse: 'none',
+    errorMessage: "We couldn't reset your match preferences.",
+  })
+}
+
+export function getSavedPropertyMatches() {
+  return apiRequest('/api/properties/matches', {
+    errorMessage: "We couldn't calculate your matches.",
   })
 }

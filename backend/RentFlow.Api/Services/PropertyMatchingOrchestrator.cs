@@ -80,7 +80,9 @@ public sealed class PropertyMatchingOrchestrator(
                     Bathrooms = candidate.Bathrooms,
                     Amenities = candidate.Amenities,
                     MatchScore = candidate.MatchScore,
-                    MatchReasons = match.Reasons
+                    // Explanations shown as match facts remain deterministic and
+                    // are never replaced with model-authored property claims.
+                    MatchReasons = candidate.MatchReasons
                 };
             })
             .OrderByDescending(match => match.MatchScore)

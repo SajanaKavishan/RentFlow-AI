@@ -50,6 +50,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<NotificationPreference> NotificationPreferences =>
         Set<NotificationPreference>();
 
+    public DbSet<TenantPropertyPreference> TenantPropertyPreferences =>
+        Set<TenantPropertyPreference>();
+
     public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
 
     public DbSet<MaintenanceCoordinationWorkflow> MaintenanceCoordinationWorkflows => Set<MaintenanceCoordinationWorkflow>();
@@ -301,6 +304,37 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne<ApplicationUser>()
                 .WithOne()
                 .HasForeignKey<NotificationPreference>(preference => preference.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TenantPropertyPreference>(entity =>
+        {
+            entity.HasKey(preference => preference.UserId);
+
+            entity.Property(preference => preference.PreferredCity)
+                .HasMaxLength(100)
+                .IsRequired(false);
+
+            entity.Property(preference => preference.MaximumMonthlyRent)
+                .HasPrecision(18, 2)
+                .IsRequired(false);
+
+            entity.Property(preference => preference.MinimumBedrooms)
+                .IsRequired(false);
+
+            entity.Property(preference => preference.MinimumBathrooms)
+                .IsRequired(false);
+
+            entity.Property(preference => preference.PreferredAmenities)
+                .HasColumnType("text[]")
+                .IsRequired();
+
+            entity.Property(preference => preference.UpdatedAt)
+                .IsRequired();
+
+            entity.HasOne<ApplicationUser>()
+                .WithOne()
+                .HasForeignKey<TenantPropertyPreference>(preference => preference.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

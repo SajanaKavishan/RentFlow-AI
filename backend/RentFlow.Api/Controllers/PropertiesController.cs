@@ -181,7 +181,7 @@ public class PropertiesController : ControllerBase
     // =========================================================
 
     [HttpPost("match")]
-    [AllowAnonymous]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
     public async Task<ActionResult<PropertyMatchingResponse>>
         MatchProperties(
             [FromBody] PropertyMatchingRequest request,
@@ -191,6 +191,38 @@ public class PropertiesController : ControllerBase
             await _propertyMatchingOrchestrator.MatchAsync(
                 request,
                 cancellationToken);
+
+        return Ok(result);
+    }
+
+    [HttpGet("matches")]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
+    public async Task<ActionResult<PropertyMatchingResponse>>
+        GetSavedPreferenceMatches(
+            [FromServices] ITenantPropertyPreferenceService preferenceService,
+            CancellationToken cancellationToken)
+    {
+        if (_currentUserService.UserId is not Guid tenantId)
+        {
+            return Unauthorized(new { message = "Authenticated tenant ID was not found." });
+        }
+
+        var saved = await preferenceService.GetAsync(tenantId, cancellationToken);
+        if (!saved.IsConfigured)
+        {
+            return BadRequest(new { message = "Set match preferences before requesting matches." });
+        }
+
+        var result = await _propertyMatchingOrchestrator.MatchAsync(
+            new PropertyMatchingRequest
+            {
+                PreferredCity = saved.PreferredCity,
+                MaximumMonthlyRent = saved.MaximumMonthlyRent,
+                MinimumBedrooms = saved.MinimumBedrooms,
+                MinimumBathrooms = saved.MinimumBathrooms,
+                PreferredAmenities = saved.PreferredAmenities
+            },
+            cancellationToken);
 
         return Ok(result);
     }

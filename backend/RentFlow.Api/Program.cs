@@ -318,6 +318,10 @@ builder.Services.AddScoped<
     IPropertyMatchingOrchestrator,
     PropertyMatchingOrchestrator>();
 
+builder.Services.AddScoped<
+    ITenantPropertyPreferenceService,
+    TenantPropertyPreferenceService>();
+
 builder.Services.AddHttpClient<
     IPropertyMatchingAgentClient,
     PropertyMatchingAgentClient>(

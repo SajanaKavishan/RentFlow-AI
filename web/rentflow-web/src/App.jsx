@@ -18,7 +18,7 @@ import NotificationsPage from './features/notifications/NotificationsPage.jsx'
 import NotificationResourcePage from './features/notifications/NotificationResourcePage.jsx'
 import PropertiesPage from './features/properties/pages/PropertiesPage.jsx'
 import PropertyDetailsPage from './features/properties/pages/PropertyDetailsPage.jsx'
-import PropertyMatchingPage from './features/properties/pages/PropertyMatchingPage.jsx'
+import PropertyMatchingRedirect from './features/properties/pages/PropertyMatchingRedirect.jsx'
 import ManagePropertiesPage from './features/properties/pages/ManagePropertiesPage.jsx'
 import PropertyFormPage from './features/properties/pages/PropertyFormPage.jsx'
 import OwnedPropertiesProvider from './shared/property/OwnedPropertiesProvider.jsx'
@@ -72,7 +72,7 @@ export default function App() {
           <Route path="/modules/my-viewings" element={<MyViewingsPage />} />
           <Route path="/modules/my-applications" element={<MyApplicationsPage />} />
           <Route path="/modules/properties" element={<PropertiesPage />} />
-          <Route path="/modules/property-matching" element={<PropertyMatchingPage />} />
+          <Route path="/modules/property-matching" element={<PropertyMatchingRedirect />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.MAINTENANCE_TECHNICIAN]} />}>
