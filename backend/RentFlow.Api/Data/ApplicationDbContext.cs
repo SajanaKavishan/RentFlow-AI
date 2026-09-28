@@ -53,6 +53,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TenantPropertyPreference> TenantPropertyPreferences =>
         Set<TenantPropertyPreference>();
 
+    public DbSet<TenantPropertyFavorite> TenantPropertyFavorites =>
+        Set<TenantPropertyFavorite>();
+
     public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
 
     public DbSet<MaintenanceCoordinationWorkflow> MaintenanceCoordinationWorkflows => Set<MaintenanceCoordinationWorkflow>();
@@ -336,6 +339,27 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithOne()
                 .HasForeignKey<TenantPropertyPreference>(preference => preference.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TenantPropertyFavorite>(entity =>
+        {
+            entity.HasKey(favorite => new { favorite.TenantId, favorite.PropertyId });
+
+            entity.Property(favorite => favorite.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(favorite => favorite.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<Property>()
+                .WithMany()
+                .HasForeignKey(favorite => favorite.PropertyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(favorite => new { favorite.TenantId, favorite.CreatedAt });
+            entity.HasIndex(favorite => favorite.PropertyId);
         });
 
         modelBuilder.Entity<SupportTicket>(entity =>

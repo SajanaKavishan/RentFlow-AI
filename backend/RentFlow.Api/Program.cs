@@ -322,6 +322,10 @@ builder.Services.AddScoped<
     ITenantPropertyPreferenceService,
     TenantPropertyPreferenceService>();
 
+builder.Services.AddScoped<
+    ITenantPropertyFavoriteService,
+    TenantPropertyFavoriteService>();
+
 builder.Services.AddHttpClient<
     IPropertyMatchingAgentClient,
     PropertyMatchingAgentClient>(

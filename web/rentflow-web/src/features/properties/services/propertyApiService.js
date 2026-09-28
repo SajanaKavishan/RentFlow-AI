@@ -140,3 +140,25 @@ export function getSavedPropertyMatches() {
     errorMessage: "We couldn't calculate your matches.",
   })
 }
+
+export function getPropertyFavorites() {
+  return apiRequest('/api/tenant/property-favorites', {
+    errorMessage: "We couldn't load your liked properties.",
+  })
+}
+
+export function addPropertyFavorite(propertyId) {
+  return apiRequest(`/api/tenant/property-favorites/${propertyId}`, {
+    method: 'PUT',
+    parse: 'none',
+    errorMessage: "We couldn't add this property to your liked properties.",
+  })
+}
+
+export function removePropertyFavorite(propertyId) {
+  return apiRequest(`/api/tenant/property-favorites/${propertyId}`, {
+    method: 'DELETE',
+    parse: 'none',
+    errorMessage: "We couldn't remove this property from your liked properties.",
+  })
+}

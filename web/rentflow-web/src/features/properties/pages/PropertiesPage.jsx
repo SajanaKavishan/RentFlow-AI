@@ -3,12 +3,16 @@ import { Link, useSearchParams } from 'react-router-dom'
 import Icon from '../../../shared/ui/Icons.jsx'
 import MatchPreferenceSummary from '../components/MatchPreferenceSummary.jsx'
 import MatchPreferencesDialog from '../components/MatchPreferencesDialog.jsx'
+import PropertyImageCarousel from '../components/PropertyImageCarousel.jsx'
 import {
+  addPropertyFavorite,
   getMatchPreferences,
   getProperties,
+  getPropertyFavorites,
   getPropertyImages,
   getPropertyImageUrl,
   getSavedPropertyMatches,
+  removePropertyFavorite,
   resetMatchPreferences,
   saveMatchPreferences,
 } from '../services/propertyApiService.js'
@@ -21,11 +25,14 @@ const isPositiveReason = (reason) => !/^(above|does not|matches 0\b)/i.test(reas
 export default function PropertiesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [properties, setProperties] = useState([])
-  const [coverImages, setCoverImages] = useState({})
+  const [propertyImages, setPropertyImages] = useState({})
+  const [favoriteState, setFavoriteState] = useState({ status: 'loading', propertyIds: [], message: '' })
+  const [favoritePending, setFavoritePending] = useState(() => new Set())
   const [propertyState, setPropertyState] = useState({ status: 'loading', message: '' })
   const [preferenceState, setPreferenceState] = useState({ status: 'loading', data: null, message: '' })
   const [matchState, setMatchState] = useState({ status: 'idle', data: null, message: '' })
   const [filters, setFilters] = useState(initialFilters)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [sortBy, setSortBy] = useState('newest')
   const [editingPreferences, setEditingPreferences] = useState(searchParams.get('preferences') === 'edit')
   const [expandedReasons, setExpandedReasons] = useState(() => new Set())
@@ -58,6 +65,16 @@ export default function PropertiesPage() {
     }
   }, [loadMatches])
 
+  const loadFavorites = useCallback(async () => {
+    setFavoriteState({ status: 'loading', propertyIds: [], message: '' })
+    try {
+      const result = await getPropertyFavorites()
+      setFavoriteState({ status: 'ready', propertyIds: result.propertyIds || [], message: '' })
+    } catch (error) {
+      setFavoriteState({ status: 'error', propertyIds: [], message: error.message || "We couldn't load your liked properties." })
+    }
+  }, [])
+
   useEffect(() => {
     let active = true
     async function loadProperties() {
@@ -71,22 +88,26 @@ export default function PropertiesPage() {
         const imageEntries = await Promise.all(available.map(async (property) => {
           try {
             const images = await getPropertyImages(property.id)
-            if (!images?.length) return [property.id, null]
-            const image = await getPropertyImageUrl(property.id, images[0].id)
-            return [property.id, image?.url || null]
+            if (!images?.length) return [property.id, []]
+            const resolvedImages = await Promise.all(images.map(async (image) => {
+              const result = await getPropertyImageUrl(property.id, image.id)
+              return result?.url || null
+            }))
+            return [property.id, resolvedImages.filter(Boolean)]
           } catch {
-            return [property.id, null]
+            return [property.id, []]
           }
         }))
-        if (active) setCoverImages(Object.fromEntries(imageEntries.filter(([, url]) => url)))
+        if (active) setPropertyImages(Object.fromEntries(imageEntries))
       } catch (error) {
         if (active) setPropertyState({ status: 'error', message: error.message || 'Unable to load properties.' })
       }
     }
     loadProperties()
     Promise.resolve().then(loadPreferences)
+    Promise.resolve().then(loadFavorites)
     return () => { active = false }
-  }, [loadPreferences])
+  }, [loadFavorites, loadPreferences])
 
   const openPreferences = () => {
     setEditingPreferences(true)
@@ -115,6 +136,7 @@ export default function PropertiesPage() {
   const matchByPropertyId = useMemo(() => new Map(
     (matchState.data?.matches || []).map((match) => [match.propertyId, match]),
   ), [matchState.data])
+  const favoriteIds = useMemo(() => new Set(favoriteState.propertyIds), [favoriteState.propertyIds])
   const hasPreferences = preferenceState.status === 'ready' && preferenceState.data?.isConfigured
   const visibleProperties = useMemo(() => {
     const search = filters.search.trim().toLowerCase()
@@ -130,15 +152,20 @@ export default function PropertiesPage() {
         && (!filters.minBathrooms || Number(property.bathrooms) >= Number(filters.minBathrooms))
         && (!amenity || amenities.some((item) => String(item).toLowerCase().includes(amenity)))
     })
-    return [...filtered].sort((a, b) => {
+    const sortable = sortBy === 'liked'
+      ? filtered.filter((property) => favoriteIds.has(property.id))
+      : filtered
+    return [...sortable].sort((a, b) => {
+      if (sortBy === 'liked') return Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0)
       if (sortBy === 'bestMatch') return (matchByPropertyId.get(b.id)?.matchScore ?? -1) - (matchByPropertyId.get(a.id)?.matchScore ?? -1) || Number(a.monthlyRent) - Number(b.monthlyRent)
       if (sortBy === 'lowestRent') return Number(a.monthlyRent) - Number(b.monthlyRent)
       if (sortBy === 'highestRent') return Number(b.monthlyRent) - Number(a.monthlyRent)
       return Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0)
     })
-  }, [filters, matchByPropertyId, properties, sortBy])
+  }, [favoriteIds, filters, matchByPropertyId, properties, sortBy])
 
   const hasFilters = Object.values(filters).some(Boolean)
+  const activeFilterCount = Object.entries(filters).filter(([name, value]) => name !== 'search' && Boolean(value)).length
   const updateFilter = (event) => {
     const { name, value } = event.target
     setFilters((current) => ({ ...current, [name]: value }))
@@ -150,6 +177,30 @@ export default function PropertiesPage() {
       else next.add(propertyId)
       return next
     })
+  }
+  const toggleFavorite = async (propertyId) => {
+    if (favoriteState.status !== 'ready' || favoritePending.has(propertyId)) return
+    const currentlyLiked = favoriteIds.has(propertyId)
+    setFavoritePending((current) => new Set(current).add(propertyId))
+    try {
+      if (currentlyLiked) await removePropertyFavorite(propertyId)
+      else await addPropertyFavorite(propertyId)
+      setFavoriteState((current) => ({
+        ...current,
+        message: '',
+        propertyIds: currentlyLiked
+          ? current.propertyIds.filter((id) => id !== propertyId)
+          : [propertyId, ...current.propertyIds],
+      }))
+    } catch (error) {
+      setFavoriteState((current) => ({ ...current, message: error.message || "We couldn't update your liked properties." }))
+    } finally {
+      setFavoritePending((current) => {
+        const next = new Set(current)
+        next.delete(propertyId)
+        return next
+      })
+    }
   }
 
   return <main className="properties-page" aria-busy={propertyState.status === 'loading' || preferenceState.status === 'loading'}>
@@ -164,38 +215,39 @@ export default function PropertiesPage() {
     {hasPreferences && <MatchPreferenceSummary preferences={preferenceState.data} onEdit={openPreferences} />}
     {hasPreferences && matchState.status === 'loading' && <div className="match-inline-state" role="status"><span className="property-spinner" aria-hidden="true" />Finding properties that match your preferences…</div>}
     {hasPreferences && matchState.status === 'error' && <section className="match-preference-error" role="alert"><div><strong>We couldn't calculate your matches.</strong><p>{matchState.message}</p></div><button type="button" className="property-button property-button--outline" onClick={loadMatches}>Retry</button></section>}
+    {favoriteState.status === 'error' && <section className="match-preference-error" role="alert"><div><strong>We couldn't load your liked properties.</strong><p>{favoriteState.message}</p></div><button type="button" className="property-button property-button--outline" onClick={loadFavorites}>Retry</button></section>}
+    {favoriteState.status === 'ready' && favoriteState.message && <section className="match-preference-error" role="alert"><div><strong>Liked properties could not be updated.</strong><p>{favoriteState.message}</p></div><button type="button" className="property-button property-button--outline" onClick={() => setFavoriteState((current) => ({ ...current, message: '' }))}>Dismiss</button></section>}
 
-    <section className="property-filters" aria-label="Property filters">
-      <div className="property-filters__top"><div className="property-filters__search"><Icon name="search" size={19} /><input type="search" name="search" value={filters.search} onChange={updateFilter} placeholder="Search properties, addresses or locations" aria-label="Search properties" /></div><label className="property-sort"><span>Sort by</span><select aria-label="Sort properties" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>{hasPreferences && <option value="bestMatch">Best Match</option>}<option value="lowestRent">Lowest Rent</option><option value="highestRent">Highest Rent</option><option value="newest">Newest</option></select></label></div>
-      <div className="property-filters__grid">
-        <label><span>City</span><input name="city" value={filters.city} onChange={updateFilter} placeholder="Any city" /></label>
-        <label><span>Maximum rent</span><input type="number" min="0" name="maxRent" value={filters.maxRent} onChange={updateFilter} placeholder="Any price" /></label>
-        <label><span>Bedrooms</span><select name="minBedrooms" value={filters.minBedrooms} onChange={updateFilter}><option value="">Any</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option></select></label>
-        <label><span>Bathrooms</span><select name="minBathrooms" value={filters.minBathrooms} onChange={updateFilter}><option value="">Any</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option></select></label>
-        <label><span>Amenity</span><input name="amenity" value={filters.amenity} onChange={updateFilter} placeholder="Parking, Security…" /></label>
+    <section className={`property-filters${filtersOpen ? ' is-open' : ''}`} aria-label="Property search and filters">
+      <div className="property-filters__top">
+        <div className="property-filters__search"><Icon name="search" size={19} /><input type="search" name="search" value={filters.search} onChange={updateFilter} placeholder="Search by location or property name…" aria-label="Search properties" /></div>
+        <button type="button" className={`property-filter-toggle${activeFilterCount > 0 ? ' has-active-filters' : ''}`} aria-expanded={filtersOpen} aria-controls="property-filter-options" onClick={() => setFiltersOpen((open) => !open)}><Icon name="filters" size={18} /><span>Filters</span>{activeFilterCount > 0 && <strong aria-label={`${activeFilterCount} active filters`}>{activeFilterCount}</strong>}<Icon name="chevronDown" size={15} className="property-filter-toggle__chevron" /></button>
+        <label className="property-sort"><span className="sr-only">Sort by</span><select aria-label="Sort properties" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>{hasPreferences && <option value="bestMatch">Best Match</option>}<option value="liked">Liked</option><option value="lowestRent">Lowest Rent</option><option value="highestRent">Highest Rent</option><option value="newest">Newest</option></select></label>
       </div>
-      {hasFilters && <button type="button" className="property-button property-button--quiet" onClick={() => setFilters(initialFilters)}>Clear filters</button>}
+      {filtersOpen && <div id="property-filter-options" className="property-filter-options">
+        <div className="property-filters__grid">
+          <label><span>City</span><input name="city" value={filters.city} onChange={updateFilter} placeholder="Any city" /></label>
+          <label><span>Maximum rent</span><input type="number" min="0" name="maxRent" value={filters.maxRent} onChange={updateFilter} placeholder="Any price" /></label>
+          <label><span>Bedrooms</span><select name="minBedrooms" value={filters.minBedrooms} onChange={updateFilter}><option value="">Any</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option></select></label>
+          <label><span>Bathrooms</span><select name="minBathrooms" value={filters.minBathrooms} onChange={updateFilter}><option value="">Any</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option></select></label>
+          <label><span>Amenity</span><input name="amenity" value={filters.amenity} onChange={updateFilter} placeholder="Parking, Security…" /></label>
+        </div>
+        <div className="property-filter-options__footer"><span>{activeFilterCount > 0 ? `${activeFilterCount} ${activeFilterCount === 1 ? 'filter' : 'filters'} applied` : 'Choose filters to narrow the available properties.'}</span>{hasFilters && <button type="button" className="property-button property-button--quiet" onClick={() => setFilters(initialFilters)}>Clear filters</button>}</div>
+      </div>}
     </section>
 
     {propertyState.status === 'loading' && <section className="property-state"><div className="property-spinner" /><h2>Loading properties</h2><p>Finding the latest available rental properties.</p></section>}
     {propertyState.status === 'error' && <section className="property-state property-state--error" role="alert"><h2>We couldn't load the properties</h2><p>{propertyState.message}</p></section>}
-    {propertyState.status === 'ready' && visibleProperties.length === 0 && <section className="property-state"><h2>{hasPreferences ? 'No available properties match your current preferences.' : 'No matching properties'}</h2><p>{hasFilters ? 'Try changing your filters.' : 'Check back as new available properties are listed.'}</p><div className="property-state__actions">{hasFilters && <button type="button" className="property-button property-button--outline" onClick={() => setFilters(initialFilters)}>Clear filters</button>}{hasPreferences && <button type="button" className="property-button property-button--primary" onClick={openPreferences}>Adjust preferences</button>}</div></section>}
+    {propertyState.status === 'ready' && visibleProperties.length === 0 && <section className="property-state"><h2>{sortBy === 'liked' ? 'No liked properties yet.' : hasPreferences ? 'No available properties match your current preferences.' : 'No matching properties'}</h2><p>{sortBy === 'liked' ? 'Use the heart button on a property card to add it here.' : hasFilters ? 'Try changing your filters.' : 'Check back as new available properties are listed.'}</p><div className="property-state__actions">{hasFilters && <button type="button" className="property-button property-button--outline" onClick={() => setFilters(initialFilters)}>Clear filters</button>}{hasPreferences && sortBy !== 'liked' && <button type="button" className="property-button property-button--primary" onClick={openPreferences}>Adjust preferences</button>}</div></section>}
     {propertyState.status === 'ready' && visibleProperties.length > 0 && <section className="property-grid" aria-label="Available properties">{visibleProperties.map((property) => {
       const match = hasPreferences && matchState.status === 'ready' ? matchByPropertyId.get(property.id) : null
       const reasonsOpen = expandedReasons.has(property.id)
       return <article className="property-card" key={property.id}>
-        <Link className="property-card__image" to={`/properties/${property.id}`} aria-label={`View ${property.title}`}>
-          {coverImages[property.id] ? <img src={coverImages[property.id]} alt="" /> : <div className="property-card__placeholder"><Icon name="home" size={34} /><span>No property photo</span></div>}
-          <span className="property-card__status">Available</span>
-          {match && <span className="property-card__match" aria-label={`${match.matchScore} percent match`}>{match.matchScore}% Match</span>}
-        </Link>
+        <PropertyImageCarousel property={property} images={propertyImages[property.id] || []} match={match} liked={favoriteIds.has(property.id)} favoritePending={favoritePending.has(property.id) || favoriteState.status !== 'ready'} onToggleFavorite={toggleFavorite} />
         <div className="property-card__body">
-          <div className="property-card__location"><Icon name="location" size={16} />{property.city}</div>
-          <h2>{property.title}</h2><p className="property-card__address">{property.address}</p>
-          <div className="property-card__features"><span><strong>{property.bedrooms}</strong> Bedrooms</span><span><strong>{property.bathrooms}</strong> Bathrooms</span></div>
-          {property.amenities?.length > 0 && <div className="property-card__amenities">{property.amenities.slice(0, 3).map((amenity) => <span key={amenity}>{amenity}</span>)}{property.amenities.length > 3 && <span>+{property.amenities.length - 3}</span>}</div>}
+          <div className="property-card__summary"><div><h2><Link to={`/properties/${property.id}`}>{property.title}</Link></h2><p className="property-card__location"><Icon name="location" size={14} />{property.city}</p></div><div className="property-card__price"><strong>Rs. {money.format(Number(property.monthlyRent))}</strong><span>/month</span></div></div>
+          <div className="property-card__features"><span><Icon name="bed" size={16} />{property.bedrooms} {property.bedrooms === 1 ? 'bed' : 'beds'}</span><span><Icon name="bath" size={16} />{property.bathrooms} {property.bathrooms === 1 ? 'bath' : 'baths'}</span>{property.area != null && <span className="property-card__area">{money.format(Number(property.area))} {property.areaUnit || ''}</span>}</div>
           {match?.matchReasons?.length > 0 && <div className="property-card__reasons"><button type="button" aria-expanded={reasonsOpen} onClick={() => toggleReasons(property.id)}>Why this matches <span aria-hidden="true">{reasonsOpen ? '−' : '+'}</span></button>{reasonsOpen && <ul>{match.matchReasons.map((reason) => <li key={reason}><span className={isPositiveReason(reason) ? 'is-positive' : 'is-neutral'} aria-hidden="true">{isPositiveReason(reason) ? '✓' : '•'}</span>{reason}</li>)}</ul>}</div>}
-          <div className="property-card__footer"><div className="property-card__price"><strong>Rs. {money.format(Number(property.monthlyRent))}</strong><span>/ month</span></div><Link to={`/properties/${property.id}`} className="property-button property-button--primary">View Property</Link></div>
         </div>
       </article>
     })}</section>}

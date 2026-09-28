@@ -4,10 +4,14 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PropertiesPage from './PropertiesPage.jsx'
 import {
+  addPropertyFavorite,
   getMatchPreferences,
   getProperties,
+  getPropertyFavorites,
   getPropertyImages,
+  getPropertyImageUrl,
   getSavedPropertyMatches,
+  removePropertyFavorite,
   saveMatchPreferences,
 } from '../services/propertyApiService.js'
 
@@ -17,6 +21,9 @@ vi.mock('../services/propertyApiService.js', () => ({
   getPropertyImages: vi.fn(),
   getPropertyImageUrl: vi.fn(),
   getSavedPropertyMatches: vi.fn(),
+  getPropertyFavorites: vi.fn(),
+  addPropertyFavorite: vi.fn(),
+  removePropertyFavorite: vi.fn(),
   resetMatchPreferences: vi.fn(),
   saveMatchPreferences: vi.fn(),
 }))
@@ -42,6 +49,9 @@ beforeEach(() => {
   getProperties.mockResolvedValue(properties)
   getPropertyImages.mockResolvedValue([])
   getSavedPropertyMatches.mockResolvedValue(matches)
+  getPropertyFavorites.mockResolvedValue({ propertyIds: [] })
+  addPropertyFavorite.mockResolvedValue(undefined)
+  removePropertyFavorite.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -59,6 +69,42 @@ describe('tenant property matching', () => {
     expect(screen.queryByText(/% Match/)).not.toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Best Match' })).not.toBeInTheDocument()
     expect(getSavedPropertyMatches).not.toHaveBeenCalled()
+
+    expect(screen.queryByLabelText('City')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    expect(screen.getByLabelText('City')).toBeInTheDocument()
+  })
+
+  it('shows all real property images as a navigable slideshow', async () => {
+    getMatchPreferences.mockResolvedValue({ isConfigured: false, preferredAmenities: [] })
+    getPropertyImages.mockImplementation((propertyId) => Promise.resolve(propertyId === 'one' ? [{ id: 'photo-a' }, { id: 'photo-b' }] : []))
+    getPropertyImageUrl.mockImplementation((_propertyId, imageId) => Promise.resolve({ url: `https://images.example/${imageId}.jpg` }))
+    renderPage()
+
+    const firstImage = await screen.findByRole('img', { name: 'City Studio — photo 1 of 2' })
+    expect(firstImage).toHaveAttribute('src', 'https://images.example/photo-a.jpg')
+    await userEvent.click(screen.getByRole('button', { name: 'Next image for City Studio' }))
+    expect(screen.getByRole('img', { name: 'City Studio — photo 2 of 2' })).toHaveAttribute('src', 'https://images.example/photo-b.jpg')
+    await userEvent.click(screen.getByRole('button', { name: 'Show image 1 of 2 for City Studio' }))
+    expect(screen.getByRole('img', { name: 'City Studio — photo 1 of 2' })).toBeInTheDocument()
+  })
+
+  it('persists heart selections and exposes them through the Liked option', async () => {
+    getMatchPreferences.mockResolvedValue({ isConfigured: false, preferredAmenities: [] })
+    renderPage()
+
+    const likeButton = await screen.findByRole('button', { name: 'Add City Studio to liked properties' })
+    await userEvent.click(likeButton)
+    expect(addPropertyFavorite).toHaveBeenCalledWith('one')
+    expect(screen.getByRole('button', { name: 'Remove City Studio from liked properties' })).toHaveAttribute('aria-pressed', 'true')
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort properties' }), 'liked')
+    expect(screen.getByRole('heading', { name: 'City Studio' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Garden House' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove City Studio from liked properties' }))
+    expect(removePropertyFavorite).toHaveBeenCalledWith('one')
+    expect(await screen.findByRole('heading', { name: 'No liked properties yet.' })).toBeInTheDocument()
   })
 
   it('loads saved preferences, automatically ranks matches, and exposes real reasons', async () => {
