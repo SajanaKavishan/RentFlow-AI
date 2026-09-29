@@ -65,7 +65,9 @@ public class PropertyService : IPropertyService
             Bathrooms = dto.Bathrooms,
             Area = dto.Area,
             AreaUnit = NormalizeAreaUnit(dto.Area, dto.AreaUnit),
-            IsAvailable = true,
+            AreaType = NormalizeAreaType(dto.Area, dto.AreaType),
+            AvailableFrom = dto.AvailableFrom,
+            IsAvailable = dto.IsAvailable,
             CreatedAt = DateTimeOffset.UtcNow
         };
 
@@ -117,6 +119,8 @@ public class PropertyService : IPropertyService
         property.Bathrooms = dto.Bathrooms;
         property.Area = dto.Area;
         property.AreaUnit = NormalizeAreaUnit(dto.Area, dto.AreaUnit);
+        property.AreaType = NormalizeAreaType(dto.Area, dto.AreaType);
+        property.AvailableFrom = dto.AvailableFrom;
         property.IsAvailable = dto.IsAvailable;
         property.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -202,8 +206,18 @@ public class PropertyService : IPropertyService
         }
 
         return string.IsNullOrWhiteSpace(areaUnit)
-            ? "sqft"
+            ? null
             : areaUnit.Trim().ToLowerInvariant();
+    }
+
+    private static string? NormalizeAreaType(decimal? area, string? areaType)
+    {
+        if (!area.HasValue || string.IsNullOrWhiteSpace(areaType))
+        {
+            return null;
+        }
+
+        return areaType.Trim();
     }
 
     private static string? NormalizeGooglePlaceId(string? googlePlaceId)
@@ -233,6 +247,8 @@ public class PropertyService : IPropertyService
             Bathrooms = property.Bathrooms,
             Area = property.Area,
             AreaUnit = property.AreaUnit,
+            AreaType = property.AreaType,
+            AvailableFrom = property.AvailableFrom,
             IsAvailable = property.IsAvailable,
             CreatedAt = property.CreatedAt,
             UpdatedAt = property.UpdatedAt,

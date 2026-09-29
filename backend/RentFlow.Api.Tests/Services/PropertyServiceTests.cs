@@ -34,6 +34,9 @@ public class PropertyServiceTests
             Bathrooms = 1,
             Area = 1250m,
             AreaUnit = "sqft",
+            AreaType = "FloorArea",
+            AvailableFrom = new DateOnly(2026, 11, 1),
+            IsAvailable = false,
             Amenities = new List<string>
             {
                 "Parking",
@@ -55,7 +58,9 @@ public class PropertyServiceTests
         Assert.Equal(85000m, result.MonthlyRent);
         Assert.Equal(1250m, result.Area);
         Assert.Equal("sqft", result.AreaUnit);
-        Assert.True(result.IsAvailable);
+        Assert.Equal("FloorArea", result.AreaType);
+        Assert.Equal(new DateOnly(2026, 11, 1), result.AvailableFrom);
+        Assert.False(result.IsAvailable);
         Assert.Equal(2, result.Amenities.Count);
 
         var storedProperty = await context.Properties
@@ -67,6 +72,36 @@ public class PropertyServiceTests
         Assert.Equal(result.Longitude, storedProperty.Longitude);
         Assert.Equal(result.GooglePlaceId, storedProperty.GooglePlaceId);
         Assert.Equal(2, storedProperty.Amenities.Count);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CreateAsync_PersistsRequestedAvailability(bool isAvailable)
+    {
+        await using var context = CreateContext();
+        var service = new PropertyService(context, new FakePropertyImageService());
+        var dto = ValidCreateDto();
+        dto.IsAvailable = isAvailable;
+
+        var result = await service.CreateAsync(Guid.NewGuid(), dto);
+
+        Assert.Equal(isAvailable, result.IsAvailable);
+        Assert.Equal(isAvailable, (await context.Properties.SingleAsync()).IsAvailable);
+    }
+
+    [Fact]
+    public async Task CreateAsync_PreservesNullAvailableFrom()
+    {
+        await using var context = CreateContext();
+        var service = new PropertyService(context, new FakePropertyImageService());
+        var dto = ValidCreateDto();
+        dto.AvailableFrom = null;
+
+        var result = await service.CreateAsync(Guid.NewGuid(), dto);
+
+        Assert.Null(result.AvailableFrom);
+        Assert.Null((await context.Properties.SingleAsync()).AvailableFrom);
     }
 
     [Fact]
@@ -142,6 +177,8 @@ public class PropertyServiceTests
             Bathrooms = 2,
             Area = 14.5m,
             AreaUnit = "perch",
+            AreaType = "LandArea",
+            AvailableFrom = null,
             IsAvailable = false,
             Amenities = new List<string>
             {
@@ -166,6 +203,8 @@ public class PropertyServiceTests
         Assert.Equal(2, result.Bathrooms);
         Assert.Equal(14.5m, result.Area);
         Assert.Equal("perch", result.AreaUnit);
+        Assert.Equal("LandArea", result.AreaType);
+        Assert.Null(result.AvailableFrom);
         Assert.False(result.IsAvailable);
         Assert.Equal(2, result.Amenities.Count);
     }
@@ -221,6 +260,52 @@ public class PropertyServiceTests
         Assert.Null(dto.Latitude);
         Assert.Null(dto.Longitude);
         Assert.Null(dto.GooglePlaceId);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void CreateDto_RejectsNonPositiveMonthlyRent(double monthlyRent)
+    {
+        var dto = ValidCreateDto();
+        dto.MonthlyRent = (decimal)monthlyRent;
+
+        Assert.False(Validate(dto).IsValid);
+    }
+
+    [Fact]
+    public void CreateDto_RejectsLandUnitsForFloorArea()
+    {
+        var dto = ValidCreateDto();
+        dto.AreaType = "FloorArea";
+        dto.AreaUnit = "perch";
+
+        var validation = Validate(dto);
+
+        Assert.False(validation.IsValid);
+        Assert.Contains(validation.Results, result =>
+            result.ErrorMessage == "Floor area must use square feet or square metres.");
+    }
+
+    [Fact]
+    public void UpdateDto_AcceptsLegacyAreaWithoutExplicitType()
+    {
+        var dto = new UpdatePropertyDto
+        {
+            Title = "Legacy listing",
+            Description = "Existing listing without semantic metadata.",
+            Address = "12 Lake Road",
+            City = "Colombo",
+            MonthlyRent = 75000m,
+            Bedrooms = 2,
+            Bathrooms = 1,
+            Area = 15m,
+            AreaUnit = "perch",
+            AreaType = null,
+            IsAvailable = true
+        };
+
+        Assert.True(Validate(dto).IsValid);
     }
 
     [Fact]
@@ -426,7 +511,8 @@ public class PropertyServiceTests
             Bedrooms = 2,
             Bathrooms = 1,
             Area = 900m,
-            AreaUnit = "sqft"
+            AreaUnit = "sqft",
+            AreaType = "FloorArea"
         };
     }
 
@@ -508,8 +594,27 @@ public class PropertyServiceTests
         }
 
         public Task<bool> DeleteAsync(
+            Guid propertyId,
             Guid imageId,
             Guid landlordId,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<PropertyImageResponseDto?> SetPrimaryAsync(
+            Guid propertyId,
+            Guid imageId,
+            Guid landlordId,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<IReadOnlyList<PropertyImageResponseDto>?> ReorderAsync(
+            Guid propertyId,
+            Guid landlordId,
+            IReadOnlyList<Guid> imageIds,
             CancellationToken cancellationToken = default)
         {
             throw new NotImplementedException();

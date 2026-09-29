@@ -368,6 +368,8 @@ public class PropertiesController : ControllerBase
             Bathrooms = property.Bathrooms,
             Area = property.Area,
             AreaUnit = property.AreaUnit,
+            AreaType = property.AreaType,
+            AvailableFrom = property.AvailableFrom,
             IsAvailable = property.IsAvailable,
             CreatedAt = property.CreatedAt,
             UpdatedAt = property.UpdatedAt,

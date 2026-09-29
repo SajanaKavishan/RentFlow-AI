@@ -44,6 +44,11 @@ public class UpdatePropertyDto : IValidatableObject
     [RegularExpression("^(sqft|sqm|perch|acre)$")]
     public string? AreaUnit { get; set; }
 
+    [RegularExpression("^(FloorArea|LandArea)$")]
+    public string? AreaType { get; set; }
+
+    public DateOnly? AvailableFrom { get; set; }
+
     public bool IsAvailable { get; set; }
 
     public List<string> Amenities { get; set; } = new();
@@ -63,6 +68,23 @@ public class UpdatePropertyDto : IValidatableObject
             yield return new ValidationResult(
                 "A Google place ID requires latitude and longitude.",
                 new[] { nameof(GooglePlaceId) });
+        }
+
+        if (AreaType == "FloorArea" &&
+            AreaUnit is "perch" or "acre")
+        {
+            yield return new ValidationResult(
+                "Floor area must use square feet or square metres.",
+                new[] { nameof(AreaType), nameof(AreaUnit) });
+        }
+
+        if (!Area.HasValue &&
+            (!string.IsNullOrWhiteSpace(AreaType) ||
+             !string.IsNullOrWhiteSpace(AreaUnit)))
+        {
+            yield return new ValidationResult(
+                "Area type and unit require an area value.",
+                new[] { nameof(Area), nameof(AreaType), nameof(AreaUnit) });
         }
     }
 }

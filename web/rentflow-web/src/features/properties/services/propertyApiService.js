@@ -105,6 +105,21 @@ export function deletePropertyImage(propertyId, imageId) {
   )
 }
 
+export function setPrimaryPropertyImage(propertyId, imageId) {
+  return apiRequest(`/api/properties/${propertyId}/images/${imageId}/primary`, {
+    method: 'PUT',
+    errorMessage: 'Unable to set the cover photo.',
+  })
+}
+
+export function reorderPropertyImages(propertyId, imageIds) {
+  return apiRequest(`/api/properties/${propertyId}/images/order`, {
+    method: 'PUT',
+    body: JSON.stringify({ imageIds }),
+    errorMessage: 'Unable to reorder property photos.',
+  })
+}
+
 export function getMatchPreferences() {
   return apiRequest('/api/tenant/property-preferences', {
     errorMessage: "We couldn't load your match preferences.",

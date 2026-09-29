@@ -455,6 +455,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasMaxLength(20)
                 .IsRequired(false);
 
+            entity.Property(property => property.AreaType)
+                .HasMaxLength(20)
+                .IsRequired(false);
+
+            entity.Property(property => property.AvailableFrom)
+                .IsRequired(false);
+
             entity.Property(property => property.IsAvailable)
                 .IsRequired();
 
@@ -522,6 +529,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(image => image.FileSizeBytes)
                 .IsRequired();
 
+            entity.Property(image => image.IsPrimary)
+                .HasDefaultValue(false)
+                .IsRequired();
+
+            entity.Property(image => image.SortOrder)
+                .HasDefaultValue(0)
+                .IsRequired();
+
             entity.Property(image => image.UploadedAt)
                 .IsRequired();
 
@@ -531,6 +546,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(image => image.PropertyId);
+            entity.HasIndex(image => new { image.PropertyId, image.SortOrder });
+            entity.HasIndex(image => new { image.PropertyId, image.IsPrimary })
+                .IsUnique()
+                .HasFilter("\"IsPrimary\" = TRUE");
         });
 
         // =========================================================

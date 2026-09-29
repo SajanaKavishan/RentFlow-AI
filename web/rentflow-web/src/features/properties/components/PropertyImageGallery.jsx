@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import Icon from '../../../shared/ui/Icons.jsx'
 import {
+  deletePropertyImage,
   getPropertyImages,
   getPropertyImageUrl,
+  reorderPropertyImages,
+  setPrimaryPropertyImage,
 } from '../services/propertyApiService.js'
 
 export default function PropertyImageGallery({
@@ -10,11 +13,14 @@ export default function PropertyImageGallery({
   variant = 'gallery',
   alt = 'Property',
   matchScore = null,
+  manageable = false,
 }) {
   const [images, setImages] = useState([])
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
+  const [imageAction, setImageAction] = useState('')
+  const [actionError, setActionError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -68,12 +74,129 @@ export default function PropertyImageGallery({
     return <div className="property-image-state">No property photos uploaded yet.</div>
   }
 
+  async function markPrimary(imageId) {
+    setImageAction(`primary-${imageId}`)
+    setActionError('')
+    try {
+      await setPrimaryPropertyImage(propertyId, imageId)
+      setImages((current) => current.map((image) => ({
+        ...image,
+        isPrimary: image.id === imageId,
+      })))
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to set the cover photo.')
+    } finally {
+      setImageAction('')
+    }
+  }
+
+  async function deleteImage(image) {
+    if (!window.confirm(`Delete ${image.originalFileName || 'this property photo'}?`)) return
+
+    setImageAction(`delete-${image.id}`)
+    setActionError('')
+    try {
+      await deletePropertyImage(propertyId, image.id)
+      setImages((current) => {
+        const remaining = current.filter((item) => item.id !== image.id)
+        if (image.isPrimary && remaining.length > 0) {
+          return remaining.map((item, index) => ({ ...item, isPrimary: index === 0 }))
+        }
+        return remaining
+      })
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to delete the photo.')
+    } finally {
+      setImageAction('')
+    }
+  }
+
+  async function moveImage(index, direction) {
+    const destination = index + direction
+    if (destination < 0 || destination >= images.length) return
+
+    const reordered = [...images]
+    const [moved] = reordered.splice(index, 1)
+    reordered.splice(destination, 0, moved)
+    setImageAction(`order-${moved.id}`)
+    setActionError('')
+    try {
+      const response = await reorderPropertyImages(
+        propertyId,
+        reordered.map((image) => image.id),
+      )
+      const metadata = new Map(response.map((image) => [image.id, image]))
+      setImages(reordered.map((image) => ({ ...image, ...metadata.get(image.id) })))
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to reorder property photos.')
+    } finally {
+      setImageAction('')
+    }
+  }
+
+  if (manageable) {
+    return (
+      <div className="property-image-manager">
+        {actionError && <p className="property-image-manager__error" role="alert">{actionError}</p>}
+        <ul>
+          {images.map((image, index) => (
+            <li key={image.id}>
+              <img src={image.url} alt={`${alt} photo ${index + 1}`} />
+              <div className="property-image-manager__details">
+                <span>{image.isPrimary ? 'Cover photo' : `Photo ${index + 1}`}</span>
+                <div className="property-image-manager__actions">
+                  <button
+                    type="button"
+                    onClick={() => markPrimary(image.id)}
+                    disabled={image.isPrimary || Boolean(imageAction)}
+                  >
+                    {image.isPrimary
+                      ? 'Current cover'
+                      : imageAction === `primary-${image.id}` ? 'Saving...' : 'Make cover'}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Move photo ${index + 1} left`}
+                    onClick={() => moveImage(index, -1)}
+                    disabled={index === 0 || Boolean(imageAction)}
+                  >
+                    <Icon name="chevronLeft" size={17} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Move photo ${index + 1} right`}
+                    onClick={() => moveImage(index, 1)}
+                    disabled={index === images.length - 1 || Boolean(imageAction)}
+                  >
+                    <Icon name="chevronRight" size={17} />
+                  </button>
+                  <button
+                    type="button"
+                    className="is-danger"
+                    onClick={() => deleteImage(image)}
+                    disabled={Boolean(imageAction)}
+                  >
+                    {imageAction === `delete-${image.id}` ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
   if (variant === 'details') {
-    const activeImage = images[activeIndex] || images[0]
+    const primary = images.find((image) => image.isPrimary)
+    const displayImages = primary
+      ? [primary, ...images.filter((image) => image.id !== primary.id)]
+      : images
+    const activeImage = displayImages[activeIndex] || displayImages[0]
     const accessibleAlt = alt === 'Property'
-      ? `${alt} photo ${activeIndex + 1} of ${images.length}`
-      : `${alt} property photo ${activeIndex + 1} of ${images.length}`
-    const hasMultipleImages = images.length > 1
+      ? `${alt} photo ${activeIndex + 1} of ${displayImages.length}`
+      : `${alt} property photo ${activeIndex + 1} of ${displayImages.length}`
+    const hasMultipleImages = displayImages.length > 1
     const resolvedMatchScore = Number(matchScore)
     const hasMatchScore = matchScore !== null
       && matchScore !== ''
@@ -81,10 +204,10 @@ export default function PropertyImageGallery({
       && resolvedMatchScore >= 0
       && resolvedMatchScore <= 100
     const showPrevious = () => setActiveIndex((current) => (
-      current === 0 ? images.length - 1 : current - 1
+      current === 0 ? displayImages.length - 1 : current - 1
     ))
     const showNext = () => setActiveIndex((current) => (
-      current === images.length - 1 ? 0 : current + 1
+      current === displayImages.length - 1 ? 0 : current + 1
     ))
 
     return (
@@ -121,7 +244,7 @@ export default function PropertyImageGallery({
                 <Icon name="chevronRight" size={22} />
               </button>
               <span className="property-image-gallery__count" aria-live="polite">
-                {activeIndex + 1} / {images.length}
+                {activeIndex + 1} / {displayImages.length}
               </span>
             </>
           )}
@@ -129,12 +252,12 @@ export default function PropertyImageGallery({
 
         {hasMultipleImages && (
           <div className="property-image-gallery__thumbnails" aria-label="Choose a property photo">
-            {images.map((image, index) => (
+            {displayImages.map((image, index) => (
               <button
                 type="button"
                 key={image.id}
                 className={index === activeIndex ? 'is-active' : ''}
-                aria-label={`Show image ${index + 1} of ${images.length} for ${alt}`}
+                aria-label={`Show image ${index + 1} of ${displayImages.length} for ${alt}`}
                 aria-pressed={index === activeIndex}
                 onClick={() => setActiveIndex(index)}
               >
@@ -147,7 +270,10 @@ export default function PropertyImageGallery({
     )
   }
 
-  const displayedImages = variant === 'cover' ? images.slice(0, 1) : images
+  const primaryImage = images.find((image) => image.isPrimary)
+  const displayedImages = variant === 'cover'
+    ? [primaryImage || images[0]]
+    : images
 
   return (
     <div className={`property-image-gallery property-image-gallery--${variant} property-image-gallery--count-${displayedImages.length}`}>

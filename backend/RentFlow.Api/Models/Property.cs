@@ -35,6 +35,10 @@ public class Property
 
     public string? AreaUnit { get; set; }
 
+    public string? AreaType { get; set; }
+
+    public DateOnly? AvailableFrom { get; set; }
+
     public bool IsAvailable { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

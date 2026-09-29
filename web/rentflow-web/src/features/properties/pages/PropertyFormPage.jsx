@@ -9,7 +9,7 @@ import {
   uploadPropertyImages,
 } from '../services/propertyApiService.js'
 import Icon from '../../../shared/ui/Icons.jsx'
-import { PROPERTY_AREA_UNITS } from '../propertyArea.js'
+import { getPropertyAreaUnits, PROPERTY_AREA_TYPES } from '../propertyArea.js'
 import '../properties.css'
 
 const MANAGE_PROPERTIES_PATH = '/modules/manage-properties'
@@ -33,6 +33,8 @@ const initialForm = {
   bathrooms: '',
   area: '',
   areaUnit: 'sqft',
+  areaType: 'FloorArea',
+  availableFrom: '',
   amenities: '',
   isAvailable: true,
 }
@@ -50,7 +52,9 @@ function propertyToForm(property) {
     bedrooms: property.bedrooms ?? '',
     bathrooms: property.bathrooms ?? '',
     area: property.area ?? '',
-    areaUnit: property.areaUnit || 'sqft',
+    areaUnit: property.areaUnit || '',
+    areaType: property.areaType || '',
+    availableFrom: property.availableFrom || '',
     amenities: (property.amenities || []).join(', '),
     isAvailable: property.isAvailable ?? true,
   }
@@ -70,6 +74,8 @@ function formToRequest(form) {
     bathrooms: Number(form.bathrooms),
     area: Number(form.area),
     areaUnit: form.areaUnit,
+    areaType: form.areaType || null,
+    availableFrom: form.availableFrom || null,
     isAvailable: Boolean(form.isAvailable),
     amenities: form.amenities
       .split(',')
@@ -94,6 +100,8 @@ function formSnapshot(form) {
     bathrooms: normalizeNumber(form.bathrooms),
     area: normalizeNumber(form.area),
     areaUnit: form.areaUnit,
+    areaType: form.areaType || null,
+    availableFrom: form.availableFrom || null,
     amenities: form.amenities
       .split(',')
       .map((item) => item.trim())
@@ -140,9 +148,13 @@ function validateStep(step, form, locationMode) {
       const value = form[field]
       const numericValue = Number(value)
       if (value === '' || !Number.isFinite(numericValue)
-        || numericValue < 0 || (field === 'area' && numericValue <= 0)) {
+        || numericValue < 0 || ((field === 'area' || field === 'monthlyRent') && numericValue <= 0)) {
         errors[field] = message
       }
+    }
+    if (form.areaType === 'FloorArea' &&
+      (form.areaUnit === 'perch' || form.areaUnit === 'acre')) {
+      errors.areaUnit = 'Floor area must use square feet or square metres.'
     }
   }
 
@@ -274,6 +286,10 @@ export default function PropertyFormPage() {
     setForm((current) => ({
       ...current,
       [name]: type === 'checkbox' ? checked : value,
+      ...(name === 'areaType' && value === 'FloorArea'
+        && (current.areaUnit === 'perch' || current.areaUnit === 'acre')
+        ? { areaUnit: 'sqft' }
+        : {}),
     }))
     setFieldErrors((current) => {
       if (!current[name]) return current
@@ -602,33 +618,55 @@ export default function PropertyFormPage() {
                 />
               </PropertyField>
 
-              <PropertyField name="area" label="Property / land size" error={fieldErrors.area} wide>
-                <div className="property-size-input">
-                  <input
-                    id="area"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    name="area"
-                    value={form.area}
-                    onChange={updateField}
-                    placeholder="e.g. 1250"
-                    aria-invalid={Boolean(fieldErrors.area)}
-                    aria-describedby={fieldErrors.area ? 'area-error' : undefined}
-                  />
-                  <label className="visually-hidden" htmlFor="areaUnit">Size unit</label>
-                  <select
-                    id="areaUnit"
-                    name="areaUnit"
-                    value={form.areaUnit}
-                    onChange={updateField}
-                  >
-                    {PROPERTY_AREA_UNITS.map((unit) => (
-                      <option key={unit.value} value={unit.value}>{unit.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <small>Choose the unit that matches the building or land measurement.</small>
+              <PropertyField name="area" label="Size" error={fieldErrors.area}>
+                <input
+                  id="area"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  name="area"
+                  value={form.area}
+                  onChange={updateField}
+                  placeholder="e.g. 1250"
+                  aria-invalid={Boolean(fieldErrors.area)}
+                  aria-describedby={fieldErrors.area ? 'area-error' : undefined}
+                />
+              </PropertyField>
+
+              <PropertyField name="areaType" label="Size type">
+                <select id="areaType" name="areaType" value={form.areaType} onChange={updateField}>
+                  {!form.areaType && <option value="">Not specified (legacy listing)</option>}
+                  {PROPERTY_AREA_TYPES.map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </select>
+              </PropertyField>
+
+              <PropertyField name="areaUnit" label="Size unit" error={fieldErrors.areaUnit}>
+                <select
+                  id="areaUnit"
+                  name="areaUnit"
+                  value={form.areaUnit}
+                  onChange={updateField}
+                  aria-invalid={Boolean(fieldErrors.areaUnit)}
+                  aria-describedby={fieldErrors.areaUnit ? 'areaUnit-error' : undefined}
+                >
+                  {!form.areaUnit && <option value="">Not specified (legacy listing)</option>}
+                  {getPropertyAreaUnits(form.areaType).map((unit) => (
+                    <option key={unit.value} value={unit.value}>{unit.label}</option>
+                  ))}
+                </select>
+              </PropertyField>
+
+              <PropertyField name="availableFrom" label="Available from">
+                <input
+                  id="availableFrom"
+                  type="date"
+                  name="availableFrom"
+                  value={form.availableFrom}
+                  onChange={updateField}
+                />
+                <small>Optional. Leave blank when no specific date has been promised.</small>
               </PropertyField>
 
               <PropertyField name="amenities" label="Amenities" wide>
@@ -651,7 +689,7 @@ export default function PropertyFormPage() {
                   <div className="property-existing-images">
                     <strong>Current photos</strong>
                     <p>These photos are already saved with this property.</p>
-                    <PropertyImageGallery propertyId={ownedPropertyId} />
+                    <PropertyImageGallery propertyId={ownedPropertyId} manageable />
                   </div>
                 )}
 

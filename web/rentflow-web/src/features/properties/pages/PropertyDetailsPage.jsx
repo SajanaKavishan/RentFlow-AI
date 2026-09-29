@@ -17,6 +17,17 @@ import '../properties.css'
 
 const MANAGE_PROPERTIES_PATH = '/modules/manage-properties'
 
+function formatAvailableFrom(value) {
+  if (!value) return null
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
 export default function PropertyDetailsPage() {
   const { propertyId } = useParams()
   const navigate = useNavigate()
@@ -122,6 +133,8 @@ export default function PropertyDetailsPage() {
         bathrooms: Number(property.bathrooms),
         area: property.area ?? null,
         areaUnit: property.areaUnit ?? null,
+        areaType: property.areaType ?? null,
+        availableFrom: property.availableFrom ?? null,
         isAvailable: !property.isAvailable,
         amenities: property.amenities || [],
       })
@@ -245,7 +258,7 @@ export default function PropertyDetailsPage() {
                 <div>
                   <Icon name="ruler" size={18} />
                   <dt className="sr-only">Size</dt>
-                  <dd>{formatPropertyArea(property.area, property.areaUnit)}</dd>
+                  <dd>{formatPropertyArea(property.area, property.areaUnit, property.areaType)}</dd>
                 </div>
               )}
               <div className={property.isAvailable ? 'is-available' : 'is-unavailable'}>
@@ -253,6 +266,13 @@ export default function PropertyDetailsPage() {
                 <dt className="sr-only">Availability</dt>
                 <dd>{property.isAvailable ? 'Available now' : 'Currently unavailable'}</dd>
               </div>
+              {formatAvailableFrom(property.availableFrom) && (
+                <div>
+                  <Icon name="calendar" size={18} />
+                  <dt className="sr-only">Available from</dt>
+                  <dd>Available from {formatAvailableFrom(property.availableFrom)}</dd>
+                </div>
+              )}
             </dl>
           </header>
 

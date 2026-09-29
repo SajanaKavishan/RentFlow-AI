@@ -6,8 +6,11 @@ import App from '../../../App.jsx'
 import { AuthContext } from '../../auth/useAuth.js'
 import {
   createProperty,
+  deletePropertyImage,
   getMyProperties,
   getPropertyImages,
+  reorderPropertyImages,
+  setPrimaryPropertyImage,
   updateProperty,
   uploadPropertyImages,
 } from '../services/propertyApiService.js'
@@ -20,8 +23,11 @@ vi.mock('../../notifications/notificationsApi.js', async (importOriginal) => ({
 vi.mock('../services/propertyApiService.js', async (importOriginal) => ({
   ...(await importOriginal()),
   createProperty: vi.fn(),
+  deletePropertyImage: vi.fn(),
   getMyProperties: vi.fn(),
   getPropertyImages: vi.fn(),
+  reorderPropertyImages: vi.fn(),
+  setPrimaryPropertyImage: vi.fn(),
   updateProperty: vi.fn(),
   uploadPropertyImages: vi.fn(),
 }))
@@ -48,6 +54,8 @@ const property = {
   bathrooms: 2,
   area: 1450,
   areaUnit: 'sqft',
+  areaType: 'FloorArea',
+  availableFrom: '2026-11-01',
   isAvailable: true,
   amenities: ['Parking', 'Security'],
 }
@@ -182,7 +190,7 @@ async function completePropertyDetails() {
   await userEvent.type(screen.getByLabelText('Monthly rent'), '95000')
   await userEvent.type(screen.getByLabelText('Bedrooms'), '2')
   await userEvent.type(screen.getByLabelText('Bathrooms'), '1')
-  await userEvent.type(screen.getByLabelText('Property / land size'), '1250')
+  await userEvent.type(screen.getByLabelText('Size'), '1250')
   await userEvent.type(screen.getByLabelText('Amenities'), 'Parking, Garden')
   await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
 }
@@ -197,6 +205,9 @@ beforeEach(() => {
   placeFetchFields = null
   getMyProperties.mockReset().mockResolvedValue([property])
   getPropertyImages.mockReset().mockResolvedValue([])
+  deletePropertyImage.mockReset().mockResolvedValue(undefined)
+  reorderPropertyImages.mockReset().mockResolvedValue([])
+  setPrimaryPropertyImage.mockReset().mockResolvedValue({})
   createProperty.mockReset().mockResolvedValue({ id: newPropertyId })
   updateProperty.mockReset().mockResolvedValue(property)
   uploadPropertyImages.mockReset().mockResolvedValue([])
@@ -242,6 +253,57 @@ describe('property form wizard', () => {
     expect(createProperty).not.toHaveBeenCalled()
   })
 
+  it('blocks zero monthly rent before leaving Property Details', async () => {
+    renderApp('/properties/new')
+    await completeBasicDetails()
+
+    await userEvent.type(screen.getByLabelText('Monthly rent'), '0')
+    await userEvent.type(screen.getByLabelText('Bedrooms'), '2')
+    await userEvent.type(screen.getByLabelText('Bathrooms'), '1')
+    await userEvent.type(screen.getByLabelText('Size'), '900')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(screen.getByText('Enter a valid monthly rent.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Property Details' })).toBeInTheDocument()
+    expect(createProperty).not.toHaveBeenCalled()
+  })
+
+  it('persists an unavailable create selection and keeps available-from optional', async () => {
+    renderApp('/properties/new')
+    await completeBasicDetails()
+    await completePropertyDetails()
+
+    await userEvent.click(screen.getByLabelText(/Available for rent/))
+    await userEvent.click(screen.getByRole('button', { name: 'Create Property' }))
+
+    await waitFor(() => expect(createProperty).toHaveBeenCalledWith(expect.objectContaining({
+      isAvailable: false,
+      availableFrom: null,
+    })))
+  })
+
+  it('collects explicit land-area semantics and an optional available-from date', async () => {
+    renderApp('/properties/new')
+    await completeBasicDetails()
+
+    await userEvent.type(screen.getByLabelText('Monthly rent'), '95000')
+    await userEvent.type(screen.getByLabelText('Bedrooms'), '2')
+    await userEvent.type(screen.getByLabelText('Bathrooms'), '1')
+    await userEvent.type(screen.getByLabelText('Size'), '15')
+    await userEvent.selectOptions(screen.getByLabelText('Size type'), 'LandArea')
+    await userEvent.selectOptions(screen.getByLabelText('Size unit'), 'perch')
+    await userEvent.type(screen.getByLabelText('Available from'), '2026-11-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Create Property' }))
+
+    await waitFor(() => expect(createProperty).toHaveBeenCalledWith(expect.objectContaining({
+      area: 15,
+      areaType: 'LandArea',
+      areaUnit: 'perch',
+      availableFrom: '2026-11-01',
+    })))
+  })
+
   it('creates only at the final action and uploads photos with the returned property ID', async () => {
     const router = renderApp('/properties/new')
     await completeBasicDetails()
@@ -266,6 +328,8 @@ describe('property form wizard', () => {
       bathrooms: 1,
       area: 1250,
       areaUnit: 'sqft',
+      areaType: 'FloorArea',
+      availableFrom: null,
       isAvailable: true,
       amenities: ['Parking', 'Garden'],
     })
@@ -283,7 +347,7 @@ describe('property form wizard', () => {
     await userEvent.type(screen.getByLabelText('Monthly rent'), '95000')
     await userEvent.type(screen.getByLabelText('Bedrooms'), '2')
     await userEvent.type(screen.getByLabelText('Bathrooms'), '1')
-    await userEvent.type(screen.getByLabelText('Property / land size'), '1250')
+    await userEvent.type(screen.getByLabelText('Size'), '1250')
 
     fireEvent.submit(screen.getByLabelText('Monthly rent').closest('form'))
 
@@ -328,12 +392,32 @@ describe('property form wizard', () => {
       bathrooms: property.bathrooms,
       area: property.area,
       areaUnit: property.areaUnit,
+      areaType: property.areaType,
+      availableFrom: property.availableFrom,
       isAvailable: false,
       amenities: property.amenities,
     })
     expect(uploadPropertyImages).not.toHaveBeenCalled()
     const updatedMessage = await screen.findByText('Harbour View Residence was updated successfully.')
     expect(updatedMessage.closest('.property-toast')).toHaveClass('property-toast--success')
+  })
+
+  it('keeps a legacy property without area semantics editable without inventing a type', async () => {
+    getMyProperties.mockResolvedValue([{ ...property, areaType: null, availableFrom: null }])
+    renderApp(`/properties/${propertyId}/edit`)
+
+    await screen.findByRole('heading', { name: 'Edit Property' })
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByLabelText('Size type')).toHaveValue('')
+    expect(screen.getByRole('option', { name: 'Not specified (legacy listing)' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(screen.getByLabelText(/Available for rent/))
+    await userEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => expect(updateProperty).toHaveBeenCalledWith(
+      propertyId,
+      expect.objectContaining({ areaType: null, availableFrom: null }),
+    ))
   })
 
   it('requires an actual Google suggestion selection and preserves it across wizard navigation', async () => {

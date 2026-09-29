@@ -37,6 +37,8 @@ const property = {
   bathrooms: 2,
   area: 1100,
   areaUnit: 'sqft',
+  areaType: 'FloorArea',
+  availableFrom: '2026-11-01',
   isAvailable: true,
   amenities: ['Parking', 'Security'],
 }
@@ -75,8 +77,9 @@ describe('tenant property details', () => {
     expect(await screen.findByRole('heading', { name: 'Lake View Apartment' })).toBeInTheDocument()
     expect(screen.getByText('2 Bedrooms')).toBeInTheDocument()
     expect(screen.getByText('2 Bathrooms')).toBeInTheDocument()
-    expect(screen.getByText('1,100 sq ft')).toBeInTheDocument()
+    expect(screen.getByText('Floor area: 1,100 sq ft')).toBeInTheDocument()
     expect(screen.getByText('Available now')).toBeInTheDocument()
+    expect(screen.getByText('Available from Nov 1, 2026')).toBeInTheDocument()
     expect(screen.getByText('Rs. 120,000')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Book a Viewing' }))
       .toHaveAttribute('href', '/modules/my-viewings')

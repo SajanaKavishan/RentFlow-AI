@@ -30,6 +30,10 @@ public class PropertyResponseDto
 
     public string? AreaUnit { get; set; }
 
+    public string? AreaType { get; set; }
+
+    public DateOnly? AvailableFrom { get; set; }
+
     public bool IsAvailable { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

@@ -24,6 +24,7 @@ const property = {
   bathrooms: 2,
   area: 1450,
   areaUnit: 'sqft',
+  areaType: 'FloorArea',
   isAvailable: true,
   createdAt: '2026-09-01T00:00:00Z',
   updatedAt: null,
@@ -176,7 +177,7 @@ describe('owned property landlord workflow integration', () => {
     expect(screen.getByText('Parking')).toBeInTheDocument()
     expect(screen.getByText('Available now')).toBeInTheDocument()
     expect(screen.queryByText('Property / land size')).not.toBeInTheDocument()
-    expect(screen.getByText('1,450 sq ft')).toBeInTheDocument()
+    expect(screen.getByText('Floor area: 1,450 sq ft')).toBeInTheDocument()
     expect(screen.getByText('Map preview unavailable')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Open in Google Maps/ }))
       .toHaveAttribute('href', expect.stringContaining('query=18+Marine+Drive%2C+Colombo'))

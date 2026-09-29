@@ -46,6 +46,14 @@ public class CreatePropertyDto : IValidatableObject
     [RegularExpression("^(sqft|sqm|perch|acre)$")]
     public string AreaUnit { get; set; } = "sqft";
 
+    [Required]
+    [RegularExpression("^(FloorArea|LandArea)$")]
+    public string? AreaType { get; set; }
+
+    public DateOnly? AvailableFrom { get; set; }
+
+    public bool IsAvailable { get; set; } = true;
+
     public List<string> Amenities { get; set; } = new();
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
@@ -63,6 +71,14 @@ public class CreatePropertyDto : IValidatableObject
             yield return new ValidationResult(
                 "A Google place ID requires latitude and longitude.",
                 new[] { nameof(GooglePlaceId) });
+        }
+
+        if (AreaType == "FloorArea" &&
+            AreaUnit is "perch" or "acre")
+        {
+            yield return new ValidationResult(
+                "Floor area must use square feet or square metres.",
+                new[] { nameof(AreaType), nameof(AreaUnit) });
         }
     }
 }
