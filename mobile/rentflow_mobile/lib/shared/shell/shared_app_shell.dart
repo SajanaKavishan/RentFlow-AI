@@ -10,6 +10,8 @@ import '../../features/properties/services/property_api_service.dart';
 import '../../features/rental_applications/screens/landlord_rental_applications_screen.dart';
 import '../../features/rental_applications/screens/my_rental_applications_screen.dart';
 import '../../features/rental_applications/services/rental_application_api_service.dart';
+import '../../features/rental_offers/screens/my_rental_offers_screen.dart';
+import '../../features/rental_offers/services/rental_offer_api_service.dart';
 import '../../features/viewings/screens/landlord_viewing_requests_screen.dart';
 import '../../features/viewings/screens/my_viewings_screen.dart';
 import '../../features/viewings/services/viewing_api_service.dart';
@@ -30,6 +32,7 @@ class SharedAppShell extends StatefulWidget {
     this.applicationsContent,
     this.viewingApiService,
     this.rentalApplicationApiService,
+    this.rentalOfferApiService,
     this.notificationApiService,
     this.maintenanceApiService,
     this.landlordPropertyId,
@@ -43,6 +46,7 @@ class SharedAppShell extends StatefulWidget {
   final Widget? applicationsContent;
   final ViewingApiService? viewingApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
+  final RentalOfferApiService? rentalOfferApiService;
   final NotificationApiService? notificationApiService;
   final MaintenanceApiService? maintenanceApiService;
   final String? landlordPropertyId;
@@ -149,12 +153,24 @@ class _SharedAppShellState extends State<SharedAppShell>
     await _refreshUnreadCount();
   }
 
-  void _openLease() => _openPendingTenantModule(
+  void _openLease() {
+    final service = widget.rentalOfferApiService;
+    if (service == null) {
+      _openPendingTenantModule(
         title: 'My Lease',
         explanation:
             'Lease details will appear here after the lease module is integrated.',
         owner: 'Lease management',
       );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MyRentalOffersScreen(rentalOfferApiService: service),
+      ),
+    );
+  }
 
   void _openPayRent() => _openPendingTenantModule(
         title: 'Pay Rent',

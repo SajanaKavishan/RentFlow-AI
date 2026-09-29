@@ -8,6 +8,7 @@ import 'features/auth/services/auth_service.dart';
 import 'features/landing/screens/public_landing_screen.dart';
 import 'features/notifications/services/notification_api_service.dart';
 import 'features/rental_applications/services/rental_application_api_service.dart';
+import 'features/rental_offers/services/rental_offer_api_service.dart';
 import 'features/viewings/services/viewing_api_service.dart';
 import 'shared/shell/shared_app_shell.dart';
 import 'shared/theme/app_theme.dart';
@@ -91,6 +92,9 @@ class _MyAppState extends State<MyApp> {
       rentalApplicationApiService: apiClient == null
           ? null
           : RentalApplicationApiService(apiClient),
+      rentalOfferApiService: apiClient == null
+          ? null
+          : RentalOfferApiService(apiClient),
       notificationApiService: apiClient == null
           ? null
           : NotificationApiService(apiClient),
