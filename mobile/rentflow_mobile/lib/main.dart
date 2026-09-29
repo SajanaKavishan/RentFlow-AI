@@ -6,6 +6,7 @@ import 'features/auth/controllers/auth_controller.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/services/auth_service.dart';
 import 'features/landing/screens/public_landing_screen.dart';
+import 'features/lease_agreements/services/lease_agreement_api_service.dart';
 import 'features/notifications/services/notification_api_service.dart';
 import 'features/rental_applications/services/rental_application_api_service.dart';
 import 'features/rental_offers/services/rental_offer_api_service.dart';
@@ -95,6 +96,9 @@ class _MyAppState extends State<MyApp> {
       rentalOfferApiService: apiClient == null
           ? null
           : RentalOfferApiService(apiClient),
+      leaseAgreementApiService: apiClient == null
+          ? null
+          : LeaseAgreementApiService(apiClient),
       notificationApiService: apiClient == null
           ? null
           : NotificationApiService(apiClient),

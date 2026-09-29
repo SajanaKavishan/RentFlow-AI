@@ -7,6 +7,9 @@ import 'package:http/testing.dart';
 import 'package:rentflow_mobile/core/auth/token_storage.dart';
 import 'package:rentflow_mobile/core/network/api_client.dart';
 import 'package:rentflow_mobile/features/auth/models/current_user.dart';
+import 'package:rentflow_mobile/features/lease_agreements/screens/lease_details_screen.dart';
+import 'package:rentflow_mobile/features/lease_agreements/screens/my_leases_screen.dart';
+import 'package:rentflow_mobile/features/lease_agreements/services/lease_agreement_api_service.dart';
 import 'package:rentflow_mobile/features/rental_offers/screens/my_rental_offers_screen.dart';
 import 'package:rentflow_mobile/features/rental_offers/screens/rental_offer_details_screen.dart';
 import 'package:rentflow_mobile/features/rental_offers/services/rental_offer_api_service.dart';
@@ -48,8 +51,22 @@ Map<String, dynamic> _offerJson() => {
   'updatedAt': null,
 };
 
+Map<String, dynamic> _leaseJson() => {
+  'id': '11111111-1111-4111-8111-111111111111',
+  'rentalOfferId': '22222222-2222-4222-8222-222222222222',
+  'tenantId': '33333333-3333-4333-8333-333333333333',
+  'propertyId': '44444444-4444-4444-8444-444444444444',
+  'monthlyRent': 1250.75,
+  'securityDeposit': 2500,
+  'startDate': '2030-01-31',
+  'endDate': '2031-01-30',
+  'status': 1,
+  'createdAt': '2029-11-20T09:00:00Z',
+  'updatedAt': null,
+};
+
 void main() {
-  testWidgets('tenant My Lease uses injected service and back returns home', (
+  testWidgets('tenant My Lease opens lease area with nested navigation', (
     tester,
   ) async {
     final requests = <http.Request>[];
@@ -58,6 +75,13 @@ void main() {
       tokenStorage: _MemoryTokenStorage(),
       httpClient: MockClient((request) async {
         requests.add(request);
+        if (request.url.path == '/api/lease-agreements/mine') {
+          return http.Response(jsonEncode([_leaseJson()]), 200);
+        }
+        if (request.url.path ==
+            '/api/lease-agreements/11111111-1111-4111-8111-111111111111') {
+          return http.Response(jsonEncode(_leaseJson()), 200);
+        }
         if (request.url.path == '/api/rental-offers/mine') {
           return http.Response(jsonEncode([_offerJson()]), 200);
         }
@@ -69,13 +93,15 @@ void main() {
       }),
     );
     addTearDown(apiClient.close);
-    final service = RentalOfferApiService(apiClient);
+    final offerService = RentalOfferApiService(apiClient);
+    final leaseService = LeaseAgreementApiService(apiClient);
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.build(),
         home: SharedAppShell(
           user: _user(UserRole.tenant),
-          rentalOfferApiService: service,
+          rentalOfferApiService: offerService,
+          leaseAgreementApiService: leaseService,
         ),
       ),
     );
@@ -85,25 +111,64 @@ void main() {
     await tester.ensureVisible(find.text('My Lease'));
     await tester.tap(find.text('My Lease'));
     await tester.pumpAndSettle();
-    expect(find.byType(MyRentalOffersScreen), findsOneWidget);
-    expect(find.text('Your offers'), findsOneWidget);
+    expect(find.byType(MyLeasesScreen), findsOneWidget);
+    expect(find.byType(MyRentalOffersScreen), findsNothing);
+    expect(find.text('Your leases'), findsOneWidget);
     expect(
       identical(
         tester
-            .widget<MyRentalOffersScreen>(find.byType(MyRentalOffersScreen))
+            .widget<MyLeasesScreen>(find.byType(MyLeasesScreen))
             .rentalOfferApiService,
-        service,
+        offerService,
       ),
       isTrue,
     );
-    expect(identical(service.apiClient, apiClient), isTrue);
+    expect(
+      identical(
+        tester
+            .widget<MyLeasesScreen>(find.byType(MyLeasesScreen))
+            .leaseAgreementApiService,
+        leaseService,
+      ),
+      isTrue,
+    );
+    expect(identical(leaseService.apiClient, apiClient), isTrue);
     expect(requests.map((request) => request.url.path), [
-      '/api/rental-offers/mine',
+      '/api/lease-agreements/mine',
     ]);
     expect(
       requests.single.headers['Authorization'],
       'Bearer tenant-offer-token',
     );
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('lease-card-11111111-1111-4111-8111-111111111111'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(LeaseDetailsScreen), findsOneWidget);
+    expect(
+      requests.last.url.path,
+      '/api/lease-agreements/11111111-1111-4111-8111-111111111111',
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(MyLeasesScreen), findsOneWidget);
+    expect(requests.last.url.path, '/api/lease-agreements/mine');
+
+    await tester.tap(find.byKey(const ValueKey('rental-offers-entry')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MyRentalOffersScreen), findsOneWidget);
+    final openedOffers = tester.widget<MyRentalOffersScreen>(
+      find.byType(MyRentalOffersScreen),
+    );
+    expect(identical(openedOffers.rentalOfferApiService, offerService), isTrue);
+    expect(
+      identical(openedOffers.rentalOfferApiService.apiClient, apiClient),
+      isTrue,
+    );
+    expect(requests.last.url.path, '/api/rental-offers/mine');
 
     await tester.tap(
       find.byKey(
@@ -124,7 +189,11 @@ void main() {
     expect(requests.last.url.path, '/api/rental-offers/mine');
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.byType(MyRentalOffersScreen), findsNothing);
+    expect(find.byType(MyLeasesScreen), findsOneWidget);
+    expect(requests.last.url.path, '/api/rental-offers/mine');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(MyLeasesScreen), findsNothing);
     expect(find.text('My Lease'), findsOneWidget);
     expect(find.byType(NavigationBar), findsOneWidget);
 
@@ -149,12 +218,15 @@ void main() {
         }),
       );
       addTearDown(apiClient.close);
+      final leaseService = LeaseAgreementApiService(apiClient);
+      final offerService = RentalOfferApiService(apiClient);
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.build(),
           home: SharedAppShell(
             user: _user(role),
-            rentalOfferApiService: RentalOfferApiService(apiClient),
+            leaseAgreementApiService: leaseService,
+            rentalOfferApiService: offerService,
           ),
         ),
       );

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../features/auth/models/current_user.dart';
 import '../../features/maintenance/screens/assigned_work_screen.dart';
 import '../../features/maintenance/services/maintenance_api_service.dart';
+import '../../features/lease_agreements/screens/my_leases_screen.dart';
+import '../../features/lease_agreements/services/lease_agreement_api_service.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/notifications/services/notification_api_service.dart';
 import '../../features/properties/screens/property_list_screen.dart';
@@ -10,7 +12,6 @@ import '../../features/properties/services/property_api_service.dart';
 import '../../features/rental_applications/screens/landlord_rental_applications_screen.dart';
 import '../../features/rental_applications/screens/my_rental_applications_screen.dart';
 import '../../features/rental_applications/services/rental_application_api_service.dart';
-import '../../features/rental_offers/screens/my_rental_offers_screen.dart';
 import '../../features/rental_offers/services/rental_offer_api_service.dart';
 import '../../features/viewings/screens/landlord_viewing_requests_screen.dart';
 import '../../features/viewings/screens/my_viewings_screen.dart';
@@ -33,6 +34,7 @@ class SharedAppShell extends StatefulWidget {
     this.viewingApiService,
     this.rentalApplicationApiService,
     this.rentalOfferApiService,
+    this.leaseAgreementApiService,
     this.notificationApiService,
     this.maintenanceApiService,
     this.landlordPropertyId,
@@ -47,6 +49,7 @@ class SharedAppShell extends StatefulWidget {
   final ViewingApiService? viewingApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
   final RentalOfferApiService? rentalOfferApiService;
+  final LeaseAgreementApiService? leaseAgreementApiService;
   final NotificationApiService? notificationApiService;
   final MaintenanceApiService? maintenanceApiService;
   final String? landlordPropertyId;
@@ -154,8 +157,9 @@ class _SharedAppShellState extends State<SharedAppShell>
   }
 
   void _openLease() {
-    final service = widget.rentalOfferApiService;
-    if (service == null) {
+    final leaseService = widget.leaseAgreementApiService;
+    final offerService = widget.rentalOfferApiService;
+    if (leaseService == null || offerService == null) {
       _openPendingTenantModule(
         title: 'My Lease',
         explanation:
@@ -167,7 +171,10 @@ class _SharedAppShellState extends State<SharedAppShell>
 
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => MyRentalOffersScreen(rentalOfferApiService: service),
+        builder: (_) => MyLeasesScreen(
+          leaseAgreementApiService: leaseService,
+          rentalOfferApiService: offerService,
+        ),
       ),
     );
   }
