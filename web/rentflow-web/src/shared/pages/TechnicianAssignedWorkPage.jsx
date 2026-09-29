@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react'
+import { useCallback, useContext, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiRequest } from '../../core/api/apiClient.js'
 import { AuthContext } from '../../features/auth/useAuth.js'
@@ -86,12 +86,13 @@ export function AssignedWorkState({ status, error = '', onRetry, requests = [] }
 
 export default function TechnicianAssignedWorkPage() {
   const { user } = useContext(AuthContext) || {}
+  const userId = user?.id
   const [status, setStatus] = useState('loading')
   const [requests, setRequests] = useState([])
   const [error, setError] = useState('')
 
-  const loadAssignedWork = async () => {
-    if (!user?.id) {
+  const loadAssignedWork = useCallback(async () => {
+    if (!userId) {
       setStatus('empty')
       setRequests([])
       return
@@ -101,7 +102,7 @@ export default function TechnicianAssignedWorkPage() {
     setError('')
 
     try {
-      const response = await apiRequest(`/api/maintenance-requests/technician/${user.id}`)
+      const response = await apiRequest(`/api/maintenance-requests/technician/${userId}`)
       const items = Array.isArray(response) ? response : []
       setRequests(items)
       setStatus(items.length ? 'ready' : 'empty')
@@ -109,11 +110,15 @@ export default function TechnicianAssignedWorkPage() {
       setStatus('error')
       setError(err.message || 'Unable to load the technician work queue.')
     }
-  }
+  }, [userId])
 
   useEffect(() => {
-    loadAssignedWork()
-  }, [user?.id])
+    const loadTimer = window.setTimeout(() => {
+      void loadAssignedWork()
+    }, 0)
+
+    return () => window.clearTimeout(loadTimer)
+  }, [loadAssignedWork])
 
   return <main className="shared-page assigned-work-page">
     <header className="assigned-work-page__header">

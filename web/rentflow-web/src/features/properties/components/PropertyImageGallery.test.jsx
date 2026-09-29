@@ -1,4 +1,5 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import PropertyImageGallery from './PropertyImageGallery.jsx'
 import {
@@ -17,7 +18,7 @@ afterEach(() => {
 })
 
 describe('PropertyImageGallery', () => {
-  it('shows one primary and at most two real secondary images for details', async () => {
+  it('shows every real image in a keyboard-accessible details gallery', async () => {
     getPropertyImages.mockResolvedValue([
       { id: 'image-1' },
       { id: 'image-2' },
@@ -28,18 +29,29 @@ describe('PropertyImageGallery', () => {
       Promise.resolve({ url: `https://images.example/${propertyId}/${imageId}.jpg` })
     ))
 
-    const { container } = render(
-      <PropertyImageGallery propertyId="property-1" alt="Harbour View" variant="details" />,
+    render(
+      <PropertyImageGallery
+        propertyId="property-1"
+        alt="Harbour View"
+        variant="details"
+        matchScore={97}
+      />,
     )
 
-    await waitFor(() => expect(screen.getAllByRole('img')).toHaveLength(3))
-    expect(screen.getAllByRole('img').map((image) => image.getAttribute('src'))).toEqual([
-      'https://images.example/property-1/image-1.jpg',
-      'https://images.example/property-1/image-2.jpg',
-      'https://images.example/property-1/image-3.jpg',
-    ])
-    expect(container.querySelector('.property-image-gallery--details'))
-      .toHaveClass('property-image-gallery--count-3')
+    expect(await screen.findByRole('img', { name: 'Harbour View property photo 1 of 4' }))
+      .toHaveAttribute('src', 'https://images.example/property-1/image-1.jpg')
+    expect(screen.getByLabelText('97 percent AI match')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /Show image/ })).toHaveLength(4)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next image for Harbour View' }))
+    expect(screen.getByRole('img', { name: 'Harbour View property photo 2 of 4' }))
+      .toHaveAttribute('src', 'https://images.example/property-1/image-2.jpg')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show image 4 of 4 for Harbour View' }))
+    expect(screen.getByRole('img', { name: 'Harbour View property photo 4 of 4' }))
+      .toHaveAttribute('src', 'https://images.example/property-1/image-4.jpg')
+    expect(screen.getByRole('button', { name: 'Show image 4 of 4 for Harbour View' }))
+      .toHaveAttribute('aria-pressed', 'true')
   })
 
   it('preserves the no-photo and failed-photo fallback states', async () => {

@@ -19,7 +19,6 @@ export default function PropertyLocationMap({ address, city, latitude = null, lo
     <section className="property-details-section property-location" aria-labelledby="property-location-title">
       <div className="property-location__heading">
         <div>
-          <span className="property-section-number">Neighbourhood</span>
           <h2 id="property-location-title">Location</h2>
           <p className="property-location__address">
             <Icon name="pin" size={17} />

@@ -1,4 +1,4 @@
-name: Backend CI
+name: RentFlow CI
 
 'on':
   push:
@@ -10,9 +10,34 @@ name: Backend CI
       - dev
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build-and-test:
+  backend:
+    name: Backend and PostgreSQL tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RENTFLOW_TEST_POSTGRES_CONNECTION_STRING: Host=localhost;Port=5432;Database=rentflow_component3_test_ci;Username=rentflow_ci;Password=rentflow_ci_password
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: rentflow_component3_test_ci
+          POSTGRES_USER: rentflow_ci
+          POSTGRES_PASSWORD: rentflow_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rentflow_ci -d rentflow_component3_test_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout repository
@@ -23,11 +48,153 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('backend/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Restore backend dependencies
         run: dotnet restore backend/RentFlow.Api.Tests/RentFlow.Api.Tests.csproj
 
       - name: Build backend API
         run: dotnet build backend/RentFlow.Api/RentFlow.Api.csproj --configuration Release --no-restore
 
-      - name: Run backend tests
-        run: dotnet test backend/RentFlow.Api.Tests/RentFlow.Api.Tests.csproj --configuration Release --no-restore --verbosity normal
+      - name: Run complete backend test suite
+        run: >-
+          dotnet test backend/RentFlow.Api.Tests/RentFlow.Api.Tests.csproj
+          --configuration Release
+          --no-restore
+          --verbosity normal
+          --logger "trx;LogFileName=backend-tests.trx"
+          --results-directory TestResults
+
+      - name: Upload backend test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: TestResults/backend-tests.trx
+          if-no-files-found: warn
+          retention-days: 14
+
+  frontend:
+    name: React lint, tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web/rentflow-web
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/rentflow-web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Run frontend tests
+        run: npm run test -- --reporter=default --reporter=junit --outputFile.junit=frontend-junit.xml
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Upload frontend test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-results
+          path: web/rentflow-web/frontend-junit.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  agent:
+    name: Python Agent tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: agent
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: agent/requirements.txt
+
+      - name: Install Agent dependencies
+        run: python -m pip install --requirement requirements.txt
+
+      - name: Run Agent tests
+        run: python -m pytest --junitxml=agent-junit.xml
+
+      - name: Upload Agent test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-test-results
+          path: agent/agent-junit.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  flutter:
+    name: Flutter analyze and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile/rentflow_mobile
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter 3.44.9
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          channel: stable
+          cache: true
+
+      - name: Cache Dart and Flutter packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('mobile/rentflow_mobile/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-pub-
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Flutter application
+        run: flutter analyze
+
+      - name: Run Flutter tests
+        run: flutter test --machine | tee flutter-test-results.json
+
+      - name: Upload Flutter test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-test-results
+          path: mobile/rentflow_mobile/flutter-test-results.json
+          if-no-files-found: warn
+          retention-days: 14

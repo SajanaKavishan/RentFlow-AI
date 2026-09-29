@@ -5,10 +5,12 @@ import { useAuth } from '../../auth/useAuth.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import PropertyLocationMap from '../components/PropertyLocationMap.jsx'
+import { formatPropertyArea } from '../propertyArea.js'
 import {
   deleteProperty,
   getMyProperties,
   getProperty,
+  getSavedPropertyMatches,
   updateProperty,
 } from '../services/propertyApiService.js'
 import '../properties.css'
@@ -24,9 +26,12 @@ export default function PropertyDetailsPage() {
   const [error, setError] = useState('')
   const [action, setAction] = useState('')
   const [toast, setToast] = useState(null)
+  const [matchResult, setMatchResult] = useState({ propertyId: null, score: null })
 
   const isOwner = user?.role === USER_ROLES.LANDLORD
     && String(user.id).toLowerCase() === String(property?.landlordId).toLowerCase()
+  const isTenant = user?.role === USER_ROLES.TENANT
+  const matchScore = matchResult.propertyId === propertyId ? matchResult.score : null
   const backPath = user?.role === USER_ROLES.LANDLORD
     ? MANAGE_PROPERTIES_PATH
     : '/modules/properties'
@@ -68,6 +73,29 @@ export default function PropertyDetailsPage() {
     loadProperty()
     return () => { active = false }
   }, [propertyId, user?.id, user?.role])
+
+  useEffect(() => {
+    let active = true
+
+    if (!isTenant) return () => { active = false }
+
+    getSavedPropertyMatches()
+      .then((result) => {
+        const match = Array.isArray(result?.matches)
+          ? result.matches.find((item) => (
+            String(item?.propertyId).toLowerCase() === String(propertyId).toLowerCase()
+          ))
+          : null
+        if (active && Number.isFinite(Number(match?.matchScore))) {
+          setMatchResult({ propertyId, score: Number(match.matchScore) })
+        }
+      })
+      .catch(() => {
+        // Matching is optional on the details page; the listing remains fully usable.
+      })
+
+    return () => { active = false }
+  }, [isTenant, propertyId])
 
   useEffect(() => {
     if (!toast) return undefined
@@ -185,57 +213,63 @@ export default function PropertyDetailsPage() {
         <Icon name="arrowLeft" size={16} /> Back to properties
       </Link>
 
-      <header className="property-details-header">
-        <div>
-          <span className={`property-details-status ${property.isAvailable ? 'is-available' : 'is-unavailable'}`}>
-            {property.isAvailable ? 'Available' : 'Unavailable'}
-          </span>
-          <h1>{property.title}</h1>
-          <p><Icon name="pin" size={17} /> {[property.address, property.city].filter(Boolean).join(', ')}</p>
-        </div>
-        <div className="property-details-rent">
-          <strong>Rs. {Number(property.monthlyRent).toLocaleString()}</strong>
-          <span>per month</span>
-        </div>
-      </header>
-
-      <section className="property-details-gallery" aria-label="Property photos">
-        <PropertyImageGallery propertyId={property.id} alt={property.title} variant="details" />
-      </section>
-
-      <div className={`property-details-layout${isOwner ? '' : ' property-details-layout--public'}`}>
+      <div className="property-details-layout">
         <div className="property-details-main">
-          <dl className="property-details-facts">
-            <div>
-              <Icon name="bed" size={22} />
-              <dt>Bedrooms</dt>
-              <dd>{property.bedrooms}</dd>
-            </div>
-            <div>
-              <Icon name="bath" size={22} />
-              <dt>Bathrooms</dt>
-              <dd>{property.bathrooms}</dd>
-            </div>
-            <div>
-              <Icon name={property.isAvailable ? 'eye' : 'eyeOff'} size={22} />
-              <dt>Availability</dt>
-              <dd>{property.isAvailable ? 'Available' : 'Unavailable'}</dd>
-            </div>
-          </dl>
+          <section className="property-details-gallery" aria-label="Property photos">
+            <PropertyImageGallery
+              propertyId={property.id}
+              alt={property.title}
+              variant="details"
+              matchScore={matchScore}
+            />
+          </section>
+
+          <header className="property-details-header">
+            <h1>{property.title}</h1>
+            <p>
+              <Icon name="pin" size={17} />
+              {[property.address, property.city].filter(Boolean).join(', ') || 'Location not specified'}
+            </p>
+            <dl className="property-details-facts" aria-label="Property highlights">
+              <div>
+                <Icon name="bed" size={18} />
+                <dt className="sr-only">Bedrooms</dt>
+                <dd>{property.bedrooms} {property.bedrooms === 1 ? 'Bedroom' : 'Bedrooms'}</dd>
+              </div>
+              <div>
+                <Icon name="bath" size={18} />
+                <dt className="sr-only">Bathrooms</dt>
+                <dd>{property.bathrooms} {property.bathrooms === 1 ? 'Bathroom' : 'Bathrooms'}</dd>
+              </div>
+              {property.area != null && Number(property.area) > 0 && (
+                <div>
+                  <Icon name="ruler" size={18} />
+                  <dt className="sr-only">Size</dt>
+                  <dd>{formatPropertyArea(property.area, property.areaUnit)}</dd>
+                </div>
+              )}
+              <div className={property.isAvailable ? 'is-available' : 'is-unavailable'}>
+                <Icon name="calendar" size={18} />
+                <dt className="sr-only">Availability</dt>
+                <dd>{property.isAvailable ? 'Available now' : 'Currently unavailable'}</dd>
+              </div>
+            </dl>
+          </header>
 
           <section className="property-details-section">
-            <span className="property-section-number">About this property</span>
-            <h2>Property description</h2>
-            <p>{property.description}</p>
+            <h2>About this property</h2>
+            <p>{property.description || 'No property description has been provided.'}</p>
           </section>
 
           <section className="property-details-section">
-            <span className="property-section-number">Included features</span>
             <h2>Amenities</h2>
             {property.amenities?.length > 0 ? (
               <ul className="property-details-amenities">
                 {property.amenities.map((amenity) => (
-                  <li key={amenity}>✓ {amenity}</li>
+                  <li key={amenity}>
+                    <span aria-hidden="true"><Icon name="sparkles" size={17} /></span>
+                    {amenity}
+                  </li>
                 ))}
               </ul>
             ) : (
@@ -250,9 +284,22 @@ export default function PropertyDetailsPage() {
             longitude={property.longitude}
             googlePlaceId={property.googlePlaceId}
           />
+
+          <section className="property-details-section property-listed-by" aria-labelledby="property-listed-by-title">
+            <h2 id="property-listed-by-title">Listed by</h2>
+            <div className="property-listed-by__profile">
+              <span className="property-listed-by__avatar" aria-hidden="true">
+                <Icon name="user" size={22} />
+              </span>
+              <div>
+                <strong>Property landlord</strong>
+                <p>Landlord profile details are not available for this listing.</p>
+              </div>
+            </div>
+          </section>
         </div>
 
-        {isOwner && (
+        {isOwner ? (
           <aside className="property-details-management" aria-label="Manage property">
             <div>
               <span className="property-section-number">Landlord tools</span>
@@ -293,6 +340,40 @@ export default function PropertyDetailsPage() {
                 {action === 'delete' ? 'Deleting...' : 'Delete'}
               </button>
             </div>
+          </aside>
+        ) : (
+          <aside className="property-details-summary" aria-label="Rental summary">
+            <div className="property-details-summary__price">
+              <strong>Rs. {Number(property.monthlyRent).toLocaleString()}</strong>
+              <span>per month</span>
+            </div>
+
+            <div className="property-details-summary__availability">
+              <span className={property.isAvailable ? 'is-available' : 'is-unavailable'} aria-hidden="true" />
+              {property.isAvailable ? 'Available to rent' : 'Currently unavailable'}
+            </div>
+
+            {isTenant && (
+              <div className="property-details-summary__actions">
+                <Link
+                  className={`property-details-summary__primary${property.isAvailable ? '' : ' is-disabled'}`}
+                  to="/modules/my-viewings"
+                  aria-disabled={!property.isAvailable}
+                  onClick={(event) => { if (!property.isAvailable) event.preventDefault() }}
+                >
+                  Book a Viewing
+                </Link>
+                <Link
+                  className={`property-details-summary__secondary${property.isAvailable ? '' : ' is-disabled'}`}
+                  to="/modules/my-applications"
+                  aria-disabled={!property.isAvailable}
+                  onClick={(event) => { if (!property.isAvailable) event.preventDefault() }}
+                >
+                  Apply for Rental
+                </Link>
+                <p>Booking and applications are completed in the RentFlow mobile app.</p>
+              </div>
+            )}
           </aside>
         )}
       </div>
