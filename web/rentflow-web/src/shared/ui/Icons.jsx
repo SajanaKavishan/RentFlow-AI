@@ -6,6 +6,7 @@ const paths = {
   tools: <><path d="M14 6a5 5 0 0 0-6 6l-5 5a2 2 0 0 0 3 3l5-5a5 5 0 0 0 6-6l-3 3-3-3z" /></>,
   devices: <><rect x="2" y="4" width="14" height="10" rx="2" /><path d="M7 18h4m-2-4v4" /><rect x="17" y="8" width="5" height="11" rx="1.5" /><path d="M19.5 16.5h.01" /></>,
   trend: <><path d="m3 17 6-6 4 4 8-9" /><path d="M15 6h6v6" /></>,
+  wallet: <><path d="M4 6.5h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a3 3 0 0 1-3-3v-10a3 3 0 0 1 3-3h12" /><path d="M20 11h-5a2 2 0 0 0 0 4h5" /><path d="M15 13h.01" /></>,
   user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
   logout: <><path d="M10 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5m4-4 4-4-4-4m4 4H9" /></>,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,

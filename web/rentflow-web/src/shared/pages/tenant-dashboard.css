@@ -11,7 +11,7 @@
   margin-bottom: 28px;
 }
 
-.tenant-dashboard__greeting > div { min-width: 0; }
+.tenant-dashboard__greeting > div { min-width: 0; flex: 1; }
 .tenant-dashboard__greeting h1 {
   margin: 5px 0 7px;
   color: var(--ink);
@@ -140,14 +140,26 @@
 
 .tenant-activity-card { min-height: 286px; overflow: hidden; }
 .tenant-activity-list { margin: 0; padding: 0; list-style: none; }
-.tenant-activity-list li { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(70px, auto); gap: 12px; padding: 15px 17px; border-bottom: 1px solid var(--border); }
+.tenant-activity-list li { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(70px, auto) auto; gap: 11px; padding: 15px 17px; border-bottom: 1px solid var(--border); }
 .tenant-activity-list li:last-child { border-bottom: 0; }
 .tenant-activity__icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: var(--olive-700); background: var(--olive-50); }
+.tenant-activity__icon--viewing { color: #49649a; background: #eef2fb; }
+.tenant-activity__icon--application { color: #6958a4; background: #f1effa; }
+.tenant-activity__icon--payment { color: #287057; background: #eaf7f0; }
+.tenant-activity__icon--maintenance { color: #9a641f; background: #fbf3e6; }
+.tenant-activity__content { min-width: 0; }
+.tenant-activity__source { display: block; margin-bottom: 2px; color: var(--olive-700); font-size: .54rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
 .tenant-activity-list strong { display: block; color: var(--ink); font-size: .76rem; line-height: 1.35; }
-.tenant-activity-list p { display: -webkit-box; margin: 3px 0 4px; overflow: hidden; color: var(--muted); font-size: .68rem; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.tenant-activity-list p { display: -webkit-box; margin: 3px 0 4px; overflow: hidden; overflow-wrap: anywhere; color: var(--muted); font-size: .68rem; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .tenant-activity__meta { display: flex; align-items: flex-start; justify-content: flex-end; gap: 7px; text-align: right; }
-.tenant-activity-list time { display: block; color: var(--neutral); font-size: .61rem; white-space: nowrap; }
+.tenant-activity-list time, .tenant-activity__meta > span:not(.tenant-activity__unread) { display: block; color: var(--neutral); font-size: .61rem; white-space: nowrap; }
 .tenant-activity__unread { width: 7px; height: 7px; flex: none; margin-top: 3px; border-radius: 50%; background: var(--olive-700); }
+.tenant-activity__link { width: 32px; height: 32px; display: grid; place-items: center; align-self: center; border-radius: 9px; color: var(--olive-700); text-decoration: none; }
+.tenant-activity__link:hover { background: var(--olive-50); }
+.tenant-activity__link:focus-visible { outline: 3px solid rgb(91 111 61 / 28%); outline-offset: 2px; }
+.tenant-activity-warning { display: flex; align-items: center; gap: 7px; padding: 9px 17px; border-bottom: 1px solid #eadab6; color: #76521e; background: #fff9eb; font-size: .65rem; line-height: 1.4; }
+.tenant-activity-warning span { min-width: 0; flex: 1; }
+.tenant-activity-warning button { min-height: 30px; padding: 3px 5px; border: 0; color: inherit; background: transparent; font: inherit; font-weight: 850; text-decoration: underline; text-underline-offset: 3px; }
 .tenant-panel-state { min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 28px; color: var(--muted); text-align: center; }
 .tenant-panel-state__icon { width: 48px; height: 48px; display: grid; place-items: center; margin-bottom: 5px; border-radius: 15px; color: var(--olive-700); background: var(--olive-50); }
 .tenant-panel-state strong { color: var(--ink); font-size: .88rem; }
@@ -166,11 +178,11 @@
   box-shadow: 0 14px 36px rgb(48 60 31 / 16%);
   overflow: hidden;
 }
-.tenant-dashboard__side .tenant-viewing-highlight { min-height: 210px; margin-top: 0; padding: 21px; }
-.tenant-dashboard__side .tenant-viewing-highlight__heading { margin-bottom: 18px; }
-.tenant-dashboard__side .tenant-viewing-highlight__details { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 15px; }
-.tenant-dashboard__side .tenant-viewing-highlight__link { width: fit-content; }
-.tenant-dashboard__side .tenant-viewing-highlight__decoration { right: -16px; bottom: -42px; }
+.tenant-dashboard__greeting .tenant-viewing-highlight { width: min(100%, 430px); min-height: 210px; flex: none; margin-top: 0; padding: 21px; }
+.tenant-dashboard__greeting .tenant-viewing-highlight__heading { margin-bottom: 18px; }
+.tenant-dashboard__greeting .tenant-viewing-highlight__details { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 15px; }
+.tenant-dashboard__greeting .tenant-viewing-highlight__link { width: fit-content; }
+.tenant-dashboard__greeting .tenant-viewing-highlight__decoration { right: -16px; bottom: -42px; }
 .tenant-viewing-highlight__decoration { position: absolute; right: 3%; bottom: -36px; color: rgb(255 255 255 / 7%); transform: rotate(-7deg); }
 .tenant-viewing-highlight__heading { position: relative; display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
 .tenant-viewing-highlight__icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; color: var(--olive-900); background: var(--olive-100); }
@@ -212,10 +224,14 @@
   .tenant-dashboard__middle { grid-template-columns: minmax(0, 1.35fr) minmax(290px, .8fr); gap: 18px; }
 }
 
+@media (max-width: 900px) {
+  .tenant-dashboard__greeting { flex-direction: column; }
+  .tenant-dashboard__greeting .tenant-viewing-highlight { width: 100%; }
+}
+
 @media (max-width: 780px) {
   .tenant-dashboard__middle { grid-template-columns: minmax(0, 1fr); }
   .tenant-activity-card { min-height: auto; }
-  .tenant-dashboard__side .tenant-viewing-highlight { width: 100%; }
 }
 
 @media (max-width: 620px) {
@@ -229,6 +245,11 @@
   .tenant-recommendations-empty__actions { width: 100%; }
   .tenant-recommendations-empty__actions .shared-button { width: 100%; }
   .tenant-viewing-highlight { padding: 22px 20px; }
+  .tenant-viewing-highlight__details { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 16px; }
+  .tenant-viewing-highlight__link { width: fit-content; }
+  .tenant-activity-list li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .tenant-activity__meta { grid-column: 2; justify-content: flex-start; text-align: left; }
+  .tenant-activity__link { grid-column: 3; grid-row: 1 / span 2; }
 
   .tenant-applications-table thead { display: none; }
   .tenant-applications-table, .tenant-applications-table tbody, .tenant-applications-table tr, .tenant-applications-table td { display: block; width: 100%; }
@@ -250,19 +271,27 @@
 }
 
 .tenant-recommendation-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.tenant-recommendation-card { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 14px rgb(48 60 31 / 7%); }
-.tenant-recommendation-card__image { position: relative; height: 120px; display: grid; place-items: center; overflow: hidden; color: var(--olive-700); background: var(--olive-50); text-decoration: none; }
+.tenant-recommendation-card { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 14px rgb(48 60 31 / 7%); transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.tenant-recommendation-card:hover { transform: translateY(-2px); border-color: var(--olive-200); box-shadow: 0 10px 24px rgb(48 60 31 / 12%); }
+.tenant-recommendation-card:focus-within { outline: 3px solid rgb(91 111 61 / 28%); outline-offset: 3px; }
+.tenant-recommendation-card__link { height: 100%; display: flex; flex-direction: column; color: inherit; text-decoration: none; }
+.tenant-recommendation-card__link:focus-visible { outline: 0; }
+.tenant-recommendation-card__image { position: relative; height: clamp(130px, 12vw, 170px); display: grid; place-items: center; overflow: hidden; color: var(--olive-700); background: var(--olive-50); }
 .tenant-recommendation-card__image img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .tenant-recommendation-card__image > span { display: grid; justify-items: center; gap: 5px; font-size: .64rem; font-weight: 750; }
-.tenant-recommendation-card__image > strong { position: absolute; left: 9px; bottom: 9px; padding: 5px 8px; border: 1px solid rgb(255 255 255 / 60%); border-radius: 999px; color: var(--olive-900); background: rgb(239 242 230 / 94%); font-size: .7rem; }
-.tenant-recommendation-card > div { padding: 13px; }
-.tenant-recommendation-card > div > p { display: flex; align-items: center; gap: 4px; margin: 0 0 5px; color: var(--muted); font-size: .7rem; }
-.tenant-recommendation-card > div > p svg { color: var(--olive-700); }
-.tenant-recommendation-card h3 { margin: 0; color: var(--ink); font-size: .88rem; line-height: 1.35; overflow-wrap: anywhere; }
-.tenant-recommendation-card dl { display: grid; gap: 4px; margin: 10px 0 12px; }
-.tenant-recommendation-card dd { margin: 0; color: var(--muted); font-size: .72rem; font-weight: 650; }
-.tenant-recommendation-card dl div:first-child dd { color: var(--olive-900); font-weight: 850; }
-.tenant-recommendation-card > div > a { display: inline-flex; align-items: center; gap: 5px; color: var(--olive-900); font-size: .72rem; font-weight: 850; text-decoration: none; }
+.tenant-recommendation-card__image > strong { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border: 1px solid rgb(255 255 255 / 24%); border-radius: 999px; color: #fff; background: rgb(48 60 31 / 94%); box-shadow: 0 4px 12px rgb(28 37 17 / 18%); font-size: .68rem; font-weight: 850; line-height: 1; backdrop-filter: blur(5px); }
+.tenant-recommendation-card__details { min-width: 0; display: flex; flex: 1; flex-direction: column; padding: 15px 16px 14px; }
+.tenant-recommendation-card h3 { margin: 0; color: var(--ink); font-size: .9rem; line-height: 1.35; overflow-wrap: anywhere; }
+.tenant-recommendation-card__location { display: flex; align-items: center; gap: 5px; margin: 5px 0 0; color: var(--muted); font-size: .7rem; overflow-wrap: anywhere; }
+.tenant-recommendation-card__location svg { flex: none; color: var(--olive-700); }
+.tenant-recommendation-card__facts { display: flex; align-items: flex-end; gap: 10px; margin: auto 0 0; padding-top: 14px; }
+.tenant-recommendation-card__facts > div { min-width: 0; }
+.tenant-recommendation-card__facts dd { display: flex; align-items: center; gap: 4px; margin: 0; color: var(--muted); font-size: .7rem; font-weight: 700; white-space: nowrap; }
+.tenant-recommendation-card__facts svg { color: var(--neutral); }
+.tenant-recommendation-card__facts .tenant-recommendation-card__rent { flex: 1; margin-right: auto; }
+.tenant-recommendation-card__rent dd { align-items: baseline; gap: 2px; color: var(--olive-900); }
+.tenant-recommendation-card__rent strong { font-size: .95rem; font-weight: 900; letter-spacing: -.02em; }
+.tenant-recommendation-card__rent span { color: var(--muted); font-size: .65rem; font-weight: 600; }
 
 @media (max-width: 1100px) {
   .tenant-recommendation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

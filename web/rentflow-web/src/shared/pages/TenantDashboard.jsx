@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { getTenantMaintenanceRequests } from '../../features/maintenance/maintenanceApi.js'
 import { getNotifications } from '../../features/notifications/notificationsApi.js'
 import { notificationTime } from '../../features/notifications/notificationFormat.js'
 import {
@@ -12,10 +13,9 @@ import {
 } from '../../features/properties/services/propertyApiService.js'
 import RentalApplicationStatusBadge from '../../features/rentalApplications/components/RentalApplicationStatusBadge.jsx'
 import { getMyApplications, RENTAL_APPLICATION_STATUS } from '../../features/rentalApplications/services/rentalApplicationApiService.js'
-import { getMyLeases, getScheduleByLease } from '../../features/tenantLeasePayments/services/tenantLeasePaymentsApi.js'
+import { getMyLeases, getMyPayments, getScheduleByLease } from '../../features/tenantLeasePayments/services/tenantLeasePaymentsApi.js'
 import ViewingStatusBadge from '../../features/viewings/components/ViewingStatusBadge.jsx'
 import { getMyViewings, VIEWING_STATUS } from '../../features/viewings/services/viewingApiService.js'
-import { StatusBadge } from '../ui/States.jsx'
 import Icon from '../ui/Icons.jsx'
 import useTenantSummary from './useTenantSummary.js'
 import './tenant-dashboard.css'
@@ -29,6 +29,32 @@ const moneyFormatter = new Intl.NumberFormat(undefined, {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 })
+const relativeTimeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+
+const viewingActivity = {
+  [VIEWING_STATUS.PENDING]: 'Viewing requested',
+  [VIEWING_STATUS.APPROVED]: 'Viewing approved',
+  [VIEWING_STATUS.REJECTED]: 'Viewing declined',
+  [VIEWING_STATUS.CANCELLED]: 'Viewing cancelled',
+  [VIEWING_STATUS.COMPLETED]: 'Viewing completed',
+}
+const applicationActivity = {
+  [RENTAL_APPLICATION_STATUS.DRAFT]: 'Application draft created',
+  [RENTAL_APPLICATION_STATUS.SUBMITTED]: 'Application submitted',
+  [RENTAL_APPLICATION_STATUS.UNDER_REVIEW]: 'Application under review',
+  [RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED]: 'Application changes requested',
+  [RENTAL_APPLICATION_STATUS.APPROVED]: 'Application approved',
+  [RENTAL_APPLICATION_STATUS.REJECTED]: 'Application declined',
+  [RENTAL_APPLICATION_STATUS.WITHDRAWN]: 'Application withdrawn',
+}
+const leaseActivity = ['Lease pending', 'Lease active', 'Lease terminated', 'Lease completed']
+const paymentActivity = ['Payment pending', 'Payment completed', 'Payment failed']
+const maintenanceActivity = [
+  'Maintenance request submitted', 'Maintenance request triaged', 'Technician assigned',
+  'Repair estimate pending', 'Repair estimate submitted', 'Awaiting landlord approval',
+  'Repair approved', 'Repair rejected', 'Repair in progress', 'Repair completed', 'Maintenance request cancelled',
+]
+const tenantGreetings = ['Welcome back', 'Good to see you', 'Hello', 'Hi there']
 
 function validDate(value) {
   return typeof value === 'string' && Number.isFinite(Date.parse(value))
@@ -45,6 +71,107 @@ function propertyLocation(property) {
 
 function applicationTimestamp(application) {
   return application.submittedAt || application.createdAt || ''
+}
+
+function latestTimestamp(item, preferred = []) {
+  return [...preferred, 'updatedAt', 'createdAt'].map((field) => item?.[field]).find(validDate) || ''
+}
+
+function activityTime(value) {
+  if (!validDate(value)) return 'Date unavailable'
+  const elapsedSeconds = (Date.parse(value) - Date.now()) / 1000
+  const ranges = [
+    ['year', 60 * 60 * 24 * 365],
+    ['month', 60 * 60 * 24 * 30],
+    ['week', 60 * 60 * 24 * 7],
+    ['day', 60 * 60 * 24],
+    ['hour', 60 * 60],
+    ['minute', 60],
+  ]
+  const absoluteSeconds = Math.abs(elapsedSeconds)
+  if (absoluteSeconds >= 60 * 60 * 24 * 7) return notificationTime(value)
+  const [unit, seconds] = ranges.find(([, size]) => absoluteSeconds >= size) || ['second', 1]
+  return relativeTimeFormatter.format(Math.round(elapsedSeconds / seconds), unit)
+}
+
+function notificationIcon(type) {
+  if (type.startsWith('viewing.')) return 'calendar'
+  if (type.startsWith('rental_application.')) return 'document'
+  if (type.startsWith('payment.') || type.startsWith('lease.')) return 'wallet'
+  if (type.startsWith('maintenance')) return 'tools'
+  return 'bell'
+}
+
+function normalizeActivities({ notifications, viewings, applications, leases, payments, maintenance }) {
+  const items = [
+    ...notifications.map((item) => ({
+      id: `notification:${item.id}`,
+      icon: notificationIcon(item.eventType),
+      tone: 'notification',
+      title: item.title,
+      description: item.message,
+      timestamp: item.createdAt,
+      target: '/notifications',
+      source: 'Notification',
+      unread: !item.isRead,
+    })),
+    ...viewings.map((item) => ({
+      id: `viewing:${item.id}`,
+      icon: 'calendar',
+      tone: 'viewing',
+      title: viewingActivity[item.status] || 'Viewing updated',
+      description: validDate(item.requestedDateTime)
+        ? `Appointment ${viewingFormatter.format(new Date(item.requestedDateTime))}`
+        : 'Appointment date unavailable',
+      timestamp: latestTimestamp(item),
+      target: '/modules/my-viewings',
+      source: 'Viewing',
+    })),
+    ...applications.map((item) => ({
+      id: `application:${item.id}`,
+      icon: 'document',
+      tone: 'application',
+      title: applicationActivity[item.status] || 'Application updated',
+      description: item.landlordResponse || `Current status: ${(applicationActivity[item.status] || 'Status unavailable').replace('Application ', '').toLowerCase()}.`,
+      timestamp: latestTimestamp(item, ['submittedAt']),
+      target: `/notifications/rental-application/${encodeURIComponent(item.id)}`,
+      source: 'Application',
+    })),
+    ...leases.map((item) => ({
+      id: `lease:${item.id}`,
+      icon: 'wallet',
+      tone: 'payment',
+      title: leaseActivity[item.status] || 'Lease updated',
+      description: item.startDate && item.endDate
+        ? `Lease term ${formatDate(item.startDate, item.startDate)} to ${formatDate(item.endDate, item.endDate)}`
+        : 'Lease details updated.',
+      timestamp: latestTimestamp(item),
+      target: '/modules/lease-payments',
+      source: 'Lease',
+    })),
+    ...payments.map((item) => ({
+      id: `payment:${item.id}`,
+      icon: 'wallet',
+      tone: 'payment',
+      title: paymentActivity[item.status] || 'Payment updated',
+      description: `${Number.isFinite(Number(item.amount)) ? `Rs. ${moneyFormatter.format(Number(item.amount))}` : 'Amount unavailable'}${item.paymentMethod ? ` via ${item.paymentMethod}` : ''}`,
+      timestamp: latestTimestamp(item, ['paidAt']),
+      target: '/modules/lease-payments',
+      source: 'Payment',
+    })),
+    ...maintenance.map((item) => ({
+      id: `maintenance:${item.id}`,
+      icon: 'tools',
+      tone: 'maintenance',
+      title: maintenanceActivity[item.status] || 'Maintenance request updated',
+      description: item.title || 'Maintenance request details updated.',
+      timestamp: latestTimestamp(item),
+      target: null,
+      source: 'Maintenance',
+    })),
+  ]
+
+  return items.sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0)).slice(0, 6)
 }
 
 function useNotificationsSummary(userId) {
@@ -70,18 +197,17 @@ function useNotificationsSummary(userId) {
   }
 }
 
-function useNextPayment(userId) {
+function useNextPayment(userId, leases) {
   const [attempt, setAttempt] = useState(0)
   const [state, setState] = useState({ status: 'loading', item: null })
 
   useEffect(() => {
     let active = true
+    if (leases.status !== 'ready') return () => { active = false }
 
     async function loadNextPayment() {
       try {
-        const leases = await getMyLeases()
-        if (!Array.isArray(leases)) throw new TypeError('The lease service returned an invalid response.')
-        const activeLeases = leases.filter((lease) => lease?.status === 1 && typeof lease.id === 'string')
+        const activeLeases = leases.data.filter((lease) => lease?.status === 1 && typeof lease.id === 'string')
         if (activeLeases.length === 0) {
           if (active) setState({ status: 'ready', item: null })
           return
@@ -110,13 +236,20 @@ function useNextPayment(userId) {
 
     loadNextPayment()
     return () => { active = false }
-  }, [attempt, userId])
+  }, [attempt, leases.data, leases.message, leases.status, userId])
+
+  const visibleState = leases.status === 'loading'
+    ? { status: 'loading', item: null }
+    : leases.status === 'error'
+      ? { status: 'error', item: null, message: leases.message || 'Unable to load your leases.' }
+      : state
 
   return {
-    ...state,
+    ...visibleState,
     retry() {
       setState({ status: 'loading', item: null })
-      setAttempt((value) => value + 1)
+      if (leases.status === 'error') leases.retry()
+      else setAttempt((value) => value + 1)
     },
   }
 }
@@ -147,22 +280,14 @@ function usePropertyDirectory(propertyIds) {
   return directory
 }
 
-function SummaryCard({ title, ariaLabel = title, icon, summary, children, pending }) {
+function SummaryCard({ title, ariaLabel = title, icon, summary, children }) {
   return <section className="tenant-summary" aria-label={ariaLabel} aria-busy={summary?.status === 'loading'}>
-    <span className="tenant-summary__icon"><Icon name={icon} size={21} /></span>
-    {pending && <><strong className="tenant-summary__pending">Unavailable</strong><StatusBadge tone="warning">Integration pending</StatusBadge>{children}</>}
+    <span className="tenant-summary__icon" data-icon={icon}><Icon name={icon} size={21} /></span>
     {summary?.status === 'loading' && <p className="tenant-summary__state" role="status">Loading summary&hellip;</p>}
     {summary?.status === 'error' && <div className="tenant-summary__state" role="alert"><p>{summary.message || 'Unable to load this summary.'}</p><button className="tenant-retry" type="button" onClick={summary.retry}>Retry {title.toLowerCase()}</button></div>}
     {summary?.status === 'ready' && children}
     <span className="tenant-summary__label">{title}</span>
   </section>
-}
-
-function NotificationIcon({ type }) {
-  const icon = type.startsWith('viewing.') ? 'calendar'
-    : type.startsWith('rental_application.') ? 'document'
-      : type.startsWith('maintenance') ? 'tools' : 'bell'
-  return <span className="tenant-activity__icon"><Icon name={icon} size={18} /></span>
 }
 
 function RecommendedSection({ userId }) {
@@ -184,11 +309,15 @@ function RecommendedSection({ userId }) {
           getProperties({ isAvailable: true }),
         ])
         const propertyById = new Map(properties.map((property) => [property.id, property]))
-        const ranked = (matches.matches || []).slice(0, 3).map((match) => ({
-          ...propertyById.get(match.propertyId),
-          ...match,
-          id: match.propertyId,
-        })).filter((property) => property.title)
+        const ranked = (matches.matches || [])
+          .map((match) => ({
+            ...propertyById.get(match.propertyId),
+            ...match,
+            id: match.propertyId,
+          }))
+          .filter((property) => property.title && Number.isFinite(Number(property.matchScore)))
+          .sort((left, right) => Number(right.matchScore) - Number(left.matchScore))
+          .slice(0, 3)
         const withImages = await Promise.all(ranked.map(async (property) => {
           try {
             const images = await getPropertyImages(property.id)
@@ -226,8 +355,21 @@ function RecommendedSection({ userId }) {
     </div>}
     {state.status === 'ready' && state.configured && state.items.length === 0 && <div className="tenant-recommendations-empty"><span className="tenant-recommendations-empty__icon"><Icon name="building" size={32} /></span><h3>No available matches right now</h3><p>New recommendations will appear as suitable properties become available.</p><Link className="shared-button shared-button--outline" to="/modules/properties?preferences=edit">Adjust preferences</Link></div>}
     {state.status === 'ready' && state.items.length > 0 && <div className="tenant-recommendation-grid">{state.items.map((property) => <article className="tenant-recommendation-card" key={property.id}>
-      <Link className="tenant-recommendation-card__image" to={`/properties/${property.id}`} aria-label={`View ${property.title}`}>{property.imageUrl ? <img src={property.imageUrl} alt="" /> : <span><Icon name="home" size={28} />No property photo</span>}<strong aria-label={`${property.matchScore} percent match`}>{property.matchScore}% Match</strong></Link>
+      <Link className="tenant-recommendation-card__link" to={`/properties/${property.id}`} aria-label={`View ${property.title}`}>
+        <div className="tenant-recommendation-card__image">{property.imageUrl ? <img src={property.imageUrl} alt="" /> : <span><Icon name="home" size={28} />No property photo</span>}<strong aria-label={`${property.matchScore} percent match`}><Icon name="sparkles" size={13} />{property.matchScore}% Match</strong></div>
+        <div className="tenant-recommendation-card__details">
+          <h3>{property.title}</h3>
+          <p className="tenant-recommendation-card__location"><Icon name="location" size={14} />{property.city}</p>
+          <dl className="tenant-recommendation-card__facts">
+            <div className="tenant-recommendation-card__rent"><dt className="sr-only">Monthly rent</dt><dd><strong>Rs. {moneyFormatter.format(Number(property.monthlyRent))}</strong><span>/mo</span></dd></div>
+            <div><dt className="sr-only">Bedrooms</dt><dd><Icon name="bed" size={15} />{property.bedrooms}</dd></div>
+            <div><dt className="sr-only">Bathrooms</dt><dd><Icon name="bath" size={15} />{property.bathrooms}</dd></div>
+          </dl>
+        </div>
+      </Link>
+      {/* The previous compact text layout is retained only as migration context.
       <div><p><Icon name="location" size={14} />{property.city}</p><h3>{property.title}</h3><dl><div><dt className="sr-only">Rent</dt><dd>Rs. {moneyFormatter.format(Number(property.monthlyRent))}/month</dd></div><div><dt className="sr-only">Bedrooms and bathrooms</dt><dd>{property.bedrooms} bed · {property.bathrooms} bath</dd></div></dl><Link to={`/properties/${property.id}`}>View property <Icon name="arrow" size={14} /></Link></div>
+      */}
     </article>)}</div>}
   </section>
 }
@@ -236,17 +378,18 @@ function RecentActivity({ activity }) {
   return <section className="tenant-dashboard__section" aria-labelledby="tenant-activity-title">
     <div className="tenant-section-heading">
       <h2 id="tenant-activity-title">Recent Activity</h2>
-      <Link to="/notifications">View all <Icon name="arrow" size={16} /></Link>
     </div>
     <div className="tenant-activity-card" aria-busy={activity.status === 'loading'}>
       {activity.status === 'loading' && <div className="tenant-panel-state" role="status"><span className="shared-spinner" aria-hidden="true" />Loading recent activity&hellip;</div>}
       {activity.status === 'error' && <div className="tenant-panel-state" role="alert"><strong>Activity could not be loaded</strong><p>{activity.message}</p><button className="tenant-retry" type="button" onClick={activity.retry}>Retry activity</button></div>}
-      {activity.status === 'ready' && activity.data.length === 0 && <div className="tenant-panel-state"><span className="tenant-panel-state__icon"><Icon name="bell" size={24} /></span><strong>No recent activity</strong><p>Verified account updates will appear here.</p></div>}
+      {activity.status === 'ready' && activity.warning && <div className="tenant-activity-warning" role="status"><Icon name="alert" size={15} /><span>{activity.warning}</span><button type="button" onClick={activity.retry}>Retry</button></div>}
+      {activity.status === 'ready' && activity.data.length === 0 && <div className="tenant-panel-state"><span className="tenant-panel-state__icon"><Icon name="bell" size={24} /></span><strong>No recent activity</strong><p>Viewing, application, lease, payment, maintenance and account updates will appear here.</p></div>}
       {activity.status === 'ready' && activity.data.length > 0 && <ol className="tenant-activity-list">
         {activity.data.map((item) => <li key={item.id}>
-          <NotificationIcon type={item.eventType} />
-          <div><strong>{item.title}</strong><p>{item.message}</p></div>
-          <div className="tenant-activity__meta"><time dateTime={item.createdAt}>{notificationTime(item.createdAt)}</time>{!item.isRead && <span className="tenant-activity__unread" aria-label="Unread" />}</div>
+          <span className={`tenant-activity__icon tenant-activity__icon--${item.tone}`}><Icon name={item.icon} size={18} /></span>
+          <div className="tenant-activity__content"><span className="tenant-activity__source">{item.source}</span><strong>{item.title}</strong><p>{item.description}</p></div>
+          <div className="tenant-activity__meta">{validDate(item.timestamp) ? <time dateTime={item.timestamp}>{activityTime(item.timestamp)}</time> : <span>Date unavailable</span>}{item.unread && <span className="tenant-activity__unread" aria-label="Unread" />}</div>
+          {item.target && <Link className="tenant-activity__link" to={item.target} aria-label={`Open ${item.title}`}><Icon name="chevronRight" size={17} /></Link>}
         </li>)}
       </ol>}
     </div>
@@ -308,15 +451,45 @@ function ApplicationsSection({ summary, applications, properties }) {
 }
 
 export default function TenantDashboard({ user }) {
+  const [greeting] = useState(() => tenantGreetings[Math.floor(Math.random() * tenantGreetings.length)])
   const applications = useTenantSummary(getMyApplications)
   const viewings = useTenantSummary(getMyViewings)
-  const activity = useNotificationsSummary(user.id)
-  const nextPayment = useNextPayment(user.id)
+  const notifications = useNotificationsSummary(user.id)
+  const leases = useTenantSummary(getMyLeases)
+  const payments = useTenantSummary(getMyPayments)
+  const loadMaintenance = useCallback(() => getTenantMaintenanceRequests(user.id), [user.id])
+  const maintenance = useTenantSummary(loadMaintenance)
+  const nextPayment = useNextPayment(user.id, leases)
+
+  const activity = useMemo(() => {
+    const sources = [notifications, viewings, applications, leases, payments, maintenance]
+    if (sources.some((source) => source.status === 'loading')) return { status: 'loading', data: [] }
+    const ready = sources.filter((source) => source.status === 'ready')
+    const failed = sources.filter((source) => source.status === 'error')
+    const retry = () => failed.forEach((source) => source.retry())
+    if (ready.length === 0) {
+      return { status: 'error', data: [], message: 'Recent activity could not be loaded from available services.', retry }
+    }
+    return {
+      status: 'ready',
+      data: normalizeActivities({
+        notifications: notifications.status === 'ready' ? notifications.data : [],
+        viewings: viewings.status === 'ready' ? viewings.data : [],
+        applications: applications.status === 'ready' ? applications.data : [],
+        leases: leases.status === 'ready' ? leases.data : [],
+        payments: payments.status === 'ready' ? payments.data : [],
+        maintenance: maintenance.status === 'ready' ? maintenance.data : [],
+      }),
+      warning: failed.length > 0 ? `Some activity could not be loaded (${failed.length} ${failed.length === 1 ? 'source' : 'sources'} unavailable).` : '',
+      retry,
+    }
+  }, [applications, leases, maintenance, notifications, payments, viewings])
 
   const sortedApplications = useMemo(() => [...applications.data]
     .sort((a, b) => Date.parse(applicationTimestamp(b)) - Date.parse(applicationTimestamp(a)))
     .slice(0, 5), [applications.data])
   const underReview = applications.data.filter((item) => item.status === RENTAL_APPLICATION_STATUS.UNDER_REVIEW).length
+  const openMaintenance = maintenance.data.filter((item) => ![7, 9, 10].includes(item.status))
   const now = viewings.loadedAt
   const upcoming = viewings.data.filter((item) =>
     (item.status === VIEWING_STATUS.APPROVED || item.status === VIEWING_STATUS.PENDING)
@@ -331,7 +504,8 @@ export default function TenantDashboard({ user }) {
 
   return <main className="shared-page tenant-dashboard">
     <header className="tenant-dashboard__greeting">
-      <div><p className="tenant-dashboard__eyebrow">Tenant dashboard</p><h1>Welcome, {user.fullName.trim() || 'there'}</h1><p>Track your rental journey, appointments and account updates in one place.</p></div>
+      <div><h1>{greeting}, {user.fullName.trim() || 'there'}</h1><p>Track your rental journey, appointments and account updates in one place.</p></div>
+      <UpcomingViewing summary={viewings} viewing={nextViewing} property={properties[nextViewing?.propertyId]} />
     </header>
 
     <div className="tenant-dashboard__summaries">
@@ -343,11 +517,12 @@ export default function TenantDashboard({ user }) {
         <strong className="tenant-summary__value">{upcoming.length}</strong>
         <p>{nextViewing ? <><time dateTime={nextViewing.requestedDateTime}>{formatDate(nextViewing.requestedDateTime, 'Date unavailable')}</time><br />{nextViewing.status === VIEWING_STATUS.APPROVED ? 'Approved' : 'Awaiting approval'}</> : 'No upcoming viewings'}</p>
       </SummaryCard>
-      <SummaryCard title="Next Payment" icon="trend" summary={nextPayment}>
+      <SummaryCard title="Next Payment" icon="wallet" summary={nextPayment}>
         {nextPayment.item ? <><strong className="tenant-summary__value tenant-summary__value--money">Rs. {moneyFormatter.format(nextPayment.item.amount)}</strong><p>Due <time dateTime={nextPayment.item.dueDate}>{formatDate(nextPayment.item.dueDate, 'Date unavailable')}</time></p></> : <><strong className="tenant-summary__empty-value">No payment due</strong><p>No unpaid schedule items found</p></>}
       </SummaryCard>
-      <SummaryCard title="Open Request" icon="tools" pending>
-        <p>Maintenance request summaries are not yet available on the web dashboard.</p>
+      <SummaryCard title="Open Request" icon="tools" summary={maintenance}>
+        <strong className="tenant-summary__value">{openMaintenance.length}</strong>
+        <p>{openMaintenance.length === 0 ? 'No open maintenance requests' : `${openMaintenance.length} ${openMaintenance.length === 1 ? 'request' : 'requests'} need attention`}</p>
       </SummaryCard>
     </div>
 
@@ -355,7 +530,6 @@ export default function TenantDashboard({ user }) {
       <RecommendedSection userId={user.id} />
       <div className="tenant-dashboard__side">
         <RecentActivity activity={activity} />
-        <UpcomingViewing summary={viewings} viewing={nextViewing} property={properties[nextViewing?.propertyId]} />
       </div>
     </div>
 
