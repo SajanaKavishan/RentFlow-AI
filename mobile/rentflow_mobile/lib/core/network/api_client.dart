@@ -12,12 +12,14 @@ typedef UnauthorizedHandler = FutureOr<void> Function();
 class ApiClient {
   ApiClient({
     this.baseUrl = ApiConstants.baseUrl,
+    this.requestTimeout = const Duration(seconds: 20),
     http.Client? httpClient,
     TokenStorage? tokenStorage,
   }) : httpClient = httpClient ?? http.Client(),
        tokenStorage = tokenStorage ?? const SecureTokenStorage();
 
   final String baseUrl;
+  final Duration requestTimeout;
   final http.Client httpClient;
   final TokenStorage tokenStorage;
   UnauthorizedHandler? _unauthorizedHandler;
@@ -52,14 +54,20 @@ class ApiClient {
   }
 
   Future<http.Response> get(Uri uri, {bool authenticated = true}) async {
-    final headers = await _headers(authenticated: authenticated);
+    final headers = await _withTimeout(
+      () => _headers(authenticated: authenticated),
+      uri,
+    );
     if (kDebugMode) {
       debugPrint(
         '[ApiClient] GET $uri '
         'authorizationBearerPresent=${headers['Authorization']?.startsWith('Bearer ') ?? false}',
       );
     }
-    final response = await httpClient.get(uri, headers: headers);
+    final response = await _withTimeout(
+      () => httpClient.get(uri, headers: headers),
+      uri,
+    );
     if (kDebugMode) {
       debugPrint('[ApiClient] GET $uri status=${response.statusCode}');
     }
@@ -71,10 +79,13 @@ class ApiClient {
     Object? body,
     bool authenticated = true,
   }) async => _check(
-    await httpClient.post(
+    await _withTimeout(
+      () async => httpClient.post(
+        uri,
+        headers: await _headers(authenticated: authenticated, json: true),
+        body: body,
+      ),
       uri,
-      headers: await _headers(authenticated: authenticated, json: true),
-      body: body,
     ),
     authenticated,
   );
@@ -84,10 +95,13 @@ class ApiClient {
     Object? body,
     bool authenticated = true,
   }) async => _check(
-    await httpClient.put(
+    await _withTimeout(
+      () async => httpClient.put(
+        uri,
+        headers: await _headers(authenticated: authenticated, json: true),
+        body: body,
+      ),
       uri,
-      headers: await _headers(authenticated: authenticated, json: true),
-      body: body,
     ),
     authenticated,
   );
@@ -97,19 +111,25 @@ class ApiClient {
     Object? body,
     bool authenticated = true,
   }) async => _check(
-    await httpClient.patch(
+    await _withTimeout(
+      () async => httpClient.patch(
+        uri,
+        headers: await _headers(authenticated: authenticated, json: true),
+        body: body,
+      ),
       uri,
-      headers: await _headers(authenticated: authenticated, json: true),
-      body: body,
     ),
     authenticated,
   );
 
   Future<http.Response> delete(Uri uri, {bool authenticated = true}) async =>
       _check(
-        await httpClient.delete(
+        await _withTimeout(
+          () async => httpClient.delete(
+            uri,
+            headers: await _headers(authenticated: authenticated, json: true),
+          ),
           uri,
-          headers: await _headers(authenticated: authenticated, json: true),
         ),
         authenticated,
       );
@@ -118,8 +138,16 @@ class ApiClient {
     http.BaseRequest request, {
     bool authenticated = true,
   }) async {
-    request.headers.addAll(await _headers(authenticated: authenticated));
-    final response = await httpClient.send(request);
+    request.headers.addAll(
+      await _withTimeout(
+        () => _headers(authenticated: authenticated),
+        request.url,
+      ),
+    );
+    final response = await _withTimeout(
+      () => httpClient.send(request),
+      request.url,
+    );
     if (response.statusCode == 401 && authenticated) {
       await _handleUnauthorized();
     }
@@ -137,8 +165,20 @@ class ApiClient {
     return response;
   }
 
+  Future<T> _withTimeout<T>(Future<T> Function() request, Uri uri) async {
+    try {
+      return await request().timeout(requestTimeout);
+    } on TimeoutException {
+      throw http.ClientException('The request timed out.', uri);
+    }
+  }
+
   Future<void> _handleUnauthorized() async {
-    await tokenStorage.deleteToken();
+    try {
+      await tokenStorage.deleteToken().timeout(requestTimeout);
+    } on TimeoutException {
+      // Still run the session handler so the app can leave authenticated UI.
+    }
     if (_handlingUnauthorized || _unauthorizedHandler == null) return;
     _handlingUnauthorized = true;
     try {
