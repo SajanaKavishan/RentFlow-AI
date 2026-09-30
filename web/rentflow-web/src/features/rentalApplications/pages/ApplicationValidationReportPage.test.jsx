@@ -134,9 +134,9 @@ describe('AI validation report', () => {
     expect(screen.getByLabelText('Application status: Under review')).toBeInTheDocument()
 
     const validation = await screen.findByRole('region', { name: 'Application validation' })
-    expect(within(validation).getByText('Awaiting human review')).toBeInTheDocument()
-    expect(within(validation).getByText('4/4')).toBeInTheDocument()
-    expect(within(validation).getAllByText('75%').length).toBeGreaterThan(0)
+    expect(await within(validation).findByText('Awaiting human review')).toBeInTheDocument()
+    expect(await within(validation).findByText('4/4')).toBeInTheDocument()
+    expect((await within(validation).findAllByText('75%')).length).toBeGreaterThan(0)
     expect(within(validation).getByText('Manual review required')).toBeInTheDocument()
     expect(within(validation).getAllByText('API AI warning').length).toBeGreaterThan(0)
     expect(within(validation).getByText('API advisory summary')).toBeInTheDocument()
