@@ -1,4 +1,5 @@
 import { apiRequest } from '../../../core/api/apiClient.js'
+import { API_BASE_URL } from '../../../core/api/apiConfig.js'
 
 export function getProperties(filters = {}) {
   const params = new URLSearchParams()
@@ -103,6 +104,17 @@ export function deletePropertyImage(propertyId, imageId) {
       errorMessage: 'Unable to delete the property image.',
     },
   )
+}
+
+export function getPublicLandlordSummary(propertyId) {
+  return apiRequest(`/api/properties/${encodeURIComponent(propertyId)}/landlord-summary`, {
+    authenticated: false,
+    errorMessage: 'Landlord details are unavailable.',
+  })
+}
+
+export function getPublicLandlordImageUrl(propertyId) {
+  return `${API_BASE_URL}/api/properties/${encodeURIComponent(propertyId)}/landlord-summary/image`
 }
 
 export function setPrimaryPropertyImage(propertyId, imageId) {

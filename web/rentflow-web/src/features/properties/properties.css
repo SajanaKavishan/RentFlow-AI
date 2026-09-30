@@ -2963,6 +2963,16 @@
   border-radius: 50%;
   color: var(--olive-100);
   background: var(--olive-900);
+  overflow: hidden;
+  font-size: .82rem;
+  font-weight: 850;
+  letter-spacing: .04em;
+}
+
+.property-listed-by__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .property-listed-by__profile strong {

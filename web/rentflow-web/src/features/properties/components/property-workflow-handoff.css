@@ -1,0 +1,36 @@
+.property-workflow-handoff {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 16px;
+  margin: 0 0 24px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--olive-50);
+}
+
+.property-workflow-handoff__icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--olive-100);
+  background: var(--olive-900);
+}
+
+.property-workflow-handoff__content { min-width: 0; }
+.property-workflow-handoff__content h2,
+.property-workflow-handoff__content p { overflow-wrap: anywhere; }
+.property-workflow-handoff__content h2 { margin: 2px 0 4px; color: var(--ink); font-size: 1rem; }
+.property-workflow-handoff__content p { margin: 0; color: var(--muted); line-height: 1.5; }
+.property-workflow-handoff__eyebrow { color: var(--olive-700) !important; font-size: .68rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+.property-workflow-handoff__note { margin-top: 9px !important; color: var(--ink) !important; font-size: .82rem; }
+.property-workflow-handoff__back { display: inline-flex; align-items: center; gap: 6px; color: var(--olive-900); font-size: .78rem; font-weight: 800; white-space: nowrap; }
+.property-workflow-handoff__back:focus-visible { outline: 3px solid var(--olive-700); outline-offset: 4px; }
+
+@media (max-width: 680px) {
+  .property-workflow-handoff { grid-template-columns: auto minmax(0, 1fr); }
+  .property-workflow-handoff__back { grid-column: 2; justify-self: start; white-space: normal; }
+}

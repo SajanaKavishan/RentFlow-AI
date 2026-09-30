@@ -10,12 +10,30 @@ import {
   deleteProperty,
   getMyProperties,
   getProperty,
+  getPublicLandlordImageUrl,
+  getPublicLandlordSummary,
   getSavedPropertyMatches,
   updateProperty,
 } from '../services/propertyApiService.js'
+import { getMyViewings } from '../../viewings/services/viewingApiService.js'
+import {
+  getMyApplications,
+  RENTAL_APPLICATION_STATUS,
+} from '../../rentalApplications/services/rentalApplicationApiService.js'
 import '../properties.css'
 
 const MANAGE_PROPERTIES_PATH = '/modules/manage-properties'
+const ACTIVE_APPLICATION_STATUSES = new Set([
+  RENTAL_APPLICATION_STATUS.DRAFT,
+  RENTAL_APPLICATION_STATUS.SUBMITTED,
+  RENTAL_APPLICATION_STATUS.UNDER_REVIEW,
+  RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED,
+])
+
+function getInitials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'L'
+}
 
 function formatAvailableFrom(value) {
   if (!value) return null
@@ -38,6 +56,20 @@ export default function PropertyDetailsPage() {
   const [action, setAction] = useState('')
   const [toast, setToast] = useState(null)
   const [matchResult, setMatchResult] = useState({ propertyId: null, score: null })
+  const [loadedLandlordState, setLandlordState] = useState({ propertyId: null, status: 'loading', summary: null })
+  const [landlordImageFailedFor, setLandlordImageFailedFor] = useState(null)
+  const [loadedWorkflowState, setWorkflowState] = useState({
+    propertyId: null,
+    viewings: 0,
+    applications: 0,
+    activeApplication: false,
+  })
+  const landlordState = loadedLandlordState.propertyId === propertyId
+    ? loadedLandlordState
+    : { status: 'loading', summary: null }
+  const workflowState = loadedWorkflowState.propertyId === propertyId
+    ? loadedWorkflowState
+    : { viewings: 0, applications: 0, activeApplication: false }
 
   const isOwner = user?.role === USER_ROLES.LANDLORD
     && String(user.id).toLowerCase() === String(property?.landlordId).toLowerCase()
@@ -107,6 +139,53 @@ export default function PropertyDetailsPage() {
 
     return () => { active = false }
   }, [isTenant, propertyId])
+
+  useEffect(() => {
+    let active = true
+
+    getPublicLandlordSummary(propertyId)
+      .then((summary) => {
+        if (!summary
+          || typeof summary.displayName !== 'string'
+          || !summary.displayName.trim()
+          || !Number.isInteger(summary.memberSinceYear)
+          || typeof summary.hasProfileImage !== 'boolean') {
+          throw new TypeError('Invalid public landlord summary')
+        }
+        if (active) setLandlordState({ propertyId, status: 'ready', summary })
+      })
+      .catch(() => {
+        if (active) setLandlordState({ propertyId, status: 'error', summary: null })
+      })
+
+    return () => { active = false }
+  }, [propertyId])
+
+  useEffect(() => {
+    let active = true
+    if (!isTenant || !property) return () => { active = false }
+
+    Promise.allSettled([getMyViewings(), getMyApplications()]).then(([viewingsResult, applicationsResult]) => {
+      if (!active) return
+      const sameProperty = (item) => String(item?.propertyId).toLowerCase() === String(property.id).toLowerCase()
+      const viewings = viewingsResult.status === 'fulfilled' && Array.isArray(viewingsResult.value)
+        ? viewingsResult.value.filter(sameProperty).length
+        : 0
+      const applications = applicationsResult.status === 'fulfilled' && Array.isArray(applicationsResult.value)
+        ? applicationsResult.value.filter(sameProperty)
+        : []
+      const activeApplication = applicationsResult.status === 'fulfilled'
+        && applications.some((item) => ACTIVE_APPLICATION_STATUSES.has(item.status))
+      setWorkflowState({
+        propertyId: property.id,
+        viewings,
+        applications: applications.length,
+        activeApplication,
+      })
+    })
+
+    return () => { active = false }
+  }, [isTenant, property])
 
   useEffect(() => {
     if (!toast) return undefined
@@ -308,13 +387,33 @@ export default function PropertyDetailsPage() {
           <section className="property-details-section property-listed-by" aria-labelledby="property-listed-by-title">
             <h2 id="property-listed-by-title">Listed by</h2>
             <div className="property-listed-by__profile">
-              <span className="property-listed-by__avatar" aria-hidden="true">
-                <Icon name="user" size={22} />
-              </span>
-              <div>
-                <strong>Property landlord</strong>
-                <p>Landlord profile details are not available for this listing.</p>
-              </div>
+              {landlordState.status === 'ready' ? (
+                <>
+                  <span className="property-listed-by__avatar" aria-hidden="true">
+                    {landlordState.summary.hasProfileImage && landlordImageFailedFor !== property.id ? (
+                      <img
+                        src={getPublicLandlordImageUrl(property.id)}
+                        alt=""
+                        onError={() => setLandlordImageFailedFor(property.id)}
+                      />
+                    ) : getInitials(landlordState.summary.displayName)}
+                  </span>
+                  <div>
+                    <strong>{landlordState.summary.displayName}</strong>
+                    <p>Member since {landlordState.summary.memberSinceYear}</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span className="property-listed-by__avatar" aria-hidden="true">
+                    <Icon name="user" size={22} />
+                  </span>
+                  <div>
+                    <strong>{landlordState.status === 'loading' ? 'Loading landlord details' : 'Landlord details unavailable'}</strong>
+                    {landlordState.status === 'error' && <p>This listing remains available to review.</p>}
+                  </div>
+                </>
+              )}
             </div>
           </section>
         </div>
@@ -376,22 +475,26 @@ export default function PropertyDetailsPage() {
             {isTenant && (
               <div className="property-details-summary__actions">
                 <Link
-                  className={`property-details-summary__primary${property.isAvailable ? '' : ' is-disabled'}`}
-                  to="/modules/my-viewings"
-                  aria-disabled={!property.isAvailable}
-                  onClick={(event) => { if (!property.isAvailable) event.preventDefault() }}
+                  className={`property-details-summary__primary${property.isAvailable || workflowState.viewings > 0 ? '' : ' is-disabled'}`}
+                  to={`/modules/my-viewings?propertyId=${encodeURIComponent(property.id)}`}
+                  aria-disabled={!property.isAvailable && workflowState.viewings === 0}
+                  onClick={(event) => { if (!property.isAvailable && workflowState.viewings === 0) event.preventDefault() }}
                 >
-                  Book a Viewing
+                  {workflowState.viewings > 0 ? 'View viewing requests' : 'Book a Viewing'}
                 </Link>
                 <Link
-                  className={`property-details-summary__secondary${property.isAvailable ? '' : ' is-disabled'}`}
-                  to="/modules/my-applications"
-                  aria-disabled={!property.isAvailable}
-                  onClick={(event) => { if (!property.isAvailable) event.preventDefault() }}
+                  className={`property-details-summary__secondary${property.isAvailable || workflowState.applications > 0 ? '' : ' is-disabled'}`}
+                  to={`/modules/my-applications?propertyId=${encodeURIComponent(property.id)}`}
+                  aria-disabled={!property.isAvailable && workflowState.applications === 0}
+                  onClick={(event) => { if (!property.isAvailable && workflowState.applications === 0) event.preventDefault() }}
                 >
-                  Apply for Rental
+                  {workflowState.activeApplication || (!property.isAvailable && workflowState.applications > 0)
+                    ? 'View application'
+                    : 'Apply for Rental'}
                 </Link>
-                <p>Booking and applications are completed in the RentFlow mobile app.</p>
+                <p>{property.isAvailable
+                  ? 'Your selected property will be carried into each workspace. New bookings and applications are completed in the RentFlow mobile app.'
+                  : 'This property is currently unavailable. Existing requests and applications remain accessible.'}</p>
               </div>
             )}
           </aside>

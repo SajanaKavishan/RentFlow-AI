@@ -303,6 +303,10 @@ builder.Services.AddScoped<
     PropertyService>();
 
 builder.Services.AddScoped<
+    IPublicLandlordSummaryService,
+    PublicLandlordSummaryService>();
+
+builder.Services.AddScoped<
     IPropertyAccessGuard,
     PropertyAccessGuard>();
 

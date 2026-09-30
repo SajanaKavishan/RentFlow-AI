@@ -12,10 +12,10 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 const viewing = (status, extra = {}) => ({ id: `viewing-${status}`, tenantId, propertyId,
   requestedDateTime: '2026-10-01T10:00:00Z', status, landlordResponse: null, ...extra })
 
-function renderPage(role = 'Tenant') {
+function renderPage(role = 'Tenant', entry = '/modules/my-viewings') {
   const session = { user: { id: tenantId, fullName: 'Taylor Example', email: 'taylor@example.com', role },
     isAuthenticated: true, isLoading: false, logout: vi.fn() }
-  return render(<MemoryRouter initialEntries={['/modules/my-viewings']}><AuthContext.Provider value={session}><App /></AuthContext.Provider></MemoryRouter>)
+  return render(<MemoryRouter initialEntries={[entry]}><AuthContext.Provider value={session}><App /></AuthContext.Provider></MemoryRouter>)
 }
 
 beforeEach(() => {
@@ -90,6 +90,26 @@ describe('Tenant My Viewings', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to connect to the viewing service')
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByRole('heading', { name: 'No viewing requests yet' })).toBeInTheDocument()
+  })
+
+  it('keeps selected property context across the property-aware handoff without mutating data', async () => {
+    fetch.mockImplementation((url) => Promise.resolve(json(
+      url.endsWith(`/api/properties/${propertyId}`)
+        ? { id: propertyId, title: 'Lake View Apartment', address: '18 Lake Road', city: 'Colombo', isAvailable: true }
+        : url.endsWith('/api/viewings')
+          ? [viewing(1)]
+          : { unreadCount: 0 },
+    )))
+
+    renderPage('Tenant', `/modules/my-viewings?propertyId=${propertyId}`)
+
+    expect(await screen.findByRole('heading', { name: 'Lake View Apartment' })).toBeInTheDocument()
+    expect(screen.getByText('18 Lake Road, Colombo')).toBeInTheDocument()
+    expect(screen.getByText(/already have a viewing request/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Back to property/ }))
+      .toHaveAttribute('href', `/properties/${propertyId}`)
+    expect(fetch.mock.calls.some(([url]) => url.endsWith(`/api/properties/${propertyId}`))).toBe(true)
+    expect(fetch.mock.calls.every(([, options = {}]) => !options.method || options.method === 'GET')).toBe(true)
   })
 
   it('blocks non-Tenant roles from the route without loading tenant viewings', async () => {
