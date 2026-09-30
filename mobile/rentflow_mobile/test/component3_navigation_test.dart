@@ -13,6 +13,8 @@ import 'package:rentflow_mobile/features/lease_agreements/services/lease_agreeme
 import 'package:rentflow_mobile/features/rental_offers/screens/my_rental_offers_screen.dart';
 import 'package:rentflow_mobile/features/rental_offers/screens/rental_offer_details_screen.dart';
 import 'package:rentflow_mobile/features/rental_offers/services/rental_offer_api_service.dart';
+import 'package:rentflow_mobile/features/rent_schedules/screens/lease_rent_schedule_screen.dart';
+import 'package:rentflow_mobile/features/rent_schedules/services/rent_schedule_api_service.dart';
 import 'package:rentflow_mobile/shared/shell/shared_app_shell.dart';
 import 'package:rentflow_mobile/shared/theme/app_theme.dart';
 
@@ -82,6 +84,22 @@ void main() {
             '/api/lease-agreements/11111111-1111-4111-8111-111111111111') {
           return http.Response(jsonEncode(_leaseJson()), 200);
         }
+        if (request.url.path ==
+            '/api/rent-schedules/lease/11111111-1111-4111-8111-111111111111') {
+          return http.Response('[]', 200);
+        }
+        if (request.url.path ==
+            '/api/rent-schedules/lease/11111111-1111-4111-8111-111111111111/outstanding') {
+          return http.Response(
+            jsonEncode({
+              'totalPending': 0,
+              'totalOverdue': 0,
+              'totalOutstanding': 0,
+              'items': [],
+            }),
+            200,
+          );
+        }
         if (request.url.path == '/api/rental-offers/mine') {
           return http.Response(jsonEncode([_offerJson()]), 200);
         }
@@ -95,6 +113,7 @@ void main() {
     addTearDown(apiClient.close);
     final offerService = RentalOfferApiService(apiClient);
     final leaseService = LeaseAgreementApiService(apiClient);
+    final rentScheduleService = RentScheduleApiService(apiClient);
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.build(),
@@ -102,6 +121,7 @@ void main() {
           user: _user(UserRole.tenant),
           rentalOfferApiService: offerService,
           leaseAgreementApiService: leaseService,
+          rentScheduleApiService: rentScheduleService,
         ),
       ),
     );
@@ -156,6 +176,53 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(MyLeasesScreen), findsOneWidget);
     expect(requests.last.url.path, '/api/lease-agreements/mine');
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('lease-card-11111111-1111-4111-8111-111111111111'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('rent-schedule-entry')),
+    );
+    await tester.tap(find.byKey(const ValueKey('rent-schedule-entry')));
+    await tester.pumpAndSettle();
+    expect(find.byType(LeaseRentScheduleScreen), findsOneWidget);
+    expect(
+      find.textContaining('Rent schedule details will appear here'),
+      findsNothing,
+    );
+    final scheduleScreen = tester.widget<LeaseRentScheduleScreen>(
+      find.byType(LeaseRentScheduleScreen),
+    );
+    expect(
+      identical(scheduleScreen.rentScheduleApiService, rentScheduleService),
+      isTrue,
+    );
+    expect(
+      scheduleScreen.leaseAgreementId,
+      '11111111-1111-4111-8111-111111111111',
+    );
+    expect(
+      identical(scheduleScreen.rentScheduleApiService.apiClient, apiClient),
+      isTrue,
+    );
+    expect(
+      requests
+          .map((request) => request.url.path)
+          .where((path) => path.startsWith('/api/rent-schedules/')),
+      [
+        '/api/rent-schedules/lease/11111111-1111-4111-8111-111111111111',
+        '/api/rent-schedules/lease/11111111-1111-4111-8111-111111111111/outstanding',
+      ],
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(LeaseDetailsScreen), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(MyLeasesScreen), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('rental-offers-entry')));
     await tester.pumpAndSettle();

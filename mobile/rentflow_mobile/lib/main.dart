@@ -10,6 +10,7 @@ import 'features/lease_agreements/services/lease_agreement_api_service.dart';
 import 'features/notifications/services/notification_api_service.dart';
 import 'features/rental_applications/services/rental_application_api_service.dart';
 import 'features/rental_offers/services/rental_offer_api_service.dart';
+import 'features/rent_schedules/services/rent_schedule_api_service.dart';
 import 'features/viewings/services/viewing_api_service.dart';
 import 'shared/shell/shared_app_shell.dart';
 import 'shared/theme/app_theme.dart';
@@ -99,6 +100,9 @@ class _MyAppState extends State<MyApp> {
       leaseAgreementApiService: apiClient == null
           ? null
           : LeaseAgreementApiService(apiClient),
+      rentScheduleApiService: apiClient == null
+          ? null
+          : RentScheduleApiService(apiClient),
       notificationApiService: apiClient == null
           ? null
           : NotificationApiService(apiClient),

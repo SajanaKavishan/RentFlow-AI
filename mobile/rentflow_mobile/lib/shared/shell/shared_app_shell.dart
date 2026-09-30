@@ -13,6 +13,7 @@ import '../../features/rental_applications/screens/landlord_rental_applications_
 import '../../features/rental_applications/screens/my_rental_applications_screen.dart';
 import '../../features/rental_applications/services/rental_application_api_service.dart';
 import '../../features/rental_offers/services/rental_offer_api_service.dart';
+import '../../features/rent_schedules/services/rent_schedule_api_service.dart';
 import '../../features/viewings/screens/landlord_viewing_requests_screen.dart';
 import '../../features/viewings/screens/my_viewings_screen.dart';
 import '../../features/viewings/services/viewing_api_service.dart';
@@ -35,6 +36,7 @@ class SharedAppShell extends StatefulWidget {
     this.rentalApplicationApiService,
     this.rentalOfferApiService,
     this.leaseAgreementApiService,
+    this.rentScheduleApiService,
     this.notificationApiService,
     this.maintenanceApiService,
     this.landlordPropertyId,
@@ -50,6 +52,7 @@ class SharedAppShell extends StatefulWidget {
   final RentalApplicationApiService? rentalApplicationApiService;
   final RentalOfferApiService? rentalOfferApiService;
   final LeaseAgreementApiService? leaseAgreementApiService;
+  final RentScheduleApiService? rentScheduleApiService;
   final NotificationApiService? notificationApiService;
   final MaintenanceApiService? maintenanceApiService;
   final String? landlordPropertyId;
@@ -174,6 +177,7 @@ class _SharedAppShellState extends State<SharedAppShell>
         builder: (_) => MyLeasesScreen(
           leaseAgreementApiService: leaseService,
           rentalOfferApiService: offerService,
+          rentScheduleApiService: widget.rentScheduleApiService,
         ),
       ),
     );

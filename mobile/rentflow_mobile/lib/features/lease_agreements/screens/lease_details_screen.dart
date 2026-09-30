@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../../rent_schedules/screens/lease_rent_schedule_screen.dart';
+import '../../rent_schedules/services/rent_schedule_api_service.dart';
 import '../models/lease_agreement.dart';
 import '../services/lease_agreement_api_service.dart';
 
@@ -10,10 +12,12 @@ class LeaseDetailsScreen extends StatefulWidget {
     super.key,
     required this.leaseId,
     required this.leaseAgreementApiService,
+    this.rentScheduleApiService,
   });
 
   final String leaseId;
   final LeaseAgreementApiService leaseAgreementApiService;
+  final RentScheduleApiService? rentScheduleApiService;
 
   @override
   State<LeaseDetailsScreen> createState() => _LeaseDetailsScreenState();
@@ -47,21 +51,27 @@ class _LeaseDetailsScreenState extends State<LeaseDetailsScreen> {
   }
 
   void _openRentSchedule() {
+    final rentScheduleService = widget.rentScheduleApiService;
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => Scaffold(
-          backgroundColor: AppPalette.background,
-          appBar: AppBar(title: const Text('Rent Schedule')),
-          body: const AuthenticatedPage(
-            child: AppCard(
-              child: IntegrationPendingState(
-                title: 'Rent Schedule',
-                message:
-                    'Rent schedule details will appear here when this feature is integrated.',
+        builder: (_) => rentScheduleService == null
+            ? Scaffold(
+                backgroundColor: AppPalette.background,
+                appBar: AppBar(title: const Text('Rent Schedule')),
+                body: const AuthenticatedPage(
+                  child: AppCard(
+                    child: IntegrationPendingState(
+                      title: 'Rent Schedule',
+                      message:
+                          'Rent schedule details will appear here when this feature is integrated.',
+                    ),
+                  ),
+                ),
+              )
+            : LeaseRentScheduleScreen(
+                rentScheduleApiService: rentScheduleService,
+                leaseAgreementId: widget.leaseId,
               ),
-            ),
-          ),
-        ),
       ),
     );
   }
