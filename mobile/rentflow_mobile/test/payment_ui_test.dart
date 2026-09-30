@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:rentflow_mobile/core/auth/token_storage.dart';
 import 'package:rentflow_mobile/core/network/api_client.dart';
+import 'package:rentflow_mobile/features/payments/screens/payment_details_screen.dart';
 import 'package:rentflow_mobile/features/payments/screens/pay_rent_screen.dart';
 import 'package:rentflow_mobile/features/payments/services/payment_api_service.dart';
 import 'package:rentflow_mobile/features/rent_schedules/services/rent_schedule_api_service.dart';
@@ -79,6 +80,16 @@ ApiClient _client(Future<http.Response> Function(http.Request) handler) =>
       tokenStorage: _MemoryTokenStorage(),
     );
 
+ApiClient _timeoutClient(
+  Future<http.Response> Function(http.Request) handler, {
+  required Duration requestTimeout,
+}) => ApiClient(
+  baseUrl: 'http://test',
+  requestTimeout: requestTimeout,
+  httpClient: MockClient(handler),
+  tokenStorage: _MemoryTokenStorage(),
+);
+
 Future<void> _show(
   WidgetTester tester,
   ApiClient client, {
@@ -91,6 +102,22 @@ Future<void> _show(
         rentScheduleApiService: RentScheduleApiService(client),
         paymentApiService: PaymentApiService(client),
         initialRentScheduleItemId: initialRentScheduleItemId,
+      ),
+    ),
+  );
+}
+
+Future<void> _showDetails(
+  WidgetTester tester,
+  ApiClient client, {
+  String paymentId = _paymentId,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AppTheme.build(),
+      home: PaymentDetailsScreen(
+        paymentApiService: PaymentApiService(client),
+        paymentId: paymentId,
       ),
     ),
   );
@@ -714,5 +741,282 @@ void main() {
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
     expect(find.text('Outstanding summary'), findsOneWidget);
+  });
+
+  testWidgets(
+    'Payment Details shows loading then fetches the authoritative ID',
+    (tester) async {
+      final response = Completer<http.Response>();
+      final requests = <http.Request>[];
+      final client = _client((request) async {
+        requests.add(request);
+        return response.future;
+      });
+      addTearDown(client.close);
+      await _showDetails(tester, client);
+      await tester.pump();
+      expect(find.text('Loading payment'), findsOneWidget);
+      expect(requests.single.url.path, '/api/payments/$_paymentId');
+      response.complete(http.Response(jsonEncode(_payment(status: 0)), 200));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('payment-details-card')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  for (final (status, label, explanation) in [
+    (
+      0,
+      'Pending',
+      'This payment record is awaiting later processing or review.',
+    ),
+    (1, 'Completed', 'The backend has marked this payment record completed.'),
+    (
+      2,
+      'Failed',
+      'This payment record failed. The associated rent schedule item may remain payable.',
+    ),
+  ]) {
+    testWidgets('Payment Details displays $label status and meaning', (
+      tester,
+    ) async {
+      final client = _client(
+        (request) async =>
+            http.Response(jsonEncode(_payment(status: status)), 200),
+      );
+      addTearDown(client.close);
+      await _showDetails(tester, client);
+      await tester.pumpAndSettle();
+      expect(find.text(label), findsOneWidget);
+      expect(find.text(explanation), findsOneWidget);
+      expect(find.textContaining('Gateway'), findsNothing);
+      expect(find.textContaining('bank confirmation'), findsNothing);
+    });
+  }
+
+  testWidgets('Payment Details displays supported populated fields read-only', (
+    tester,
+  ) async {
+    final payment = _payment(
+      status: 1,
+      transactionReference: 'txn-detail-42',
+      paidAt: '2030-02-01T09:00:00Z',
+    )..['updatedAt'] = '2030-02-02T09:30:00Z';
+    final client = _client(
+      (request) async => http.Response(jsonEncode(payment), 200),
+    );
+    addTearDown(client.close);
+    await _showDetails(tester, client);
+    await tester.pumpAndSettle();
+    expect(find.text('Amount'), findsOneWidget);
+    expect(find.text('1250.75'), findsOneWidget);
+    expect(find.text('Payment method'), findsOneWidget);
+    expect(find.text('Bank transfer'), findsOneWidget);
+    expect(find.text('Transaction reference'), findsOneWidget);
+    expect(find.text('txn-detail-42'), findsOneWidget);
+    expect(find.text('Rent schedule item ID'), findsOneWidget);
+    expect(find.text(_pendingId), findsOneWidget);
+    expect(find.text('Created'), findsOneWidget);
+    expect(find.text('Paid at'), findsOneWidget);
+    expect(find.text('Updated'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(FilledButton), findsNothing);
+    expect(find.byType(OutlinedButton), findsNothing);
+    expect(find.text('Complete payment'), findsNothing);
+    expect(find.text('Fail payment'), findsNothing);
+  });
+
+  testWidgets('Payment Details omits nullable reference and timestamps', (
+    tester,
+  ) async {
+    final client = _client(
+      (request) async => http.Response(
+        jsonEncode(_payment(transactionReference: null, paidAt: null)),
+        200,
+      ),
+    );
+    addTearDown(client.close);
+    await _showDetails(tester, client);
+    await tester.pumpAndSettle();
+    expect(find.text('Transaction reference'), findsNothing);
+    expect(find.text('Paid at'), findsNothing);
+    expect(find.text('Updated'), findsNothing);
+  });
+
+  for (final (status, message) in [
+    (403, 'You do not have permission to view this payment.'),
+    (404, 'This payment was not found or is no longer available.'),
+  ]) {
+    testWidgets('Payment Details handles $status safely', (tester) async {
+      final client = _client(
+        (request) async =>
+            http.Response('private backend details should stay hidden', status),
+      );
+      addTearDown(client.close);
+      await _showDetails(tester, client);
+      await tester.pumpAndSettle();
+      expect(find.text(message), findsOneWidget);
+      expect(find.textContaining('private backend'), findsNothing);
+      expect(find.text('Try again'), findsOneWidget);
+    });
+  }
+
+  testWidgets('Payment Details retries 5xx and safely handles malformed JSON', (
+    tester,
+  ) async {
+    var attempts = 0;
+    final client = _client((request) async {
+      attempts++;
+      if (attempts == 1) {
+        return http.Response('private server exception', 503);
+      }
+      if (attempts == 2) return http.Response('{bad json', 200);
+      return http.Response(jsonEncode(_payment()), 200);
+    });
+    addTearDown(client.close);
+    await _showDetails(tester, client);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Unable to load payment details. Please try again.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('private server'), findsNothing);
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.text('Try again'), findsOneWidget);
+    expect(find.textContaining('invalid response'), findsNothing);
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('payment-details-card')), findsOneWidget);
+    expect(attempts, 3);
+  });
+
+  testWidgets('Payment Details retries after a connection error', (
+    tester,
+  ) async {
+    var attempts = 0;
+    final client = _client((request) async {
+      attempts++;
+      if (attempts == 1) throw http.ClientException('private connection data');
+      return http.Response(jsonEncode(_payment()), 200);
+    });
+    addTearDown(client.close);
+    await _showDetails(tester, client);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Unable to load payment details. Please try again.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('private connection'), findsNothing);
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('payment-details-card')), findsOneWidget);
+    expect(attempts, 2);
+  });
+
+  testWidgets('Payment Details shows a safe retry state after timeout', (
+    tester,
+  ) async {
+    final client = _timeoutClient(
+      (request) => Completer<http.Response>().future,
+      requestTimeout: const Duration(milliseconds: 5),
+    );
+    addTearDown(client.close);
+    await _showDetails(tester, client);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Unable to load payment details. Please try again.'),
+      findsOneWidget,
+    );
+    expect(find.text('Try again'), findsOneWidget);
+  });
+
+  testWidgets('Payment Details 401 uses the shared unauthorized handler', (
+    tester,
+  ) async {
+    final tokenStorage = _MemoryTokenStorage();
+    var unauthorizedCalls = 0;
+    final client = ApiClient(
+      baseUrl: 'http://test',
+      tokenStorage: tokenStorage,
+      httpClient: MockClient(
+        (request) async => http.Response('private details', 401),
+      ),
+    )..setUnauthorizedHandler(() => unauthorizedCalls++);
+    addTearDown(client.close);
+    await _showDetails(tester, client);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Your session has expired. Sign in again to view this payment.',
+      ),
+      findsOneWidget,
+    );
+    expect(tokenStorage.token, isNull);
+    expect(unauthorizedCalls, 1);
+    expect(find.textContaining('private details'), findsNothing);
+  });
+
+  testWidgets('history opens authoritative details and refreshes on return', (
+    tester,
+  ) async {
+    final requests = <http.Request>[];
+    final apiClient = ApiClient(
+      baseUrl: 'http://test',
+      tokenStorage: _MemoryTokenStorage(),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.url.path == '/api/payments/mine') {
+          return http.Response(jsonEncode([_payment()]), 200);
+        }
+        if (request.url.path == '/api/payments/$_paymentId') {
+          return http.Response(jsonEncode(_payment()), 200);
+        }
+        return http.Response(jsonEncode(_summary()), 200);
+      }),
+    );
+    addTearDown(apiClient.close);
+    final scheduleService = RentScheduleApiService(apiClient);
+    final paymentService = PaymentApiService(apiClient);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.build(),
+        home: PayRentScreen(
+          rentScheduleApiService: scheduleService,
+          paymentApiService: paymentService,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final historyCallsBefore = requests
+        .where((request) => request.url.path == '/api/payments/mine')
+        .length;
+    final historyCard = find.byKey(
+      const ValueKey('payment-history-card-$_paymentId'),
+    );
+    await tester.ensureVisible(historyCard);
+    await tester.pumpAndSettle();
+    await tester.tap(historyCard);
+    await tester.pumpAndSettle();
+    expect(find.byType(PaymentDetailsScreen), findsOneWidget);
+    final details = tester.widget<PaymentDetailsScreen>(
+      find.byType(PaymentDetailsScreen),
+    );
+    expect(details.paymentId, _paymentId);
+    expect(identical(details.paymentApiService, paymentService), isTrue);
+    expect(requests.last.url.path, '/api/payments/$_paymentId');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(PayRentScreen), findsOneWidget);
+    expect(
+      requests
+          .where((request) => request.url.path == '/api/payments/mine')
+          .length,
+      historyCallsBefore + 1,
+    );
   });
 }

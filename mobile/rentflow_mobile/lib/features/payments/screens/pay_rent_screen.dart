@@ -3,6 +3,7 @@ import 'package:flutter/services.dart' show MaxLengthEnforcement;
 
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import 'payment_details_screen.dart';
 import '../../rent_schedules/models/rent_schedule_item.dart';
 import '../../rent_schedules/models/rent_schedule_outstanding_summary.dart';
 import '../../rent_schedules/services/rent_schedule_api_service.dart';
@@ -137,6 +138,18 @@ class _PayRentScreenState extends State<PayRentScreen> {
     }
   }
 
+  Future<void> _openPaymentDetails(Payment payment) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PaymentDetailsScreen(
+          paymentApiService: widget.paymentApiService,
+          paymentId: payment.id,
+        ),
+      ),
+    );
+    if (mounted) await _refresh();
+  }
+
   RentScheduleItem? _selectedItem(List<RentScheduleItem> items) {
     for (final item in items) {
       if (item.id == _selectedItemId) return item;
@@ -226,7 +239,10 @@ class _PayRentScreenState extends State<PayRentScreen> {
             )
           else
             for (final payment in data.payments) ...[
-              _PaymentHistoryCard(payment: payment),
+              _PaymentHistoryCard(
+                payment: payment,
+                onTap: () => _openPaymentDetails(payment),
+              ),
               const SizedBox(height: AppSpacing.md),
             ],
         ]);
@@ -496,15 +512,17 @@ class _PaymentForm extends StatelessWidget {
 }
 
 class _PaymentHistoryCard extends StatelessWidget {
-  const _PaymentHistoryCard({required this.payment});
+  const _PaymentHistoryCard({required this.payment, required this.onTap});
 
   final Payment payment;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final (status, tone) = _paymentStatus(payment.status);
     return AppCard(
       key: ValueKey('payment-history-card-${payment.id}'),
+      onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -10,6 +10,7 @@ import 'package:rentflow_mobile/features/auth/models/current_user.dart';
 import 'package:rentflow_mobile/features/lease_agreements/screens/lease_details_screen.dart';
 import 'package:rentflow_mobile/features/lease_agreements/screens/my_leases_screen.dart';
 import 'package:rentflow_mobile/features/lease_agreements/services/lease_agreement_api_service.dart';
+import 'package:rentflow_mobile/features/payments/screens/payment_details_screen.dart';
 import 'package:rentflow_mobile/features/payments/screens/pay_rent_screen.dart';
 import 'package:rentflow_mobile/features/payments/services/payment_api_service.dart';
 import 'package:rentflow_mobile/features/rental_offers/screens/my_rental_offers_screen.dart';
@@ -127,7 +128,11 @@ void main() {
           );
         }
         if (request.url.path == '/api/payments/mine') {
-          return http.Response('[]', 200);
+          return http.Response(jsonEncode([_paymentJson()]), 200);
+        }
+        if (request.url.path ==
+            '/api/payments/88888888-8888-4888-8888-888888888888') {
+          return http.Response(jsonEncode(_paymentJson()), 200);
         }
         if (request.method == 'POST' && request.url.path == '/api/payments') {
           return http.Response(jsonEncode(_paymentJson()), 201);
@@ -387,6 +392,28 @@ void main() {
       identical(payScreen.rentScheduleApiService, rentScheduleService),
       isTrue,
     );
+    final historyCard = find.byKey(
+      const ValueKey(
+        'payment-history-card-88888888-8888-4888-8888-888888888888',
+      ),
+    );
+    await tester.ensureVisible(historyCard);
+    await tester.pumpAndSettle();
+    await tester.tap(historyCard);
+    await tester.pumpAndSettle();
+    expect(find.byType(PaymentDetailsScreen), findsOneWidget);
+    final paymentDetails = tester.widget<PaymentDetailsScreen>(
+      find.byType(PaymentDetailsScreen),
+    );
+    expect(paymentDetails.paymentId, '88888888-8888-4888-8888-888888888888');
+    expect(identical(paymentDetails.paymentApiService, paymentService), isTrue);
+    expect(
+      requests.last.url.path,
+      '/api/payments/88888888-8888-4888-8888-888888888888',
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(PayRentScreen), findsOneWidget);
   });
 
   for (final role in [UserRole.landlord, UserRole.admin]) {
@@ -441,8 +468,8 @@ Map<String, dynamic> _paymentJson() => {
   'amount': 1250.75,
   'paymentMethod': 'Bank transfer',
   'transactionReference': null,
-  'status': 0,
-  'paidAt': null,
+  'status': 1,
+  'paidAt': '2030-01-16T09:00:00Z',
   'createdAt': '2030-01-15T09:00:00Z',
   'updatedAt': null,
 };
