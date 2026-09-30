@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using RentFlow.Api.Models;
+using RentFlow.Api.Services;
 
 namespace RentFlow.Api.DTOs;
 
@@ -32,6 +34,19 @@ public class CreatePropertyDto : IValidatableObject
     [Range(0.01, double.MaxValue)]
     public decimal MonthlyRent { get; set; }
 
+    [Range(typeof(decimal), "0", "9999999999999999.99")]
+    public decimal? AdvertisedSecurityDeposit { get; set; }
+
+    [Range(1, 120)]
+    public int? PreferredLeaseTermMonths { get; set; }
+
+    public PetPolicyStatus? PetPolicy { get; set; }
+
+    [MaxLength(500)]
+    public string? PetPolicyNotes { get; set; }
+
+    public List<string>? IncludedUtilities { get; set; }
+
     [Range(0, int.MaxValue)]
     public int Bedrooms { get; set; }
 
@@ -56,6 +71,8 @@ public class CreatePropertyDto : IValidatableObject
 
     public List<string> Amenities { get; set; } = new();
 
+    public List<PropertyAmenityInputDto>? AmenityDetails { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (Latitude.HasValue != Longitude.HasValue)
@@ -79,6 +96,12 @@ public class CreatePropertyDto : IValidatableObject
             yield return new ValidationResult(
                 "Floor area must use square feet or square metres.",
                 new[] { nameof(AreaType), nameof(AreaUnit) });
+        }
+
+        foreach (var result in PropertyListingPreferenceValidator.Validate(
+            PetPolicy, PetPolicyNotes, IncludedUtilities))
+        {
+            yield return result;
         }
     }
 }

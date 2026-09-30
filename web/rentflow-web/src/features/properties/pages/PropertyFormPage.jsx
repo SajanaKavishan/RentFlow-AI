@@ -5,19 +5,21 @@ import PropertyLocationPicker from '../components/PropertyLocationPicker.jsx'
 import {
   createProperty,
   getMyProperties,
-  updateProperty,
+  updatePropertyListing,
   uploadPropertyImages,
 } from '../services/propertyApiService.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import { getPropertyAreaUnits, PROPERTY_AREA_TYPES } from '../propertyArea.js'
+import { AMENITY_CATALOG, UTILITY_CATALOG, getPropertyAmenityDetails } from '../propertyListingCatalog.js'
 import '../properties.css'
 
 const MANAGE_PROPERTIES_PATH = '/modules/manage-properties'
 const UNSAVED_MESSAGE = 'You have unsaved property changes. Leave without saving them?'
 const STEPS = [
   { title: 'Basic Details', description: 'Name and locate the property.' },
-  { title: 'Property Details', description: 'Add rent, rooms, size and amenities.' },
-  { title: 'Photos & Availability', description: 'Finish the listing and publish.' },
+  { title: 'Property Details', description: 'Add rent, rooms, size and availability.' },
+  { title: 'Rental Preferences & Amenities', description: 'Share non-binding preferences and listing features.' },
+  { title: 'Photos & Publication', description: 'Finish the listing and publish.' },
 ]
 
 const initialForm = {
@@ -35,11 +37,20 @@ const initialForm = {
   areaUnit: 'sqft',
   areaType: 'FloorArea',
   availableFrom: '',
-  amenities: '',
+  advertisedSecurityDeposit: '',
+  preferredLeaseTermMonths: '',
+  petPolicy: '',
+  petPolicyNotes: '',
+  utilityInfoProvided: false,
+  includedUtilities: [],
+  canonicalAmenities: [],
+  customAmenities: [],
+  customAmenityDraft: '',
   isAvailable: true,
 }
 
 function propertyToForm(property) {
+  const amenityDetails = getPropertyAmenityDetails(property)
   return {
     title: property.title || '',
     description: property.description || '',
@@ -55,7 +66,15 @@ function propertyToForm(property) {
     areaUnit: property.areaUnit || '',
     areaType: property.areaType || '',
     availableFrom: property.availableFrom || '',
-    amenities: (property.amenities || []).join(', '),
+    advertisedSecurityDeposit: property.advertisedSecurityDeposit ?? '',
+    preferredLeaseTermMonths: property.preferredLeaseTermMonths ?? '',
+    petPolicy: property.petPolicy || '',
+    petPolicyNotes: property.petPolicy === 'NotAllowed' ? '' : property.petPolicyNotes || '',
+    utilityInfoProvided: Array.isArray(property.includedUtilities),
+    includedUtilities: property.includedUtilities || [],
+    canonicalAmenities: amenityDetails.filter((item) => item.canonicalKey).map((item) => item.canonicalKey),
+    customAmenities: amenityDetails.filter((item) => !item.canonicalKey).map((item) => item.name),
+    customAmenityDraft: '',
     isAvailable: property.isAvailable ?? true,
   }
 }
@@ -77,10 +96,18 @@ function formToRequest(form) {
     areaType: form.areaType || null,
     availableFrom: form.availableFrom || null,
     isAvailable: Boolean(form.isAvailable),
-    amenities: form.amenities
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean),
+    advertisedSecurityDeposit: form.advertisedSecurityDeposit === ''
+      ? null : Number(form.advertisedSecurityDeposit),
+    preferredLeaseTermMonths: form.preferredLeaseTermMonths === ''
+      ? null : Number(form.preferredLeaseTermMonths),
+    petPolicy: form.petPolicy || null,
+    petPolicyNotes: form.petPolicyNotes.trim() || null,
+    includedUtilities: form.utilityInfoProvided ? form.includedUtilities : null,
+    amenities: [],
+    amenityDetails: [
+      ...form.canonicalAmenities.map((canonicalKey) => ({ canonicalKey, customName: null })),
+      ...form.customAmenities.map((customName) => ({ canonicalKey: null, customName })),
+    ],
   }
 }
 
@@ -102,10 +129,14 @@ function formSnapshot(form) {
     areaUnit: form.areaUnit,
     areaType: form.areaType || null,
     availableFrom: form.availableFrom || null,
-    amenities: form.amenities
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean),
+    advertisedSecurityDeposit: normalizeNumber(form.advertisedSecurityDeposit),
+    preferredLeaseTermMonths: normalizeNumber(form.preferredLeaseTermMonths),
+    petPolicy: form.petPolicy || null,
+    petPolicyNotes: form.petPolicyNotes.trim(),
+    utilityInfoProvided: form.utilityInfoProvided,
+    includedUtilities: [...form.includedUtilities].sort(),
+    canonicalAmenities: [...form.canonicalAmenities].sort(),
+    customAmenities: form.customAmenities.map((item) => item.trim()).filter(Boolean).sort(),
     isAvailable: Boolean(form.isAvailable),
   })
 }
@@ -155,6 +186,25 @@ function validateStep(step, form, locationMode) {
     if (form.areaType === 'FloorArea' &&
       (form.areaUnit === 'perch' || form.areaUnit === 'acre')) {
       errors.areaUnit = 'Floor area must use square feet or square metres.'
+    }
+  }
+
+  if (step === 2) {
+    if (form.advertisedSecurityDeposit !== ''
+      && (!Number.isFinite(Number(form.advertisedSecurityDeposit)) || Number(form.advertisedSecurityDeposit) < 0)) {
+      errors.advertisedSecurityDeposit = 'Advertised security deposit must be zero or more.'
+    }
+    if (form.preferredLeaseTermMonths !== '') {
+      const term = Number(form.preferredLeaseTermMonths)
+      if (!Number.isInteger(term) || term < 1 || term > 120) {
+        errors.preferredLeaseTermMonths = 'Preferred lease term must be 1 to 120 months.'
+      }
+    }
+    if (form.petPolicy === 'Conditional' && !form.petPolicyNotes.trim()) {
+      errors.petPolicyNotes = 'Add meaningful notes for a conditional pet policy.'
+    }
+    if (form.petPolicyNotes.length > 500) {
+      errors.petPolicyNotes = 'Pet notes must be 500 characters or fewer.'
     }
   }
 
@@ -278,7 +328,7 @@ export default function PropertyFormPage() {
   const pageTitle = isEditing ? 'Edit Property' : 'Add Property'
   const pageDescription = isEditing
     ? 'Update the listing details and add new property photos.'
-    : 'Create a complete listing in three short steps.'
+    : 'Create a complete listing in four short steps.'
   const progressLabel = useMemo(() => `Step ${step + 1} of ${STEPS.length}`, [step])
 
   function updateField(event) {
@@ -290,6 +340,9 @@ export default function PropertyFormPage() {
         && (current.areaUnit === 'perch' || current.areaUnit === 'acre')
         ? { areaUnit: 'sqft' }
         : {}),
+      ...(name === 'petPolicy' && value === 'NotAllowed'
+        ? { petPolicyNotes: '' }
+        : {}),
     }))
     setFieldErrors((current) => {
       if (!current[name]) return current
@@ -297,6 +350,26 @@ export default function PropertyFormPage() {
       delete next[name]
       return next
     })
+  }
+
+  function toggleCollection(field, value) {
+    setForm((current) => ({
+      ...current,
+      [field]: current[field].includes(value)
+        ? current[field].filter((item) => item !== value)
+        : [...current[field], value],
+    }))
+  }
+
+  function addCustomAmenity() {
+    const value = form.customAmenityDraft.trim()
+    if (!value) return
+    setForm((current) => ({
+      ...current,
+      customAmenities: current.customAmenities.some((item) => item.toLowerCase() === value.toLowerCase())
+        ? current.customAmenities : [...current.customAmenities, value],
+      customAmenityDraft: '',
+    }))
   }
 
   function continueToNextStep() {
@@ -386,7 +459,7 @@ export default function PropertyFormPage() {
 
     if (isEditing && !isDirty) return
 
-    for (const candidateStep of [0, 1]) {
+    for (const candidateStep of [0, 1, 2]) {
       const errors = validateStep(candidateStep, form, locationMode)
       if (Object.keys(errors).length > 0) {
         setStep(candidateStep)
@@ -403,7 +476,7 @@ export default function PropertyFormPage() {
       let savedPropertyId = ownedPropertyId
 
       if (isEditing) {
-        await updateProperty(ownedPropertyId, request)
+        await updatePropertyListing(ownedPropertyId, request)
       } else {
         const property = await createProperty(request)
         savedPropertyId = property.id
@@ -669,20 +742,156 @@ export default function PropertyFormPage() {
                 <small>Optional. Leave blank when no specific date has been promised.</small>
               </PropertyField>
 
-              <PropertyField name="amenities" label="Amenities" wide>
-                <input
-                  id="amenities"
-                  name="amenities"
-                  value={form.amenities}
-                  onChange={updateField}
-                  placeholder="e.g. Parking, Air Conditioning, Security"
-                />
-                <small>Separate multiple amenities with commas.</small>
-              </PropertyField>
             </>
           )}
 
           {step === 2 && (
+            <>
+              <PropertyField
+                name="advertisedSecurityDeposit"
+                label="Advertised security deposit"
+                error={fieldErrors.advertisedSecurityDeposit}
+              >
+                <div className="property-input-prefix">
+                  <span>Rs.</span>
+                  <input
+                    id="advertisedSecurityDeposit"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    name="advertisedSecurityDeposit"
+                    value={form.advertisedSecurityDeposit}
+                    onChange={updateField}
+                    placeholder="Optional"
+                  />
+                </div>
+                <small>Public listing information only; final negotiated terms may differ.</small>
+              </PropertyField>
+
+              <PropertyField
+                name="preferredLeaseTermMonths"
+                label="Preferred lease term"
+                error={fieldErrors.preferredLeaseTermMonths}
+              >
+                <div className="property-input-suffix">
+                  <input
+                    id="preferredLeaseTermMonths"
+                    type="number"
+                    min="1"
+                    max="120"
+                    name="preferredLeaseTermMonths"
+                    value={form.preferredLeaseTermMonths}
+                    onChange={updateField}
+                    placeholder="12"
+                  />
+                  <span>months</span>
+                </div>
+              </PropertyField>
+
+              <PropertyField name="petPolicy" label="Pet policy">
+                <select id="petPolicy" name="petPolicy" value={form.petPolicy} onChange={updateField}>
+                  <option value="">Not specified</option>
+                  <option value="Allowed">Allowed</option>
+                  <option value="NotAllowed">Not allowed</option>
+                  <option value="Conditional">Conditional</option>
+                </select>
+              </PropertyField>
+
+              {form.petPolicy !== 'NotAllowed' && (
+                <PropertyField name="petPolicyNotes" label="Pet notes" error={fieldErrors.petPolicyNotes} wide>
+                  <textarea
+                    id="petPolicyNotes"
+                    name="petPolicyNotes"
+                    value={form.petPolicyNotes}
+                    onChange={updateField}
+                    maxLength="500"
+                    rows="3"
+                    placeholder={form.petPolicy === 'Conditional'
+                      ? 'Required, e.g. Landlord approval required'
+                      : 'Optional, e.g. Small pets only'}
+                  />
+                </PropertyField>
+              )}
+
+              <fieldset className="property-choice-group property-form-field--wide">
+                <legend>Utilities included in monthly rent</legend>
+                <label className="property-choice-toggle">
+                  <input
+                    type="checkbox"
+                    checked={form.utilityInfoProvided}
+                    onChange={(event) => setForm((current) => ({
+                      ...current,
+                      utilityInfoProvided: event.target.checked,
+                      includedUtilities: event.target.checked ? current.includedUtilities : [],
+                    }))}
+                  />
+                  <span>I want to provide utility information</span>
+                </label>
+                {form.utilityInfoProvided && (
+                  <div className="property-choice-grid">
+                    {UTILITY_CATALOG.map((utility) => (
+                      <label key={utility.key}>
+                        <input
+                          type="checkbox"
+                          checked={form.includedUtilities.includes(utility.key)}
+                          onChange={() => toggleCollection('includedUtilities', utility.key)}
+                        />
+                        <span>{utility.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <small>{form.utilityInfoProvided && form.includedUtilities.length === 0
+                  ? 'No utilities are advertised as included.'
+                  : 'Only select utilities included in the advertised monthly rent.'}</small>
+              </fieldset>
+
+              <fieldset className="property-choice-group property-form-field--wide">
+                <legend>Amenities</legend>
+                <div className="property-choice-grid property-choice-grid--amenities">
+                  {AMENITY_CATALOG.map((amenity) => (
+                    <label key={amenity.key}>
+                      <input
+                        type="checkbox"
+                        checked={form.canonicalAmenities.includes(amenity.key)}
+                        onChange={() => toggleCollection('canonicalAmenities', amenity.key)}
+                      />
+                      <Icon name={amenity.icon} size={18} />
+                      <span>{amenity.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="property-custom-amenity">
+                  <input
+                    value={form.customAmenityDraft}
+                    onChange={(event) => setForm((current) => ({ ...current, customAmenityDraft: event.target.value }))}
+                    placeholder="Other amenity"
+                    maxLength="100"
+                  />
+                  <button type="button" onClick={addCustomAmenity}>+ Add</button>
+                </div>
+                {form.customAmenities.length > 0 && (
+                  <div className="property-custom-amenity-list">
+                    {form.customAmenities.map((amenity) => (
+                      <span key={amenity}>
+                        {amenity}
+                        <button
+                          type="button"
+                          aria-label={`Remove ${amenity}`}
+                          onClick={() => setForm((current) => ({
+                            ...current,
+                            customAmenities: current.customAmenities.filter((item) => item !== amenity),
+                          }))}
+                        >×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </fieldset>
+            </>
+          )}
+
+          {step === 3 && (
             <>
               <div className="property-photo-field">
                 {isEditing && (

@@ -5,6 +5,7 @@ using RentFlow.Api.Data;
 using RentFlow.Api.DTOs;
 using RentFlow.Api.DTOs.PropertyMatching;
 using RentFlow.Api.Models;
+using RentFlow.Api.Services;
 using RentFlow.Api.Services.Interfaces;
 
 namespace RentFlow.Api.Controllers;
@@ -102,18 +103,21 @@ public class PropertiesController : ControllerBase
                 property.IsAvailable == isAvailable.Value);
         }
 
-        if (!string.IsNullOrWhiteSpace(amenity))
-        {
-            var amenityFilter = amenity.Trim().ToLower();
-
-            query = query.Where(property =>
-                property.Amenities.Any(item =>
-                    item.Name.ToLower() == amenityFilter));
-        }
-
         var properties = await query
             .OrderByDescending(property => property.CreatedAt)
             .ToListAsync();
+
+        if (!string.IsNullOrWhiteSpace(amenity))
+        {
+            var amenityFilter = PropertyListingCatalog.NormalizeForMatching(amenity);
+            properties = properties
+                .Where(property => property.Amenities.Any(item =>
+                    string.Equals(
+                        item.CanonicalKey ?? PropertyListingCatalog.NormalizeForMatching(item.Name),
+                        amenityFilter,
+                        StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
 
         var result = properties
             .Select(MapToResponseDto)
@@ -173,6 +177,22 @@ public class PropertiesController : ControllerBase
         }
 
         return Ok(property);
+    }
+
+    // Atomic, presence-safe endpoint for the current Add/Edit listing workflow.
+    [HttpPut("{id:guid}/listing")]
+    [Authorize(Roles = nameof(UserRole.Landlord))]
+    public async Task<ActionResult<PropertyResponseDto>> UpdatePropertyListing(
+        Guid id,
+        UpdatePropertyListingDto dto)
+    {
+        var landlordId = GetCurrentLandlordId();
+        if (landlordId is null) return Forbid();
+
+        var property = await _propertyService.UpdateListingAsync(
+            id, landlordId.Value, dto);
+
+        return property is null ? NotFound() : Ok(property);
     }
 
     // =========================================================
@@ -364,6 +384,11 @@ public class PropertiesController : ControllerBase
             Longitude = property.Longitude,
             GooglePlaceId = property.GooglePlaceId,
             MonthlyRent = property.MonthlyRent,
+            AdvertisedSecurityDeposit = property.AdvertisedSecurityDeposit,
+            PreferredLeaseTermMonths = property.PreferredLeaseTermMonths,
+            PetPolicy = property.PetPolicy,
+            PetPolicyNotes = property.PetPolicyNotes,
+            IncludedUtilities = property.IncludedUtilities?.ToList(),
             Bedrooms = property.Bedrooms,
             Bathrooms = property.Bathrooms,
             Area = property.Area,
@@ -376,6 +401,13 @@ public class PropertiesController : ControllerBase
 
             Amenities = property.Amenities
                 .Select(amenity => amenity.Name)
+                .ToList(),
+            AmenityDetails = property.Amenities
+                .Select(amenity => new PropertyAmenityResponseDto
+                {
+                    CanonicalKey = amenity.CanonicalKey,
+                    Name = amenity.Name
+                })
                 .ToList()
         };
     }

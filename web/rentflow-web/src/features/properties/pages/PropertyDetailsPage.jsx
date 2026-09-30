@@ -7,6 +7,11 @@ import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import PropertyLocationMap from '../components/PropertyLocationMap.jsx'
 import { formatPropertyArea } from '../propertyArea.js'
 import {
+  UTILITY_CATALOG,
+  getAmenityPresentation,
+  getPropertyAmenityDetails,
+} from '../propertyListingCatalog.js'
+import {
   deleteProperty,
   getMyProperties,
   getProperty,
@@ -46,6 +51,20 @@ function formatAvailableFrom(value) {
   })
 }
 
+function formatPetPolicy(property) {
+  if (!property?.petPolicy) return null
+  if (property.petPolicy === 'NotAllowed') return 'Not allowed'
+  if (property.petPolicyNotes?.trim()) return property.petPolicyNotes.trim()
+  return property.petPolicy === 'Conditional' ? 'Conditional' : 'Allowed'
+}
+
+function formatUtilities(includedUtilities) {
+  if (!Array.isArray(includedUtilities)) return null
+  if (includedUtilities.length === 0) return 'None advertised as included'
+  const labels = new Map(UTILITY_CATALOG.map((item) => [item.key, item.label]))
+  return includedUtilities.map((key) => labels.get(key) || key).join(', ')
+}
+
 export default function PropertyDetailsPage() {
   const { propertyId } = useParams()
   const navigate = useNavigate()
@@ -80,6 +99,9 @@ export default function PropertyDetailsPage() {
     ? MANAGE_PROPERTIES_PATH
     : '/modules/properties'
   const availableFromLabel = formatAvailableFrom(property?.availableFrom)
+  const petPolicyLabel = formatPetPolicy(property)
+  const utilitiesLabel = formatUtilities(property?.includedUtilities)
+  const amenityDetails = getPropertyAmenityDetails(property)
 
   useEffect(() => {
     let active = true
@@ -150,6 +172,8 @@ export default function PropertyDetailsPage() {
   useEffect(() => {
     let active = true
 
+    if (!isTenant) return () => { active = false }
+
     getPublicLandlordSummary(propertyId)
       .then((summary) => {
         if (!summary
@@ -166,7 +190,7 @@ export default function PropertyDetailsPage() {
       })
 
     return () => { active = false }
-  }, [propertyId])
+  }, [isTenant, propertyId])
 
   useEffect(() => {
     let active = true
@@ -420,6 +444,30 @@ export default function PropertyDetailsPage() {
             </div>
 
             <dl className="property-details-summary__details">
+              {property.advertisedSecurityDeposit != null && (
+                <div>
+                  <dt>Advertised security deposit</dt>
+                  <dd>Rs. {Number(property.advertisedSecurityDeposit).toLocaleString()}</dd>
+                </div>
+              )}
+              {property.preferredLeaseTermMonths != null && (
+                <div>
+                  <dt>Preferred lease term</dt>
+                  <dd>{property.preferredLeaseTermMonths} months</dd>
+                </div>
+              )}
+              {petPolicyLabel && (
+                <div>
+                  <dt>Pets</dt>
+                  <dd>{petPolicyLabel}</dd>
+                </div>
+              )}
+              {utilitiesLabel && (
+                <div>
+                  <dt>Utilities</dt>
+                  <dd>{utilitiesLabel}</dd>
+                </div>
+              )}
               <div>
                 <dt>Availability</dt>
                 <dd className={property.isAvailable ? 'is-available' : 'is-unavailable'}>
@@ -472,14 +520,17 @@ export default function PropertyDetailsPage() {
 
           <section className="property-details-section">
             <h2>Amenities</h2>
-            {property.amenities?.length > 0 ? (
+            {amenityDetails.length > 0 ? (
               <ul className="property-details-amenities">
-                {property.amenities.map((amenity) => (
-                  <li key={amenity}>
-                    <span aria-hidden="true"><Icon name="sparkles" size={17} /></span>
-                    {amenity}
-                  </li>
-                ))}
+                {amenityDetails.map((amenity, index) => {
+                  const presentation = getAmenityPresentation(amenity)
+                  return (
+                    <li key={`${presentation.key}-${index}`}>
+                      <span aria-hidden="true"><Icon name={presentation.icon} size={19} /></span>
+                      {presentation.label}
+                    </li>
+                  )
+                })}
               </ul>
             ) : (
               <p>No amenities have been added yet.</p>
@@ -494,38 +545,40 @@ export default function PropertyDetailsPage() {
             googlePlaceId={property.googlePlaceId}
           />
 
-          <section className="property-details-section property-listed-by" aria-labelledby="property-listed-by-title">
-            <h2 id="property-listed-by-title">Listed by</h2>
-            <div className="property-listed-by__profile">
-              {landlordState.status === 'ready' ? (
-                <>
-                  <span className="property-listed-by__avatar" aria-hidden="true">
-                    {landlordState.summary.hasProfileImage && landlordImageFailedFor !== property.id ? (
-                      <img
-                        src={getPublicLandlordImageUrl(property.id)}
-                        alt=""
-                        onError={() => setLandlordImageFailedFor(property.id)}
-                      />
-                    ) : getInitials(landlordState.summary.displayName)}
-                  </span>
-                  <div>
-                    <strong>{landlordState.summary.displayName}</strong>
-                    <p>Member since {landlordState.summary.memberSinceYear}</p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <span className="property-listed-by__avatar" aria-hidden="true">
-                    <Icon name="user" size={22} />
-                  </span>
-                  <div>
-                    <strong>{landlordState.status === 'loading' ? 'Loading landlord details' : 'Landlord details unavailable'}</strong>
-                    {landlordState.status === 'error' && <p>This listing remains available to review.</p>}
-                  </div>
-                </>
-              )}
-            </div>
-          </section>
+          {isTenant && (
+            <section className="property-details-section property-listed-by" aria-labelledby="property-listed-by-title">
+              <h2 id="property-listed-by-title">Listed by</h2>
+              <div className="property-listed-by__profile">
+                {landlordState.status === 'ready' ? (
+                  <>
+                    <span className="property-listed-by__avatar" aria-hidden="true">
+                      {landlordState.summary.hasProfileImage && landlordImageFailedFor !== property.id ? (
+                        <img
+                          src={getPublicLandlordImageUrl(property.id)}
+                          alt=""
+                          onError={() => setLandlordImageFailedFor(property.id)}
+                        />
+                      ) : getInitials(landlordState.summary.displayName)}
+                    </span>
+                    <div>
+                      <strong>{landlordState.summary.displayName}</strong>
+                      <p>Member since {landlordState.summary.memberSinceYear}</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="property-listed-by__avatar" aria-hidden="true">
+                      <Icon name="user" size={22} />
+                    </span>
+                    <div>
+                      <strong>{landlordState.status === 'loading' ? 'Loading landlord details' : 'Landlord details unavailable'}</strong>
+                      {landlordState.status === 'error' && <p>This listing remains available to review.</p>}
+                    </div>
+                  </>
+                )}
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </main>

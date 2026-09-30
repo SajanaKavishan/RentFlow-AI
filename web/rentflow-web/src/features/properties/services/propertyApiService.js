@@ -106,6 +106,14 @@ export function deletePropertyImage(propertyId, imageId) {
   )
 }
 
+export function updatePropertyListing(propertyId, property) {
+  return apiRequest(`/api/properties/${propertyId}/listing`, {
+    method: 'PUT',
+    body: JSON.stringify(property),
+    errorMessage: 'Unable to update the property listing.',
+  })
+}
+
 export function getPublicLandlordSummary(propertyId) {
   return apiRequest(`/api/properties/${encodeURIComponent(propertyId)}/landlord-summary`, {
     authenticated: false,

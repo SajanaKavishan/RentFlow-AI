@@ -66,6 +66,31 @@ public sealed class PropertyMatchingRuleToolTests
     }
 
     [Fact]
+    public async Task ScoreAsync_MatchesCanonicalAmenityAliasesWithoutChangingWeights()
+    {
+        var property = new Property
+        {
+            Id = Guid.NewGuid(),
+            Title = "Cool apartment",
+            City = "Colombo",
+            IsAvailable = true,
+            Amenities =
+            [
+                new PropertyAmenity { Name = "Air Conditioning", CanonicalKey = "air-conditioning" },
+                new PropertyAmenity { Name = "Solar inverter" }
+            ]
+        };
+
+        var result = await new PropertyMatchingRuleTool().ScoreAsync(
+            [property],
+            new PropertyMatchingRequest { PreferredAmenities = ["A/C", "Solar inverter"] });
+
+        var match = Assert.Single(result);
+        Assert.Equal(100, match.MatchScore);
+        Assert.Contains("Matches 2 of 2 preferred amenities.", match.MatchReasons);
+    }
+
+    [Fact]
     public async Task Orchestrator_KeepsDeterministicReasonsWhenAgentReturnsInventedClaims()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()

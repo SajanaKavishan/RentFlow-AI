@@ -122,6 +122,43 @@ describe('tenant property details', () => {
     expect(screen.queryByText(/pets allowed/i)).not.toBeInTheDocument()
   })
 
+  it('renders real advertised preferences and canonical/custom amenity labels', async () => {
+    getProperty.mockResolvedValue({
+      ...property,
+      advertisedSecurityDeposit: 240000,
+      preferredLeaseTermMonths: 12,
+      petPolicy: 'Allowed',
+      petPolicyNotes: 'Small pets only',
+      includedUtilities: ['water', 'internet'],
+      amenityDetails: [
+        { canonicalKey: 'wifi', name: 'Wi-Fi' },
+        { canonicalKey: null, name: 'Solar inverter' },
+      ],
+    })
+    renderPage()
+
+    expect(await screen.findByText('Rs. 240,000')).toBeInTheDocument()
+    expect(screen.getByText('12 months')).toBeInTheDocument()
+    expect(screen.getByText('Small pets only')).toBeInTheDocument()
+    expect(screen.getByText('Water, Internet')).toBeInTheDocument()
+    expect(screen.getByText('Wi-Fi')).toBeInTheDocument()
+    expect(screen.getByText('Solar inverter')).toBeInTheDocument()
+    expect(screen.queryByText(/application fee/i)).not.toBeInTheDocument()
+  })
+
+  it('distinguishes no included utilities from missing utility information', async () => {
+    getProperty.mockResolvedValue({ ...property, includedUtilities: [] })
+    const view = renderPage()
+    expect(await screen.findByText('None advertised as included')).toBeInTheDocument()
+
+    view.unmount()
+    getProperty.mockResolvedValue({ ...property, includedUtilities: null })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lake View Apartment' })
+    expect(screen.queryByText('None advertised as included')).not.toBeInTheDocument()
+    expect(screen.queryByText('Utilities information not provided')).not.toBeInTheDocument()
+  })
+
   it('shows only the real public landlord summary after location with initials fallback', async () => {
     renderPage()
 
@@ -188,5 +225,7 @@ describe('tenant property details', () => {
     expect(screen.getByRole('link', { name: /Viewing Requests/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Rental Applications/ })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Book a Viewing' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Listed by' })).not.toBeInTheDocument()
+    expect(getPublicLandlordSummary).not.toHaveBeenCalled()
   })
 })

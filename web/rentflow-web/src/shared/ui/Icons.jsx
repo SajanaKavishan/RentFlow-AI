@@ -35,6 +35,17 @@ const paths = {
   edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z" /></>,
   trash: <><path d="M4 7h16m-11 4v6m6-6v6M9 4h6l1 3H8z" /><path d="m6 7 1 14h10l1-14" /></>,
   ruler: <><path d="m4 17 13-13 3 3L7 20H4z" /><path d="m14 7 3 3m-6 0 2 2m-5 1 2 2" /></>,
+  wifi: <><path d="M5 12.5a10 10 0 0 1 14 0M8 16a6 6 0 0 1 8 0" /><path d="M12 20h.01" /></>,
+  car: <><path d="m5 11 2-5h10l2 5" /><rect x="3" y="10" width="18" height="8" rx="2" /><path d="M6 18v2m12-2v2M7 14h.01M17 14h.01" /></>,
+  wind: <><path d="M4 8h10a2 2 0 1 0-2-2M4 12h15a2 2 0 1 1-2 2M4 16h7" /></>,
+  washer: <><rect x="5" y="3" width="14" height="18" rx="2" /><circle cx="12" cy="13" r="4" /><path d="M8 6h.01M11 6h4" /></>,
+  dumbbell: <><path d="M6 8v8m12-8v8M3 10v4m18-4v4M6 12h12" /></>,
+  waves: <><path d="M3 7c2 0 2 2 4 2s2-2 4-2 2 2 4 2 2-2 4-2 2 2 4 2M3 13c2 0 2 2 4 2s2-2 4-2 2 2 4 2 2-2 4-2 2 2 4 2M3 19c2 0 2 2 4 2s2-2 4-2 2 2 4 2 2-2 4-2 2 2 4 2" /></>,
+  elevator: <><rect x="5" y="3" width="14" height="18" rx="1" /><path d="M12 7V17m-3-7 3-3 3 3m0 4-3 3-3-3" /></>,
+  sofa: <><path d="M5 12V8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v4" /><path d="M4 11a2 2 0 0 0-2 2v5h20v-5a2 2 0 0 0-2-2M5 18v2m14-2v2" /></>,
+  leaf: <><path d="M20 4C10 4 5 9 5 15c0 3 2 5 5 5 6 0 10-6 10-16z" /><path d="M4 21c3-6 7-9 12-12" /></>,
+  rooftop: <><path d="m3 11 9-7 9 7M6 10v10h12V10" /><path d="m12 11 .7 2.1 2.3.1-1.8 1.4.6 2.2-1.8-1.3-1.8 1.3.6-2.2-1.8-1.4 2.3-.1z" /></>,
+  amenity: <><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16 9" /></>,
 }
 
 export default function Icon({ name, size = 20, className = '' }) {

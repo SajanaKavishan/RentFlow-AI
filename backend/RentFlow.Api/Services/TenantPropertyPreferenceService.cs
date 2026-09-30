@@ -50,6 +50,10 @@ public sealed class TenantPropertyPreferenceService(
             .Select(NormalizeOptional)
             .Where(item => item is not null)
             .Cast<string>()
+            .Select(item => PropertyListingCatalog.CanonicalizeAmenity(item) is string canonical
+                ? PropertyListingCatalog.CanonicalAmenityLabel(canonical)
+                : item)
+            .Where(item => item.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         preference.UpdatedAt = timeProvider.GetUtcNow();

@@ -22,6 +22,16 @@ public class PropertyResponseDto
 
     public decimal MonthlyRent { get; set; }
 
+    public decimal? AdvertisedSecurityDeposit { get; set; }
+
+    public int? PreferredLeaseTermMonths { get; set; }
+
+    public Models.PetPolicyStatus? PetPolicy { get; set; }
+
+    public string? PetPolicyNotes { get; set; }
+
+    public List<string>? IncludedUtilities { get; set; }
+
     public int Bedrooms { get; set; }
 
     public int Bathrooms { get; set; }
@@ -41,4 +51,6 @@ public class PropertyResponseDto
     public DateTimeOffset? UpdatedAt { get; set; }
 
     public List<string> Amenities { get; set; } = new();
+
+    public List<PropertyAmenityResponseDto> AmenityDetails { get; set; } = new();
 }

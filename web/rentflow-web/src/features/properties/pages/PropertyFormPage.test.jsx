@@ -11,7 +11,7 @@ import {
   getPropertyImages,
   reorderPropertyImages,
   setPrimaryPropertyImage,
-  updateProperty,
+  updatePropertyListing,
   uploadPropertyImages,
 } from '../services/propertyApiService.js'
 import { loadGoogleLocationTools, loadGooglePlaces } from '../googleMapsLoader.js'
@@ -28,7 +28,7 @@ vi.mock('../services/propertyApiService.js', async (importOriginal) => ({
   getPropertyImages: vi.fn(),
   reorderPropertyImages: vi.fn(),
   setPrimaryPropertyImage: vi.fn(),
-  updateProperty: vi.fn(),
+  updatePropertyListing: vi.fn(),
   uploadPropertyImages: vi.fn(),
 }))
 
@@ -191,7 +191,9 @@ async function completePropertyDetails() {
   await userEvent.type(screen.getByLabelText('Bedrooms'), '2')
   await userEvent.type(screen.getByLabelText('Bathrooms'), '1')
   await userEvent.type(screen.getByLabelText('Size'), '1250')
-  await userEvent.type(screen.getByLabelText('Amenities'), 'Parking, Garden')
+  await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await userEvent.click(screen.getByLabelText('Parking'))
+  await userEvent.click(screen.getByLabelText('Garden'))
   await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
 }
 
@@ -209,7 +211,7 @@ beforeEach(() => {
   reorderPropertyImages.mockReset().mockResolvedValue([])
   setPrimaryPropertyImage.mockReset().mockResolvedValue({})
   createProperty.mockReset().mockResolvedValue({ id: newPropertyId })
-  updateProperty.mockReset().mockResolvedValue(property)
+  updatePropertyListing.mockReset().mockResolvedValue(property)
   uploadPropertyImages.mockReset().mockResolvedValue([])
 })
 
@@ -239,10 +241,12 @@ describe('property form wizard', () => {
 
     await completePropertyDetails()
 
-    expect(screen.getByRole('heading', { name: 'Photos & Availability' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Photos & Publication' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByLabelText('Parking')).toBeChecked()
+    expect(screen.getByLabelText('Garden')).toBeChecked()
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByLabelText('Monthly rent')).toHaveValue(95000)
-    expect(screen.getByLabelText('Amenities')).toHaveValue('Parking, Garden')
 
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByLabelText('Property title')).toHaveValue('Lake House')
@@ -267,6 +271,46 @@ describe('property form wizard', () => {
     expect(screen.getByRole('heading', { name: 'Property Details' })).toBeInTheDocument()
     expect(createProperty).not.toHaveBeenCalled()
   })
+
+  it('validates and preserves rental preferences, utilities, and custom amenities', async () => {
+    renderApp('/properties/new')
+    await completeBasicDetails()
+    await userEvent.type(screen.getByLabelText('Monthly rent'), '95000')
+    await userEvent.type(screen.getByLabelText('Bedrooms'), '2')
+    await userEvent.type(screen.getByLabelText('Bathrooms'), '1')
+    await userEvent.type(screen.getByLabelText('Size'), '1250')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    await userEvent.type(screen.getByLabelText('Advertised security deposit'), '-1')
+    await userEvent.type(screen.getByLabelText('Preferred lease term'), '121')
+    await userEvent.selectOptions(screen.getByLabelText('Pet policy'), 'Conditional')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByText('Advertised security deposit must be zero or more.')).toBeInTheDocument()
+    expect(screen.getByText('Preferred lease term must be 1 to 120 months.')).toBeInTheDocument()
+    expect(screen.getByText('Add meaningful notes for a conditional pet policy.')).toBeInTheDocument()
+
+    await userEvent.clear(screen.getByLabelText('Advertised security deposit'))
+    await userEvent.type(screen.getByLabelText('Advertised security deposit'), '190000')
+    await userEvent.clear(screen.getByLabelText('Preferred lease term'))
+    await userEvent.type(screen.getByLabelText('Preferred lease term'), '12')
+    await userEvent.type(screen.getByLabelText('Pet notes'), 'Landlord approval required')
+    await userEvent.click(screen.getByText('I want to provide utility information'))
+    await userEvent.click(screen.getByLabelText('Water'))
+    await userEvent.click(screen.getByLabelText('Internet'))
+    await userEvent.type(screen.getByPlaceholderText('Other amenity'), 'Solar inverter')
+    await userEvent.click(screen.getByRole('button', { name: '+ Add' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Create Property' }))
+
+    await waitFor(() => expect(createProperty).toHaveBeenCalledWith(expect.objectContaining({
+      advertisedSecurityDeposit: 190000,
+      preferredLeaseTermMonths: 12,
+      petPolicy: 'Conditional',
+      petPolicyNotes: 'Landlord approval required',
+      includedUtilities: ['water', 'internet'],
+      amenityDetails: [{ canonicalKey: null, customName: 'Solar inverter' }],
+    })))
+  }, 10000)
 
   it('persists an unavailable create selection and keeps available-from optional', async () => {
     renderApp('/properties/new')
@@ -293,6 +337,7 @@ describe('property form wizard', () => {
     await userEvent.selectOptions(screen.getByLabelText('Size type'), 'LandArea')
     await userEvent.selectOptions(screen.getByLabelText('Size unit'), 'perch')
     await userEvent.type(screen.getByLabelText('Available from'), '2026-11-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
     await userEvent.click(screen.getByRole('button', { name: 'Create Property' }))
 
@@ -331,7 +376,16 @@ describe('property form wizard', () => {
       areaType: 'FloorArea',
       availableFrom: null,
       isAvailable: true,
-      amenities: ['Parking', 'Garden'],
+      advertisedSecurityDeposit: null,
+      preferredLeaseTermMonths: null,
+      petPolicy: null,
+      petPolicyNotes: null,
+      includedUtilities: null,
+      amenities: [],
+      amenityDetails: [
+        { canonicalKey: 'parking', customName: null },
+        { canonicalKey: 'garden', customName: null },
+      ],
     })
     expect(uploadPropertyImages).toHaveBeenCalledWith(newPropertyId, [photo])
     expect(createProperty.mock.invocationCallOrder[0])
@@ -351,7 +405,7 @@ describe('property form wizard', () => {
 
     fireEvent.submit(screen.getByLabelText('Monthly rent').closest('form'))
 
-    expect(screen.getByRole('heading', { name: 'Photos & Availability' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Rental Preferences & Amenities' })).toBeInTheDocument()
     expect(createProperty).not.toHaveBeenCalled()
   })
 
@@ -365,11 +419,13 @@ describe('property form wizard', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
     expect(screen.getByLabelText('Monthly rent')).toHaveValue(property.monthlyRent)
-    expect(screen.getByLabelText('Amenities')).toHaveValue('Parking, Security')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByRole('button', { name: 'Remove Parking' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Security' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
-    expect(screen.getByRole('heading', { name: 'Photos & Availability' })).toBeInTheDocument()
-    expect(updateProperty).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Photos & Publication' })).toBeInTheDocument()
+    expect(updatePropertyListing).not.toHaveBeenCalled()
     expect(await screen.findByText('No property photos uploaded yet.')).toBeInTheDocument()
     const saveButton = screen.getByRole('button', { name: 'Save Changes' })
     expect(saveButton).toBeDisabled()
@@ -379,7 +435,7 @@ describe('property form wizard', () => {
     await userEvent.click(saveButton)
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/modules/manage-properties'))
-    expect(updateProperty).toHaveBeenCalledWith(propertyId, {
+    expect(updatePropertyListing).toHaveBeenCalledWith(propertyId, {
       title: property.title,
       description: property.description,
       address: property.address,
@@ -395,7 +451,16 @@ describe('property form wizard', () => {
       areaType: property.areaType,
       availableFrom: property.availableFrom,
       isAvailable: false,
-      amenities: property.amenities,
+      advertisedSecurityDeposit: null,
+      preferredLeaseTermMonths: null,
+      petPolicy: null,
+      petPolicyNotes: null,
+      includedUtilities: null,
+      amenities: [],
+      amenityDetails: [
+        { canonicalKey: null, customName: 'Parking' },
+        { canonicalKey: null, customName: 'Security' },
+      ],
     })
     expect(uploadPropertyImages).not.toHaveBeenCalled()
     const updatedMessage = await screen.findByText('Harbour View Residence was updated successfully.')
@@ -411,10 +476,11 @@ describe('property form wizard', () => {
     expect(screen.getByLabelText('Size type')).toHaveValue('')
     expect(screen.getByRole('option', { name: 'Not specified (legacy listing)' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
     await userEvent.click(screen.getByLabelText(/Available for rent/))
     await userEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
-    await waitFor(() => expect(updateProperty).toHaveBeenCalledWith(
+    await waitFor(() => expect(updatePropertyListing).toHaveBeenCalledWith(
       propertyId,
       expect.objectContaining({ areaType: null, availableFrom: null }),
     ))

@@ -441,6 +441,26 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasPrecision(18, 2)
                 .IsRequired();
 
+            entity.Property(property => property.AdvertisedSecurityDeposit)
+                .HasPrecision(18, 2)
+                .IsRequired(false);
+
+            entity.Property(property => property.PreferredLeaseTermMonths)
+                .IsRequired(false);
+
+            entity.Property(property => property.PetPolicy)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired(false);
+
+            entity.Property(property => property.PetPolicyNotes)
+                .HasMaxLength(500)
+                .IsRequired(false);
+
+            entity.Property(property => property.IncludedUtilities)
+                .HasColumnType("text[]")
+                .IsRequired(false);
+
             entity.Property(property => property.Bedrooms)
                 .IsRequired();
 
@@ -496,12 +516,19 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasMaxLength(100)
                 .IsRequired();
 
+            entity.Property(amenity => amenity.CanonicalKey)
+                .HasMaxLength(100)
+                .IsRequired(false);
+
             entity.HasOne(amenity => amenity.Property)
                 .WithMany(property => property.Amenities)
                 .HasForeignKey(amenity => amenity.PropertyId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(amenity => amenity.PropertyId);
+            entity.HasIndex(amenity => new { amenity.PropertyId, amenity.CanonicalKey })
+                .IsUnique()
+                .HasFilter("\"CanonicalKey\" IS NOT NULL");
         });
 
         // =========================================================

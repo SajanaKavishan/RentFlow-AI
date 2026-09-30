@@ -488,6 +488,174 @@ public class PropertyServiceTests
         Assert.Null(imageService.DeletedPropertyId);
     }
 
+    [Fact]
+    public void ListingPreferences_ValidateRangesAndPetPolicyRules()
+    {
+        var dto = ValidCreateDto();
+        dto.AdvertisedSecurityDeposit = -1;
+        dto.PreferredLeaseTermMonths = 121;
+        dto.PetPolicy = PetPolicyStatus.Conditional;
+        dto.PetPolicyNotes = "   ";
+
+        var validation = Validate(dto);
+
+        Assert.False(validation.IsValid);
+        Assert.Contains(validation.Results, item =>
+            item.MemberNames.Contains(nameof(dto.AdvertisedSecurityDeposit)));
+        Assert.Contains(validation.Results, item =>
+            item.MemberNames.Contains(nameof(dto.PreferredLeaseTermMonths)));
+
+        dto.AdvertisedSecurityDeposit = 0;
+        dto.PreferredLeaseTermMonths = 1;
+        validation = Validate(dto);
+        Assert.Contains(validation.Results, item =>
+            item.ErrorMessage!.Contains("required when the pet policy is Conditional"));
+
+        dto.PetPolicy = PetPolicyStatus.NotAllowed;
+        dto.PetPolicyNotes = "Small pets only";
+        validation = Validate(dto);
+        Assert.Contains(validation.Results, item =>
+            item.ErrorMessage!.Contains("must be empty when pets are not allowed"));
+    }
+
+    [Fact]
+    public void UpdateListingDto_ValidatesConditionalPetNotesAndUtilityCatalog()
+    {
+        var dto = new UpdatePropertyListingDto
+        {
+            Title = "Listing",
+            Description = "Description",
+            Address = "Address",
+            City = "Colombo",
+            MonthlyRent = 1000m,
+            Bedrooms = 1,
+            Bathrooms = 1,
+            IsAvailable = true,
+            PetPolicy = PetPolicyStatus.Conditional,
+            IncludedUtilities = ["cable-tv"]
+        };
+
+        var validation = Validate(dto);
+
+        Assert.False(validation.IsValid);
+        Assert.Contains(validation.Results, item =>
+            item.MemberNames.Contains(nameof(dto.PetPolicyNotes)));
+        Assert.Contains(validation.Results, item =>
+            item.MemberNames.Contains(nameof(dto.IncludedUtilities)));
+    }
+
+    [Fact]
+    public async Task CreateAsync_PreservesNullAndEmptyUtilitySemantics()
+    {
+        await using var context = CreateContext();
+        var service = new PropertyService(context, new FakePropertyImageService());
+        var missing = ValidCreateDto();
+        missing.Title = "Utilities unknown";
+        missing.IncludedUtilities = null;
+        var none = ValidCreateDto();
+        none.Title = "No utilities included";
+        none.IncludedUtilities = [];
+
+        var missingResult = await service.CreateAsync(Guid.NewGuid(), missing);
+        var noneResult = await service.CreateAsync(Guid.NewGuid(), none);
+
+        Assert.Null(missingResult.IncludedUtilities);
+        Assert.NotNull(noneResult.IncludedUtilities);
+        Assert.Empty(noneResult.IncludedUtilities);
+    }
+
+    [Fact]
+    public async Task CreateAsync_CanonicalizesAliasesAndPreservesCustomAmenities()
+    {
+        await using var context = CreateContext();
+        var service = new PropertyService(context, new FakePropertyImageService());
+        var dto = ValidCreateDto();
+        dto.Amenities = ["WiFi", "Wi-Fi", "Solar inverter"];
+
+        var result = await service.CreateAsync(Guid.NewGuid(), dto);
+
+        Assert.Equal(2, result.AmenityDetails.Count);
+        Assert.Contains(result.AmenityDetails, item =>
+            item.CanonicalKey == "wifi" && item.Name == "Wi-Fi");
+        Assert.Contains(result.AmenityDetails, item =>
+            item.CanonicalKey is null && item.Name == "Solar inverter");
+    }
+
+    [Fact]
+    public async Task LegacyUpdate_DoesNotEraseNewListingPreferences()
+    {
+        await using var context = CreateContext();
+        var property = AddProperty(context);
+        property.AdvertisedSecurityDeposit = 150000m;
+        property.PreferredLeaseTermMonths = 12;
+        property.PetPolicy = PetPolicyStatus.Allowed;
+        property.PetPolicyNotes = "Small pets only";
+        property.IncludedUtilities = ["water"];
+        await context.SaveChangesAsync();
+        var service = new PropertyService(context, new FakePropertyImageService());
+
+        await service.UpdateAsync(property.Id, property.LandlordId, new UpdatePropertyDto
+        {
+            Title = property.Title,
+            Description = property.Description,
+            Address = property.Address,
+            City = property.City,
+            MonthlyRent = property.MonthlyRent,
+            Bedrooms = property.Bedrooms,
+            Bathrooms = property.Bathrooms,
+            IsAvailable = property.IsAvailable,
+            Amenities = ["Parking"]
+        });
+
+        var saved = await context.Properties.SingleAsync(item => item.Id == property.Id);
+        Assert.Equal(150000m, saved.AdvertisedSecurityDeposit);
+        Assert.Equal(12, saved.PreferredLeaseTermMonths);
+        Assert.Equal(PetPolicyStatus.Allowed, saved.PetPolicy);
+        Assert.Equal("Small pets only", saved.PetPolicyNotes);
+        Assert.Equal(["water"], saved.IncludedUtilities!);
+    }
+
+    [Fact]
+    public async Task UpdateListingAsync_AtomicallyUpdatesCoreAndPreferenceFields()
+    {
+        await using var context = CreateContext();
+        var property = AddProperty(context);
+        await context.SaveChangesAsync();
+        var service = new PropertyService(context, new FakePropertyImageService());
+        var dto = new UpdatePropertyListingDto
+        {
+            Title = "Updated listing",
+            Description = property.Description,
+            Address = property.Address,
+            City = property.City,
+            MonthlyRent = 99000m,
+            Bedrooms = 3,
+            Bathrooms = 2,
+            IsAvailable = true,
+            AdvertisedSecurityDeposit = 198000m,
+            PreferredLeaseTermMonths = 24,
+            PetPolicy = PetPolicyStatus.Conditional,
+            PetPolicyNotes = " Landlord approval required ",
+            IncludedUtilities = ["Water", "waste-collection"],
+            Amenities = [],
+            AmenityDetails =
+            [
+                new PropertyAmenityInputDto { CanonicalKey = "air-conditioning" },
+                new PropertyAmenityInputDto { CustomName = "Generator" }
+            ]
+        };
+
+        var result = await service.UpdateListingAsync(property.Id, property.LandlordId, dto);
+
+        Assert.NotNull(result);
+        Assert.Equal("Updated listing", result.Title);
+        Assert.Equal(198000m, result.AdvertisedSecurityDeposit);
+        Assert.Equal("Landlord approval required", result.PetPolicyNotes);
+        Assert.Equal(["water", "waste-collection"], result.IncludedUtilities);
+        Assert.Contains(result.AmenityDetails, item => item.CanonicalKey == "air-conditioning");
+        Assert.Contains(result.AmenityDetails, item => item.CanonicalKey is null && item.Name == "Generator");
+    }
+
     private static ApplicationDbContext CreateContext()
     {
         var options =
