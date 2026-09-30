@@ -18,6 +18,7 @@ const tenant = {
   phoneNumber: '+94 77 123 4567',
   role: 'Tenant',
 }
+const tenantGreeting = /^(Welcome back|Good to see you|Hello|Hi there), Taylor Tenant$/
 
 function renderApp(api, initialEntry = '/login') {
   return render(
@@ -48,7 +49,7 @@ describe('React authentication', () => {
     await userEvent.type(await screen.findByLabelText('Email'), tenant.email)
     await userEvent.type(screen.getByLabelText('Password'), 'Password1!')
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(await screen.findByText('Welcome, Taylor Tenant')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: tenantGreeting })).toBeInTheDocument()
     expect(tokenStorage.getToken()).toBe('access-token')
     expect(api.getCurrentUser).toHaveBeenCalled()
   })
@@ -192,6 +193,6 @@ describe('React authentication', () => {
     await userEvent.type(screen.getByLabelText('Confirm password'), 'Password1!')
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
     expect(api.register).toHaveBeenCalledWith({ fullName: 'Taylor Tenant', email: tenant.email, phoneNumber: tenant.phoneNumber, password: 'Password1!', role: 'Tenant' })
-    expect(await screen.findByRole('heading', { name: 'Welcome, Taylor Tenant' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: tenantGreeting })).toBeInTheDocument()
   })
 })

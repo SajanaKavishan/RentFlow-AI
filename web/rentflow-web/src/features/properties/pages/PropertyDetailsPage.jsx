@@ -55,7 +55,7 @@ export default function PropertyDetailsPage() {
   const [error, setError] = useState('')
   const [action, setAction] = useState('')
   const [toast, setToast] = useState(null)
-  const [matchResult, setMatchResult] = useState({ propertyId: null, score: null })
+  const [matchResult, setMatchResult] = useState({ propertyId: null, score: null, reasons: [] })
   const [loadedLandlordState, setLandlordState] = useState({ propertyId: null, status: 'loading', summary: null })
   const [landlordImageFailedFor, setLandlordImageFailedFor] = useState(null)
   const [loadedWorkflowState, setWorkflowState] = useState({
@@ -75,9 +75,11 @@ export default function PropertyDetailsPage() {
     && String(user.id).toLowerCase() === String(property?.landlordId).toLowerCase()
   const isTenant = user?.role === USER_ROLES.TENANT
   const matchScore = matchResult.propertyId === propertyId ? matchResult.score : null
+  const matchReasons = matchResult.propertyId === propertyId ? matchResult.reasons : []
   const backPath = user?.role === USER_ROLES.LANDLORD
     ? MANAGE_PROPERTIES_PATH
     : '/modules/properties'
+  const availableFromLabel = formatAvailableFrom(property?.availableFrom)
 
   useEffect(() => {
     let active = true
@@ -130,7 +132,12 @@ export default function PropertyDetailsPage() {
           ))
           : null
         if (active && Number.isFinite(Number(match?.matchScore))) {
-          setMatchResult({ propertyId, score: Number(match.matchScore) })
+          const reasons = Array.isArray(match.matchReasons)
+            ? [...new Set(match.matchReasons
+              .filter((reason) => typeof reason === 'string' && reason.trim())
+              .map((reason) => reason.trim()))]
+            : []
+          setMatchResult({ propertyId, score: Number(match.matchScore), reasons })
         }
       })
       .catch(() => {
@@ -343,17 +350,120 @@ export default function PropertyDetailsPage() {
               <div className={property.isAvailable ? 'is-available' : 'is-unavailable'}>
                 <Icon name="calendar" size={18} />
                 <dt className="sr-only">Availability</dt>
-                <dd>{property.isAvailable ? 'Available now' : 'Currently unavailable'}</dd>
+                <dd>{property.isAvailable
+                  ? availableFromLabel ? `Available ${availableFromLabel}` : 'Available now'
+                  : availableFromLabel ? `Unavailable · Available ${availableFromLabel}` : 'Currently unavailable'}</dd>
               </div>
-              {formatAvailableFrom(property.availableFrom) && (
+            </dl>
+          </header>
+
+          {matchReasons.length > 0 && (
+            <section className="property-details-match" aria-labelledby="property-match-title">
+              <div className="property-details-match__heading">
+                <span aria-hidden="true"><Icon name="sparkles" size={17} /></span>
+                <h2 id="property-match-title">Why this matches</h2>
+              </div>
+              <ul>
+                {matchReasons.map((reason) => <li key={reason}>{reason}</li>)}
+              </ul>
+            </section>
+          )}
+        </div>
+
+        {isOwner ? (
+          <aside className="property-details-management" aria-label="Manage property">
+            <div>
+              <span className="property-section-number">Landlord tools</span>
+              <h2>Manage this property</h2>
+              <p>Review activity or update this listing.</p>
+            </div>
+
+            <div className="property-details-workflows">
+              <Link to={`/properties/${encodeURIComponent(property.id)}/viewing-requests`}>
+                <Icon name="calendar" size={19} />
+                <span>Viewing Requests</span>
+                <Icon name="arrow" size={16} />
+              </Link>
+              <Link to={`/properties/${encodeURIComponent(property.id)}/rental-applications`}>
+                <Icon name="document" size={19} />
+                <span>Rental Applications</span>
+                <Icon name="arrow" size={16} />
+              </Link>
+            </div>
+
+            <div className="property-details-actions">
+              <Link to={`/properties/${encodeURIComponent(property.id)}/edit`}>
+                <Icon name="edit" size={17} /> Edit
+              </Link>
+              <button type="button" onClick={handleAvailability} disabled={Boolean(action)}>
+                <Icon name={property.isAvailable ? 'eyeOff' : 'eye'} size={17} />
+                {action === 'availability'
+                  ? 'Updating...'
+                  : property.isAvailable ? 'Mark unavailable' : 'Mark available'}
+              </button>
+              <button
+                type="button"
+                className="is-danger"
+                onClick={handleDelete}
+                disabled={Boolean(action)}
+              >
+                <Icon name="trash" size={17} />
+                {action === 'delete' ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </aside>
+        ) : (
+          <aside className="property-details-summary" aria-label="Rental summary">
+            <div className="property-details-summary__price">
+              <strong>Rs. {Number(property.monthlyRent).toLocaleString()}</strong>
+              <span>/month</span>
+            </div>
+
+            <dl className="property-details-summary__details">
+              <div>
+                <dt>Availability</dt>
+                <dd className={property.isAvailable ? 'is-available' : 'is-unavailable'}>
+                  <span aria-hidden="true" />
+                  {property.isAvailable ? 'Available to rent' : 'Currently unavailable'}
+                </dd>
+              </div>
+              {availableFromLabel && (
                 <div>
-                  <Icon name="calendar" size={18} />
-                  <dt className="sr-only">Available from</dt>
-                  <dd>Available from {formatAvailableFrom(property.availableFrom)}</dd>
+                  <dt>Available from</dt>
+                  <dd>{availableFromLabel}</dd>
                 </div>
               )}
             </dl>
-          </header>
+
+            {isTenant && (
+              <div className="property-details-summary__actions">
+                <Link
+                  className={`property-details-summary__primary${property.isAvailable || workflowState.viewings > 0 ? '' : ' is-disabled'}`}
+                  to={`/modules/my-viewings?propertyId=${encodeURIComponent(property.id)}`}
+                  aria-disabled={!property.isAvailable && workflowState.viewings === 0}
+                  onClick={(event) => { if (!property.isAvailable && workflowState.viewings === 0) event.preventDefault() }}
+                >
+                  {workflowState.viewings > 0 ? 'View viewing requests' : 'Book a Viewing'}
+                </Link>
+                <Link
+                  className={`property-details-summary__secondary${property.isAvailable || workflowState.applications > 0 ? '' : ' is-disabled'}`}
+                  to={`/modules/my-applications?propertyId=${encodeURIComponent(property.id)}`}
+                  aria-disabled={!property.isAvailable && workflowState.applications === 0}
+                  onClick={(event) => { if (!property.isAvailable && workflowState.applications === 0) event.preventDefault() }}
+                >
+                  {workflowState.activeApplication || (!property.isAvailable && workflowState.applications > 0)
+                    ? 'View application'
+                    : 'Apply for Rental'}
+                </Link>
+                <p>{property.isAvailable
+                  ? 'Your selected property will be carried into each workspace. New bookings and applications are completed in the RentFlow mobile app.'
+                  : 'This property is currently unavailable. Existing requests and applications remain accessible.'}</p>
+              </div>
+            )}
+          </aside>
+        )}
+
+        <div className="property-details-content">
 
           <section className="property-details-section">
             <h2>About this property</h2>
@@ -417,88 +527,6 @@ export default function PropertyDetailsPage() {
             </div>
           </section>
         </div>
-
-        {isOwner ? (
-          <aside className="property-details-management" aria-label="Manage property">
-            <div>
-              <span className="property-section-number">Landlord tools</span>
-              <h2>Manage this property</h2>
-              <p>Review activity or update this listing.</p>
-            </div>
-
-            <div className="property-details-workflows">
-              <Link to={`/properties/${encodeURIComponent(property.id)}/viewing-requests`}>
-                <Icon name="calendar" size={19} />
-                <span>Viewing Requests</span>
-                <Icon name="arrow" size={16} />
-              </Link>
-              <Link to={`/properties/${encodeURIComponent(property.id)}/rental-applications`}>
-                <Icon name="document" size={19} />
-                <span>Rental Applications</span>
-                <Icon name="arrow" size={16} />
-              </Link>
-            </div>
-
-            <div className="property-details-actions">
-              <Link to={`/properties/${encodeURIComponent(property.id)}/edit`}>
-                <Icon name="edit" size={17} /> Edit
-              </Link>
-              <button type="button" onClick={handleAvailability} disabled={Boolean(action)}>
-                <Icon name={property.isAvailable ? 'eyeOff' : 'eye'} size={17} />
-                {action === 'availability'
-                  ? 'Updating...'
-                  : property.isAvailable ? 'Mark unavailable' : 'Mark available'}
-              </button>
-              <button
-                type="button"
-                className="is-danger"
-                onClick={handleDelete}
-                disabled={Boolean(action)}
-              >
-                <Icon name="trash" size={17} />
-                {action === 'delete' ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </aside>
-        ) : (
-          <aside className="property-details-summary" aria-label="Rental summary">
-            <div className="property-details-summary__price">
-              <strong>Rs. {Number(property.monthlyRent).toLocaleString()}</strong>
-              <span>per month</span>
-            </div>
-
-            <div className="property-details-summary__availability">
-              <span className={property.isAvailable ? 'is-available' : 'is-unavailable'} aria-hidden="true" />
-              {property.isAvailable ? 'Available to rent' : 'Currently unavailable'}
-            </div>
-
-            {isTenant && (
-              <div className="property-details-summary__actions">
-                <Link
-                  className={`property-details-summary__primary${property.isAvailable || workflowState.viewings > 0 ? '' : ' is-disabled'}`}
-                  to={`/modules/my-viewings?propertyId=${encodeURIComponent(property.id)}`}
-                  aria-disabled={!property.isAvailable && workflowState.viewings === 0}
-                  onClick={(event) => { if (!property.isAvailable && workflowState.viewings === 0) event.preventDefault() }}
-                >
-                  {workflowState.viewings > 0 ? 'View viewing requests' : 'Book a Viewing'}
-                </Link>
-                <Link
-                  className={`property-details-summary__secondary${property.isAvailable || workflowState.applications > 0 ? '' : ' is-disabled'}`}
-                  to={`/modules/my-applications?propertyId=${encodeURIComponent(property.id)}`}
-                  aria-disabled={!property.isAvailable && workflowState.applications === 0}
-                  onClick={(event) => { if (!property.isAvailable && workflowState.applications === 0) event.preventDefault() }}
-                >
-                  {workflowState.activeApplication || (!property.isAvailable && workflowState.applications > 0)
-                    ? 'View application'
-                    : 'Apply for Rental'}
-                </Link>
-                <p>{property.isAvailable
-                  ? 'Your selected property will be carried into each workspace. New bookings and applications are completed in the RentFlow mobile app.'
-                  : 'This property is currently unavailable. Existing requests and applications remain accessible.'}</p>
-              </div>
-            )}
-          </aside>
-        )}
       </div>
     </main>
   )

@@ -13,6 +13,7 @@ const tenant = {
   phoneNumber: '+94 77 123 4567',
   role: 'Tenant',
 }
+const tenantGreeting = /^(Welcome back|Good to see you|Hello|Hi there), Taylor Tenant$/
 
 function apiWith(currentUser = null) {
   return {
@@ -106,13 +107,13 @@ describe('public landing experience', () => {
     renderApp(api)
 
     expect(screen.getByRole('heading', { name: 'Find your perfect home, smarter.' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Welcome, Taylor Tenant' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: tenantGreeting })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Sign In' })[0])
     expect(screen.getAllByRole('button', { name: 'Restoring…' })[0]).toBeDisabled()
     finishRestore(tenant)
 
-    expect(await screen.findByRole('heading', { name: 'Welcome, Taylor Tenant' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: tenantGreeting })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument()
   })
 

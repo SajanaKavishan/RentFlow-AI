@@ -85,7 +85,11 @@ beforeEach(() => {
   getMyViewings.mockResolvedValue([])
   getMyApplications.mockResolvedValue([])
   getSavedPropertyMatches.mockResolvedValue({
-    matches: [{ propertyId: 'property-1', matchScore: 97 }],
+    matches: [{
+      propertyId: 'property-1',
+      matchScore: 97,
+      matchReasons: ['Preferred city matches.', 'Within maximum monthly rent.'],
+    }],
   })
 })
 
@@ -102,14 +106,16 @@ describe('tenant property details', () => {
     expect(screen.getByText('2 Bedrooms')).toBeInTheDocument()
     expect(screen.getByText('2 Bathrooms')).toBeInTheDocument()
     expect(screen.getByText('Floor area: 1,100 sq ft')).toBeInTheDocument()
-    expect(screen.getByText('Available now')).toBeInTheDocument()
-    expect(screen.getByText('Available from Nov 1, 2026')).toBeInTheDocument()
+    expect(screen.getByText('Available Nov 1, 2026')).toBeInTheDocument()
     expect(screen.getByText('Rs. 120,000')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Book a Viewing' }))
       .toHaveAttribute('href', '/modules/my-viewings?propertyId=property-1')
     expect(screen.getByRole('link', { name: 'Apply for Rental' }))
       .toHaveAttribute('href', '/modules/my-applications?propertyId=property-1')
     await waitFor(() => expect(screen.getByTestId('details-gallery')).toHaveTextContent('97% match'))
+    expect(screen.getByRole('heading', { name: 'Why this matches' })).toBeInTheDocument()
+    expect(screen.getByText('Preferred city matches.')).toBeInTheDocument()
+    expect(screen.getByText('Within maximum monthly rent.')).toBeInTheDocument()
 
     expect(screen.queryByText(/security deposit/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/lease term/i)).not.toBeInTheDocument()
@@ -136,6 +142,16 @@ describe('tenant property details', () => {
     expect(await screen.findByRole('heading', { name: 'Lake View Apartment' })).toBeInTheDocument()
     expect(await screen.findByText('Landlord details unavailable')).toBeInTheDocument()
     expect(screen.getByText('This listing remains available to review.')).toBeInTheDocument()
+  })
+
+  it('does not invent match reasons when the deterministic response has none', async () => {
+    getSavedPropertyMatches.mockResolvedValue({
+      matches: [{ propertyId: 'property-1', matchScore: 88, matchReasons: [] }],
+    })
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('details-gallery')).toHaveTextContent('88% match'))
+    expect(screen.queryByRole('heading', { name: 'Why this matches' })).not.toBeInTheDocument()
   })
 
   it('disables new actions for unavailable properties but keeps existing tenant state accessible', async () => {
