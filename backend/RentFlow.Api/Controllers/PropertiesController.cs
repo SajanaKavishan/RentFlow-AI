@@ -158,6 +158,48 @@ public class PropertiesController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("tenant/mine")]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
+    [ProducesResponseType<IEnumerable<PropertyResponseDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IEnumerable<PropertyResponseDto>>>
+        GetMyTenantProperties(CancellationToken cancellationToken)
+    {
+        if (!_currentUserService.IsAuthenticated
+            || _currentUserService.Role != UserRole.Tenant
+            || _currentUserService.UserId is not { } tenantId
+            || tenantId == Guid.Empty)
+        {
+            return Forbid();
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var properties = await _context.Properties
+            .AsNoTracking()
+            .Include(property => property.Amenities)
+            .Where(property => _context.LeaseAgreements.Any(lease =>
+                lease.TenantId == tenantId
+                && lease.PropertyId == property.Id
+                && lease.Status == LeaseAgreementStatus.Active
+                && lease.StartDate <= today
+                && lease.EndDate >= today
+                && _context.RentalOffers.Any(offer =>
+                    offer.Id == lease.RentalOfferId
+                    && offer.Status == RentalOfferStatus.Accepted
+                    && offer.TenantId == lease.TenantId
+                    && offer.PropertyId == lease.PropertyId
+                    && _context.RentalApplications.Any(application =>
+                        application.Id == offer.RentalApplicationId
+                        && application.Status == RentalApplicationStatus.Approved
+                        && application.TenantId == lease.TenantId
+                        && application.PropertyId == lease.PropertyId))))
+            .OrderByDescending(property => property.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return Ok(properties.Select(MapToResponseDto).ToList());
+    }
+
     // =========================================================
     // GET /api/properties/{id}
     // Public property details

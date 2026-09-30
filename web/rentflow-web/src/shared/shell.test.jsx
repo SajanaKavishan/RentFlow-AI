@@ -75,6 +75,50 @@ describe('shared React shell', () => {
     expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
   })
 
+  it('renders the existing tenant maintenance page for the maintenance module', async () => {
+    fetch.mockImplementation((url) => Promise.resolve(new Response(
+      JSON.stringify(String(url).includes('/api/properties/tenant/mine')
+        ? [{ id: propertyId, title: 'Riverside flat', city: 'Colombo' }]
+        : [],
+      ),
+      { status: 200 },
+    )))
+    renderApp('Tenant', `/modules/maintenance?propertyId=${propertyId}`)
+
+    expect(await screen.findByRole('heading', { name: 'Maintenance requests' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Report an issue' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('Associated property')).toHaveValue(propertyId)
+    expect(screen.queryByText('Integration pending')).not.toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/maintenance-requests/tenant/user-id'),
+      expect.any(Object),
+    )
+  })
+
+  it('renders the preserved landlord maintenance workspace with an authenticated property selector', async () => {
+    fetch.mockImplementation((url) => Promise.resolve(new Response(
+      JSON.stringify(String(url).includes('/api/properties/mine')
+        ? [{ id: propertyId, title: 'Riverside flat', address: '10 Main Road', city: 'Colombo' }]
+        : [],
+      ),
+      { status: 200 },
+    )))
+    renderApp('Landlord', '/modules/maintenance')
+
+    expect(await screen.findByRole('heading', { name: 'Maintenance & support management' })).toBeInTheDocument()
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Property' }), propertyId)
+    expect(await screen.findByRole('heading', { name: 'No maintenance requests yet' })).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/properties/mine'),
+      expect.any(Object),
+    )
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining(`/api/maintenance-requests/property/${propertyId}`),
+      expect.any(Object),
+    )
+    expect(screen.queryByText('Maintenance management will be connected when that module is merged.')).not.toBeInTheDocument()
+  })
+
   it('opens the landlord property management route without inventing property context', async () => {
     renderApp('Landlord', '/modules/manage-properties')
     expect(await screen.findByRole('heading', { name: 'My Properties' })).toBeInTheDocument()

@@ -18,6 +18,20 @@
 .assigned-work-state p { max-width: 540px; margin: 0; color: var(--muted); font-size: .84rem; line-height: 1.7; }
 .assigned-work-state--error .assigned-work-state__icon { color: var(--danger); background: var(--danger-bg); }
 .assigned-work-state--error .shared-button { margin-top: 8px; }
+.assigned-work-area__controls { display: flex; justify-content: flex-end; padding-top: 16px; }
+.assigned-work-page__notice { color: var(--olive-700); font-weight: 700; }
+.assigned-work-item__actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
+.assigned-work-item__details { display: grid; gap: 9px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.assigned-work-item__details > div { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(0, 1.3fr); gap: 10px; }
+.assigned-work-item__details dt { font-weight: 800; }
+.assigned-work-item__details dd { margin: 0; overflow-wrap: anywhere; color: var(--muted); }
+.assigned-work-item__estimate { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.assigned-work-item__estimate h4 { margin: 0 0 12px; color: var(--ink); }
+.assigned-work-estimate-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.assigned-work-estimate-form label { display: grid; gap: 6px; color: var(--ink); font-size: .78rem; font-weight: 800; }
+.assigned-work-estimate-form input, .assigned-work-estimate-form textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font: inherit; color: var(--ink); background: #fff; }
+.assigned-work-estimate-form label:nth-of-type(4), .assigned-work-estimate-form button { grid-column: 1 / -1; }
+.assigned-work-estimate-form textarea { resize: vertical; }
 .assigned-work-page__side { display: grid; gap: 20px; }
 .assigned-work-availability { padding: 22px; }
 .assigned-work-availability__heading { display: flex; align-items: center; gap: 12px; }
@@ -54,4 +68,5 @@
 @media (max-width: 410px) {
   .assigned-work-page__header-actions .shared-button { flex-basis: 100%; }
   .assigned-work-area__scope { align-items: flex-start; border-radius: var(--radius-sm); white-space: normal; }
+  .assigned-work-estimate-form { grid-template-columns: minmax(0, 1fr); }
 }

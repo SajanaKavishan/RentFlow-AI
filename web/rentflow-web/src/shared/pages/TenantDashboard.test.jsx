@@ -296,9 +296,19 @@ describe('tenant dashboard', () => {
     expect(screen.getByRole('link', { name: 'Browse properties' })).toHaveAttribute('href', '/modules/properties')
     expect(screen.getByRole('region', { name: 'Open Request' })).toHaveTextContent('No open maintenance requests')
 
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: /Maintenance/ }))
-    expect(screen.getByRole('heading', { name: 'Maintenance' })).toBeInTheDocument()
-    expect(screen.getByText('Integration pending')).toBeInTheDocument()
+    const maintenanceLink = within(screen.getByRole('main')).getByRole('link', { name: 'Maintenance' })
+    expect(maintenanceLink).toHaveAttribute('href', '/modules/maintenance')
+    expect(maintenanceLink).toHaveTextContent('Request repairs and track their progress.')
+    expect(maintenanceLink).not.toHaveTextContent('Integration pending')
+    await userEvent.click(maintenanceLink)
+    expect(await screen.findByRole('heading', { name: 'Maintenance requests' })).toBeInTheDocument()
+  })
+
+  it('opens the tenant lease and payments workspace from the sidebar', async () => {
+    renderApp()
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Lease & Payments' }))
+    expect(screen.getByRole('heading', { name: 'Lease & Payments' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Lease and payment sections' })).toBeInTheDocument()
   })
 
   it('shows only the three highest-ranked real available property recommendations', async () => {

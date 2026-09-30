@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:rentflow_mobile/core/network/api_client.dart';
 import 'package:rentflow_mobile/features/auth/controllers/auth_controller.dart';
 import 'package:rentflow_mobile/features/auth/models/current_user.dart';
+import 'package:rentflow_mobile/features/maintenance/services/maintenance_api_service.dart';
 import 'package:rentflow_mobile/features/rental_applications/services/rental_application_api_service.dart';
 import 'package:rentflow_mobile/features/viewings/services/viewing_api_service.dart';
 import 'package:rentflow_mobile/shared/home/tenant_home.dart';
@@ -60,6 +61,9 @@ Future<fixtures.MemoryTokenStorage> pumpShell(
           rentalApplicationApiService: apiClient == null
               ? null
               : RentalApplicationApiService(apiClient),
+          maintenanceApiService: apiClient == null
+              ? null
+              : MaintenanceApiService(apiClient),
         ),
       ),
     ),
@@ -405,38 +409,74 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
+  testWidgets('tenant shell opens the existing maintenance request screen', (
+    tester,
+  ) async {
+    final apiClient = ApiClient(
+      baseUrl: 'http://test',
+      tokenStorage: fixtures.MemoryTokenStorage('token'),
+      httpClient: MockClient((_) async => http.Response('[]', 200)),
+    );
+    addTearDown(apiClient.close);
+    await pumpShell(
+      tester,
+      UserRole.tenant,
+      viewingsContent: const Center(child: Text('Viewings content')),
+      applicationsContent: const Center(child: Text('Applications content')),
+      apiClient: apiClient,
+    );
+    expect(find.byType(NavigationBar), findsOneWidget);
+    await tester.tap(navigationDestination('Applications'));
+    await tester.pumpAndSettle();
+    expect(find.text('Applications content'), findsOneWidget);
+    await tester.tap(navigationDestination('Maintenance'));
+    await tester.pumpAndSettle();
+    expect(find.text('My Maintenance Requests'), findsOneWidget);
+    expect(find.text('No maintenance requests yet'), findsOneWidget);
+    expect(find.text('Integration pending'), findsNothing);
+    await tester.tap(navigationDestination('Properties'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Property discovery is currently unavailable.'),
+      findsOneWidget,
+    );
+    await tester.tap(navigationDestination('Profile'));
+    await tester.pumpAndSettle();
+    expect(find.text('user@example.com'), findsOneWidget);
+    for (final section in ['Account', 'Preferences', 'Support']) {
+      expect(find.text(section), findsOneWidget);
+    }
+  });
+
   testWidgets(
-    'tenant shell reaches Applications, Maintenance, Properties, and Profile without feature network calls',
+    'technician navigation loads the assigned queue for the authenticated identity',
     (tester) async {
+      final paths = <String>[];
+      final apiClient = ApiClient(
+        baseUrl: 'http://test',
+        tokenStorage: fixtures.MemoryTokenStorage('token'),
+        httpClient: MockClient((request) async {
+          paths.add(request.url.path);
+          return http.Response('[]', 200);
+        }),
+      );
+      addTearDown(apiClient.close);
       await pumpShell(
         tester,
-        UserRole.tenant,
-        viewingsContent: const Center(child: Text('Viewings content')),
-        applicationsContent: const Center(child: Text('Applications content')),
+        UserRole.maintenanceTechnician,
+        apiClient: apiClient,
       );
-      expect(find.byType(NavigationBar), findsOneWidget);
-      await tester.tap(navigationDestination('Applications'));
+
+      await tester.tap(navigationDestination('Assigned Work'));
       await tester.pumpAndSettle();
-      expect(find.text('Applications content'), findsOneWidget);
-      await tester.tap(navigationDestination('Maintenance'));
-      await tester.pumpAndSettle();
-      expect(find.text('Integration pending'), findsOneWidget);
+
+      expect(find.text('No assigned work found'), findsOneWidget);
       expect(
-        find.textContaining('maintenance requests will appear here'),
-        findsOneWidget,
+        paths,
+        contains(
+          '/api/maintenance-requests/technician/11111111-1111-1111-1111-111111111112',
+        ),
       );
-      await tester.tap(navigationDestination('Properties'));
-      await tester.pumpAndSettle();
-      expect(
-        find.textContaining('Property discovery will appear here'),
-        findsOneWidget,
-      );
-      await tester.tap(navigationDestination('Profile'));
-      await tester.pumpAndSettle();
-      expect(find.text('user@example.com'), findsOneWidget);
-      for (final section in ['Account', 'Preferences', 'Support']) {
-        expect(find.text(section), findsOneWidget);
-      }
     },
   );
 
