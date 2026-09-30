@@ -36,6 +36,8 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 
     public RecordingLoggerProvider Logs { get; } = new();
 
+    public IPropertyMatchingAgentClient? PropertyMatchingAgentClient { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(_environmentName);
@@ -108,6 +110,12 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 
             services.RemoveAll<IEmailSender>();
             services.AddSingleton<IEmailSender>(EmailSender);
+
+            if (PropertyMatchingAgentClient is not null)
+            {
+                services.RemoveAll<IPropertyMatchingAgentClient>();
+                services.AddSingleton(PropertyMatchingAgentClient);
+            }
         });
     }
 

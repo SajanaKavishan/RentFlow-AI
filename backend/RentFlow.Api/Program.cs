@@ -303,6 +303,10 @@ builder.Services.AddScoped<
     PropertyService>();
 
 builder.Services.AddScoped<
+    IPublicLandlordSummaryService,
+    PublicLandlordSummaryService>();
+
+builder.Services.AddScoped<
     IPropertyAccessGuard,
     PropertyAccessGuard>();
 
@@ -317,6 +321,14 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IPropertyMatchingOrchestrator,
     PropertyMatchingOrchestrator>();
+
+builder.Services.AddScoped<
+    ITenantPropertyPreferenceService,
+    TenantPropertyPreferenceService>();
+
+builder.Services.AddScoped<
+    ITenantPropertyFavoriteService,
+    TenantPropertyFavoriteService>();
 
 builder.Services.AddHttpClient<
     IPropertyMatchingAgentClient,

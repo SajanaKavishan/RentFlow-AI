@@ -1,0 +1,76 @@
+.public-page { min-height: 100vh; overflow: clip; }
+.public-page .public-header--solid { background: rgb(28 36 18 / 97%); }
+.public-page__main { min-height: calc(100vh - 66px); padding-top: 82px; }
+.public-page__hero { padding: clamp(74px, 9vw, 116px) 0 clamp(58px, 7vw, 88px); background: var(--olive-100); }
+.public-page__hero--dark { color: white; background: var(--olive-900); }
+.public-page__hero--center { text-align: center; }
+.public-page__hero-inner { display: grid; justify-items: start; }
+.public-page__hero--center .public-page__hero-inner { justify-items: center; }
+.public-page__hero h1 { max-width: 900px; margin: 0 0 22px; color: var(--olive-900); font-size: clamp(2.6rem, 6.16vw, 5.2rem); font-weight: 600; letter-spacing: -.06em; line-height: 1; text-wrap: balance; }
+.public-page__hero--dark h1 { color: white; }
+.public-page__hero p:last-child { max-width: 680px; margin: 0; color: #586046; font-size: clamp(1rem, 1.65vw, 1.16rem); line-height: 1.75; }
+.public-page__hero--dark p:last-child { color: rgb(255 255 255 / 72%); }
+.public-page__section { padding: clamp(60px, 8vw, 104px) 0; }
+.public-info-card { min-width: 0; border: 1px solid var(--border); border-radius: 24px; background: rgb(255 255 255 / 88%); box-shadow: 0 16px 38px rgb(48 60 31 / 7%); }
+.public-info-card__icon { display: grid; width: 52px; height: 52px; place-items: center; border-radius: 16px; color: var(--olive-900); background: var(--olive-100); }
+.public-page__button { align-self: flex-start; color: white; background: var(--olive-900); }
+.public-page__button:hover { color: white; background: var(--olive-hover); }
+.role-choice-grid { display: grid; max-width: 940px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.role-choice-card { display: flex; min-height: 390px; flex-direction: column; padding: clamp(28px, 4vw, 44px); }
+.role-choice-card__role { margin: 30px 0 9px; color: var(--olive-700); font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.role-choice-card h2,
+.public-role-card h2,
+.journey-card h2,
+.assistance-page-card h2 { margin: 0 0 15px; color: var(--olive-900); font-size: clamp(1.55rem, 2.75vw, 2.1rem); letter-spacing: -.035em; line-height: 1.15; }
+.role-choice-card > p:not(.role-choice-card__role) { margin: 0 0 32px; color: var(--muted); line-height: 1.75; }
+.role-choice-card .public-page__button { margin-top: auto; }
+.public-page__signin { margin: 34px auto 0; text-align: center; color: var(--muted); }
+.public-page__signin a { font-weight: 800; }
+.public-role-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.public-role-card { display: flex; min-height: 510px; flex-direction: column; padding: clamp(27px, 3.5vw, 40px); }
+.public-role-card header { display: flex; align-items: center; gap: 16px; margin-bottom: 26px; }
+.public-role-card header p { margin: 0; color: var(--olive-700); font-size: .76rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.public-role-card ul { display: grid; gap: 12px; margin: 6px 0 34px; padding: 0; list-style: none; }
+.public-role-card li { position: relative; padding-left: 24px; color: var(--muted); line-height: 1.55; }
+.public-role-card li::before { position: absolute; top: .1em; left: 0; color: var(--olive-700); content: '\2713'; font-weight: 900; }
+.public-role-card .public-page__button { margin-top: auto; }
+.journey-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.journey-card { padding: clamp(28px, 4vw, 44px); }
+.journey-card .role-choice-card__role { margin-top: 0; }
+.journey-card ol { display: grid; gap: 12px; margin: 30px 0 36px; padding: 0; list-style: none; }
+.journey-card li { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 13px; }
+.journey-card li > span { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid #cbd4b7; border-radius: 50%; color: var(--olive-900); background: var(--cream-50); font-size: .73rem; font-weight: 800; }
+.journey-card li p { margin: 0; color: var(--muted); line-height: 1.55; }
+.assistance-page-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.assistance-page-card { padding: 30px; }
+.assistance-page-card .role-choice-card__role { margin-top: 28px; }
+.assistance-page-card > p:not(.role-choice-card__role) { min-height: 145px; margin: 0 0 26px; color: var(--muted); line-height: 1.72; }
+.assistance-page-card small { display: block; padding-top: 18px; border-top: 1px solid var(--border); color: var(--olive-700); font-size: .74rem; font-weight: 800; line-height: 1.5; }
+.public-page__callout { display: grid; max-width: 920px; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 20px; margin-top: 28px; padding: 28px 30px; border-radius: 22px; color: white; background: var(--olive-700); }
+.public-page__callout > svg { color: var(--olive-100); }
+.public-page__callout h2 { margin: 0 0 5px; font-size: 1.15rem; }
+.public-page__callout p { margin: 0; color: rgb(255 255 255 / 72%); line-height: 1.55; }
+.public-page__callout .public-page__button { color: var(--olive-900); background: var(--olive-100); }
+
+@media (max-width: 900px) {
+  .assistance-page-grid { grid-template-columns: 1fr 1fr; }
+  .assistance-page-card:last-child { grid-column: 1 / -1; }
+  .assistance-page-card > p:not(.role-choice-card__role) { min-height: 0; }
+  .public-page__callout { grid-template-columns: auto 1fr; }
+  .public-page__callout .public-page__button { grid-column: 1 / -1; }
+}
+
+@media (max-width: 680px) {
+  .public-page__main { padding-top: 76px; }
+  .public-page__hero { padding-top: 62px; }
+  .role-choice-grid,
+  .public-role-grid,
+  .journey-grid,
+  .assistance-page-grid { grid-template-columns: 1fr; }
+  .assistance-page-card:last-child { grid-column: auto; }
+  .role-choice-card,
+  .public-role-card { min-height: 0; }
+  .public-page__button { width: 100%; }
+  .public-page__callout { grid-template-columns: 1fr; padding: 25px; }
+  .public-page__callout .public-page__button { grid-column: auto; }
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/useAuth.js'
+import PropertyWorkflowHandoff from '../../properties/components/PropertyWorkflowHandoff.jsx'
 import { AppCard, PageHeader } from '../../../shared/ui/States.jsx'
 import Icon from '../../../shared/ui/Icons.jsx'
 import RentalApplicationStatusBadge from '../components/RentalApplicationStatusBadge.jsx'
@@ -37,6 +38,8 @@ function validateApplications(applications, tenantId) {
 
 export default function MyApplicationsPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const propertyId = searchParams.get('propertyId')?.trim() || null
   const [attempt, setAttempt] = useState(0)
   const [filter, setFilter] = useState('all')
   const [state, setState] = useState({ status: 'loading', applications: [], error: '' })
@@ -59,6 +62,9 @@ export default function MyApplicationsPage() {
 
   const visibleApplications = filter === 'all' ? state.applications
     : state.applications.filter((item) => item.status === Number(filter))
+  const selectedPropertyApplications = propertyId
+    ? state.applications.filter((item) => item.propertyId.toLowerCase() === propertyId.toLowerCase()).length
+    : 0
 
   return <main className="shared-page my-applications-page" aria-busy={state.status === 'loading'}>
     <div className="my-applications-page__heading">
@@ -67,6 +73,14 @@ export default function MyApplicationsPage() {
       </PageHeader>
       <button className="shared-button shared-button--outline" type="button" onClick={reload} disabled={state.status === 'loading'}><Icon name="refresh" size={18} />Refresh</button>
     </div>
+
+    {propertyId && (
+      <PropertyWorkflowHandoff
+        propertyId={propertyId}
+        workflow="application"
+        existingCount={selectedPropertyApplications}
+      />
+    )}
 
     {state.status === 'loading' && <div className="my-applications-state" role="status"><span className="shared-spinner" aria-hidden="true" />Loading your applications&hellip;</div>}
     {state.status === 'error' && <div className="my-applications-state" role="alert"><h2>Applications could not be loaded</h2><p>{state.error}</p><button className="shared-button" type="button" onClick={reload}>Try again</button></div>}

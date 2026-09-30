@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/useAuth.js'
+import PropertyWorkflowHandoff from '../../properties/components/PropertyWorkflowHandoff.jsx'
 import { AppCard, PageHeader } from '../../../shared/ui/States.jsx'
 import Icon from '../../../shared/ui/Icons.jsx'
 import ViewingStatusBadge from '../components/ViewingStatusBadge.jsx'
@@ -22,6 +24,8 @@ function validateViewings(viewings, tenantId) {
 
 export default function MyViewingsPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const propertyId = searchParams.get('propertyId')?.trim() || null
   const [attempt, setAttempt] = useState(0)
   const [state, setState] = useState({ status: 'loading', viewings: [], error: '' })
 
@@ -41,6 +45,10 @@ export default function MyViewingsPage() {
     setAttempt((value) => value + 1)
   }
 
+  const selectedPropertyViewings = propertyId
+    ? state.viewings.filter((viewing) => viewing.propertyId.toLowerCase() === propertyId.toLowerCase()).length
+    : 0
+
   return <main className="shared-page my-viewings-page">
     <div className="my-viewings-page__heading">
       <PageHeader eyebrow="Your requests" title="My Viewings">
@@ -48,6 +56,13 @@ export default function MyViewingsPage() {
       </PageHeader>
       <button className="shared-button shared-button--outline" type="button" onClick={reload} disabled={state.status === 'loading'}><Icon name="refresh" size={18} />Refresh</button>
     </div>
+    {propertyId && (
+      <PropertyWorkflowHandoff
+        propertyId={propertyId}
+        workflow="viewing"
+        existingCount={selectedPropertyViewings}
+      />
+    )}
     {state.status === 'loading' && <div className="my-viewings-state" role="status"><span className="shared-spinner" aria-hidden="true" />Loading your viewings&hellip;</div>}
     {state.status === 'error' && <div className="my-viewings-state" role="alert"><h2>Viewings could not be loaded</h2><p>{state.error}</p><button className="shared-button" type="button" onClick={reload}>Try again</button></div>}
     {state.status === 'ready' && state.viewings.length === 0 && <AppCard className="my-viewings-state"><Icon name="calendar" size={28} /><h2>No viewing requests yet</h2><p>Your viewing requests will appear here after you book them in the mobile app.</p></AppCard>}

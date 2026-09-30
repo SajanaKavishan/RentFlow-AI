@@ -12,5 +12,9 @@ public class PropertyImageResponseDto
 
     public long FileSizeBytes { get; set; }
 
+    public bool IsPrimary { get; set; }
+
+    public int SortOrder { get; set; }
+
     public DateTimeOffset UploadedAt { get; set; }
 }

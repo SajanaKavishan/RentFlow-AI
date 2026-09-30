@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react'
+import { useCallback, useContext, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AuthContext } from '../../features/auth/useAuth.js'
 import {
@@ -189,6 +189,7 @@ export function AssignedWorkState({
 
 export default function TechnicianAssignedWorkPage() {
   const { user } = useContext(AuthContext) || {}
+  const userId = user?.id
   const [status, setStatus] = useState('loading')
   const [requests, setRequests] = useState([])
   const [error, setError] = useState('')
@@ -200,8 +201,8 @@ export default function TechnicianAssignedWorkPage() {
   const [estimatePending, setEstimatePending] = useState(false)
   const [estimateForm, setEstimateForm] = useState(DEFAULT_ESTIMATE_FORM)
 
-  const loadAssignedWork = async () => {
-    if (!user?.id) {
+  const loadAssignedWork = useCallback(async () => {
+    if (!userId) {
       setStatus('error')
       setError('Your authenticated technician account could not be identified.')
       setRequests([])
@@ -213,7 +214,7 @@ export default function TechnicianAssignedWorkPage() {
     setNotice('')
 
     try {
-      const items = await getTechnicianMaintenanceRequests(user.id)
+      const items = await getTechnicianMaintenanceRequests(userId)
       setRequests(items)
       setSelectedRequestId((current) =>
         items.some((item) => item.id === current) ? current : null,
@@ -225,11 +226,15 @@ export default function TechnicianAssignedWorkPage() {
       setError(err.message || 'Unable to load the technician work queue.')
       return false
     }
-  }
+  }, [userId])
 
   useEffect(() => {
-    loadAssignedWork()
-  }, [user?.id])
+    const loadTimer = window.setTimeout(() => {
+      void loadAssignedWork()
+    }, 0)
+
+    return () => window.clearTimeout(loadTimer)
+  }, [loadAssignedWork])
 
   const handleWorkAction = async (request, action) => {
     if (pendingRequestId) return

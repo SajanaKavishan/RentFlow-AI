@@ -8,17 +8,17 @@ const viewingDateFormatter = new Intl.DateTimeFormat(undefined, {
 const viewingTimeFormatter = new Intl.DateTimeFormat(undefined, {
   timeStyle: 'short',
 })
+const submittedDateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
 
 function parseViewingDate(value) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-function displayValue(...values) {
-  return values.find((value) => typeof value === 'string' && value.trim())?.trim() || null
-}
-
-function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) {
+function ViewingCard({ viewing, property, isUpdating, actionError, onApprove, onReject }) {
   const [action, setAction] = useState(null)
   const [response, setResponse] = useState('')
   const [validationError, setValidationError] = useState('')
@@ -27,10 +27,9 @@ function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) 
   const requestedDate = parseViewingDate(viewing.requestedDateTime)
   const tenantMessage = viewing.tenantMessage?.trim()
   const landlordResponse = viewing.landlordResponse?.trim()
-  const tenantName = displayValue(viewing.tenantName, viewing.tenant?.name)
-  const tenantEmail = displayValue(viewing.tenantEmail, viewing.tenant?.email)
-  const propertyName = displayValue(viewing.propertyName, viewing.property?.name)
-  const propertyLocation = displayValue(viewing.propertyLocation, viewing.property?.location)
+  const propertyLocation = property
+    ? [property.address, property.city].filter(Boolean).join(', ')
+    : ''
   const createdDate = parseViewingDate(viewing.createdAt)
 
   function openAction(nextAction) {
@@ -104,17 +103,14 @@ function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) 
 
         <dl className="viewing-card__references">
           <div>
-            <dt>Tenant</dt>
-            <dd title={tenantEmail || viewing.tenantId}>
-              {tenantName || tenantEmail || viewing.tenantId || 'Unavailable'}
-              {tenantName && tenantEmail && <small>{tenantEmail}</small>}
-            </dd>
+            <dt>Tenant ID</dt>
+            <dd title={viewing.tenantId}>{viewing.tenantId || 'Unavailable'}</dd>
           </div>
           <div>
             <dt>Property</dt>
             <dd title={propertyLocation || viewing.propertyId}>
-              {propertyName || propertyLocation || viewing.propertyId || 'Unavailable'}
-              {propertyName && propertyLocation && <small>{propertyLocation}</small>}
+              {property?.title || viewing.propertyId || 'Unavailable'}
+              {property?.title && propertyLocation && <small>{propertyLocation}</small>}
             </dd>
           </div>
         </dl>
@@ -122,22 +118,27 @@ function ViewingCard({ viewing, isUpdating, actionError, onApprove, onReject }) 
 
       {createdDate && (
         <p className="viewing-card__created">
-          Requested on <time dateTime={viewing.createdAt}>{viewingDateFormatter.format(createdDate)}</time>
+          <span>Submitted</span>
+          <time dateTime={viewing.createdAt}>{submittedDateTimeFormatter.format(createdDate)}</time>
         </p>
       )}
 
-      <div className="viewing-card__conversation">
-        <div className="viewing-card__message">
-          <span>Tenant message</span>
-          <p>{tenantMessage || 'No message was included with this request.'}</p>
+      {(tenantMessage || landlordResponse) && (
+        <div className="viewing-card__conversation">
+          {tenantMessage && (
+            <div className="viewing-card__message">
+              <span>Tenant message</span>
+              <p>{tenantMessage}</p>
+            </div>
+          )}
+          {landlordResponse && (
+            <div className="viewing-card__response">
+              <span>Your response</span>
+              <p>{landlordResponse}</p>
+            </div>
+          )}
         </div>
-        {landlordResponse && (
-          <div className="viewing-card__response">
-            <span>Your response</span>
-            <p>{landlordResponse}</p>
-          </div>
-        )}
-      </div>
+      )}
 
       {isPending && !action && (
         <div className="viewing-card__actions viewing-card__actions--primary">

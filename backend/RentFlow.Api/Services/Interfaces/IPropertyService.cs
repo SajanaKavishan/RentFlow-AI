@@ -17,6 +17,11 @@ public interface IPropertyService
         Guid landlordId,
         UpdatePropertyDto dto);
 
+    Task<PropertyResponseDto?> UpdateListingAsync(
+        Guid id,
+        Guid landlordId,
+        UpdatePropertyListingDto dto);
+
     Task<bool> DeleteAsync(
         Guid id,
         Guid landlordId);

@@ -13,6 +13,11 @@ import {
 } from '../../features/notifications/notificationPreferencesApi.js'
 import { getMySupportTickets } from '../../features/supportTickets/supportTicketsApi.js'
 import ProfilePage from './ProfilePage.jsx'
+import {
+  getMatchPreferences,
+  resetMatchPreferences,
+  saveMatchPreferences,
+} from '../../features/properties/services/propertyApiService.js'
 
 vi.mock('../../features/notifications/notificationPreferencesApi.js', () => ({
   getNotificationPreferences: vi.fn(),
@@ -29,6 +34,12 @@ vi.mock('../../features/supportTickets/supportTicketsApi.js', () => ({
   ],
   createSupportTicket: vi.fn(),
   getMySupportTickets: vi.fn(),
+}))
+
+vi.mock('../../features/properties/services/propertyApiService.js', () => ({
+  getMatchPreferences: vi.fn(),
+  resetMatchPreferences: vi.fn(),
+  saveMatchPreferences: vi.fn(),
 }))
 
 const applicationId = '22222222-2222-2222-2222-222222222222'
@@ -59,6 +70,9 @@ beforeEach(() => {
     accountSecurityUpdatesEnabled: true,
   })
   getMySupportTickets.mockResolvedValue([])
+  getMatchPreferences.mockResolvedValue({ isConfigured: false, preferredAmenities: [] })
+  resetMatchPreferences.mockResolvedValue(undefined)
+  saveMatchPreferences.mockResolvedValue({ isConfigured: true, preferredCity: 'Kurunegala', preferredAmenities: [] })
 })
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
@@ -99,6 +113,15 @@ describe('shared profile', () => {
       expect(screen.queryByRole('checkbox', { name: /Rental application updates/ })).not.toBeInTheDocument()
       expect(screen.queryByText('Account & security updates')).not.toBeInTheDocument()
       expect(getNotificationPreferences).not.toHaveBeenCalled()
+    }
+
+    if (role === USER_ROLES.TENANT) {
+      expect(screen.getByRole('region', { name: 'Match Preferences' })).toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: 'Set match preferences' })).toBeEnabled()
+      expect(getMatchPreferences).toHaveBeenCalledTimes(1)
+    } else {
+      expect(screen.queryByRole('region', { name: 'Match Preferences' })).not.toBeInTheDocument()
+      expect(getMatchPreferences).not.toHaveBeenCalled()
     }
 
     if (isAdmin) {
@@ -155,6 +178,29 @@ describe('shared profile', () => {
     })
     expect((await screen.findAllByText('Notification preferences saved.')).length).toBeGreaterThan(0)
     expect(viewingToggle).not.toBeChecked()
+  })
+
+  it('loads and edits tenant match preferences without exposing them to other roles', async () => {
+    getMatchPreferences.mockResolvedValueOnce({
+      isConfigured: true,
+      preferredCity: 'Kurunegala',
+      maximumMonthlyRent: 150000,
+      minimumBedrooms: 2,
+      minimumBathrooms: 2,
+      preferredAmenities: ['Parking', 'Security'],
+    })
+    renderProfile('Tenant')
+
+    const section = screen.getByRole('region', { name: 'Match Preferences' })
+    expect(await within(section).findByText('Kurunegala')).toBeInTheDocument()
+    expect(within(section).getByText('Up to Rs. 150,000')).toBeInTheDocument()
+    await userEvent.click(within(section).getByRole('button', { name: 'Edit preferences' }))
+    const dialog = screen.getByRole('dialog', { name: 'Edit match preferences' })
+    await userEvent.clear(within(dialog).getByLabelText('Preferred city'))
+    await userEvent.type(within(dialog).getByLabelText('Preferred city'), 'Colombo')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save preferences' }))
+    expect(saveMatchPreferences).toHaveBeenCalledWith(expect.objectContaining({ preferredCity: 'Colombo' }))
+    expect(await screen.findByText('Match preferences saved.')).toBeInTheDocument()
   })
 
   it('keeps failed notification changes unconfirmed and supports save retry', async () => {

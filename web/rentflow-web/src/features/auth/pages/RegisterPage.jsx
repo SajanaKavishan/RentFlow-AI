@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../../core/api/apiClient.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import { useAuth } from '../useAuth.js'
@@ -8,6 +8,9 @@ import AuthVisual from './AuthVisual.jsx'
 import './auth.css'
 
 const initialForm = { fullName: '', email: '', phoneNumber: '', password: '', confirmPassword: '', role: USER_ROLES.TENANT }
+const publicRoleFromQuery = (value) => value?.toLowerCase() === 'landlord'
+  ? USER_ROLES.LANDLORD
+  : USER_ROLES.TENANT
 function validate(form) {
   if (form.fullName.trim().length < 2) return 'Enter your full name.'
   if (!/^\S+@\S+\.\S+$/.test(form.email)) return 'Enter a valid email address.'
@@ -20,7 +23,8 @@ function validate(form) {
 
 export default function RegisterPage() {
   const { isAuthenticated, isLoading, register, user } = useAuth(); const navigate = useNavigate()
-  const [form, setForm] = useState(initialForm); const [error, setError] = useState(''); const [isSubmitting, setIsSubmitting] = useState(false)
+  const [searchParams] = useSearchParams()
+  const [form, setForm] = useState(() => ({ ...initialForm, role: publicRoleFromQuery(searchParams.get('role')) })); const [error, setError] = useState(''); const [isSubmitting, setIsSubmitting] = useState(false)
   const [passwordVisible, setPasswordVisible] = useState(false)
   if (isLoading) return <div className="auth-restoring" role="status"><span className="shared-spinner" aria-hidden="true" />Restoring your session&hellip;</div>
   if (isAuthenticated) return <Navigate to={authenticatedHomePathForRole(user.role)} replace />

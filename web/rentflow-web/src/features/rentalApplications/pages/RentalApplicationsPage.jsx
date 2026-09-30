@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useContext, useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
+import { useOwnedPropertySelection } from '../../../shared/property/useOwnedProperties.js'
+import { PendingApplicationsContext } from '../../../shared/layout/PendingApplicationsContext.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import { APPLICATION_STATUS_DETAILS } from '../components/applicationStatus.js'
 import RentalApplicationListCard from '../components/RentalApplicationListCard.jsx'
@@ -41,25 +43,57 @@ function sortApplications(applications) {
 
 const FILTER_STATUSES = [
   ['All', 'all'],
-  ...Object.entries(APPLICATION_STATUS_DETAILS)
-    .filter(([status]) => Number(status) !== RENTAL_APPLICATION_STATUS.DRAFT)
-    .map(([status, details]) => [details.label, status]),
-  [APPLICATION_STATUS_DETAILS[RENTAL_APPLICATION_STATUS.DRAFT].label, String(RENTAL_APPLICATION_STATUS.DRAFT)],
+  ['Submitted', String(RENTAL_APPLICATION_STATUS.SUBMITTED)],
+  ['Under Review', String(RENTAL_APPLICATION_STATUS.UNDER_REVIEW)],
+  ['Changes Requested', String(RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED)],
+  ['Approved', String(RENTAL_APPLICATION_STATUS.APPROVED)],
+  ['Rejected', String(RENTAL_APPLICATION_STATUS.REJECTED)],
 ]
 
+function applicationSearchValues(application) {
+  return [
+    application.id,
+    application.tenantId,
+    application.propertyId,
+    application.moveInDate,
+    application.monthlyIncome,
+    application.occupation,
+    application.numberOfOccupants,
+    application.tenantNote,
+    application.landlordResponse,
+    application.createdAt,
+    application.submittedAt,
+    application.updatedAt,
+  ].filter((value) => value !== null && value !== undefined)
+}
+
+function validPropertyApplication(application, propertyId, expectedId = null) {
+  return Boolean(
+    application
+    && typeof application.id === 'string'
+    && application.id.trim()
+    && (!expectedId || application.id.toLowerCase() === expectedId.toLowerCase())
+    && typeof application.tenantId === 'string'
+    && application.tenantId.trim()
+    && typeof application.propertyId === 'string'
+    && application.propertyId.toLowerCase() === propertyId.toLowerCase()
+    && Object.hasOwn(APPLICATION_STATUS_DETAILS, application.status),
+  )
+}
+
 function verifyPropertyApplications(applications, propertyId) {
-  if (!Array.isArray(applications) || applications.some((application) =>
-    !application || typeof application.id !== 'string' || !application.id.trim()
-    || typeof application.tenantId !== 'string' || !application.tenantId.trim()
-    || typeof application.propertyId !== 'string'
-    || application.propertyId.toLowerCase() !== propertyId.toLowerCase()
-    || !Object.hasOwn(APPLICATION_STATUS_DETAILS, application.status)
-  )) throw new TypeError('Invalid property application response')
+  if (!Array.isArray(applications)
+    || applications.some((application) => !validPropertyApplication(application, propertyId))
+    || new Set(applications.map((application) => application.id.toLowerCase())).size !== applications.length) {
+    throw new TypeError('Invalid property application response')
+  }
   return sortApplications(applications)
 }
 
 function RentalApplicationsPage() {
+  const publishPendingApplications = useContext(PendingApplicationsContext)
   const { propertyId } = usePropertyContext()
+  const selection = useOwnedPropertySelection(propertyId)
   const { pathname } = useLocation()
   const isAiReviewRoute = pathname === '/ai-review' || /\/ai-review\/?$/.test(pathname)
   const [pageState, setPageState] = useState({
@@ -74,14 +108,14 @@ function RentalApplicationsPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const pageStatus = !propertyId
-    ? 'property-required'
+  const pageStatus = selection.status !== 'selected'
+    ? 'property-context'
     : pageState.propertyId === propertyId
       ? pageState.status
       : 'loading'
 
   useEffect(() => {
-    if (!propertyId) return undefined
+    if (!propertyId || selection.status !== 'selected') return undefined
 
     let isActive = true
 
@@ -112,10 +146,10 @@ function RentalApplicationsPage() {
     return () => {
       isActive = false
     }
-  }, [propertyId, reloadKey])
+  }, [propertyId, reloadKey, selection.status])
 
   function loadApplications() {
-    if (!propertyId || pageStatus === 'loading') return
+    if (!propertyId || selection.status !== 'selected' || pageStatus === 'loading') return
 
     setPageState((current) => ({
       ...current,
@@ -137,6 +171,9 @@ function RentalApplicationsPage() {
 
     try {
       const updatedApplication = await operation()
+      if (!validPropertyApplication(updatedApplication, propertyId, id)) {
+        throw new TypeError('Invalid application update response')
+      }
       setPageState((current) => ({
         ...current,
         applications: current.propertyId === propertyId ? sortApplications(
@@ -196,40 +233,61 @@ function RentalApplicationsPage() {
   const applications = pageStatus === 'success' ? pageState.applications : []
   const awaitingReview = applications.filter((application) =>
     [RENTAL_APPLICATION_STATUS.SUBMITTED, RENTAL_APPLICATION_STATUS.UNDER_REVIEW].includes(application.status)).length
+  useEffect(() => {
+    if (selection.status === 'selected') {
+      publishPendingApplications?.(propertyId, pageStatus === 'success' ? awaitingReview : null)
+    }
+  }, [pageStatus, propertyId, awaitingReview, publishPendingApplications, selection.status])
   const query = search.trim().toLocaleLowerCase()
   const visibleApplications = applications.filter((application) =>
     (statusFilter === 'all' || application.status === Number(statusFilter))
-    && (!query || [application.tenantId, application.propertyId].some((value) => value.toLocaleLowerCase().includes(query))))
+    && (!query || applicationSearchValues(application)
+      .some((value) => String(value).toLocaleLowerCase().includes(query))))
 
   return (
     <main
       className="applications-page"
       aria-busy={pageStatus === 'loading'}
     >
+      {selection.property && <Link className="applications-page__back" to={`/properties/${encodeURIComponent(propertyId)}`}>
+        <span aria-hidden="true">&larr;</span> Back to Property
+      </Link>}
       <header className="applications-page__header">
-        <div>
+        <div className="applications-page__intro">
           <h1>{isAiReviewRoute ? 'AI Review' : 'Rental Applications'}</h1>
           <p className="applications-page__description">
             {isAiReviewRoute
               ? 'Review application validation findings and supporting documents before making a decision.'
               : 'Track tenant applications, review documents and validation findings, and make the final landlord decision.'}
           </p>
-          {pageStatus === 'success' && <p className="applications-page__count">
-            {applications.length} total <span aria-hidden="true">&middot;</span> {awaitingReview} awaiting review
-          </p>}
+          {selection.property && <div className="applications-page__property" role="group" aria-label="Selected property">
+            <span className="applications-page__property-icon" aria-hidden="true"><Icon name="home" size={19} /></span>
+            <span>
+              <strong>{selection.property.title}</strong>
+              {[selection.property.address, selection.property.city].filter(Boolean).length > 0
+                && <span>{[selection.property.address, selection.property.city].filter(Boolean).join(', ')}</span>}
+            </span>
+          </div>}
         </div>
-        <button
-          type="button"
-          className="application-button application-button--quiet"
-          onClick={loadApplications}
-          disabled={!propertyId || pageStatus === 'loading'}
-        >
-          <Icon name="refresh" size={17} />Refresh
-        </button>
+        <div className="applications-page__header-actions">
+          {pageStatus === 'success' && <dl className="applications-page__counts" role="group" aria-label="Rental application counts">
+            <div><dt>Total</dt><dd>{applications.length}</dd></div>
+            <div><dt>Awaiting review</dt><dd>{awaitingReview}</dd></div>
+          </dl>}
+          <button
+            type="button"
+            className="application-button application-button--quiet"
+            onClick={loadApplications}
+            disabled={selection.status !== 'selected' || pageStatus === 'loading'}
+          >
+            <Icon name="refresh" size={17} />Refresh
+          </button>
+        </div>
       </header>
 
-      {pageStatus === 'property-required' && (
-        <PropertySelectionState className="applications-state" />
+      {pageStatus === 'property-context' && (
+        <PropertySelectionState className="applications-state" destination={isAiReviewRoute ? 'ai-review' : 'rental-applications'}
+          selectedPropertyId={selection.status === 'unauthorized' ? propertyId : null} />
       )}
 
       {pageStatus === 'success' && notice.propertyId === propertyId && notice.message && (
@@ -281,8 +339,8 @@ function RentalApplicationsPage() {
             <div className="applications-toolbar">
               <label className="applications-toolbar__search">
                 <Icon name="search" size={19} />
-                <input type="search" aria-label="Search tenant or property reference" value={search} onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search tenant or property reference" />
+                <input type="search" aria-label="Search rental applications" value={search} onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search application details" />
               </label>
               <div className="applications-toolbar__filters" role="group" aria-label="Filter applications by status">
                 {FILTER_STATUSES.map(([label, value]) => <button key={value} type="button"
@@ -294,12 +352,12 @@ function RentalApplicationsPage() {
             {visibleApplications.length === 0 ? <section className="applications-state applications-state--filtered">
               <Icon name="search" size={28} />
               <h2>No matching applications</h2>
-              <p>Try a different tenant or property reference, or choose another status.</p>
+              <p>Try a different application search, or choose another status.</p>
               <button type="button" className="application-button application-button--quiet"
                 onClick={() => { setSearch(''); setStatusFilter('all') }}>Clear filters</button>
             </section> : <section className="applications-list" aria-label="Rental applications">
               {visibleApplications.map((application) => <RentalApplicationListCard
-                key={application.id} application={application} isUpdating={updatingId === application.id}
+                key={application.id} application={application} property={selection.property} isUpdating={updatingId === application.id}
                 actionError={actionError.id === application.id ? actionError.message : ''}
                 onReview={handleReview} onApprove={handleApprove} onReject={handleReject}
                 onRequestChanges={handleRequestChanges} />)}

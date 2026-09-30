@@ -20,5 +20,9 @@ public class PropertyImage
 
     public long FileSizeBytes { get; set; }
 
+    public bool IsPrimary { get; set; }
+
+    public int SortOrder { get; set; }
+
     public DateTimeOffset UploadedAt { get; set; } = DateTimeOffset.UtcNow;
 }
