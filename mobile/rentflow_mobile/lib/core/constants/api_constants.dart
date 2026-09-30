@@ -10,6 +10,7 @@ abstract final class ApiConstants {
   static const String rentalOffersPath = '/api/rental-offers';
   static const String leaseAgreementsPath = '/api/lease-agreements';
   static const String rentSchedulesPath = '/api/rent-schedules';
+  static const String paymentsPath = '/api/payments';
   static const String applicationDocumentsPath = '/api/application-documents';
   static const String notificationsPath = '/api/notifications';
   static const String authPath = '/api/auth';
