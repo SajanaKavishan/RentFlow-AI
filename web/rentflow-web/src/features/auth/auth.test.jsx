@@ -30,7 +30,7 @@ function renderApp(api, initialEntry = '/login') {
 
 describe('React authentication', () => {
   beforeEach(() => { vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response('[]', { status: 200 })))) })
-  afterEach(() => { cleanup(); setUnauthorizedHandler(null); vi.unstubAllGlobals() })
+  afterEach(() => { cleanup(); tokenStorage.clearToken(); setUnauthorizedHandler(null); vi.unstubAllGlobals() })
 
   it('persists and clears the access token through the storage abstraction', () => {
     tokenStorage.setToken('access-token')
@@ -181,6 +181,23 @@ describe('React authentication', () => {
     expect(screen.queryByRole('option', { name: 'Admin' })).not.toBeInTheDocument()
     fireEvent.change(select, { target: { value: 'Landlord' } })
     expect(select).toHaveValue('Landlord')
+  })
+
+  it.each([
+    ['/register?role=tenant', 'Tenant'],
+    ['/register?role=landlord', 'Landlord'],
+  ])('preselects the supported role from %s', async (entry, expectedRole) => {
+    const api = { login: vi.fn(), register: vi.fn(), getCurrentUser: vi.fn() }
+    renderApp(api, entry)
+    expect(await screen.findByLabelText('Account type')).toHaveValue(expectedRole)
+  })
+
+  it.each(['admin', 'technician', 'MaintenanceTechnician', 'unknown'])('falls back safely for the invalid public role query %s', async (role) => {
+    const api = { login: vi.fn(), register: vi.fn(), getCurrentUser: vi.fn() }
+    renderApp(api, `/register?role=${role}`)
+    const select = await screen.findByLabelText('Account type')
+    expect(select).toHaveValue('Tenant')
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(['Tenant', 'Landlord'])
   })
 
   it('registers with all real fields and only the selected public role', async () => {

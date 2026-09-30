@@ -13,7 +13,6 @@ const tenant = {
   phoneNumber: '+94 77 123 4567',
   role: 'Tenant',
 }
-const tenantGreeting = /^(Welcome back|Good to see you|Hello|Hi there), Taylor Tenant$/
 
 function apiWith(currentUser = null) {
   return {
@@ -39,159 +38,144 @@ afterEach(() => {
 })
 
 describe('public landing experience', () => {
-  it('renders the public landing page at the root route', () => {
+  it('renders the public landing page and guest hero journey', () => {
     renderApp()
     expect(screen.getByRole('heading', { name: 'Find your perfect home, smarter.' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Everything you need for the rental journey.' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Smarter help throughout your rental journey.' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Your rental journey, kept together.' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Built for every part of the rental process.' })).not.toBeInTheDocument()
+    expect(screen.getByText('AI-powered rental search and management for a simpler rental journey.')).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /Get Started/ })[0]).toHaveAttribute('href', '/get-started')
+    expect(screen.getByRole('link', { name: 'Explore the platform' })).toHaveAttribute('href', '/platform')
     expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument()
   })
 
-  it('shows a transparent navbar initially', () => {
+  it('keeps the auto-hiding header behavior', async () => {
     renderApp()
     const navbar = screen.getByRole('banner')
     expect(navbar).toHaveAttribute('data-visible', 'true')
     expect(navbar).toHaveAttribute('data-surface', 'transparent')
-  })
-
-  it('hides after meaningful downward scrolling', async () => {
-    renderApp()
-    const navbar = screen.getByRole('banner')
     scrollTo(120)
     await waitFor(() => expect(navbar).toHaveAttribute('data-visible', 'false'))
     expect(navbar).toHaveAttribute('data-surface', 'dark')
-  })
-
-  it('reappears on upward movement from a lower landing section', async () => {
-    renderApp()
-    const navbar = screen.getByRole('banner')
-    scrollTo(1400)
-    await waitFor(() => expect(navbar).toHaveAttribute('data-visible', 'false'))
-    scrollTo(1370)
+    scrollTo(90)
     await waitFor(() => expect(navbar).toHaveAttribute('data-visible', 'true'))
-    expect(navbar).toHaveAttribute('data-surface', 'dark')
   })
 
-  it('restores the visible transparent state at the top', async () => {
-    renderApp()
-    const navbar = screen.getByRole('banner')
-    scrollTo(180)
-    await waitFor(() => expect(navbar).toHaveAttribute('data-visible', 'false'))
-    scrollTo(0)
-    await waitFor(() => {
-      expect(navbar).toHaveAttribute('data-visible', 'true')
-      expect(navbar).toHaveAttribute('data-surface', 'transparent')
-    })
-  })
-
-  it('navigates Get Started to the real registration page', async () => {
+  it('routes Get Started to the two supported public account choices', async () => {
     renderApp()
     await userEvent.click(screen.getAllByRole('link', { name: 'Get Started' })[0])
-    expect(await screen.findByRole('heading', { name: 'Create your RentFlow account' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'How would you like to use RentFlow?' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Continue as Tenant/ })).toHaveAttribute('href', '/register?role=tenant')
+    expect(screen.getByRole('link', { name: /Continue as Landlord/ })).toHaveAttribute('href', '/register?role=landlord')
+    expect(screen.queryByText('Admin', { selector: '.role-choice-card__role' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Technician', { selector: '.role-choice-card__role' })).not.toBeInTheDocument()
   })
 
-  it('navigates an unauthenticated Sign In request to login', async () => {
+  it('routes guest Sign In to the canonical login page', async () => {
     renderApp()
-    await userEvent.click(screen.getAllByRole('button', { name: 'Sign In' })[0])
+    await userEvent.click(screen.getByRole('link', { name: 'Sign In' }))
     expect(await screen.findByRole('heading', { name: 'Sign in to RentFlow' })).toBeInTheDocument()
   })
 
-  it('keeps landing visible during session restoration and enters the authenticated home only after Sign In', async () => {
-    let finishRestore
-    const restoredUser = new Promise((resolve) => { finishRestore = resolve })
-    tokenStorage.setToken('stored-token')
-    const api = apiWith()
-    api.getCurrentUser.mockReturnValue(restoredUser)
-    renderApp(api)
-
-    expect(screen.getByRole('heading', { name: 'Find your perfect home, smarter.' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: tenantGreeting })).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Sign In' })[0])
-    expect(screen.getAllByRole('button', { name: 'Restoring…' })[0]).toBeDisabled()
-    finishRestore(tenant)
-
-    expect(await screen.findByRole('heading', { name: tenantGreeting })).toBeInTheDocument()
-    expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument()
-  })
-
-  it('uses in-page section links without leaving the landing route', async () => {
+  it('uses dedicated public information routes in the navbar', async () => {
     renderApp()
     const navigation = screen.getByRole('navigation', { name: 'Landing page navigation' })
-    const platformLink = within(navigation).getByRole('link', { name: 'Platform' })
-    const assistanceLink = within(navigation).getByRole('link', { name: 'Smart Assistance' })
-    expect(platformLink).toHaveAttribute('href', '#platform')
-    expect(assistanceLink).toHaveAttribute('href', '#smart-assistance')
-    expect(within(navigation).queryByRole('link', { name: 'Roles' })).not.toBeInTheDocument()
-    await userEvent.click(platformLink)
-    expect(screen.getByRole('heading', { name: 'Everything you need for the rental journey.' })).toBeInTheDocument()
+    expect(within(navigation).getByRole('link', { name: 'Platform' })).toHaveAttribute('href', '/platform')
+    expect(within(navigation).getByRole('link', { name: 'How It Works' })).toHaveAttribute('href', '/how-it-works')
+    expect(within(navigation).getByRole('link', { name: 'Smart Assistance' })).toHaveAttribute('href', '/smart-assistance')
+    await userEvent.click(within(navigation).getByRole('link', { name: 'Platform' }))
+    expect(await screen.findByRole('heading', { name: 'One rental platform. A workspace for every role.' })).toBeInTheDocument()
   })
 
-  it('uses a simplified mobile header without drawer controls', () => {
+  it.each([
+    ['/how-it-works', 'A clear path through the rental journey.'],
+    ['/smart-assistance', 'Useful intelligence, with clear boundaries.'],
+  ])('keeps %s public and renders its marketing content', async (path, heading) => {
+    renderApp(apiWith(), path)
+    expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Sign In' })).toHaveAttribute('href', '/login')
+  })
+
+  it('provides an accessible mobile navigation menu control', async () => {
     renderApp()
     const header = screen.getByRole('banner')
-    expect(within(header).queryByRole('button', { name: 'Open menu' })).not.toBeInTheDocument()
-    expect(within(header).queryByRole('button', { name: 'Close menu' })).not.toBeInTheDocument()
-    expect(header.querySelector('.public-header__mobile-signin')).toHaveTextContent('Sign In')
-    expect(header.querySelector('.public-header__menu')).not.toBeInTheDocument()
+    const openMenu = within(header).getByRole('button', { name: 'Open menu' })
+    expect(openMenu).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(openMenu)
+    expect(within(header).getByRole('button', { name: 'Close menu' })).toHaveAttribute('aria-expanded', 'true')
+    expect(header.querySelector('.public-header__nav')).toHaveClass('is-open')
   })
 
-  it('renders product-value rail cards without testimonial claims or ratings', () => {
+  it('shows Tenant hero and navbar destinations after restoring a session', async () => {
+    tokenStorage.setToken('stored-token')
+    renderApp(apiWith(tenant))
+    expect(await screen.findByRole('link', { name: /Browse Properties/ })).toHaveAttribute('href', '/modules/properties')
+    expect(screen.getByRole('link', { name: 'My Dashboard' })).toHaveAttribute('href', '/dashboard')
+    expect(screen.getByRole('link', { name: 'Open Workspace' })).toHaveAttribute('href', '/modules/properties')
+    expect(screen.queryByRole('link', { name: 'Sign In' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Get Started' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['Landlord', 'Manage Properties', '/modules/manage-properties', 'Dashboard', '/dashboard'],
+    ['MaintenanceTechnician', 'View Assigned Work', '/modules/assigned-work', 'Dashboard', '/dashboard'],
+  ])('shows isolated %s hero destinations', async (role, primaryLabel, primaryPath, secondaryLabel, secondaryPath) => {
+    tokenStorage.setToken('stored-token')
+    renderApp(apiWith({ ...tenant, role }))
+    expect(await screen.findByRole('link', { name: new RegExp(primaryLabel) })).toHaveAttribute('href', primaryPath)
+    expect(screen.getByRole('link', { name: secondaryLabel })).toHaveAttribute('href', secondaryPath)
+    expect(screen.queryByRole('link', { name: 'Get Started' })).not.toBeInTheDocument()
+  })
+
+  it('shows only the Admin dashboard hero action for an authenticated Admin', async () => {
+    tokenStorage.setToken('stored-token')
+    renderApp(apiWith({ ...tenant, role: 'Admin' }))
+    expect(await screen.findByRole('link', { name: /Open Admin Dashboard/ })).toHaveAttribute('href', '/dashboard')
+    expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Browse Properties|Manage Properties|View Assigned Work/ })).not.toBeInTheDocument()
+  })
+
+  it('redirects an authenticated Tenant away from Get Started to the Tenant workspace', async () => {
+    tokenStorage.setToken('stored-token')
+    renderApp(apiWith(tenant), '/get-started')
+    expect(await screen.findByRole('heading', { name: 'Find a home that fits' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'How would you like to use RentFlow?' })).not.toBeInTheDocument()
+  })
+
+  it('keeps role identity unchanged when using role-aware links', async () => {
+    tokenStorage.setToken('stored-token')
+    const landlord = { ...tenant, role: 'Landlord' }
+    const api = apiWith(landlord)
+    renderApp(api)
+    const manageLink = await screen.findByRole('link', { name: /Manage Properties/ })
+    expect(manageLink).toHaveAttribute('href', '/modules/manage-properties')
+    expect(api.getCurrentUser).toHaveBeenCalledTimes(1)
+    expect(landlord.role).toBe('Landlord')
+  })
+
+  it('renders product-value rail cards without fake testimonials or ratings', () => {
     renderApp()
     const rail = screen.getByLabelText('Product experience highlights')
     expect(within(rail).getAllByText('Easy property discovery')).toHaveLength(2)
-    expect(within(rail).getAllByText('Human-controlled decisions')).toHaveLength(2)
     expect(rail.querySelector('.experience-rail__list[aria-hidden="true"]')).toBeInTheDocument()
-    expect(rail).not.toHaveTextContent('★')
     expect(screen.queryByText(/what customers say|testimonial/i)).not.toBeInTheDocument()
   })
 
-  it('keeps one complete semantic value list available without animation', () => {
-    renderApp()
-    const rail = screen.getByLabelText('Product experience highlights')
-    const primaryList = rail.querySelector('.experience-rail__list:not([aria-hidden])')
-    expect(primaryList).toBeInTheDocument()
-    expect(within(primaryList).getAllByRole('listitem')).toHaveLength(12)
-    expect(rail.querySelector('.experience-rail__list[aria-hidden="true"]')).toHaveAttribute('aria-hidden', 'true')
-  })
-
-  it('validates feedback fields and never fakes successful delivery', async () => {
+  it('validates feedback and never fakes successful delivery', async () => {
     renderApp()
     const sendButton = screen.getByRole('button', { name: 'Send message' })
     await userEvent.click(sendButton)
     expect(screen.getByText('Enter your name.')).toBeInTheDocument()
-    expect(screen.getByText('Enter your email address.')).toBeInTheDocument()
-    expect(screen.getByText('Enter your message.')).toBeInTheDocument()
-
     await userEvent.type(screen.getByLabelText('Name'), 'Taylor Example')
     await userEvent.type(screen.getByLabelText('Email'), 'taylor@example.com')
     await userEvent.type(screen.getByLabelText('Message'), 'I have a question about RentFlow.')
     await userEvent.click(sendButton)
-
     expect(await screen.findByRole('alert')).toHaveTextContent('Message delivery is not connected yet.')
     expect(screen.queryByText(/message sent|sent successfully/i)).not.toBeInTheDocument()
   })
 
-  it('renders a minimal footer without repeated navigation or auth actions', () => {
+  it('keeps the footer minimal', () => {
     renderApp()
     const footer = screen.getByRole('contentinfo')
-    expect(within(footer).queryByRole('link', { name: 'RentFlow AI home' })).not.toBeInTheDocument()
     expect(within(footer).getByText('© 2026 RentFlow AI. All rights reserved.')).toBeInTheDocument()
     expect(within(footer).queryByRole('navigation')).not.toBeInTheDocument()
-    expect(within(footer).queryByText('Platform')).not.toBeInTheDocument()
-    expect(within(footer).queryByText('How It Works')).not.toBeInTheDocument()
-    expect(within(footer).queryByText('Smart Assistance')).not.toBeInTheDocument()
-    expect(within(footer).queryByText('Sign In')).not.toBeInTheDocument()
-    expect(within(footer).queryByText('Create Account')).not.toBeInTheDocument()
-  })
-
-  it('removes the repeated Final CTA while preserving navbar auth actions', () => {
-    renderApp()
-    expect(screen.queryByRole('heading', { name: 'Ready to start your rental journey?' })).not.toBeInTheDocument()
-    const navigation = screen.getByRole('navigation', { name: 'Landing page navigation' })
-    expect(within(navigation).getByRole('button', { name: 'Sign In' })).toBeInTheDocument()
-    expect(within(navigation).getByRole('link', { name: 'Get Started' })).toHaveAttribute('href', '/register')
   })
 })

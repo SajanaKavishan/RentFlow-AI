@@ -243,9 +243,18 @@ export default function PropertyImageGallery({
               >
                 <Icon name="chevronRight" size={22} />
               </button>
-              <span className="property-image-gallery__count" aria-live="polite">
-                {activeIndex + 1} / {displayImages.length}
-              </span>
+              <div className="property-image-gallery__dots" aria-label={`Choose hero image for ${alt}`}>
+                {displayImages.map((image, index) => (
+                  <button
+                    type="button"
+                    key={image.id}
+                    className={index === activeIndex ? 'is-active' : ''}
+                    aria-label={`Show hero image ${index + 1} of ${displayImages.length} for ${alt}`}
+                    aria-current={index === activeIndex ? 'true' : undefined}
+                    onClick={() => setActiveIndex(index)}
+                  />
+                ))}
+              </div>
             </>
           )}
         </div>

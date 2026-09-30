@@ -2880,24 +2880,44 @@
 .property-image-gallery__arrow--previous { left: 16px; }
 .property-image-gallery__arrow--next { right: 16px; }
 
-.property-image-gallery__count {
+.property-image-gallery__dots {
   position: absolute;
-  right: 18px;
-  bottom: 16px;
-  padding: 6px 9px;
+  z-index: 2;
+  left: 50%;
+  bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
   border-radius: 999px;
-  color: var(--surface);
-  background: rgb(32 33 29 / 68%);
-  font-size: .68rem;
-  font-weight: 800;
-  line-height: 1;
+  background: rgb(32 33 29 / 24%);
+  backdrop-filter: blur(5px);
+  transform: translateX(-50%);
+}
+
+.property-image-gallery__dots button {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 58%);
+  box-shadow: 0 1px 3px rgb(15 20 13 / 18%);
+  cursor: pointer;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.property-image-gallery__dots button:hover,
+.property-image-gallery__dots button.is-active {
+  background: var(--surface);
+  transform: scale(1.08);
 }
 
 .property-image-gallery__thumbnails {
   display: flex;
   gap: 12px;
   overflow-x: auto;
-  padding: 14px 2px 3px;
+  padding: 28px 2px 3px;
   scrollbar-width: thin;
 }
 
@@ -3354,7 +3374,9 @@
   .property-image-gallery__arrow--previous { left: 11px; }
   .property-image-gallery__arrow--next { right: 11px; }
   .property-image-gallery__match { top: 13px; left: 13px; }
-  .property-image-gallery__thumbnails { gap: 9px; padding-top: 10px; }
+  .property-image-gallery__dots { bottom: 12px; gap: 6px; }
+  .property-image-gallery__dots button { width: 9px; height: 9px; }
+  .property-image-gallery__thumbnails { gap: 9px; padding-top: 18px; }
   .property-image-gallery__thumbnails button { width: 82px; height: 58px; flex-basis: 82px; border-radius: 10px; }
   .property-details-gallery .property-image-state { min-height: 260px; }
   .property-details-header h1 { font-size: 1.7rem; }
@@ -3373,6 +3395,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .property-image-gallery__arrow,
+  .property-image-gallery__dots button,
   .property-image-gallery__thumbnails button,
   .property-details-summary__actions > a { transition: none; }
 }

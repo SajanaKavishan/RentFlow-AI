@@ -48,6 +48,8 @@ describe('PropertyImageGallery', () => {
       .toHaveAttribute('src', 'https://images.example/property-1/image-1.jpg')
     expect(screen.getByLabelText('97 percent AI match')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /Show image/ })).toHaveLength(4)
+    expect(screen.getAllByRole('button', { name: /Show hero image/ })).toHaveLength(4)
+    expect(screen.queryByText('1 / 4')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Next image for Harbour View' }))
     expect(screen.getByRole('img', { name: 'Harbour View property photo 2 of 4' }))
@@ -58,6 +60,8 @@ describe('PropertyImageGallery', () => {
       .toHaveAttribute('src', 'https://images.example/property-1/image-4.jpg')
     expect(screen.getByRole('button', { name: 'Show image 4 of 4 for Harbour View' }))
       .toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Show hero image 4 of 4 for Harbour View' }))
+      .toHaveAttribute('aria-current', 'true')
   })
 
   it('preserves the no-photo and failed-photo fallback states', async () => {

@@ -29,6 +29,10 @@ import RentSchedulesPage from './features/rentSchedules/pages/RentSchedulesPage.
 import PaymentsPage from './features/payments/pages/PaymentsPage.jsx'
 import TenantLeasePaymentsPage from './features/tenantLeasePayments/pages/TenantLeasePaymentsPage.jsx'
 import LandingPage from './features/landing/pages/LandingPage.jsx'
+import GetStartedPage from './features/landing/pages/GetStartedPage.jsx'
+import PlatformOverviewPage from './features/landing/pages/PlatformOverviewPage.jsx'
+import HowItWorksPage from './features/landing/pages/HowItWorksPage.jsx'
+import SmartAssistancePage from './features/landing/pages/SmartAssistancePage.jsx'
 
 import AppShell from './shared/layout/AppShell.jsx'
 import DashboardPage from './shared/pages/DashboardPage.jsx'
@@ -42,6 +46,10 @@ import { NotFoundState, UnauthorizedState, UnavailableState } from './shared/ui/
 export default function App() {
   return <Routes>
     <Route path="/" element={<LandingPage />} />
+    <Route path="/platform" element={<PlatformOverviewPage />} />
+    <Route path="/get-started" element={<GetStartedPage />} />
+    <Route path="/how-it-works" element={<HowItWorksPage />} />
+    <Route path="/smart-assistance" element={<SmartAssistancePage />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/forgot-password" element={<ForgotPasswordPage />} />
     <Route path="/reset-password" element={<ResetPasswordPage />} />
