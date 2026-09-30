@@ -7,6 +7,8 @@ import '../../features/lease_agreements/screens/my_leases_screen.dart';
 import '../../features/lease_agreements/services/lease_agreement_api_service.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/notifications/services/notification_api_service.dart';
+import '../../features/payments/screens/pay_rent_screen.dart';
+import '../../features/payments/services/payment_api_service.dart';
 import '../../features/properties/screens/property_list_screen.dart';
 import '../../features/properties/services/property_api_service.dart';
 import '../../features/rental_applications/screens/landlord_rental_applications_screen.dart';
@@ -37,6 +39,7 @@ class SharedAppShell extends StatefulWidget {
     this.rentalOfferApiService,
     this.leaseAgreementApiService,
     this.rentScheduleApiService,
+    this.paymentApiService,
     this.notificationApiService,
     this.maintenanceApiService,
     this.landlordPropertyId,
@@ -53,6 +56,7 @@ class SharedAppShell extends StatefulWidget {
   final RentalOfferApiService? rentalOfferApiService;
   final LeaseAgreementApiService? leaseAgreementApiService;
   final RentScheduleApiService? rentScheduleApiService;
+  final PaymentApiService? paymentApiService;
   final NotificationApiService? notificationApiService;
   final MaintenanceApiService? maintenanceApiService;
   final String? landlordPropertyId;
@@ -178,17 +182,33 @@ class _SharedAppShellState extends State<SharedAppShell>
           leaseAgreementApiService: leaseService,
           rentalOfferApiService: offerService,
           rentScheduleApiService: widget.rentScheduleApiService,
+          paymentApiService: widget.paymentApiService,
         ),
       ),
     );
   }
 
-  void _openPayRent() => _openPendingTenantModule(
+  void _openPayRent() {
+    final rentScheduleService = widget.rentScheduleApiService;
+    final paymentService = widget.paymentApiService;
+    if (rentScheduleService == null || paymentService == null) {
+      _openPendingTenantModule(
         title: 'Pay Rent',
         explanation:
             'Rent payments will appear here after the payment module is integrated.',
         owner: 'Payments',
       );
+      return;
+    }
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PayRentScreen(
+          rentScheduleApiService: rentScheduleService,
+          paymentApiService: paymentService,
+        ),
+      ),
+    );
+  }
 
   void _openPendingTenantModule({
     required String title,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../../payments/services/payment_api_service.dart';
 import '../../rental_offers/screens/my_rental_offers_screen.dart';
 import '../../rental_offers/services/rental_offer_api_service.dart';
 import '../../rent_schedules/services/rent_schedule_api_service.dart';
@@ -15,11 +16,13 @@ class MyLeasesScreen extends StatefulWidget {
     required this.leaseAgreementApiService,
     required this.rentalOfferApiService,
     this.rentScheduleApiService,
+    this.paymentApiService,
   });
 
   final LeaseAgreementApiService leaseAgreementApiService;
   final RentalOfferApiService rentalOfferApiService;
   final RentScheduleApiService? rentScheduleApiService;
+  final PaymentApiService? paymentApiService;
 
   @override
   State<MyLeasesScreen> createState() => _MyLeasesScreenState();
@@ -59,6 +62,7 @@ class _MyLeasesScreenState extends State<MyLeasesScreen> {
           leaseId: lease.id,
           leaseAgreementApiService: widget.leaseAgreementApiService,
           rentScheduleApiService: widget.rentScheduleApiService,
+          paymentApiService: widget.paymentApiService,
         ),
       ),
     );

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../../payments/screens/pay_rent_screen.dart';
+import '../../payments/services/payment_api_service.dart';
 import '../models/rent_schedule_item.dart';
 import '../models/rent_schedule_outstanding_summary.dart';
 import '../services/rent_schedule_api_service.dart';
@@ -11,10 +13,12 @@ class LeaseRentScheduleScreen extends StatefulWidget {
     super.key,
     required this.rentScheduleApiService,
     required this.leaseAgreementId,
+    this.paymentApiService,
   });
 
   final RentScheduleApiService rentScheduleApiService;
   final String leaseAgreementId;
+  final PaymentApiService? paymentApiService;
 
   @override
   State<LeaseRentScheduleScreen> createState() =>
@@ -125,7 +129,11 @@ class _LeaseRentScheduleScreenState extends State<LeaseRentScheduleScreen> {
             )
           else
             for (final item in data.items) ...[
-              _RentScheduleItemCard(item: item),
+              _RentScheduleItemCard(
+                item: item,
+                rentScheduleApiService: widget.rentScheduleApiService,
+                paymentApiService: widget.paymentApiService,
+              ),
               const SizedBox(height: AppSpacing.md),
             ],
         ]);
@@ -216,9 +224,15 @@ class _SummaryFact extends StatelessWidget {
 }
 
 class _RentScheduleItemCard extends StatelessWidget {
-  const _RentScheduleItemCard({required this.item});
+  const _RentScheduleItemCard({
+    required this.item,
+    required this.rentScheduleApiService,
+    required this.paymentApiService,
+  });
 
   final RentScheduleItem item;
+  final RentScheduleApiService rentScheduleApiService;
+  final PaymentApiService? paymentApiService;
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +262,7 @@ class _RentScheduleItemCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             OutlinedButton.icon(
               key: ValueKey('rent-payment-placeholder-${item.id}'),
-              onPressed: () => _openPaymentPlaceholder(context),
+              onPressed: () => _openPayment(context),
               icon: const Icon(Icons.payments_outlined),
               label: const Text('Record payment'),
             ),
@@ -258,7 +272,20 @@ class _RentScheduleItemCard extends StatelessWidget {
     );
   }
 
-  void _openPaymentPlaceholder(BuildContext context) {
+  void _openPayment(BuildContext context) {
+    final paymentService = paymentApiService;
+    if (paymentService != null) {
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => PayRentScreen(
+            rentScheduleApiService: rentScheduleApiService,
+            paymentApiService: paymentService,
+            initialRentScheduleItemId: item.id,
+          ),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => Scaffold(

@@ -10,6 +10,8 @@ import 'package:rentflow_mobile/features/auth/models/current_user.dart';
 import 'package:rentflow_mobile/features/lease_agreements/screens/lease_details_screen.dart';
 import 'package:rentflow_mobile/features/lease_agreements/screens/my_leases_screen.dart';
 import 'package:rentflow_mobile/features/lease_agreements/services/lease_agreement_api_service.dart';
+import 'package:rentflow_mobile/features/payments/screens/pay_rent_screen.dart';
+import 'package:rentflow_mobile/features/payments/services/payment_api_service.dart';
 import 'package:rentflow_mobile/features/rental_offers/screens/my_rental_offers_screen.dart';
 import 'package:rentflow_mobile/features/rental_offers/screens/rental_offer_details_screen.dart';
 import 'package:rentflow_mobile/features/rental_offers/services/rental_offer_api_service.dart';
@@ -86,19 +88,49 @@ void main() {
         }
         if (request.url.path ==
             '/api/rent-schedules/lease/11111111-1111-4111-8111-111111111111') {
-          return http.Response('[]', 200);
+          return http.Response(
+            jsonEncode([
+              _scheduleItem('55555555-5555-4555-8555-555555555555', 0),
+              _scheduleItem('66666666-6666-4666-8666-666666666666', 2),
+              _scheduleItem('77777777-7777-4777-8777-777777777777', 1),
+            ]),
+            200,
+          );
         }
         if (request.url.path ==
             '/api/rent-schedules/lease/11111111-1111-4111-8111-111111111111/outstanding') {
           return http.Response(
             jsonEncode({
-              'totalPending': 0,
-              'totalOverdue': 0,
-              'totalOutstanding': 0,
-              'items': [],
+              'totalPending': 1250.75,
+              'totalOverdue': 1250.75,
+              'totalOutstanding': 2501.5,
+              'items': [
+                _scheduleItem('55555555-5555-4555-8555-555555555555', 0),
+                _scheduleItem('66666666-6666-4666-8666-666666666666', 2),
+              ],
             }),
             200,
           );
+        }
+        if (request.url.path == '/api/rent-schedules/outstanding/mine') {
+          return http.Response(
+            jsonEncode({
+              'totalPending': 1250.75,
+              'totalOverdue': 1250.75,
+              'totalOutstanding': 2501.5,
+              'items': [
+                _scheduleItem('55555555-5555-4555-8555-555555555555', 0),
+                _scheduleItem('66666666-6666-4666-8666-666666666666', 2),
+              ],
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/api/payments/mine') {
+          return http.Response('[]', 200);
+        }
+        if (request.method == 'POST' && request.url.path == '/api/payments') {
+          return http.Response(jsonEncode(_paymentJson()), 201);
         }
         if (request.url.path == '/api/rental-offers/mine') {
           return http.Response(jsonEncode([_offerJson()]), 200);
@@ -114,6 +146,7 @@ void main() {
     final offerService = RentalOfferApiService(apiClient);
     final leaseService = LeaseAgreementApiService(apiClient);
     final rentScheduleService = RentScheduleApiService(apiClient);
+    final paymentService = PaymentApiService(apiClient);
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.build(),
@@ -122,6 +155,7 @@ void main() {
           rentalOfferApiService: offerService,
           leaseAgreementApiService: leaseService,
           rentScheduleApiService: rentScheduleService,
+          paymentApiService: paymentService,
         ),
       ),
     );
@@ -208,6 +242,7 @@ void main() {
       identical(scheduleScreen.rentScheduleApiService.apiClient, apiClient),
       isTrue,
     );
+    expect(identical(scheduleScreen.paymentApiService, paymentService), isTrue);
     expect(
       requests
           .map((request) => request.url.path)
@@ -217,6 +252,83 @@ void main() {
         '/api/rent-schedules/lease/11111111-1111-4111-8111-111111111111/outstanding',
       ],
     );
+    expect(
+      find.byKey(
+        const ValueKey(
+          'rent-payment-placeholder-55555555-5555-4555-8555-555555555555',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey(
+          'rent-payment-placeholder-66666666-6666-4666-8666-666666666666',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey(
+          'rent-payment-placeholder-77777777-7777-4777-8777-777777777777',
+        ),
+      ),
+      findsNothing,
+    );
+    await tester.ensureVisible(
+      find.byKey(
+        const ValueKey(
+          'rent-payment-placeholder-55555555-5555-4555-8555-555555555555',
+        ),
+      ),
+    );
+    await tester.tap(
+      find.byKey(
+        const ValueKey(
+          'rent-payment-placeholder-55555555-5555-4555-8555-555555555555',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(PayRentScreen), findsOneWidget);
+    var payScreen = tester.widget<PayRentScreen>(find.byType(PayRentScreen));
+    expect(
+      payScreen.initialRentScheduleItemId,
+      '55555555-5555-4555-8555-555555555555',
+    );
+    expect(identical(payScreen.paymentApiService, paymentService), isTrue);
+    expect(
+      identical(payScreen.rentScheduleApiService, rentScheduleService),
+      isTrue,
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(LeaseRentScheduleScreen), findsOneWidget);
+
+    await tester.ensureVisible(
+      find.byKey(
+        const ValueKey(
+          'rent-payment-placeholder-66666666-6666-4666-8666-666666666666',
+        ),
+      ),
+    );
+    await tester.tap(
+      find.byKey(
+        const ValueKey(
+          'rent-payment-placeholder-66666666-6666-4666-8666-666666666666',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    payScreen = tester.widget<PayRentScreen>(find.byType(PayRentScreen));
+    expect(
+      payScreen.initialRentScheduleItemId,
+      '66666666-6666-4666-8666-666666666666',
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(LeaseRentScheduleScreen), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.byType(LeaseDetailsScreen), findsOneWidget);
@@ -267,8 +379,14 @@ void main() {
     await tester.ensureVisible(find.text('Pay Rent'));
     await tester.tap(find.text('Pay Rent'));
     await tester.pumpAndSettle();
-    expect(find.text('Integration pending'), findsOneWidget);
-    expect(find.textContaining('payment module is integrated'), findsOneWidget);
+    expect(find.byType(PayRentScreen), findsOneWidget);
+    payScreen = tester.widget<PayRentScreen>(find.byType(PayRentScreen));
+    expect(payScreen.initialRentScheduleItemId, isNull);
+    expect(identical(payScreen.paymentApiService, paymentService), isTrue);
+    expect(
+      identical(payScreen.rentScheduleApiService, rentScheduleService),
+      isTrue,
+    );
   });
 
   for (final role in [UserRole.landlord, UserRole.admin]) {
@@ -305,3 +423,26 @@ void main() {
     });
   }
 }
+
+Map<String, dynamic> _scheduleItem(String id, int status) => {
+  'id': id,
+  'leaseAgreementId': '11111111-1111-4111-8111-111111111111',
+  'dueDate': status == 2 ? '2030-01-28' : '2030-02-28',
+  'amount': 1250.75,
+  'status': status,
+  'createdAt': '2030-01-15T09:00:00Z',
+  'updatedAt': null,
+};
+
+Map<String, dynamic> _paymentJson() => {
+  'id': '88888888-8888-4888-8888-888888888888',
+  'rentScheduleItemId': '55555555-5555-4555-8555-555555555555',
+  'tenantId': '33333333-3333-4333-8333-333333333333',
+  'amount': 1250.75,
+  'paymentMethod': 'Bank transfer',
+  'transactionReference': null,
+  'status': 0,
+  'paidAt': null,
+  'createdAt': '2030-01-15T09:00:00Z',
+  'updatedAt': null,
+};
