@@ -362,7 +362,7 @@ void main() {
     expect(find.text('Record payment'), findsNWidgets(2));
     expect(
       find.text(
-        'Payment recording is not available yet. No payment has been made.',
+        'Payment services are unavailable right now. Return to the lease and try again. No payment has been made.',
       ),
       findsOneWidget,
     );

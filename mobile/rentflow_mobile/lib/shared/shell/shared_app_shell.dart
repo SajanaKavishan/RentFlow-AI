@@ -170,7 +170,7 @@ class _SharedAppShellState extends State<SharedAppShell>
       _openPendingTenantModule(
         title: 'My Lease',
         explanation:
-            'Lease details will appear here after the lease module is integrated.',
+            'Lease services are unavailable right now. Return to Home and try again.',
         owner: 'Lease management',
       );
       return;
@@ -195,7 +195,7 @@ class _SharedAppShellState extends State<SharedAppShell>
       _openPendingTenantModule(
         title: 'Pay Rent',
         explanation:
-            'Rent payments will appear here after the payment module is integrated.',
+            'Payment services are unavailable right now. Return to Home and try again.',
         owner: 'Payments',
       );
       return;

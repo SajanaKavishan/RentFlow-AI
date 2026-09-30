@@ -63,10 +63,11 @@ class _LeaseDetailsScreenState extends State<LeaseDetailsScreen> {
                 appBar: AppBar(title: const Text('Rent Schedule')),
                 body: const AuthenticatedPage(
                   child: AppCard(
-                    child: IntegrationPendingState(
-                      title: 'Rent Schedule',
+                    child: EmptyState(
+                      title: 'Rent Schedule unavailable',
                       message:
-                          'Rent schedule details will appear here when this feature is integrated.',
+                          'Rent schedule data is unavailable right now. Return to the lease and try again.',
+                      compact: true,
                     ),
                   ),
                 ),

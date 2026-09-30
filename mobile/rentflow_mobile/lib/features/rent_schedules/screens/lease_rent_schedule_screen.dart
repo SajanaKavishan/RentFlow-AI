@@ -293,7 +293,7 @@ class _RentScheduleItemCard extends StatelessWidget {
           body: const ModuleUnavailableState(
             title: 'Record payment',
             explanation:
-                'Payment recording is not available yet. No payment has been made.',
+                'Payment services are unavailable right now. Return to the lease and try again. No payment has been made.',
             owner: 'Payments',
           ),
         ),

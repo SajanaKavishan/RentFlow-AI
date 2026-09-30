@@ -271,7 +271,11 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('rent-schedule-entry')));
       await tester.pumpAndSettle();
-      expect(find.text('Integration pending'), findsOneWidget);
+      expect(find.text('Rent Schedule unavailable'), findsOneWidget);
+      expect(
+        find.textContaining('when this feature is integrated'),
+        findsNothing,
+      );
       expect(find.text('Rent Schedule'), findsWidgets);
       expect(calls, 1);
     });
