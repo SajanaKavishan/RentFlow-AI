@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../auth/useAuth.js'
 import { USER_ROLES } from '../../auth/authModel.js'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
@@ -115,6 +115,7 @@ export default function LandlordMaintenancePage() {
   const [propertyLoadVersion, setPropertyLoadVersion] = useState(0)
   const [requests, setRequests] = useState([])
   const [selectedRequestId, setSelectedRequestId] = useState(null)
+  const selectedRequestIdRef = useRef(null)
   const [selectedRequest, setSelectedRequest] = useState(null)
   const [history, setHistory] = useState([])
   const [latestEstimate, setLatestEstimate] = useState(null)
@@ -180,7 +181,12 @@ export default function LandlordMaintenancePage() {
     setPropertyLoadVersion((version) => version + 1)
   }
 
-  async function loadRequestDetails(requestId) {
+  const updateSelectedRequestId = useCallback((requestId) => {
+    selectedRequestIdRef.current = requestId
+    setSelectedRequestId(requestId)
+  }, [])
+
+  const loadRequestDetails = useCallback(async (requestId) => {
     if (!requestId) {
       setSelectedRequest(null)
       setHistory([])
@@ -202,7 +208,7 @@ export default function LandlordMaintenancePage() {
       return
     }
 
-    setSelectedRequestId(requestId)
+    updateSelectedRequestId(requestId)
     setDetailState('loading')
     setDetailError('')
     setHistoryState('loading')
@@ -326,12 +332,12 @@ export default function LandlordMaintenancePage() {
       setWorkflowState('idle')
       setWorkflowError('')
     }
-  }
+  }, [updateSelectedRequestId])
 
-  async function loadRequests() {
+  const loadRequests = useCallback(async () => {
     if (!activePropertyId) {
       setRequests([])
-      setSelectedRequestId(null)
+      updateSelectedRequestId(null)
       setSelectedRequest(null)
       setPageState('property-required')
       setPageError('')
@@ -348,7 +354,7 @@ export default function LandlordMaintenancePage() {
 
       if (safeRequests.length === 0) {
         setPageState('empty')
-        setSelectedRequestId(null)
+        updateSelectedRequestId(null)
         setSelectedRequest(null)
         setHistory([])
         setLatestEstimate(null)
@@ -358,12 +364,13 @@ export default function LandlordMaintenancePage() {
         return
       }
 
-      const nextSelectedId = selectedRequestId && safeRequests.some((request) => request.id === selectedRequestId)
-        ? selectedRequestId
+      const currentRequestId = selectedRequestIdRef.current
+      const nextSelectedId = currentRequestId && safeRequests.some((request) => request.id === currentRequestId)
+        ? currentRequestId
         : safeRequests[0].id
 
       setPageState('success')
-      setSelectedRequestId(nextSelectedId)
+      updateSelectedRequestId(nextSelectedId)
       await loadRequestDetails(nextSelectedId)
     } catch (error) {
       setPageState('error')
@@ -374,7 +381,7 @@ export default function LandlordMaintenancePage() {
         ),
       )
       setRequests([])
-      setSelectedRequestId(null)
+      updateSelectedRequestId(null)
       setSelectedRequest(null)
       setHistory([])
       setLatestEstimate(null)
@@ -382,18 +389,17 @@ export default function LandlordMaintenancePage() {
       setDetailState('idle')
       setDetailError('')
     }
-  }
+  }, [activePropertyId, loadRequestDetails, updateSelectedRequestId])
 
   useEffect(() => {
-    if (!isLandlord) {
-      setPageState('unauthorized')
-      setPageError('You do not have permission to view landlord maintenance records.')
-      return undefined
-    }
+    if (!isLandlord) return undefined
 
-    loadRequests()
-    return undefined
-  }, [activePropertyId, isLandlord])
+    const loadTimer = window.setTimeout(() => {
+      void loadRequests()
+    }, 0)
+
+    return () => window.clearTimeout(loadTimer)
+  }, [isLandlord, loadRequests])
 
   async function handleWorkflowDecision(action) {
     if (!selectedRequest || !workflow || decisionPending) return
@@ -520,9 +526,10 @@ export default function LandlordMaintenancePage() {
 
   const workflowRequiresDecision =
     workflow && workflow.status === 'AwaitingHumanReview' && workflow.requiresHumanApproval !== false
+  const isPageLoading = Boolean(isLandlord && pageState === 'loading')
 
   return (
-    <main className="maintenance-page" aria-busy={pageState === 'loading'}>
+    <main className="maintenance-page" aria-busy={isPageLoading}>
       <header className="maintenance-page__header">
         <div>
           <p className="maintenance-page__eyebrow">Landlord workspace</p>
@@ -535,10 +542,10 @@ export default function LandlordMaintenancePage() {
           type="button"
           className="button button--quiet maintenance-page__refresh"
           onClick={loadRequests}
-          disabled={pageState === 'loading' || !propertyId || !isLandlord}
+          disabled={isPageLoading || !propertyId || !isLandlord}
         >
           <span aria-hidden="true">↻</span>
-          {pageState === 'loading' ? 'Refreshing...' : 'Refresh'}
+          {isPageLoading ? 'Refreshing...' : 'Refresh'}
         </button>
       </header>
 
