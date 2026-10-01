@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show MaxLengthEnforcement;
 
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../format_lkr.dart';
 import 'payment_details_screen.dart';
 import '../../rent_schedules/models/rent_schedule_item.dart';
 import '../../rent_schedules/models/rent_schedule_outstanding_summary.dart';
 import '../../rent_schedules/services/rent_schedule_api_service.dart';
 import '../models/payment.dart';
 import '../services/payment_api_service.dart';
+import '../services/stripe_payment_sheet_service.dart';
 
 class PayRentScreen extends StatefulWidget {
   const PayRentScreen({
@@ -16,11 +17,13 @@ class PayRentScreen extends StatefulWidget {
     required this.rentScheduleApiService,
     required this.paymentApiService,
     this.initialRentScheduleItemId,
+    this.stripePaymentSheetService = const NativeStripePaymentSheetService(),
   });
 
   final RentScheduleApiService rentScheduleApiService;
   final PaymentApiService paymentApiService;
   final String? initialRentScheduleItemId;
+  final StripePaymentSheetService stripePaymentSheetService;
 
   @override
   State<PayRentScreen> createState() => _PayRentScreenState();
@@ -32,26 +35,17 @@ typedef _PayRentData = ({
 });
 
 class _PayRentScreenState extends State<PayRentScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _paymentMethodController = TextEditingController();
-  final _referenceController = TextEditingController();
   late Future<_PayRentData> _data;
   Future<_PayRentData>? _activeLoad;
   String? _selectedItemId;
   bool _initialSelectionResolved = false;
   bool _submitting = false;
+  String? _flowMessage;
 
   @override
   void initState() {
     super.initState();
     _data = _startLoad();
-  }
-
-  @override
-  void dispose() {
-    _paymentMethodController.dispose();
-    _referenceController.dispose();
-    super.dispose();
   }
 
   Future<_PayRentData> _loadBoth() async {
@@ -105,33 +99,96 @@ class _PayRentScreenState extends State<PayRentScreen> {
     }
   }
 
-  Future<void> _submit(_PayRentData data) async {
+  Future<void> _pay(_PayRentData data) async {
     if (_submitting) return;
     final item = _selectedItem(data.outstanding.items);
-    if (item == null || !_formKey.currentState!.validate()) return;
+    if (item == null) return;
 
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _flowMessage = 'Preparing secure payment…';
+    });
+    var sheetReturned = false;
     try {
-      await widget.paymentApiService.createPayment(
-        rentScheduleItemId: item.id,
-        paymentMethod: _paymentMethodController.text.trim(),
-        transactionReference: _referenceController.text.trim(),
-      );
+      final intent = await widget.paymentApiService.createStripeIntent(item.id);
+      if ((intent.amount - item.amount).abs() > 0.005) {
+        throw const PaymentApiException(
+          'The payment amount changed. Refresh and try again.',
+        );
+      }
+      final clientSecret = intent.clientSecret;
+      if (intent.paymentStatus != PaymentStatus.completed &&
+          clientSecret != null &&
+          clientSecret.isNotEmpty) {
+        await widget.stripePaymentSheetService.initialize(
+          publishableKey: intent.publishableKey,
+          clientSecret: clientSecret,
+        );
+        await widget.stripePaymentSheetService.present();
+        sheetReturned = true;
+      }
       if (!mounted) return;
-      AppSnackbars.show(
-        context,
-        message: 'Payment record submitted.',
-        tone: SnackTone.success,
+      setState(() => _flowMessage = 'Confirming payment…');
+      await _reconcile(intent.paymentId);
+    } on StripePaymentSheetCanceledException {
+      if (!mounted) return;
+      setState(
+        () => _flowMessage =
+            'Payment canceled. You can resume this payment later.',
+      );
+      await _refresh();
+    } on StripePaymentSheetException {
+      if (!mounted) return;
+      setState(
+        () => _flowMessage =
+            'Payment could not be completed. You can retry safely.',
       );
       await _refresh();
     } catch (error) {
       if (!mounted) return;
       final message = error is PaymentApiException
-          ? error.message
-          : 'Unable to submit this payment record. Please try again.';
-      AppSnackbars.show(context, message: message, tone: SnackTone.error);
+          ? sheetReturned
+                ? 'Unable to confirm payment yet. Check its status before retrying.'
+                : error.message
+          : 'Unable to start payment. Please try again.';
+      setState(() => _flowMessage = message);
       if (error is PaymentApiException && error.statusCode == 409) {
         await _refresh();
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _reconcile(String paymentId) async {
+    final status = await widget.paymentApiService.getStripeStatus(paymentId);
+    await _refresh();
+    if (!mounted) return;
+    setState(() {
+      _flowMessage = switch (status.paymentStatus) {
+        PaymentStatus.completed => 'Payment completed successfully.',
+        PaymentStatus.pending =>
+          'Payment is processing. Check payment status shortly.',
+        PaymentStatus.failed =>
+          'This payment attempt ended. Refresh to try again.',
+      };
+    });
+  }
+
+  Future<void> _checkPending(Payment payment) async {
+    if (_submitting) return;
+    setState(() {
+      _submitting = true;
+      _flowMessage = 'Checking payment status…';
+    });
+    try {
+      await _reconcile(payment.id);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _flowMessage =
+              'Unable to check payment status. Please try again.',
+        );
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -185,7 +242,7 @@ class _PayRentScreenState extends State<PayRentScreen> {
         return _scrollable([
           PageHeader(
             title: 'Pay Rent',
-            subtitle: 'Select an outstanding item and submit a payment record.',
+            subtitle: 'Select an outstanding item and pay securely.',
             trailing: IconButton(
               tooltip: 'Refresh Pay Rent',
               onPressed: _refresh,
@@ -194,6 +251,12 @@ class _PayRentScreenState extends State<PayRentScreen> {
           ),
           const SizedBox(height: AppSpacing.lg),
           _OutstandingSummaryCard(summary: data.outstanding),
+          if (_flowMessage case final message?) ...[
+            const SizedBox(height: AppSpacing.md),
+            AppCard(
+              child: Text(message, key: const ValueKey('payment-flow-message')),
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           const SectionHeader(title: 'Outstanding rent items'),
           const SizedBox(height: AppSpacing.md),
@@ -218,15 +281,14 @@ class _PayRentScreenState extends State<PayRentScreen> {
             _selectedItemDetails(selected),
             const SizedBox(height: AppSpacing.md),
             if (_pendingPaymentFor(selected, data.payments) case final pending?)
-              _PendingPaymentGuard(payment: pending)
+              _PendingPaymentGuard(
+                payment: pending,
+                busy: _submitting,
+                onResume: () => _pay(data),
+                onCheck: () => _checkPending(pending),
+              )
             else
-              _PaymentForm(
-                formKey: _formKey,
-                methodController: _paymentMethodController,
-                referenceController: _referenceController,
-                submitting: _submitting,
-                onSubmit: () => _submit(data),
-              ),
+              _StripePaymentAction(busy: _submitting, onPay: () => _pay(data)),
           ],
           const SizedBox(height: AppSpacing.xl),
           const SectionHeader(title: 'Payment history'),
@@ -234,7 +296,7 @@ class _PayRentScreenState extends State<PayRentScreen> {
           if (data.payments.isEmpty)
             const EmptyState(
               title: 'No payment records yet',
-              message: 'Payment records you submit will appear here.',
+              message: 'Your payments will appear here.',
               compact: true,
             )
           else
@@ -258,7 +320,7 @@ class _PayRentScreenState extends State<PayRentScreen> {
       children: [
         Text('Selected item', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: AppSpacing.sm),
-        Text('Amount: ${item.amount.toStringAsFixed(2)}'),
+        Text('Amount: ${formatLkr(item.amount)}'),
         Text('Due date: ${_date(item.dueDate)}'),
         Text('Status: ${_scheduleStatus(item.status).$1}'),
       ],
@@ -341,7 +403,7 @@ class _AmountFact extends StatelessWidget {
       children: [
         Expanded(child: Text(label)),
         Text(
-          amount.toStringAsFixed(2),
+          formatLkr(amount),
           key: ValueKey('pay-rent-${label.toLowerCase().replaceAll(' ', '-')}'),
           style: emphasize ? Theme.of(context).textTheme.titleMedium : null,
         ),
@@ -387,12 +449,14 @@ class _OutstandingItemCard extends StatelessWidget {
               ),
             ],
           ),
-          Text('Amount: ${item.amount.toStringAsFixed(2)}'),
+          Text('Amount: ${formatLkr(item.amount)}'),
           Text('Lease reference: ${item.leaseAgreementId}'),
           if (pendingPayment != null) ...[
             const SizedBox(height: AppSpacing.sm),
-            const StatusChip(
-              label: 'Payment record already Pending',
+            StatusChip(
+              label: pendingPayment!.paymentMethod == 'Stripe'
+                  ? 'Payment in progress'
+                  : 'Manual payment pending',
               tone: StatusTone.warning,
             ),
           ],
@@ -403,110 +467,88 @@ class _OutstandingItemCard extends StatelessWidget {
 }
 
 class _PendingPaymentGuard extends StatelessWidget {
-  const _PendingPaymentGuard({required this.payment});
+  const _PendingPaymentGuard({
+    required this.payment,
+    required this.busy,
+    required this.onResume,
+    required this.onCheck,
+  });
 
   final Payment payment;
+  final bool busy;
+  final VoidCallback onResume;
+  final VoidCallback onCheck;
 
   @override
   Widget build(BuildContext context) => AppCard(
     key: ValueKey('pending-payment-guard-${payment.rentScheduleItemId}'),
-    child: const Column(
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         StatusChip(
-          label: 'Payment record already Pending',
+          label: payment.paymentMethod == 'Stripe'
+              ? 'Payment in progress'
+              : 'Manual payment pending',
           tone: StatusTone.warning,
         ),
-        SizedBox(height: AppSpacing.sm),
-        Text(
-          'Review the existing record in Payment history before submitting another.',
-        ),
+        const SizedBox(height: AppSpacing.sm),
+        if (payment.paymentMethod == 'Stripe') ...[
+          const Text('Resume this payment or check its latest status.'),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.sm,
+            children: [
+              FilledButton(
+                key: const ValueKey('resume-stripe-payment'),
+                onPressed: busy ? null : onResume,
+                child: const Text('Resume payment'),
+              ),
+              OutlinedButton(
+                key: const ValueKey('check-stripe-status'),
+                onPressed: busy ? null : onCheck,
+                child: const Text('Check payment status'),
+              ),
+            ],
+          ),
+        ] else
+          const Text(
+            'Resolve the existing manual payment before starting a Stripe payment.',
+          ),
       ],
     ),
   );
 }
 
-class _PaymentForm extends StatelessWidget {
-  const _PaymentForm({
-    required this.formKey,
-    required this.methodController,
-    required this.referenceController,
-    required this.submitting,
-    required this.onSubmit,
-  });
+class _StripePaymentAction extends StatelessWidget {
+  const _StripePaymentAction({required this.busy, required this.onPay});
 
-  final GlobalKey<FormState> formKey;
-  final TextEditingController methodController;
-  final TextEditingController referenceController;
-  final bool submitting;
-  final VoidCallback onSubmit;
+  final bool busy;
+  final VoidCallback onPay;
 
   @override
   Widget build(BuildContext context) => AppCard(
-    child: Form(
-      key: formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Payment record',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextFormField(
-            key: const ValueKey('payment-method-field'),
-            controller: methodController,
-            maxLength: 100,
-            maxLengthEnforcement: MaxLengthEnforcement.none,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Payment method',
-              hintText: 'For example, Bank transfer',
-            ),
-            validator: (value) {
-              final method = value?.trim() ?? '';
-              if (method.isEmpty) return 'Payment method is required.';
-              if (method.length > 100) {
-                return 'Payment method must be 100 characters or fewer.';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          TextFormField(
-            key: const ValueKey('transaction-reference-field'),
-            controller: referenceController,
-            maxLength: 200,
-            maxLengthEnforcement: MaxLengthEnforcement.none,
-            decoration: const InputDecoration(
-              labelText: 'Transaction reference (optional)',
-            ),
-            validator: (value) {
-              if ((value?.trim().length ?? 0) > 200) {
-                return 'Transaction reference must be 200 characters or fewer.';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: AppSpacing.md),
-          FilledButton.icon(
-            key: const ValueKey('submit-payment'),
-            onPressed: submitting ? null : onSubmit,
-            icon: submitting
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.receipt_long_outlined),
-            label: Text(submitting ? 'Submitting…' : 'Record payment'),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'This submits a payment record for review. It does not process a payment.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Secure payment', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.md),
+        FilledButton.icon(
+          key: const ValueKey('pay-securely'),
+          onPressed: busy ? null : onPay,
+          icon: busy
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.lock_outline),
+          label: Text(busy ? 'Please wait…' : 'Pay securely'),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          'Payment details are entered securely in Stripe PaymentSheet.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
     ),
   );
 }
@@ -528,7 +570,7 @@ class _PaymentHistoryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(payment.amount.toStringAsFixed(2))),
+              Expanded(child: Text(formatLkr(payment.amount))),
               StatusChip(label: status, tone: tone),
             ],
           ),

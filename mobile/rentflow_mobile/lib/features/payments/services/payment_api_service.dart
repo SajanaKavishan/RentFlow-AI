@@ -5,11 +5,38 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../models/payment.dart';
+import '../models/stripe_payment.dart';
 
 class PaymentApiService {
   const PaymentApiService(this.apiClient);
 
   final ApiClient apiClient;
+
+  Future<StripeIntentResponse> createStripeIntent(
+    String rentScheduleItemId,
+  ) async {
+    if (rentScheduleItemId.trim().isEmpty) {
+      throw const PaymentApiException('Select a rent schedule item first.');
+    }
+    final response = await _send(
+      () => apiClient.post(
+        apiClient.buildUri('${ApiConstants.paymentsPath}/stripe/create-intent'),
+        body: jsonEncode({'rentScheduleItemId': rentScheduleItemId}),
+      ),
+    );
+    return _parseStripeIntent(response.body);
+  }
+
+  Future<StripePaymentStatusResponse> getStripeStatus(String paymentId) async {
+    final response = await _send(
+      () => apiClient.get(
+        apiClient.buildUri(
+          '${ApiConstants.paymentsPath}/$paymentId/stripe-status',
+        ),
+      ),
+    );
+    return _parseStripeStatus(response.body);
+  }
 
   Future<Payment> createPayment({
     required String rentScheduleItemId,
@@ -108,6 +135,30 @@ class PaymentApiService {
       final decoded = jsonDecode(body);
       if (decoded is! Map<String, dynamic>) throw const FormatException();
       return Payment.fromJson(decoded);
+    } on FormatException {
+      throw const PaymentApiException(
+        'The payment service returned an invalid response.',
+      );
+    }
+  }
+
+  StripeIntentResponse _parseStripeIntent(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) throw const FormatException();
+      return StripeIntentResponse.fromJson(decoded);
+    } on FormatException {
+      throw const PaymentApiException(
+        'The payment service returned an invalid response.',
+      );
+    }
+  }
+
+  StripePaymentStatusResponse _parseStripeStatus(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) throw const FormatException();
+      return StripePaymentStatusResponse.fromJson(decoded);
     } on FormatException {
       throw const PaymentApiException(
         'The payment service returned an invalid response.',

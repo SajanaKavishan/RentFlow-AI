@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../format_lkr.dart';
 import '../models/payment.dart';
 import '../services/payment_api_service.dart';
 
@@ -100,10 +101,7 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
               const SizedBox(height: AppSpacing.sm),
               Text(explanation),
               const Divider(height: AppSpacing.xl),
-              _DetailFact(
-                label: 'Amount',
-                value: payment.amount.toStringAsFixed(2),
-              ),
+              _DetailFact(label: 'Amount', value: formatLkr(payment.amount)),
               _DetailFact(
                 label: 'Payment method',
                 value: payment.paymentMethod,

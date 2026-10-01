@@ -281,6 +281,7 @@ void main() {
       ),
       findsNothing,
     );
+    expect(find.text('Pay securely'), findsWidgets);
     await tester.ensureVisible(
       find.byKey(
         const ValueKey(
@@ -297,6 +298,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(PayRentScreen), findsOneWidget);
+    expect(find.byKey(const ValueKey('payment-method-field')), findsNothing);
     var payScreen = tester.widget<PayRentScreen>(find.byType(PayRentScreen));
     expect(
       payScreen.initialRentScheduleItemId,

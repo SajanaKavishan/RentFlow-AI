@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../../payments/format_lkr.dart';
 import '../../payments/screens/pay_rent_screen.dart';
 import '../../payments/services/payment_api_service.dart';
 import '../models/rent_schedule_item.dart';
@@ -212,7 +213,7 @@ class _SummaryFact extends StatelessWidget {
           ),
         ),
         Text(
-          amount.toStringAsFixed(2),
+          formatLkr(amount),
           key: ValueKey(
             'rent-summary-${label.toLowerCase().replaceAll(' ', '-')}',
           ),
@@ -254,7 +255,7 @@ class _RentScheduleItemCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           _ItemFact(label: 'Due date', value: _date(item.dueDate)),
-          _ItemFact(label: 'Amount', value: item.amount.toStringAsFixed(2)),
+          _ItemFact(label: 'Amount', value: formatLkr(item.amount)),
           _ItemFact(label: 'Created', value: _dateTime(item.createdAt)),
           if (item.updatedAt case final updatedAt?)
             _ItemFact(label: 'Updated', value: _dateTime(updatedAt)),
@@ -264,7 +265,7 @@ class _RentScheduleItemCard extends StatelessWidget {
               key: ValueKey('rent-payment-placeholder-${item.id}'),
               onPressed: () => _openPayment(context),
               icon: const Icon(Icons.payments_outlined),
-              label: const Text('Record payment'),
+              label: const Text('Pay securely'),
             ),
           ],
         ],
@@ -289,9 +290,9 @@ class _RentScheduleItemCard extends StatelessWidget {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('Record payment')),
+          appBar: AppBar(title: const Text('Pay securely')),
           body: const ModuleUnavailableState(
-            title: 'Record payment',
+            title: 'Pay securely',
             explanation:
                 'Payment services are unavailable right now. Return to the lease and try again. No payment has been made.',
             owner: 'Payments',
