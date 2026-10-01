@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:rentflow_mobile/core/auth/token_storage.dart';
 import 'package:rentflow_mobile/core/network/api_client.dart';
+import 'package:rentflow_mobile/features/maintenance/models/maintenance_attachment.dart';
 import 'package:rentflow_mobile/features/maintenance/models/maintenance_request.dart';
 import 'package:rentflow_mobile/features/maintenance/models/repair_estimate.dart';
 import 'package:rentflow_mobile/features/maintenance/services/maintenance_api_service.dart';
@@ -79,6 +82,46 @@ class _FakeHttpClient extends http.BaseClient {
       );
     }
     return Future.value(response);
+  }
+}
+
+class _AttachmentHttpClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.method == 'POST') {
+      final body = await request.finalize().toBytes();
+      final payload = utf8.decode(body);
+      expect(payload, contains('photo.jpg'));
+      expect(payload, contains('damage photo'));
+      return http.StreamedResponse(
+        Stream.value(
+          utf8.encode(
+            jsonEncode({
+              'id': 'attachment-1',
+              'maintenanceRequestId': 'request-1',
+              'fileName': 'photo.jpg',
+              'contentType': 'image/jpeg',
+              'fileSize': 3,
+              'attachmentType': 'damage photo',
+              'uploadedByUserId': 'tenant-1',
+              'createdAt': '2026-09-18T10:00:00Z',
+            }),
+          ),
+        ),
+        201,
+      );
+    }
+    if (request.method == 'GET') {
+      return http.StreamedResponse(
+        const Stream<List<int>>.empty(),
+        302,
+        headers: {'location': 'https://downloads.example/photo.jpg'},
+      );
+    }
+    if (request.method == 'DELETE') {
+      return http.StreamedResponse(const Stream<List<int>>.empty(), 204);
+    }
+    return http.StreamedResponse(const Stream<List<int>>.empty(), 404);
   }
 }
 
@@ -460,6 +503,125 @@ void main() {
         ),
         throwsA(isA<MaintenanceApiException>()),
       );
+    });
+
+    test('parses maintenance request history', () async {
+      final requestId = '7d4d0f16-1a1d-442a-8c1f-cf6c0b66b200';
+      final service = MaintenanceApiService(
+        ApiClient(
+          httpClient: _FakeHttpClient({
+            'http://10.0.2.2:5277/api/maintenance-requests/$requestId/history':
+                http.Response(
+              jsonEncode([
+                {
+                  'id': 'history-1',
+                  'fromStatus': null,
+                  'toStatus': 0,
+                  'changedByUserId': null,
+                  'changedAt': '2026-09-17T08:15:00Z',
+                  'notes': 'Request submitted.',
+                },
+                {
+                  'id': 'history-2',
+                  'fromStatus': 0,
+                  'toStatus': 1,
+                  'changedByUserId': 'landlord-1',
+                  'changedAt': '2026-09-18T10:00:00Z',
+                  'notes': null,
+                },
+              ]),
+              200,
+            ),
+          }),
+          tokenStorage: _MemoryTokenStorage('token'),
+        ),
+      );
+
+      final history = await service.getMaintenanceRequestHistory(
+        maintenanceRequestId: requestId,
+      );
+
+      expect(history, hasLength(2));
+      expect(history.first.fromStatus, isNull);
+      expect(history.first.toStatus, MaintenanceRequestStatus.submitted);
+      expect(history.first.notes, 'Request submitted.');
+      expect(history.last.fromStatus, MaintenanceRequestStatus.submitted);
+      expect(history.last.toStatus, MaintenanceRequestStatus.triaged);
+    });
+
+    test('loads maintenance attachment metadata for a tenant request', () async {
+      const requestId = '7d4d0f16-1a1d-442a-8c1f-cf6c0b66b200';
+      const tenantId = 'a8160d5a-3e08-4de6-8f6d-1bb1d0ee13ff';
+      final service = MaintenanceApiService(
+        ApiClient(
+          httpClient: _FakeHttpClient({
+            'http://10.0.2.2:5277/api/maintenance-requests/$requestId/attachments'
+                '?tenantId=$tenantId': http.Response(
+              jsonEncode([
+                {
+                  'id': 'attachment-1',
+                  'maintenanceRequestId': requestId,
+                  'fileName': 'leak-photo.webp',
+                  'contentType': 'image/webp',
+                  'fileSize': 4096,
+                  'attachmentType': 'damage photo',
+                  'uploadedByUserId': tenantId,
+                  'createdAt': '2026-09-18T10:00:00Z',
+                },
+              ]),
+              200,
+            ),
+          }),
+          tokenStorage: _MemoryTokenStorage('token'),
+        ),
+      );
+
+      final attachments = await service.getMaintenanceRequestAttachments(
+        maintenanceRequestId: requestId,
+        tenantId: tenantId,
+      );
+
+      expect(attachments, hasLength(1));
+      expect(attachments.single, isA<MaintenanceAttachment>());
+      expect(attachments.single.fileName, 'leak-photo.webp');
+      expect(attachments.single.contentType, 'image/webp');
+      expect(attachments.single.fileSize, 4096);
+      expect(attachments.single.attachmentType, 'damage photo');
+    });
+
+    test('uploads, downloads, and deletes a maintenance attachment', () async {
+      const requestId = 'request-1';
+      const tenantId = 'tenant-1';
+      const attachmentId = 'attachment-1';
+      final apiClient = ApiClient(
+        baseUrl: 'http://test',
+        httpClient: _AttachmentHttpClient(),
+        tokenStorage: _MemoryTokenStorage('token'),
+      );
+      final service = MaintenanceApiService(apiClient);
+
+      final uploaded = await service.uploadMaintenanceAttachment(
+        maintenanceRequestId: requestId,
+        tenantId: tenantId,
+        fileName: 'photo.jpg',
+        contentType: 'image/jpeg',
+        bytes: Uint8List.fromList([1, 2, 3]),
+        attachmentType: 'damage photo',
+      );
+      final downloadUrl = await service.requestMaintenanceAttachmentDownloadUrl(
+        maintenanceRequestId: requestId,
+        attachmentId: attachmentId,
+        tenantId: tenantId,
+      );
+      await service.deleteMaintenanceAttachment(
+        maintenanceRequestId: requestId,
+        attachmentId: attachmentId,
+        tenantId: tenantId,
+      );
+
+      expect(uploaded.id, attachmentId);
+      expect(downloadUrl.toString(), 'https://downloads.example/photo.jpg');
+      apiClient.close();
     });
 
     test('throws an API exception for malformed JSON responses', () async {

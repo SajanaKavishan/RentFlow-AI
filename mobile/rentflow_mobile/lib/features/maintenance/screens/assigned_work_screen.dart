@@ -4,6 +4,7 @@ import '../../../core/network/api_client.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../models/maintenance_status_history.dart';
 import '../models/maintenance_request.dart';
 import '../models/repair_estimate.dart';
 import '../services/maintenance_api_service.dart';
@@ -32,6 +33,8 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
   MaintenanceRequest? _request;
   List<MaintenanceRequest> _assignedWork = const [];
   List<RepairEstimate> _estimates = const [];
+  Future<List<MaintenanceStatusHistory>> _historyFuture =
+      Future.value(const <MaintenanceStatusHistory>[]);
   bool _areEstimatesLoaded = false;
   late Future<MaintenanceRequest?> _requestFuture;
 
@@ -90,6 +93,9 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
             latest.status == RepairEstimateStatus.revisionRequested);
   }
 
+  bool get _revisionWasRequested =>
+      _latestEstimate?.status == RepairEstimateStatus.revisionRequested;
+
   bool get _canSubmitEstimateForReview =>
       _areEstimatesLoaded &&
       _activeRequest?.status == MaintenanceRequestStatus.estimateSubmitted &&
@@ -99,6 +105,7 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
     if (_request != null) {
       final loaded = await _apiService.getMaintenanceRequestById(_request!.id);
       if (mounted) setState(() => _request = loaded);
+      _loadHistory(loaded);
       await _loadEstimates(loaded);
       return loaded;
     }
@@ -118,6 +125,7 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
       }
       final selected = assignedWork.isEmpty ? null : assignedWork.first;
       if (selected != null) await _loadEstimates(selected);
+      if (selected != null) _loadHistory(selected);
       return selected;
     }
 
@@ -125,8 +133,15 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
     if (mounted) {
       setState(() => _request = loaded);
     }
+    _loadHistory(loaded);
     await _loadEstimates(loaded);
     return loaded;
+  }
+
+  void _loadHistory(MaintenanceRequest request) {
+    _historyFuture = _apiService.getMaintenanceRequestHistory(
+      maintenanceRequestId: request.id,
+    );
   }
 
   Future<void> _loadEstimates(MaintenanceRequest request) async {
@@ -185,9 +200,13 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
         _errorMessage = null;
         _estimates = const [];
         _areEstimatesLoaded = false;
+        _historyFuture = Future.value(const <MaintenanceStatusHistory>[]);
       });
       final current = _request;
-      if (current != null) await _loadEstimates(current);
+      if (current != null) {
+        _loadHistory(current);
+        await _loadEstimates(current);
+      }
     } on MaintenanceApiException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } catch (_) {
@@ -204,7 +223,9 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
       _areEstimatesLoaded = false;
       _estimateErrorMessage = null;
       _errorMessage = null;
+      _historyFuture = Future.value(const <MaintenanceStatusHistory>[]);
     });
+    _loadHistory(request);
     _loadEstimates(request);
   }
 
@@ -595,6 +616,74 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
+                const SectionHeader(title: 'Attachments'),
+                const SizedBox(height: AppSpacing.md),
+                const AppCard(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.attach_file, color: AppPalette.olive),
+                      SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'Attachments are currently available to tenants only.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                const SectionHeader(title: 'Status history'),
+                const SizedBox(height: AppSpacing.md),
+                FutureBuilder<List<MaintenanceStatusHistory>>(
+                  future: _historyFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const AppCard(
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: AppPalette.olive,
+                          ),
+                        ),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      final message = snapshot.error is MaintenanceApiException
+                          ? (snapshot.error as MaintenanceApiException).message
+                          : 'Unable to load status history.';
+                      return _ActionError(message: message);
+                    }
+                    final history =
+                        snapshot.data ??
+                        const <MaintenanceStatusHistory>[];
+                    if (history.isEmpty) {
+                      return const AppCard(
+                        child: Text('No status history yet.'),
+                      );
+                    }
+                    return AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: history
+                            .map(
+                              (entry) => Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: AppSpacing.sm,
+                                ),
+                                child: Text(
+                                  '${entry.fromStatus == null ? 'Created' : _statusLabel(entry.fromStatus!)}'
+                                  ' → ${_statusLabel(entry.toStatus)}\n'
+                                  '${MaterialLocalizations.of(context).formatMediumDate(entry.changedAt.toLocal())}'
+                                  '${entry.notes == null ? '' : '\n${entry.notes}'}',
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: AppSpacing.lg),
                 const SectionHeader(title: 'Work details'),
                 const SizedBox(height: AppSpacing.md),
                 AppCard(
@@ -624,6 +713,38 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                 const SizedBox(height: AppSpacing.md),
                 if (_estimateErrorMessage != null) ...[
                   _ActionError(message: _estimateErrorMessage!),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
+                if (_revisionWasRequested) ...[
+                  AppCard(
+                    color: AppPalette.softCream,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.rate_review_outlined,
+                              color: AppPalette.olive,
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                'Revision requested by landlord',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_latestEstimate?.reviewNotes
+                                case final reviewNotes?
+                            when reviewNotes.trim().isNotEmpty) ...[
+                          const SizedBox(height: AppSpacing.sm),
+                          Text('Requested changes: $reviewNotes'),
+                        ],
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                 ],
                 if (!_areEstimatesLoaded)
@@ -662,6 +783,8 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                     label: Text(
                       _isSubmittingEstimate
                           ? 'Submitting estimate...'
+                          : _revisionWasRequested
+                          ? 'Create revised estimate'
                           : 'Create estimate',
                     ),
                   ),

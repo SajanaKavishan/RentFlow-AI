@@ -254,6 +254,155 @@ void main() {
   });
 
   testWidgets(
+    'technician creates a revised estimate after landlord requests changes',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final storage = fixtures.MemoryTokenStorage('token');
+      final controller = fixtures.buildController(
+        storage,
+        role: UserRole.maintenanceTechnician,
+      );
+      await controller.restoreSession();
+      addTearDown(controller.dispose);
+
+      var requestStatus = 3;
+      Map<String, dynamic> latestEstimate = _repairEstimate(
+        status: 2,
+        reviewNotes: 'Please include the replacement valve cost.',
+      );
+      var createCount = 0;
+      var reviewSubmissionCount = 0;
+      final apiClient = ApiClient(
+        baseUrl: 'http://test',
+        tokenStorage: storage,
+        httpClient: MockClient((request) async {
+          final path = request.url.path;
+          if (path.endsWith('/technician/11111111-1111-1111-1111-111111111112')) {
+            return http.Response(
+              jsonEncode([
+                _maintenanceRequest(
+                  id: 'revision-request',
+                  title: 'Boiler repair',
+                  status: requestStatus,
+                ),
+              ]),
+              200,
+            );
+          }
+          if (path.endsWith('/estimates/latest')) {
+            return http.Response(jsonEncode(latestEstimate), 200);
+          }
+          if (path.endsWith('/estimates') && request.method == 'GET') {
+            return http.Response(jsonEncode([latestEstimate]), 200);
+          }
+          if (path.endsWith('/estimates') && request.method == 'POST') {
+            createCount++;
+            latestEstimate = {
+              ..._repairEstimate(status: 1, version: 2),
+              'id': 'estimate-2',
+              'maintenanceRequestId': 'revision-request',
+            };
+            requestStatus = 4;
+            return http.Response(jsonEncode(latestEstimate), 201);
+          }
+          if (path.endsWith('/estimates/estimate-2/submit-for-review')) {
+            reviewSubmissionCount++;
+            requestStatus = 5;
+            return http.Response(
+              jsonEncode(
+                _maintenanceRequest(
+                  id: 'revision-request',
+                  title: 'Boiler repair',
+                  status: requestStatus,
+                ),
+              ),
+              200,
+            );
+          }
+          if (path.endsWith('/revision-request')) {
+            return http.Response(
+              jsonEncode(
+                _maintenanceRequest(
+                  id: 'revision-request',
+                  title: 'Boiler repair',
+                  status: requestStatus,
+                ),
+              ),
+              200,
+            );
+          }
+          return http.Response('[]', 200);
+        }),
+      );
+      addTearDown(apiClient.close);
+
+      await tester.pumpWidget(
+        AuthScope(
+          controller: controller,
+          child: MaterialApp(
+            home: AssignedWorkScreen(
+              maintenanceApiService: MaintenanceApiService(apiClient),
+              technicianId: '11111111-1111-1111-1111-111111111112',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Revision requested by landlord'), findsOneWidget);
+      expect(
+        find.text(
+          'Requested changes: Please include the replacement valve cost.',
+        ),
+        findsOneWidget,
+      );
+      final createButton = find.byKey(
+        const ValueKey('create-maintenance-estimate'),
+      );
+      expect(createButton, findsOneWidget);
+      await tester.ensureVisible(createButton);
+      await tester.tap(createButton);
+      await tester.pumpAndSettle();
+
+      for (final field in [
+        ('Labor cost', '130'),
+        ('Parts cost', '45'),
+        ('Additional cost', '0'),
+      ]) {
+        await tester.enterText(
+          find.widgetWithText(TextFormField, field.$1),
+          field.$2,
+        );
+      }
+      final saveButton = find.byKey(
+        const ValueKey('save-maintenance-estimate'),
+      );
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await tester.pumpAndSettle();
+
+      expect(createCount, 1);
+      expect(reviewSubmissionCount, 0);
+      expect(
+        find.byKey(const ValueKey('create-maintenance-estimate')),
+        findsNothing,
+      );
+      final submitButton = find.byKey(
+        const ValueKey('submit-maintenance-estimate-for-review'),
+      );
+      expect(submitButton, findsOneWidget);
+      await tester.ensureVisible(submitButton);
+      await tester.tap(submitButton);
+      await tester.pumpAndSettle();
+
+      expect(reviewSubmissionCount, 1);
+      expect(find.text('awaiting Landlord Approval'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'technician creates and submits a persisted estimate for review',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 1000));
@@ -480,6 +629,212 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(const ValueKey('start-maintenance-work')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tenant opens a request and sees its status history', (
+    tester,
+  ) async {
+    final storage = fixtures.MemoryTokenStorage('token');
+    final controller = fixtures.buildController(storage, role: UserRole.tenant);
+    await controller.restoreSession();
+    addTearDown(controller.dispose);
+
+    final request = _maintenanceRequest(
+      id: 'history-request',
+      title: 'Kitchen sink leak',
+      status: 1,
+    );
+    final apiClient = ApiClient(
+      baseUrl: 'http://test',
+      tokenStorage: storage,
+      httpClient: MockClient((httpRequest) async {
+        if (httpRequest.url.path.endsWith(
+          '/tenant/11111111-1111-1111-1111-111111111112',
+        )) {
+          return http.Response(jsonEncode([request]), 200);
+        }
+        if (httpRequest.url.path.endsWith('/history-request')) {
+          return http.Response(jsonEncode(request), 200);
+        }
+        if (httpRequest.url.path.endsWith('/history')) {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'history-1',
+                'fromStatus': 0,
+                'toStatus': 1,
+                'changedByUserId': null,
+                'changedAt': '2026-09-18T10:00:00Z',
+                'notes': 'Request triaged.',
+              },
+            ]),
+            200,
+          );
+        }
+        if (httpRequest.url.path.endsWith('/attachments')) {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'attachment-1',
+                'maintenanceRequestId': 'history-request',
+                'fileName': 'leak-photo.jpg',
+                'contentType': 'image/jpeg',
+                'fileSize': 2048,
+                'attachmentType': 'damage photo',
+                'uploadedByUserId': '11111111-1111-1111-1111-111111111112',
+                'createdAt': '2026-09-18T10:00:00Z',
+              },
+            ]),
+            200,
+          );
+        }
+        return http.Response('[]', 200);
+      }),
+    );
+    addTearDown(apiClient.close);
+
+    await tester.pumpWidget(
+      AuthScope(
+        controller: controller,
+        child: MaterialApp(
+          home: MyMaintenanceRequestsScreen(
+            maintenanceApiService: MaintenanceApiService(apiClient),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kitchen sink leak'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('History'), findsOneWidget);
+    expect(find.textContaining('Submitted → Triaged'), findsOneWidget);
+    expect(find.textContaining('Request triaged.'), findsOneWidget);
+    expect(find.text('leak-photo.jpg'), findsOneWidget);
+    expect(find.textContaining('image/jpeg'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('technician sees assigned request status history', (tester) async {
+    final storage = fixtures.MemoryTokenStorage('token');
+    final controller = fixtures.buildController(
+      storage,
+      role: UserRole.maintenanceTechnician,
+    );
+    await controller.restoreSession();
+    addTearDown(controller.dispose);
+
+    final request = _maintenanceRequest(
+      id: 'technician-history-request',
+      title: 'Broken tap',
+      status: 2,
+    );
+    final apiClient = ApiClient(
+      baseUrl: 'http://test',
+      tokenStorage: storage,
+      httpClient: MockClient((httpRequest) async {
+        if (httpRequest.url.path.endsWith('/technician/technician-1')) {
+          return http.Response(jsonEncode([request]), 200);
+        }
+        if (httpRequest.url.path.endsWith('/technician-history-request')) {
+          return http.Response(jsonEncode(request), 200);
+        }
+        if (httpRequest.url.path.endsWith('/history')) {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'technician-history-1',
+                'fromStatus': 1,
+                'toStatus': 2,
+                'changedByUserId': null,
+                'changedAt': '2026-09-18T10:00:00Z',
+                'notes': 'Assigned to technician.',
+              },
+            ]),
+            200,
+          );
+        }
+        if (httpRequest.url.path.endsWith('/estimates')) {
+          return http.Response('[]', 200);
+        }
+        return http.Response('[]', 200);
+      }),
+    );
+    addTearDown(apiClient.close);
+
+    await tester.pumpWidget(
+      AuthScope(
+        controller: controller,
+        child: MaterialApp(
+          home: AssignedWorkScreen(
+            maintenanceApiService: MaintenanceApiService(apiClient),
+            requestId: 'technician-history-request',
+            technicianId: 'technician-1',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Status history'), findsOneWidget);
+    expect(find.textContaining('triaged → assigned'), findsOneWidget);
+    expect(find.textContaining('Assigned to technician.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('technician attachment section reflects backend access policy', (
+    tester,
+  ) async {
+    final storage = fixtures.MemoryTokenStorage('token');
+    final controller = fixtures.buildController(
+      storage,
+      role: UserRole.maintenanceTechnician,
+    );
+    await controller.restoreSession();
+    addTearDown(controller.dispose);
+
+    final request = _maintenanceRequest(
+      id: 'technician-attachment-request',
+      title: 'Leaking pipe',
+      status: 2,
+    );
+    final apiClient = ApiClient(
+      baseUrl: 'http://test',
+      tokenStorage: storage,
+      httpClient: MockClient((httpRequest) async {
+        if (httpRequest.url.path.endsWith('/technician-attachment-request')) {
+          return http.Response(jsonEncode(request), 200);
+        }
+        if (httpRequest.url.path.endsWith('/history') ||
+            httpRequest.url.path.endsWith('/estimates')) {
+          return http.Response('[]', 200);
+        }
+        return http.Response('[]', 200);
+      }),
+    );
+    addTearDown(apiClient.close);
+
+    await tester.pumpWidget(
+      AuthScope(
+        controller: controller,
+        child: MaterialApp(
+          home: AssignedWorkScreen(
+            maintenanceApiService: MaintenanceApiService(apiClient),
+            requestId: 'technician-attachment-request',
+            technicianId: 'technician-1',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Attachments'), findsOneWidget);
+    expect(
+      find.text('Attachments are currently available to tenants only.'),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Delete attachment'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

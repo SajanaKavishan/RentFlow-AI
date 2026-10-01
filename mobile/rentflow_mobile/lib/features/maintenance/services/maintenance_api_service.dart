@@ -1,9 +1,13 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../properties/models/property.dart';
+import '../models/maintenance_attachment.dart';
+import '../models/maintenance_status_history.dart';
 import '../models/repair_estimate.dart';
 import '../models/maintenance_request.dart';
 
@@ -16,6 +20,35 @@ class MaintenanceApiService {
     final uri = apiClient.buildUri('/api/properties/tenant/mine');
     final response = await _send(() => apiClient.get(uri));
     return _parsePropertyList(response.body);
+  }
+
+  MaintenanceAttachment _parseAttachment(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) throw const FormatException();
+      return MaintenanceAttachment.fromJson(decoded);
+    } on FormatException {
+      throw const MaintenanceApiException(
+        'The maintenance service returned an invalid attachment.',
+      );
+    }
+  }
+
+  List<MaintenanceAttachment> _parseAttachmentList(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! List) throw const FormatException();
+      return decoded
+          .map((item) {
+            if (item is! Map<String, dynamic>) throw const FormatException();
+            return MaintenanceAttachment.fromJson(item);
+          })
+          .toList(growable: false);
+    } on FormatException {
+      throw const MaintenanceApiException(
+        'The maintenance service returned an invalid attachment list.',
+      );
+    }
   }
 
   Future<List<MaintenanceRequest>> getMyMaintenanceRequests({
@@ -73,6 +106,105 @@ class MaintenanceApiService {
     final uri = apiClient.buildUri('/api/maintenance-requests/$id');
     final response = await _send(() => apiClient.get(uri));
     return _parseObject(response.body);
+  }
+
+  Future<List<MaintenanceStatusHistory>> getMaintenanceRequestHistory({
+    required String maintenanceRequestId,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$maintenanceRequestId/history',
+    );
+    final response = await _send(() => apiClient.get(uri));
+    return _parseHistoryList(response.body);
+  }
+
+  Future<List<MaintenanceAttachment>> getMaintenanceRequestAttachments({
+    required String maintenanceRequestId,
+    required String tenantId,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$maintenanceRequestId/attachments',
+      queryParameters: {'tenantId': tenantId},
+    );
+    final response = await _send(() => apiClient.get(uri));
+    return _parseAttachmentList(response.body);
+  }
+
+  Future<MaintenanceAttachment> uploadMaintenanceAttachment({
+    required String maintenanceRequestId,
+    required String tenantId,
+    required String fileName,
+    required String contentType,
+    required Uint8List bytes,
+    String? attachmentType,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$maintenanceRequestId/attachments',
+      queryParameters: {'tenantId': tenantId},
+    );
+    final multipart = http.MultipartRequest('POST', uri)
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: fileName,
+          contentType: MediaType.parse(contentType),
+        ),
+      );
+    if (attachmentType != null && attachmentType.trim().isNotEmpty) {
+      multipart.fields['attachmentType'] = attachmentType;
+    }
+    final response = await _sendStreamed(() => apiClient.send(multipart));
+    return _parseAttachment(response.body);
+  }
+
+  Future<Uri> requestMaintenanceAttachmentDownloadUrl({
+    required String maintenanceRequestId,
+    required String attachmentId,
+    required String tenantId,
+  }) async {
+    final endpoint = apiClient.buildUri(
+      '/api/maintenance-requests/$maintenanceRequestId/attachments/'
+      '$attachmentId',
+      queryParameters: {'tenantId': tenantId},
+    );
+    final request = http.Request('GET', endpoint)
+      ..followRedirects = false
+      ..headers['Accept'] = 'application/json';
+    late final http.StreamedResponse streamedResponse;
+    try {
+      streamedResponse = await apiClient.send(request);
+    } on http.ClientException {
+      throw const MaintenanceApiException(
+        'Unable to connect to the maintenance service.',
+      );
+    }
+    if (streamedResponse.statusCode >= 300 &&
+        streamedResponse.statusCode < 400) {
+      final location = streamedResponse.headers['location'];
+      await streamedResponse.stream.drain<void>();
+      if (location != null && location.trim().isNotEmpty) {
+        return endpoint.resolve(location);
+      }
+    }
+    final response = await http.Response.fromStream(streamedResponse);
+    throw MaintenanceApiException(
+      _safeErrorMessage(response) ?? 'The attachment download link was invalid.',
+      statusCode: response.statusCode,
+    );
+  }
+
+  Future<void> deleteMaintenanceAttachment({
+    required String maintenanceRequestId,
+    required String attachmentId,
+    required String tenantId,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$maintenanceRequestId/attachments/'
+      '$attachmentId',
+      queryParameters: {'tenantId': tenantId},
+    );
+    await _send(() => apiClient.delete(uri));
   }
 
   Future<List<RepairEstimate>> getRepairEstimates({
@@ -178,6 +310,28 @@ class MaintenanceApiService {
     return response;
   }
 
+  Future<http.Response> _sendStreamed(
+    Future<http.StreamedResponse> Function() request,
+  ) async {
+    late final http.StreamedResponse streamedResponse;
+    try {
+      streamedResponse = await request();
+    } on http.ClientException {
+      throw const MaintenanceApiException(
+        'Unable to connect to the maintenance service.',
+      );
+    }
+    final response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw MaintenanceApiException(
+        _safeErrorMessage(response) ??
+            'The maintenance request could not be completed. Please try again.',
+        statusCode: response.statusCode,
+      );
+    }
+    return response;
+  }
+
   String? _safeErrorMessage(http.Response response) {
     if (response.statusCode == 403) {
       return 'You do not have permission to access this resource.';
@@ -237,6 +391,7 @@ class MaintenanceApiService {
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException();
       }
+
       return RepairEstimate.fromJson(decoded);
     } on FormatException {
       throw const MaintenanceApiException(
@@ -305,6 +460,28 @@ class MaintenanceApiService {
     } on FormatException {
       throw const MaintenanceApiException(
         'The maintenance service returned an invalid response.',
+      );
+    }
+  }
+
+  List<MaintenanceStatusHistory> _parseHistoryList(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! List<dynamic>) {
+        throw const FormatException();
+      }
+
+      return decoded
+          .map((item) {
+            if (item is! Map<String, dynamic>) {
+              throw const FormatException();
+            }
+            return MaintenanceStatusHistory.fromJson(item);
+          })
+          .toList(growable: false);
+    } on FormatException {
+      throw const MaintenanceApiException(
+        'The maintenance service returned an invalid history response.',
       );
     }
   }
