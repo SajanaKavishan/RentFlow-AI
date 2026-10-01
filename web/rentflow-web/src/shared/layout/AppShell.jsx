@@ -89,8 +89,12 @@ export default function AppShell() {
     pendingApplications <= dismissedApplications.count
   ) ? pendingApplications : 0
   const activePath = navigationPath(location.pathname)
+  const isViewingCollectionRoute = location.pathname === '/viewing-requests'
+    || /^\/properties\/[^/]+\/viewing-requests\/?$/.test(location.pathname)
+  const isApplicationCollectionRoute = ['/rental-applications', '/ai-review'].includes(location.pathname)
+    || /^\/properties\/[^/]+\/(?:rental-applications|ai-review)\/?$/.test(location.pathname)
   useEffect(() => {
-    if (user.role !== USER_ROLES.LANDLORD || !propertyId || activePath === '/dashboard' ||
+    if (user.role !== USER_ROLES.LANDLORD || !propertyId || activePath === '/dashboard' || isViewingCollectionRoute ||
       (viewingSummary?.userId === user.id && viewingSummary.propertyId === propertyId && viewingSummary.count !== null)) return undefined
     let active = true
     getViewingsByProperty(propertyId).then((records) => {
@@ -98,9 +102,9 @@ export default function AppShell() {
       if (active && count !== null) setViewingSummary({ userId: user.id, propertyId, count })
     }).catch(() => {})
     return () => { active = false }
-  }, [user.id, user.role, propertyId, activePath, viewingSummary])
+  }, [user.id, user.role, propertyId, activePath, isViewingCollectionRoute, viewingSummary])
   useEffect(() => {
-    if (user.role !== USER_ROLES.LANDLORD || !propertyId || activePath === '/dashboard' ||
+    if (user.role !== USER_ROLES.LANDLORD || !propertyId || activePath === '/dashboard' || isApplicationCollectionRoute ||
       (applicationSummary?.userId === user.id && applicationSummary.propertyId === propertyId && applicationSummary.count !== null)) return undefined
     let active = true
     getApplicationsByProperty(propertyId).then((records) => {
@@ -109,7 +113,7 @@ export default function AppShell() {
       if (active && count !== null) setApplicationSummary({ userId: user.id, propertyId, count })
     }).catch(() => {})
     return () => { active = false }
-  }, [user.id, user.role, propertyId, activePath, applicationSummary])
+  }, [user.id, user.role, propertyId, activePath, isApplicationCollectionRoute, applicationSummary])
   const scopedPath = (path) => propertyId ? `${path}?${new URLSearchParams({ propertyId })}` : path
   const [menu, setMenu] = useState({ path: location.pathname, open: false })
   const menuOpen = menu.path === location.pathname && menu.open
@@ -201,7 +205,7 @@ export default function AppShell() {
         <button ref={menuRef} type="button" className="shared-menu-button" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="shared-navigation" onClick={() => setMenu({ path: location.pathname, open: !menuOpen })}><Icon name={menuOpen ? 'close' : 'menu'} size={22} /></button>
         {activePath !== '/notifications' && <div className="shared-topbar__title"><strong>{current}</strong></div>}
         <NotificationPopover key={user.id} userId={user.id} unreadCount={unreadCount} refreshCount={refreshCount} onOpen={() => { closeMenu(); setAccountMenu({ path: location.pathname, open: false }) }} />
-        <button ref={accountButtonRef} className="shared-topbar__account" type="button" title={user.email} aria-label={`Profile for ${user.fullName}`} aria-haspopup="dialog" aria-expanded={accountOpen} onClick={() => { closeMenu(); setAccountMenu({ path: location.pathname, open: !accountOpen }) }}><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span></span><ProfileAvatar user={user} className="shared-avatar" /></button>
+        <button ref={accountButtonRef} className="shared-topbar__account" type="button" title={user.email} aria-label={`Profile for ${user.fullName}`} aria-haspopup="dialog" aria-expanded={accountOpen} onClick={() => { closeMenu(); setAccountMenu({ path: location.pathname, open: !accountOpen }) }}><ProfileAvatar user={user} className="shared-avatar" /><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span></span></button>
         {accountOpen && <section ref={accountPopupRef} className="shared-account-popup" role="dialog" aria-label="Account menu">
           <div className="shared-account-popup__identity">
             <ProfileAvatar user={user} className="shared-avatar" />

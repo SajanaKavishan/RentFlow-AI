@@ -115,6 +115,35 @@ Public registration remains limited to Tenant and Landlord. Technician and Admin
 accounts require an authorized administrative workflow or controlled development
 seed; the web UI does not provide public staff registration.
 
+## Google Maps and Places configuration
+
+The Add/Edit Property wizard supports Google place search, user-initiated browser
+geolocation, an interactive draggable map pin, and manual Address/City entry.
+It uses the Maps JavaScript `PlaceAutocompleteElement`, `Geocoder`, and
+`AdvancedMarkerElement`; property screens use Maps Embed previews. Copy
+`.env.example` to a local Vite environment file and set
+`VITE_GOOGLE_MAPS_API_KEY`. This is a browser-only key; it is never sent to the
+RentFlow API. Never commit a real key. Set `VITE_GOOGLE_MAPS_MAP_ID` to your
+production Map ID when available; otherwise the interactive map uses Google's
+public `DEMO_MAP_ID`.
+
+In Google Cloud, restrict this browser key to:
+
+- the **Maps JavaScript API**, **Places API (New)**, **Maps Embed API**, and
+  **Geocoding API** only;
+- approved frontend **HTTP referrers/domains** only, including the exact local
+  development origin when needed; and
+- only the production and development frontend origins that actually use it.
+
+Browser location permission is requested only after the landlord clicks
+**Use my current location**. Reverse-geocoding failures retain the exact selected
+coordinates and require the landlord to enter Address/City before confirming.
+No raw Google response or browser location is stored before the full property
+form is submitted. If the variable or Google service is unavailable, the wizard
+keeps a manual Address/City fallback and stores no fabricated coordinates.
+Legacy properties without saved coordinates remain valid; their details map
+falls back to the existing Address/City query.
+
 ## Validation commands
 
 From `web/rentflow-web` run:

@@ -18,6 +18,7 @@ const tenant = {
   phoneNumber: '+94 77 123 4567',
   role: 'Tenant',
 }
+const tenantGreeting = /^(Welcome back|Good to see you|Hello|Hi there), Taylor Tenant$/
 
 function renderApp(api, initialEntry = '/login') {
   return render(
@@ -29,7 +30,7 @@ function renderApp(api, initialEntry = '/login') {
 
 describe('React authentication', () => {
   beforeEach(() => { vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response('[]', { status: 200 })))) })
-  afterEach(() => { cleanup(); setUnauthorizedHandler(null); vi.unstubAllGlobals() })
+  afterEach(() => { cleanup(); tokenStorage.clearToken(); setUnauthorizedHandler(null); vi.unstubAllGlobals() })
 
   it('persists and clears the access token through the storage abstraction', () => {
     tokenStorage.setToken('access-token')
@@ -48,7 +49,7 @@ describe('React authentication', () => {
     await userEvent.type(await screen.findByLabelText('Email'), tenant.email)
     await userEvent.type(screen.getByLabelText('Password'), 'Password1!')
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(await screen.findByText('Welcome, Taylor Tenant')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: tenantGreeting })).toBeInTheDocument()
     expect(tokenStorage.getToken()).toBe('access-token')
     expect(api.getCurrentUser).toHaveBeenCalled()
   })
@@ -182,6 +183,23 @@ describe('React authentication', () => {
     expect(select).toHaveValue('Landlord')
   })
 
+  it.each([
+    ['/register?role=tenant', 'Tenant'],
+    ['/register?role=landlord', 'Landlord'],
+  ])('preselects the supported role from %s', async (entry, expectedRole) => {
+    const api = { login: vi.fn(), register: vi.fn(), getCurrentUser: vi.fn() }
+    renderApp(api, entry)
+    expect(await screen.findByLabelText('Account type')).toHaveValue(expectedRole)
+  })
+
+  it.each(['admin', 'technician', 'MaintenanceTechnician', 'unknown'])('falls back safely for the invalid public role query %s', async (role) => {
+    const api = { login: vi.fn(), register: vi.fn(), getCurrentUser: vi.fn() }
+    renderApp(api, `/register?role=${role}`)
+    const select = await screen.findByLabelText('Account type')
+    expect(select).toHaveValue('Tenant')
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(['Tenant', 'Landlord'])
+  })
+
   it('registers with all real fields and only the selected public role', async () => {
     const api = { login: vi.fn(), register: vi.fn().mockResolvedValue({ accessToken: 'registered-token', user: tenant }), getCurrentUser: vi.fn().mockResolvedValue(tenant) }
     renderApp(api, '/register')
@@ -192,6 +210,6 @@ describe('React authentication', () => {
     await userEvent.type(screen.getByLabelText('Confirm password'), 'Password1!')
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
     expect(api.register).toHaveBeenCalledWith({ fullName: 'Taylor Tenant', email: tenant.email, phoneNumber: tenant.phoneNumber, password: 'Password1!', role: 'Tenant' })
-    expect(await screen.findByRole('heading', { name: 'Welcome, Taylor Tenant' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: tenantGreeting })).toBeInTheDocument()
   })
 })

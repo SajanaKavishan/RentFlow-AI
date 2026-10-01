@@ -88,7 +88,9 @@ public sealed class PricingAnalysisWorkflowPostgresTests
 
             var propertyDeleteException = await Assert.ThrowsAsync<PostgresException>(() =>
                 context.Properties.Where(item => item.Id == property.Id).ExecuteDeleteAsync());
-            Assert.Equal(PostgresErrorCodes.RestrictViolation, propertyDeleteException.SqlState);
+            AssertRestrictiveForeignKeyViolation(
+                propertyDeleteException,
+                "FK_PricingAnalysisWorkflows_Properties_PropertyId");
 
             var persistedWorkflow = await context.PricingAnalysisWorkflows
                 .Include(item => item.Steps)
@@ -99,7 +101,9 @@ public sealed class PricingAnalysisWorkflowPostgresTests
                 context.PricingAnalysisWorkflows
                     .Where(item => item.Id == persistedWorkflow.Id)
                     .ExecuteDeleteAsync());
-            Assert.Equal(PostgresErrorCodes.RestrictViolation, workflowDeleteException.SqlState);
+            AssertRestrictiveForeignKeyViolation(
+                workflowDeleteException,
+                "FK_PricingAnalysisWorkflowSteps_PricingAnalysisWorkflows_Workf~");
         }
         finally
         {
@@ -109,6 +113,20 @@ public sealed class PricingAnalysisWorkflowPostgresTests
             dropSchema.CommandText = $"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
             await dropSchema.ExecuteNonQueryAsync();
         }
+    }
+
+    private static void AssertRestrictiveForeignKeyViolation(
+        PostgresException exception,
+        string expectedConstraint)
+    {
+        Assert.Contains(
+            exception.SqlState,
+            new[]
+            {
+                PostgresErrorCodes.RestrictViolation,
+                PostgresErrorCodes.ForeignKeyViolation
+            });
+        Assert.Equal(expectedConstraint, exception.ConstraintName);
     }
 
     private static ApplicationUser CreateLandlord()

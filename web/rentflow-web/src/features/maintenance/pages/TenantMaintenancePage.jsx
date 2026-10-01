@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import { useAuth } from '../../auth/useAuth.js'
 import {
@@ -121,7 +121,7 @@ function TenantMaintenancePage() {
     }
   }, [tenantId, contextualPropertyId])
 
-  async function loadRequestDetails(id) {
+  const loadRequestDetails = useCallback(async (id) => {
     if (!id) {
       setSelectedRequest(null)
       setDetailState('idle')
@@ -162,9 +162,9 @@ function TenantMaintenancePage() {
         ),
       )
     }
-  }
+  }, [tenantId])
 
-  async function refreshRequests() {
+  const refreshRequests = useCallback(async () => {
     if (!tenantId) {
       setPageState('unauthorized')
       setRequests([])
@@ -207,11 +207,15 @@ function TenantMaintenancePage() {
       setDetailState('idle')
       setDetailError('')
     }
-  }
+  }, [loadRequestDetails, tenantId])
 
   useEffect(() => {
-    refreshRequests()
-  }, [tenantId])
+    const refreshTimer = window.setTimeout(() => {
+      void refreshRequests()
+    }, 0)
+
+    return () => window.clearTimeout(refreshTimer)
+  }, [refreshRequests])
 
   const handleRequestSelection = async (requestId) => {
     if (!requestId) return

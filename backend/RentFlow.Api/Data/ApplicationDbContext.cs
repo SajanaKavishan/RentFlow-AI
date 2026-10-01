@@ -50,6 +50,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<NotificationPreference> NotificationPreferences =>
         Set<NotificationPreference>();
 
+    public DbSet<TenantPropertyPreference> TenantPropertyPreferences =>
+        Set<TenantPropertyPreference>();
+
+    public DbSet<TenantPropertyFavorite> TenantPropertyFavorites =>
+        Set<TenantPropertyFavorite>();
+
     public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
 
     public DbSet<MaintenanceCoordinationWorkflow> MaintenanceCoordinationWorkflows => Set<MaintenanceCoordinationWorkflow>();
@@ -304,6 +310,58 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<TenantPropertyPreference>(entity =>
+        {
+            entity.HasKey(preference => preference.UserId);
+
+            entity.Property(preference => preference.PreferredCity)
+                .HasMaxLength(100)
+                .IsRequired(false);
+
+            entity.Property(preference => preference.MaximumMonthlyRent)
+                .HasPrecision(18, 2)
+                .IsRequired(false);
+
+            entity.Property(preference => preference.MinimumBedrooms)
+                .IsRequired(false);
+
+            entity.Property(preference => preference.MinimumBathrooms)
+                .IsRequired(false);
+
+            entity.Property(preference => preference.PreferredAmenities)
+                .HasColumnType("text[]")
+                .IsRequired();
+
+            entity.Property(preference => preference.UpdatedAt)
+                .IsRequired();
+
+            entity.HasOne<ApplicationUser>()
+                .WithOne()
+                .HasForeignKey<TenantPropertyPreference>(preference => preference.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TenantPropertyFavorite>(entity =>
+        {
+            entity.HasKey(favorite => new { favorite.TenantId, favorite.PropertyId });
+
+            entity.Property(favorite => favorite.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(favorite => favorite.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<Property>()
+                .WithMany()
+                .HasForeignKey(favorite => favorite.PropertyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(favorite => new { favorite.TenantId, favorite.CreatedAt });
+            entity.HasIndex(favorite => favorite.PropertyId);
+        });
+
         modelBuilder.Entity<SupportTicket>(entity =>
         {
             entity.HasKey(ticket => ticket.Id);
@@ -369,15 +427,60 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasMaxLength(100)
                 .IsRequired();
 
+            entity.Property(property => property.Latitude)
+                .IsRequired(false);
+
+            entity.Property(property => property.Longitude)
+                .IsRequired(false);
+
+            entity.Property(property => property.GooglePlaceId)
+                .HasMaxLength(255)
+                .IsRequired(false);
+
             entity.Property(property => property.MonthlyRent)
                 .HasPrecision(18, 2)
                 .IsRequired();
+
+            entity.Property(property => property.AdvertisedSecurityDeposit)
+                .HasPrecision(18, 2)
+                .IsRequired(false);
+
+            entity.Property(property => property.PreferredLeaseTermMonths)
+                .IsRequired(false);
+
+            entity.Property(property => property.PetPolicy)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired(false);
+
+            entity.Property(property => property.PetPolicyNotes)
+                .HasMaxLength(500)
+                .IsRequired(false);
+
+            entity.Property(property => property.IncludedUtilities)
+                .HasColumnType("text[]")
+                .IsRequired(false);
 
             entity.Property(property => property.Bedrooms)
                 .IsRequired();
 
             entity.Property(property => property.Bathrooms)
                 .IsRequired();
+
+            entity.Property(property => property.Area)
+                .HasPrecision(18, 2)
+                .IsRequired(false);
+
+            entity.Property(property => property.AreaUnit)
+                .HasMaxLength(20)
+                .IsRequired(false);
+
+            entity.Property(property => property.AreaType)
+                .HasMaxLength(20)
+                .IsRequired(false);
+
+            entity.Property(property => property.AvailableFrom)
+                .IsRequired(false);
 
             entity.Property(property => property.IsAvailable)
                 .IsRequired();
@@ -413,12 +516,19 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasMaxLength(100)
                 .IsRequired();
 
+            entity.Property(amenity => amenity.CanonicalKey)
+                .HasMaxLength(100)
+                .IsRequired(false);
+
             entity.HasOne(amenity => amenity.Property)
                 .WithMany(property => property.Amenities)
                 .HasForeignKey(amenity => amenity.PropertyId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(amenity => amenity.PropertyId);
+            entity.HasIndex(amenity => new { amenity.PropertyId, amenity.CanonicalKey })
+                .IsUnique()
+                .HasFilter("\"CanonicalKey\" IS NOT NULL");
         });
 
         // =========================================================
@@ -446,6 +556,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(image => image.FileSizeBytes)
                 .IsRequired();
 
+            entity.Property(image => image.IsPrimary)
+                .HasDefaultValue(false)
+                .IsRequired();
+
+            entity.Property(image => image.SortOrder)
+                .HasDefaultValue(0)
+                .IsRequired();
+
             entity.Property(image => image.UploadedAt)
                 .IsRequired();
 
@@ -455,6 +573,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(image => image.PropertyId);
+            entity.HasIndex(image => new { image.PropertyId, image.SortOrder });
+            entity.HasIndex(image => new { image.PropertyId, image.IsPrimary })
+                .IsUnique()
+                .HasFilter("\"IsPrimary\" = TRUE");
         });
 
         // =========================================================
