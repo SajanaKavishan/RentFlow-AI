@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
+import '../../viewings/services/viewing_api_service.dart';
+import '../../rental_applications/services/rental_application_api_service.dart';
 import '../models/property.dart';
 import '../services/property_api_service.dart';
 import '../widgets/property_card.dart';
 import 'property_matching_screen.dart';
+import 'property_details_screen.dart';
 
 class PropertyListScreen extends StatefulWidget {
   const PropertyListScreen({
     super.key,
     required this.propertyApiService,
+    this.viewingApiService,
+    this.rentalApplicationApiService,
   });
 
   final PropertyApiService propertyApiService;
+  final ViewingApiService? viewingApiService;
+  final RentalApplicationApiService? rentalApplicationApiService;
 
   @override
   State<PropertyListScreen> createState() => _PropertyListScreenState();
@@ -72,11 +79,11 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => Scaffold(
-          appBar: AppBar(
-            title: const Text('AI Property Match'),
-          ),
+          appBar: AppBar(title: const Text('AI Property Match')),
           body: PropertyMatchingScreen(
             propertyApiService: widget.propertyApiService,
+            viewingApiService: widget.viewingApiService,
+            rentalApplicationApiService: widget.rentalApplicationApiService,
           ),
         ),
       ),
@@ -97,25 +104,19 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
                 delegate: SliverChildListDelegate([
                   Text(
                     'EXPLORE HOMES',
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelMedium
-                        ?.copyWith(
-                          color: AppPalette.olive,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.4,
-                        ),
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: AppPalette.olive,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.4,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Find your place',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineMedium
-                        ?.copyWith(
-                          color: AppPalette.darkOlive,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: AppPalette.darkOlive,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -141,16 +142,13 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
                   const SizedBox(height: 26),
                   Text(
                     'Properties',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    '${_properties.length} homes available to explore',
+                    '${_properties.length} homes to explore',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 16),
@@ -230,9 +228,7 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
     if (_isLoading) {
       return const SliverFillRemaining(
         hasScrollBody: false,
-        child: Center(
-          child: CircularProgressIndicator(),
-        ),
+        child: Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -251,10 +247,7 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
                   color: AppPalette.olive,
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  _errorMessage!,
-                  textAlign: TextAlign.center,
-                ),
+                Text(_errorMessage!, textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: _loadProperties,
@@ -291,8 +284,19 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
 
           return PropertyCard(
             property: property,
+            propertyApiService: widget.propertyApiService,
             onTap: () {
-              // Property Details screen is the next integration step.
+              Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => PropertyDetailsScreen(
+                    property: property,
+                    propertyApiService: widget.propertyApiService,
+                    viewingApiService: widget.viewingApiService,
+                    rentalApplicationApiService:
+                        widget.rentalApplicationApiService,
+                  ),
+                ),
+              );
             },
           );
         },

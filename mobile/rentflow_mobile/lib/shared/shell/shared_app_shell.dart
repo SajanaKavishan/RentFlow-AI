@@ -327,7 +327,11 @@ class _SharedAppShellState extends State<SharedAppShell>
               explanation: 'Property discovery is currently unavailable.',
               owner: 'Property management',
             )
-          : PropertyListScreen(propertyApiService: widget.propertyApiService!),
+          : PropertyListScreen(
+              propertyApiService: widget.propertyApiService!,
+              viewingApiService: widget.viewingApiService,
+              rentalApplicationApiService: widget.rentalApplicationApiService,
+            ),
 
     RoleDestinationId.viewings =>
       widget.viewingsContent ??

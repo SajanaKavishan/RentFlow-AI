@@ -24,7 +24,7 @@ abstract final class AppPalette {
   static const warning = Color(0xFF755B15);
   static const neutral = Color(0xFF5F625E);
   static const pending = Color(0xFFFFF1C7);
-  static const progress = Color(0xFFDDE7EF);
+  static const progress = Color(0xFFE5EAD9);
 
   // Authentication aliases are intentionally retained so the existing
   // landing and authentication screens keep their current appearance.

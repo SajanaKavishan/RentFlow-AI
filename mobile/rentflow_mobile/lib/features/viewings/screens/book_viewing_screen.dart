@@ -10,10 +10,12 @@ class BookViewingScreen extends StatefulWidget {
   const BookViewingScreen({
     super.key,
     required this.propertyId,
+    this.propertyTitle,
     this.viewingApiService,
   });
 
   final String propertyId;
+  final String? propertyTitle;
   final ViewingApiService? viewingApiService;
 
   @override
@@ -207,6 +209,7 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
             const SizedBox(height: AppSpacing.md),
             _PropertySummary(
               propertyId: widget.propertyId,
+              propertyTitle: widget.propertyTitle,
               isAvailable: _hasPropertyReference,
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -304,9 +307,14 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
 }
 
 class _PropertySummary extends StatelessWidget {
-  const _PropertySummary({required this.propertyId, required this.isAvailable});
+  const _PropertySummary({
+    required this.propertyId,
+    required this.isAvailable,
+    this.propertyTitle,
+  });
 
   final String propertyId;
+  final String? propertyTitle;
   final bool isAvailable;
 
   @override
@@ -330,20 +338,22 @@ class _PropertySummary extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Property reference',
+                propertyTitle == null ? 'Property reference' : 'Selected home',
                 style: Theme.of(
                   context,
                 ).textTheme.labelMedium?.copyWith(color: AppPalette.muted),
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                isAvailable ? propertyId : 'Unavailable',
+                isAvailable ? (propertyTitle ?? propertyId) : 'Unavailable',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
                 isAvailable
-                    ? 'Property details are not available in the mobile integration. This reference will be sent with your request.'
+                    ? propertyTitle == null
+                          ? 'Property details are not available in the mobile integration. This reference will be sent with your request.'
+                          : 'This home will be included with your viewing request.'
                     : 'Property selection is not integrated. A viewing cannot be booked without a real property reference.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),

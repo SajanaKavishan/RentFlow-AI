@@ -1,89 +1,98 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
+import '../../../shared/widgets/shared_widgets.dart';
 import '../models/property.dart';
+import '../services/property_api_service.dart';
+import 'property_photo.dart';
 
 class PropertyCard extends StatelessWidget {
   const PropertyCard({
     super.key,
     required this.property,
     required this.onTap,
+    this.propertyApiService,
+    this.matchScore,
   });
 
   final Property property;
   final VoidCallback onTap;
+  final PropertyApiService? propertyApiService;
+  final int? matchScore;
 
   @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: AppSpacing.base),
+    child: Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _PropertyImagePlaceholder(
-              isAvailable: property.isAvailable,
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  PropertyPhoto(
+                    propertyId: property.id,
+                    propertyApiService: propertyApiService,
+                  ),
+                  if (matchScore != null)
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: StatusChip(
+                        label: '$matchScore% match',
+                        tone: StatusTone.success,
+                      ),
+                    ),
+                ],
+              ),
             ),
             Padding(
-              padding: const EdgeInsets.all(18),
+              padding: AppSpacing.card,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          property.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      _AvailabilityBadge(
-                        isAvailable: property.isAvailable,
-                      ),
-                    ],
+                  Text(
+                    property.title,
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.location_on_outlined,
-                        size: 17,
-                        color: AppPalette.olive,
-                      ),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        child: Text(
-                          property.city,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    property.city,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.md),
                   Text(
                     'LKR ${property.monthlyRent.toStringAsFixed(0)} / month',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: AppPalette.darkOlive,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      color: AppPalette.darkOlive,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                  const SizedBox(height: 14),
-                  Row(
+                  const SizedBox(height: AppSpacing.md),
+                  Wrap(
+                    spacing: AppSpacing.md,
+                    runSpacing: AppSpacing.sm,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      _PropertyFact(
-                        icon: Icons.bed_outlined,
-                        label: '${property.bedrooms} Beds',
+                      _Fact(Icons.bed_outlined, '${property.bedrooms} beds'),
+                      _Fact(
+                        Icons.bathtub_outlined,
+                        '${property.bathrooms} baths',
                       ),
-                      const SizedBox(width: 18),
-                      _PropertyFact(
-                        icon: Icons.bathtub_outlined,
-                        label: '${property.bathrooms} Baths',
+                      StatusChip(
+                        label: property.isAvailable
+                            ? 'Available'
+                            : 'Unavailable',
+                        tone: property.isAvailable
+                            ? StatusTone.success
+                            : StatusTone.neutral,
                       ),
                     ],
                   ),
@@ -93,116 +102,22 @@ class PropertyCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-class _PropertyImagePlaceholder extends StatelessWidget {
-  const _PropertyImagePlaceholder({
-    required this.isAvailable,
-  });
-
-  final bool isAvailable;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 170,
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        color: AppPalette.sage,
-      ),
-      child: Stack(
-        children: [
-          const Center(
-            child: Icon(
-              Icons.home_work_outlined,
-              size: 58,
-              color: AppPalette.darkOlive,
-            ),
-          ),
-          Positioned(
-            top: 14,
-            left: 14,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 7,
-              ),
-              decoration: BoxDecoration(
-                color: AppPalette.darkOlive,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'RentFlow Home',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-class _AvailabilityBadge extends StatelessWidget {
-  const _AvailabilityBadge({
-    required this.isAvailable,
-  });
-
-  final bool isAvailable;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 6,
-      ),
-      decoration: BoxDecoration(
-        color: isAvailable
-            ? AppPalette.sage
-            : Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        isAvailable ? 'Available' : 'Unavailable',
-        style: const TextStyle(
-          color: AppPalette.darkOlive,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }
 
-class _PropertyFact extends StatelessWidget {
-  const _PropertyFact({
-    required this.icon,
-    required this.label,
-  });
-
+class _Fact extends StatelessWidget {
+  const _Fact(this.icon, this.label);
   final IconData icon;
   final String label;
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          size: 18,
-          color: AppPalette.olive,
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 18, color: AppPalette.olive),
+      const SizedBox(width: 5),
+      Text(label),
+    ],
+  );
 }

@@ -14,11 +14,13 @@ class RentalApplicationFormScreen extends StatefulWidget {
   const RentalApplicationFormScreen({
     super.key,
     required this.propertyId,
+    this.propertyTitle,
     this.application,
     this.rentalApplicationApiService,
   });
 
   final String propertyId;
+  final String? propertyTitle;
   final RentalApplication? application;
   final RentalApplicationApiService? rentalApplicationApiService;
 
@@ -351,6 +353,13 @@ class _RentalApplicationFormScreenState
                     ? null
                     : RentalApplicationStatusChip(status: application.status),
               ),
+              if (widget.propertyTitle != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  'Selected home: ${widget.propertyTitle}',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
               if (application?.status ==
                   RentalApplicationStatus.changesRequested) ...[
                 const SizedBox(height: AppSpacing.base),
