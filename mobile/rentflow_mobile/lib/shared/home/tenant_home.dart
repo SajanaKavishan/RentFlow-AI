@@ -155,7 +155,7 @@ class _TenantHomeState extends State<TenantHome> {
       child: RefreshIndicator(
         onRefresh: _refresh,
         child: AuthenticatedPage(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -179,7 +179,7 @@ class _TenantHomeState extends State<TenantHome> {
                         Text(
                           '${_greetingForHour(local.hour)}, ${_firstName(widget.user.fullName)}',
                           style: _style(
-                            28,
+                            24,
                             FontWeight.w700,
                             height: 1.1,
                             color: AppPalette.darkOlive,
@@ -212,7 +212,7 @@ class _TenantHomeState extends State<TenantHome> {
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               FutureBuilder<TenantDashboardSnapshot>(
                 future: _snapshot,
                 builder: (context, result) {
@@ -261,7 +261,7 @@ class _TenantHomeState extends State<TenantHome> {
                   );
                 },
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
               _SectionHeading(
                 title: 'Recommended for You',
                 subtitle: 'Based on your preferences',
@@ -271,7 +271,7 @@ class _TenantHomeState extends State<TenantHome> {
               ),
               const SizedBox(height: 12),
               _buildRecommendations(),
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
               const _SectionHeading(title: 'What would you like to do?'),
               const SizedBox(height: 8),
               _QuickActionsRow(
@@ -616,7 +616,7 @@ class _SectionHeading extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: _style(22, FontWeight.w700, height: 1.2)),
+            Text(title, style: _style(18, FontWeight.w700, height: 1.2)),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
               Text(
@@ -638,7 +638,7 @@ class _SectionHeading extends StatelessWidget {
             minimumSize: const Size(48, 48),
             padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
-          child: const Text('See all'),
+          child: const Text('See all', style: TextStyle(fontSize: 13)),
         ),
     ],
   );
@@ -678,7 +678,7 @@ class _JourneyCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -715,11 +715,11 @@ class _JourneyCard extends StatelessWidget {
                     ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               Text(
                 title,
                 style: _style(
-                  24,
+                  20,
                   FontWeight.w700,
                   height: 1.15,
                   color: AppPalette.white,

@@ -7,6 +7,7 @@ import '../../../core/network/api_client.dart';
 import '../models/property.dart';
 import '../models/property_image.dart';
 import '../models/property_matching.dart';
+import '../models/property_preferences.dart';
 
 class PropertyApiService {
   PropertyApiService(this.apiClient);
@@ -193,6 +194,72 @@ class PropertyApiService {
       ),
     );
     return _parsePropertyMatchingResponse(response.body);
+  }
+
+  Future<PropertyPreferences> getMatchPreferences() async {
+    final response = await _send(
+      () =>
+          apiClient.get(apiClient.buildUri('/api/tenant/property-preferences')),
+    );
+    return _parsePreferences(response.body);
+  }
+
+  Future<PropertyPreferences> saveMatchPreferences(
+    PropertyMatchingRequest preferences,
+  ) async {
+    final response = await _send(
+      () => apiClient.put(
+        apiClient.buildUri('/api/tenant/property-preferences'),
+        body: jsonEncode(preferences.toJson()),
+      ),
+    );
+    return _parsePreferences(response.body);
+  }
+
+  Future<void> resetMatchPreferences() async {
+    await _send(
+      () => apiClient.delete(
+        apiClient.buildUri('/api/tenant/property-preferences'),
+      ),
+    );
+  }
+
+  PropertyPreferences _parsePreferences(String body) {
+    try {
+      final json = jsonDecode(body);
+      if (json is! Map<String, dynamic>) throw const FormatException();
+      return PropertyPreferences.fromJson(json);
+    } on FormatException {
+      throw const PropertyApiException(
+        'Unable to read your match preferences.',
+      );
+    }
+  }
+
+  Future<Set<String>> getPropertyFavorites() async {
+    final response = await _send(
+      () => apiClient.get(apiClient.buildUri('/api/tenant/property-favorites')),
+    );
+    try {
+      final json = jsonDecode(response.body);
+      final ids = json is Map<String, dynamic> ? json['propertyIds'] : null;
+      if (ids is! List || ids.any((id) => id is! String)) {
+        throw const FormatException();
+      }
+      return Set<String>.from(ids);
+    } on FormatException {
+      throw const PropertyApiException('Unable to read your saved properties.');
+    }
+  }
+
+  Future<void> setPropertyFavorite(
+    String propertyId, {
+    required bool saved,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/tenant/property-favorites/${Uri.encodeComponent(propertyId)}',
+    );
+    await _send(() => saved ? apiClient.put(uri) : apiClient.delete(uri));
   }
 
   Future<http.Response> _send(Future<http.Response> Function() request) async {
