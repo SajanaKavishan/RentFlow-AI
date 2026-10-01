@@ -68,6 +68,7 @@ public class PaymentService : IPaymentService
             RentScheduleItemId = rentScheduleItem.Id,
             TenantId = tenantId,
             Amount = rentScheduleItem.Amount,
+            Provider = PaymentProvider.Manual,
             PaymentMethod = dto.PaymentMethod.Trim(),
             TransactionReference = string.IsNullOrWhiteSpace(dto.TransactionReference)
                 ? null
@@ -145,6 +146,12 @@ public class PaymentService : IPaymentService
         {
             throw PaymentServiceException.NotFound(
                 "Payment was not found.");
+        }
+
+        if (payment.Provider != PaymentProvider.Manual)
+        {
+            throw PaymentServiceException.Conflict(
+                "Stripe payments cannot be settled through the manual payment action.");
         }
 
         if (payment.Status != PaymentStatus.Pending)
@@ -239,6 +246,12 @@ public class PaymentService : IPaymentService
         {
             throw PaymentServiceException.NotFound(
                 "Payment was not found.");
+        }
+
+        if (payment.Provider != PaymentProvider.Manual)
+        {
+            throw PaymentServiceException.Conflict(
+                "Stripe payments cannot be settled through the manual payment action.");
         }
 
         if (payment.Status != PaymentStatus.Pending)

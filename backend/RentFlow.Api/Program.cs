@@ -82,6 +82,12 @@ builder.Services.AddOptions<PasswordResetOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+builder.Services.AddOptions<StripePaymentOptions>()
+    .Bind(builder.Configuration.GetSection(StripePaymentOptions.SectionName))
+    .Validate(options => options.HasValidCurrency,
+        "Payments:Currency must be LKR.")
+    .ValidateOnStart();
+
 var emailOptions = builder.Services.AddOptions<EmailOptions>()
     .Bind(builder.Configuration.GetSection(EmailOptions.SectionName));
 var frontendOptions = builder.Services.AddOptions<FrontendOptions>()

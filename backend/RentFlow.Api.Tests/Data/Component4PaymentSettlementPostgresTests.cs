@@ -59,6 +59,15 @@ public sealed class Component4PaymentSettlementPostgresTests
             dbContext.RentScheduleItems.Add(schedule);
             await dbContext.SaveChangesAsync();
 
+            var legacyPaymentId = Guid.NewGuid();
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO \"Payments\" (\"Id\", \"RentScheduleItemId\", \"TenantId\", \"Amount\", \"PaymentMethod\", \"Status\", \"CreatedAt\") VALUES ({legacyPaymentId}, {schedule.Id}, {offer.TenantId}, {schedule.Amount}, {"BankTransfer"}, {0}, {DateTimeOffset.UtcNow})");
+
+            var legacyPayment = await dbContext.Payments.AsNoTracking()
+                .SingleAsync(payment => payment.Id == legacyPaymentId);
+            Assert.Equal(PaymentProvider.Manual, legacyPayment.Provider);
+            Assert.Null(legacyPayment.StripePaymentIntentId);
+
             dbContext.Payments.AddRange(
                 CreatePayment(schedule, PaymentStatus.Pending),
                 CreatePayment(schedule, PaymentStatus.Pending),
@@ -77,6 +86,49 @@ public sealed class Component4PaymentSettlementPostgresTests
             dbContext.Payments.Add(CreatePayment(schedule, PaymentStatus.Completed));
             await Assert.ThrowsAsync<DbUpdateException>(
                 () => dbContext.SaveChangesAsync());
+            dbContext.ChangeTracker.Clear();
+
+            var stripeSchedule = CreateSchedule(lease.Id);
+            stripeSchedule.DueDate = stripeSchedule.DueDate.AddMonths(1);
+            var otherSchedule = CreateSchedule(lease.Id);
+            otherSchedule.DueDate = otherSchedule.DueDate.AddMonths(2);
+            dbContext.RentScheduleItems.AddRange(stripeSchedule, otherSchedule);
+            await dbContext.SaveChangesAsync();
+
+            var firstStripeAttempt = CreatePayment(stripeSchedule, PaymentStatus.Pending);
+            firstStripeAttempt.Provider = PaymentProvider.Stripe;
+            firstStripeAttempt.StripePaymentIntentId = "pi_test_first";
+            dbContext.Payments.Add(firstStripeAttempt);
+            await dbContext.SaveChangesAsync();
+            Assert.Equal("pi_test_first", (await dbContext.Payments.AsNoTracking()
+                .SingleAsync(payment => payment.Id == firstStripeAttempt.Id)).StripePaymentIntentId);
+
+            var duplicateActiveAttempt = CreatePayment(stripeSchedule, PaymentStatus.Pending);
+            duplicateActiveAttempt.Provider = PaymentProvider.Stripe;
+            duplicateActiveAttempt.StripePaymentIntentId = "pi_test_second";
+            dbContext.Payments.Add(duplicateActiveAttempt);
+            await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync());
+            dbContext.ChangeTracker.Clear();
+
+            var duplicateIntent = CreatePayment(otherSchedule, PaymentStatus.Pending);
+            duplicateIntent.Provider = PaymentProvider.Stripe;
+            duplicateIntent.StripePaymentIntentId = firstStripeAttempt.StripePaymentIntentId;
+            dbContext.Payments.Add(duplicateIntent);
+            await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync());
+            dbContext.ChangeTracker.Clear();
+
+            var persistedAttempt = await dbContext.Payments.SingleAsync(
+                payment => payment.Id == firstStripeAttempt.Id);
+            persistedAttempt.Status = PaymentStatus.Failed;
+            await dbContext.SaveChangesAsync();
+            var retry = CreatePayment(stripeSchedule, PaymentStatus.Pending);
+            retry.Provider = PaymentProvider.Stripe;
+            retry.StripePaymentIntentId = "pi_test_retry";
+            dbContext.Payments.Add(retry);
+            await dbContext.SaveChangesAsync();
+            Assert.Equal(2, await dbContext.Payments.CountAsync(payment =>
+                payment.RentScheduleItemId == stripeSchedule.Id
+                && payment.Provider == PaymentProvider.Stripe));
         }
         finally
         {
