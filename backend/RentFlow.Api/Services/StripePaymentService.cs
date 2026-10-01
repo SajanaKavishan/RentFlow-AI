@@ -195,6 +195,28 @@ public sealed class StripePaymentService(
         return await ApplyVerifiedIntentAsync(payment, intent, cancellationToken);
     }
 
+    public async Task<StripeWebhookProcessingResult> ProcessWebhookAsync(
+        string paymentIntentId,
+        CancellationToken cancellationToken = default)
+    {
+        var payment = await dbContext.Payments.SingleOrDefaultAsync(item =>
+            item.StripePaymentIntentId == paymentIntentId, cancellationToken);
+        if (payment is null)
+        {
+            return StripeWebhookProcessingResult.UnknownPaymentIntent;
+        }
+
+        if (payment.Provider != PaymentProvider.Stripe)
+        {
+            throw PaymentServiceException.Conflict(
+                "The Stripe payment mapping is invalid.");
+        }
+
+        var intent = await RetrieveAsync(paymentIntentId, cancellationToken);
+        await ApplyVerifiedIntentAsync(payment, intent, cancellationToken);
+        return StripeWebhookProcessingResult.Processed;
+    }
+
     private async Task<StripePaymentIntentResult> CreateIntentAsync(
         Payment payment,
         long amountMinorUnits,
@@ -245,6 +267,15 @@ public sealed class StripePaymentService(
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
             : null;
 
+        if (transaction is not null)
+        {
+            // Serialize settlement of this one payment so duplicate webhook and
+            // status requests cannot overwrite its original PaidAt value.
+            await dbContext.Payments.FromSqlInterpolated(
+                $"SELECT * FROM \"Payments\" WHERE \"Id\" = {payment.Id} FOR UPDATE")
+                .ToListAsync(cancellationToken);
+        }
+
         await dbContext.Entry(payment).ReloadAsync(cancellationToken);
         var schedule = await dbContext.RentScheduleItems
             .SingleAsync(item => item.Id == payment.RentScheduleItemId, cancellationToken);
@@ -260,13 +291,7 @@ public sealed class StripePaymentService(
         var safeStatus = SafeStatus(intent.Status);
         if (payment.Status == PaymentStatus.Completed)
         {
-            if (safeStatus != "succeeded")
-            {
-                throw PaymentServiceException.Conflict(
-                    "A completed payment cannot be changed.");
-            }
-
-            return new StripePaymentStatusDto(payment.Id, payment.Status, safeStatus, payment.PaidAt);
+            return new StripePaymentStatusDto(payment.Id, payment.Status, "succeeded", payment.PaidAt);
         }
 
         if (payment.Status == PaymentStatus.Failed)
@@ -309,6 +334,23 @@ public sealed class StripePaymentService(
             }
             catch (DbUpdateException ex) when (IsCompletedPaymentRace(ex))
             {
+                if (transaction is not null)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                }
+
+                dbContext.ChangeTracker.Clear();
+                var anotherCompletionWon = await dbContext.Payments.AsNoTracking()
+                    .AnyAsync(existing => existing.RentScheduleItemId == schedule.Id
+                        && existing.Id != payment.Id
+                        && existing.Status == PaymentStatus.Completed,
+                        cancellationToken);
+                if (!anotherCompletionWon)
+                {
+                    throw PaymentServiceException.TemporaryFailure(
+                        "Payment settlement could not be confirmed. Please retry.");
+                }
+
                 throw PaymentServiceException.Conflict(
                     "This rent schedule item has already been paid.");
             }

@@ -324,6 +324,100 @@ public sealed class StripePaymentServiceTests
         Assert.Equal(PaymentServiceError.Validation, wrongProvider.Error);
     }
 
+    [Fact]
+    public async Task WebhookSuccessUsesStatusSettlementAndDuplicateDoesNotRewritePaidAt()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var created = await fixture.Service.CreateOrResumeAsync(
+            fixture.Schedule.Id, fixture.TenantId);
+        fixture.Gateway.Status = "succeeded";
+
+        Assert.Equal(StripeWebhookProcessingResult.Processed,
+            await fixture.Service.ProcessWebhookAsync("pi_fake_1"));
+        var firstPaidAt = (await fixture.Db.Payments.SingleAsync()).PaidAt;
+        Assert.NotNull(firstPaidAt);
+        Assert.Equal(RentScheduleStatus.Paid, fixture.Schedule.Status);
+
+        await fixture.Service.ProcessWebhookAsync("pi_fake_1");
+        var refreshed = await fixture.Service.GetStatusAsync(created.PaymentId, fixture.TenantId);
+        Assert.Equal(firstPaidAt, refreshed.PaidAt);
+        Assert.Equal(PaymentStatus.Completed, refreshed.PaymentStatus);
+
+        fixture.Gateway.Status = "requires_payment_method";
+        await fixture.Service.ProcessWebhookAsync("pi_fake_1");
+        Assert.Equal(PaymentStatus.Completed, (await fixture.Db.Payments.SingleAsync()).Status);
+        Assert.Equal(firstPaidAt, (await fixture.Db.Payments.SingleAsync()).PaidAt);
+    }
+
+    [Fact]
+    public async Task WebhookRetryableFailureStaysPendingAndLaterSuccessCompletes()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await fixture.Service.CreateOrResumeAsync(fixture.Schedule.Id, fixture.TenantId);
+
+        await fixture.Service.ProcessWebhookAsync("pi_fake_1");
+        Assert.Equal(PaymentStatus.Pending, (await fixture.Db.Payments.SingleAsync()).Status);
+        Assert.Equal(RentScheduleStatus.Pending, fixture.Schedule.Status);
+
+        fixture.Gateway.Status = "succeeded";
+        await fixture.Service.ProcessWebhookAsync("pi_fake_1");
+        Assert.Equal(PaymentStatus.Completed, (await fixture.Db.Payments.SingleAsync()).Status);
+        Assert.Equal(RentScheduleStatus.Paid, fixture.Schedule.Status);
+    }
+
+    [Fact]
+    public async Task WebhookCanceledIsIdempotentAndLeavesScheduleUnpaid()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await fixture.Service.CreateOrResumeAsync(fixture.Schedule.Id, fixture.TenantId);
+        fixture.Gateway.Status = "canceled";
+
+        await fixture.Service.ProcessWebhookAsync("pi_fake_1");
+        await fixture.Service.ProcessWebhookAsync("pi_fake_1");
+
+        Assert.Equal(PaymentStatus.Failed, (await fixture.Db.Payments.SingleAsync()).Status);
+        Assert.Equal(RentScheduleStatus.Pending, fixture.Schedule.Status);
+    }
+
+    [Fact]
+    public async Task WebhookUnknownIntentOrManualMappingCannotSettle()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var unknown = await fixture.Service.ProcessWebhookAsync("pi_unknown");
+        Assert.Equal(StripeWebhookProcessingResult.UnknownPaymentIntent, unknown);
+        Assert.Equal(0, fixture.Gateway.RetrieveCount);
+
+        var manual = fixture.NewPayment(PaymentStatus.Pending, PaymentProvider.Manual);
+        manual.StripePaymentIntentId = "pi_manual_mapping";
+        fixture.Db.Payments.Add(manual);
+        await fixture.Db.SaveChangesAsync();
+        var error = await Assert.ThrowsAsync<PaymentServiceException>(() =>
+            fixture.Service.ProcessWebhookAsync("pi_manual_mapping"));
+        Assert.Equal(PaymentServiceError.Conflict, error.Error);
+        Assert.Equal(PaymentStatus.Pending, manual.Status);
+        Assert.Equal(RentScheduleStatus.Pending, fixture.Schedule.Status);
+        Assert.Equal(0, fixture.Gateway.RetrieveCount);
+    }
+
+    [Theory]
+    [InlineData("amount")]
+    [InlineData("currency")]
+    [InlineData("intent")]
+    [InlineData("metadata")]
+    public async Task WebhookMismatchNeverSettles(string mismatch)
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await fixture.Service.CreateOrResumeAsync(fixture.Schedule.Id, fixture.TenantId);
+        fixture.Gateway.Status = "succeeded";
+        fixture.Gateway.Mismatch = mismatch;
+
+        var error = await Assert.ThrowsAsync<PaymentServiceException>(() =>
+            fixture.Service.ProcessWebhookAsync("pi_fake_1"));
+        Assert.Equal(PaymentServiceError.Conflict, error.Error);
+        Assert.Equal(PaymentStatus.Pending, (await fixture.Db.Payments.SingleAsync()).Status);
+        Assert.Equal(RentScheduleStatus.Pending, fixture.Schedule.Status);
+    }
+
     private sealed class Fixture : IAsyncDisposable
     {
         private Fixture(ApplicationDbContext db, Guid tenantId, LeaseAgreement lease,

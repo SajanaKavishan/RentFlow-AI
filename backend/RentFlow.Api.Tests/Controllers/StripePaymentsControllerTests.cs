@@ -3,6 +3,8 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using RentFlow.Api.Configuration;
 using RentFlow.Api.Controllers;
 using RentFlow.Api.DTOs.Payments;
 using RentFlow.Api.Models;
@@ -117,7 +119,13 @@ public sealed class StripePaymentsControllerTests
     }
 
     private static StripePaymentsController CreateController(
-        IStripePaymentService service, Guid? userId) => new(service, new StubCurrentUser(userId))
+        IStripePaymentService service, Guid? userId) => new(
+            service,
+            new StubCurrentUser(userId),
+            new StripeWebhookVerifier(Options.Create(new StripePaymentOptions
+            {
+                WebhookSecret = "fake-webhook-secret"
+            })))
         {
             ControllerContext = new ControllerContext
             {
@@ -161,5 +169,10 @@ public sealed class StripePaymentsControllerTests
             LastTenantId = tenantId;
             return Task.FromResult(StatusResult!);
         }
+
+        public Task<StripeWebhookProcessingResult> ProcessWebhookAsync(
+            string paymentIntentId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(StripeWebhookProcessingResult.UnknownPaymentIntent);
     }
 }

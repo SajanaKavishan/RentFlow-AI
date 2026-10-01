@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RentFlow.Api.DTOs.Payments;
@@ -11,8 +12,11 @@ namespace RentFlow.Api.Controllers;
 [Authorize(Roles = "Tenant")]
 public sealed class StripePaymentsController(
     IStripePaymentService paymentService,
-    ICurrentUserService currentUserService) : ControllerBase
+    ICurrentUserService currentUserService,
+    IStripeWebhookVerifier webhookVerifier) : ControllerBase
 {
+    private const int MaximumWebhookBytes = 1_048_576;
+
     [HttpPost("stripe/create-intent")]
     public Task<IActionResult> CreateIntent(
         [FromBody] CreateStripeIntentRequestDto request,
@@ -34,6 +38,88 @@ public sealed class StripePaymentsController(
         Response.Headers.CacheControl = "no-store";
         return Ok(response);
     });
+
+    [HttpPost("stripe/webhook")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Webhook(CancellationToken cancellationToken)
+    {
+        if (!Request.Headers.TryGetValue("Stripe-Signature", out var signature)
+            || string.IsNullOrWhiteSpace(signature.ToString()))
+        {
+            return BadRequest(new { message = "Invalid webhook signature." });
+        }
+
+        StripeWebhookEvent stripeEvent;
+        try
+        {
+            var rawBody = await ReadRawBodyAsync(cancellationToken);
+            stripeEvent = webhookVerifier.Verify(rawBody, signature.ToString());
+        }
+        catch (StripeWebhookException ex)
+        {
+            return ex.Error == StripeWebhookError.NotConfigured
+                ? StatusCode(StatusCodes.Status503ServiceUnavailable,
+                    new { message = "Webhook processing is unavailable." })
+                : BadRequest(new { message = "Invalid webhook request." });
+        }
+        catch (Exception ex) when (ex is InvalidDataException or DecoderFallbackException)
+        {
+            return BadRequest(new { message = "Invalid webhook request." });
+        }
+
+        if (stripeEvent.Type is not ("payment_intent.succeeded"
+            or "payment_intent.payment_failed" or "payment_intent.canceled"))
+        {
+            return Ok(new { received = true });
+        }
+
+        if (string.IsNullOrWhiteSpace(stripeEvent.PaymentIntentId))
+        {
+            return Ok(new { received = true });
+        }
+
+        try
+        {
+            await paymentService.ProcessWebhookAsync(
+                stripeEvent.PaymentIntentId, cancellationToken);
+            return Ok(new { received = true });
+        }
+        catch (PaymentServiceException ex) when (ex.Error == PaymentServiceError.Conflict
+            || ex.Error == PaymentServiceError.Validation)
+        {
+            // A verified event with a permanent mismatch cannot be repaired by
+            // replaying the same delivery. Leave internal state untouched.
+            return Ok(new { received = true });
+        }
+        catch
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { message = "Webhook processing is temporarily unavailable." });
+        }
+    }
+
+    private async Task<string> ReadRawBodyAsync(CancellationToken cancellationToken)
+    {
+        await using var body = new MemoryStream();
+        var buffer = new byte[8192];
+        while (true)
+        {
+            var read = await Request.Body.ReadAsync(buffer, cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+
+            if (body.Length + read > MaximumWebhookBytes)
+            {
+                throw new InvalidDataException("Webhook request is too large.");
+            }
+
+            await body.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+        }
+
+        return new UTF8Encoding(false, true).GetString(body.ToArray());
+    }
 
     private async Task<IActionResult> ExecuteAsync(Func<Guid, Task<IActionResult>> action)
     {

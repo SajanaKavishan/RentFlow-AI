@@ -13,4 +13,14 @@ public interface IStripePaymentService
         Guid paymentId,
         Guid tenantId,
         CancellationToken cancellationToken = default);
+
+    Task<StripeWebhookProcessingResult> ProcessWebhookAsync(
+        string paymentIntentId,
+        CancellationToken cancellationToken = default);
+}
+
+public enum StripeWebhookProcessingResult
+{
+    Processed,
+    UnknownPaymentIntent
 }

@@ -170,6 +170,56 @@ public sealed class Component4PaymentSettlementPostgresTests
             Assert.Equal(RentScheduleStatus.Paid,
                 (await dbContext.RentScheduleItems.SingleAsync(item =>
                     item.Id == settlementSchedule.Id)).Status);
+
+            var concurrentSchedule = CreateSchedule(lease.Id);
+            concurrentSchedule.DueDate = concurrentSchedule.DueDate.AddMonths(4);
+            dbContext.RentScheduleItems.Add(concurrentSchedule);
+            await dbContext.SaveChangesAsync();
+            var concurrentPayment = CreatePayment(concurrentSchedule, PaymentStatus.Pending);
+            concurrentPayment.TenantId = offer.TenantId;
+            concurrentPayment.Provider = PaymentProvider.Stripe;
+            concurrentPayment.StripePaymentIntentId = "pi_test_concurrent_settlement";
+            dbContext.Payments.Add(concurrentPayment);
+            await dbContext.SaveChangesAsync();
+
+            var concurrentIntent = new StripePaymentIntentResult(
+                concurrentPayment.StripePaymentIntentId, null, "succeeded",
+                (long)(concurrentPayment.Amount * 100m), "lkr",
+                new Dictionary<string, string>
+                {
+                    ["rentflowPaymentId"] = concurrentPayment.Id.ToString("D"),
+                    ["rentScheduleItemId"] = concurrentSchedule.Id.ToString("D"),
+                    ["tenantId"] = concurrentPayment.TenantId.ToString("D")
+                });
+            await using var webhookContext = new ApplicationDbContext(options);
+            await using var statusContext = new ApplicationDbContext(options);
+            var webhookService = new StripePaymentService(
+                webhookContext, new SettlementGateway(concurrentIntent),
+                Options.Create(new StripePaymentOptions()));
+            var statusService = new StripePaymentService(
+                statusContext, new SettlementGateway(concurrentIntent),
+                Options.Create(new StripePaymentOptions()));
+
+            await Task.WhenAll(
+                webhookService.ProcessWebhookAsync(concurrentIntent.Id),
+                statusService.GetStatusAsync(concurrentPayment.Id, concurrentPayment.TenantId));
+
+            dbContext.ChangeTracker.Clear();
+            var settledPayment = await dbContext.Payments.AsNoTracking()
+                .SingleAsync(payment => payment.Id == concurrentPayment.Id);
+            Assert.Equal(PaymentStatus.Completed, settledPayment.Status);
+            Assert.NotNull(settledPayment.PaidAt);
+            Assert.Equal(RentScheduleStatus.Paid,
+                (await dbContext.RentScheduleItems.AsNoTracking().SingleAsync(item =>
+                    item.Id == concurrentSchedule.Id)).Status);
+            Assert.Equal(1, await dbContext.Payments.CountAsync(payment =>
+                payment.RentScheduleItemId == concurrentSchedule.Id
+                && payment.Status == PaymentStatus.Completed));
+
+            await webhookService.ProcessWebhookAsync(concurrentIntent.Id);
+            Assert.Equal(settledPayment.PaidAt,
+                (await dbContext.Payments.AsNoTracking().SingleAsync(payment =>
+                    payment.Id == concurrentPayment.Id)).PaidAt);
         }
         finally
         {

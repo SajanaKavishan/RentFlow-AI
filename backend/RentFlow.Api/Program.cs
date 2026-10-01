@@ -393,6 +393,7 @@ builder.Services.AddScoped<
     PaymentService>();
 builder.Services.AddScoped<IStripePaymentService, StripePaymentService>();
 builder.Services.AddSingleton<IStripePaymentGateway, StripePaymentGateway>();
+builder.Services.AddSingleton<IStripeWebhookVerifier, StripeWebhookVerifier>();
 
 // =========================================================
 // MAINTENANCE SERVICES
