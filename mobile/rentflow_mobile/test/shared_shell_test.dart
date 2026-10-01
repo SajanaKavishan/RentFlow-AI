@@ -74,6 +74,128 @@ Future<fixtures.MemoryTokenStorage> pumpShell(
 
 void main() {
   testWidgets(
+    'quick actions give three cards room and keep the fourth reachable across phone sizes',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      const labels = ['My Viewings', 'My Lease', 'Pay Rent', 'Documents'];
+      final semantics = tester.ensureSemantics();
+      for (final display in [
+        (size: const Size(320, 640), density: 1.0),
+        (size: const Size(720, 1560), density: 2.0),
+        (size: const Size(1080, 2340), density: 3.0),
+        (size: const Size(240, 640), density: 1.0),
+      ]) {
+        for (final scale in [1.0, 2.0]) {
+          tester.view.physicalSize = display.size;
+          tester.view.devicePixelRatio = display.density;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          final opened = <String>[];
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: AppTheme.build(),
+              home: Scaffold(
+                body: TenantHome(
+                  user: userFor(UserRole.tenant),
+                  onDestinationSelected: (_) =>
+                      fail('Quick action destinations must stay unchanged.'),
+                  onOpenViewings: () => opened.add(labels[0]),
+                  onOpenLease: () => opened.add(labels[1]),
+                  onPayRent: () => opened.add(labels[2]),
+                  onOpenDocuments: () => opened.add(labels[3]),
+                  onOpenNotifications: () {},
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final row = find.byKey(const Key('tenant-quick-actions-row'));
+          final cards = [
+            for (var index = 0; index < 4; index++)
+              find.byKey(ValueKey('tenant-quick-action-$index')),
+          ];
+          final rowTop = tester.getTopLeft(cards.first).dy;
+          final rowWidth = tester.getSize(row).width;
+          for (var index = 0; index < cards.length; index++) {
+            final size = tester.getSize(cards[index]);
+            expect(size.width, greaterThanOrEqualTo(48));
+            expect(tester.getTopLeft(cards[index]).dy, rowTop);
+            expect(size, tester.getSize(cards.first));
+            final label = tester.widget<Text>(find.text(labels[index]));
+            expect(label.maxLines, 2);
+            expect(label.textAlign, TextAlign.center);
+            expect(label.style!.fontSize, 12);
+            expect(label.style!.fontWeight, FontWeight.w600);
+          }
+          if (scale == 1 && display.size.width / display.density >= 320) {
+            expect(tester.getSize(cards.first).height, 88);
+            expect(
+              tester.getBottomRight(cards[2]).dx,
+              lessThanOrEqualTo(tester.getBottomRight(row).dx + 0.01),
+            );
+            expect(
+              tester.getSize(cards.first).width * 3 + 14,
+              closeTo(rowWidth, 0.01),
+            );
+            expect(
+              tester.getTopLeft(cards.last).dx,
+              greaterThan(tester.getBottomRight(row).dx),
+            );
+          } else {
+            expect(
+              tester.getSize(cards.first).width * 4 + 21,
+              greaterThan(rowWidth),
+            );
+            expect(
+              tester.widget<SingleChildScrollView>(row).scrollDirection,
+              Axis.horizontal,
+            );
+          }
+          expect(
+            find.descendant(
+              of: row,
+              matching: find.byIcon(Icons.chevron_right_rounded),
+            ),
+            findsNothing,
+          );
+          final lastCardBottom = tester.getBottomRight(cards.last).dy;
+          expect(
+            tester.getTopLeft(find.text('Recent activity')).dy - lastCardBottom,
+            18,
+          );
+          final headingBottom = tester
+              .getBottomRight(find.text('What would you like to do?'))
+              .dy;
+          expect(rowTop - headingBottom, 8);
+          for (var index = 0; index < cards.length; index++) {
+            await tester.ensureVisible(cards[index]);
+            await tester.pumpAndSettle();
+            expect(
+              tester.getSemantics(find.bySemanticsLabel(labels[index])),
+              matchesSemantics(
+                label: labels[index],
+                isButton: true,
+                hasEnabledState: true,
+                isEnabled: true,
+                hasTapAction: true,
+              ),
+            );
+            // Tapping the card surface, outside the icon, invokes the same callback.
+            await tester.tapAt(
+              tester.getTopLeft(cards[index]) + const Offset(8, 8),
+            );
+          }
+          expect(opened, labels);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        }
+      }
+      semantics.dispose();
+    },
+  );
+
+  testWidgets(
     'populated tenant home stays compact and accessible at mobile widths',
     (tester) async {
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -124,21 +246,32 @@ void main() {
             tester.widget<Container>(journey).decoration! as BoxDecoration;
         expect(decoration.color, AppPalette.darkOlive);
 
-        final cards = ['My Viewings', 'My Lease', 'Pay Rent', 'Documents']
-            .map(
-              (label) => find.ancestor(
-                of: find.text(label),
-                matching: find.byType(AppCard),
-              ),
-            )
-            .toList();
-        expect(tester.getTopLeft(cards[0]).dy, tester.getTopLeft(cards[1]).dy);
-        expect(tester.getTopLeft(cards[2]).dy, tester.getTopLeft(cards[3]).dy);
-        expect(tester.getTopLeft(cards[0]).dx, tester.getTopLeft(cards[2]).dx);
-        expect(tester.getSize(cards[0]).height, lessThan(160));
-        for (final card in cards) {
-          expect(tester.getSize(card), tester.getSize(cards[0]));
+        final cards = [
+          for (var index = 0; index < 4; index++)
+            find.byKey(ValueKey('tenant-quick-action-$index')),
+        ];
+        for (var index = 0; index < cards.length; index++) {
+          expect(
+            tester.getTopLeft(cards[index]).dy,
+            tester.getTopLeft(cards[0]).dy,
+          );
+          expect(tester.getSize(cards[index]), tester.getSize(cards[0]));
+          expect(tester.getSize(cards[index]).height, inInclusiveRange(82, 90));
+          if (index > 0) {
+            expect(
+              tester.getTopLeft(cards[index]).dx -
+                  tester.getBottomRight(cards[index - 1]).dx,
+              closeTo(7, 0.01),
+            );
+          }
         }
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('tenant-quick-actions-row')),
+            matching: find.byIcon(Icons.chevron_right_rounded),
+          ),
+          findsNothing,
+        );
         await tester.ensureVisible(find.text('Documents'));
         await tester.pumpAndSettle();
         expect(

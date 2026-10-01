@@ -273,8 +273,8 @@ class _TenantHomeState extends State<TenantHome> {
               _buildRecommendations(),
               const SizedBox(height: 28),
               const _SectionHeading(title: 'What would you like to do?'),
-              const SizedBox(height: 12),
-              _QuickActionGrid(
+              const SizedBox(height: 8),
+              _QuickActionsRow(
                 actions: [
                   _QuickAction(
                     'My Viewings',
@@ -298,7 +298,7 @@ class _TenantHomeState extends State<TenantHome> {
                   ),
                 ],
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 18),
               _buildActivity(),
             ],
           ),
@@ -816,89 +816,120 @@ class _QuickAction {
   final VoidCallback? onTap;
 }
 
-class _QuickActionGrid extends StatelessWidget {
-  const _QuickActionGrid({required this.actions});
+class _QuickActionsRow extends StatelessWidget {
+  const _QuickActionsRow({required this.actions});
   final List<_QuickAction> actions;
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final width = (constraints.maxWidth - 12) / 2;
-      final textHeight = actions
-          .map(
-            (action) => _measuredHeight(
-              context,
-              TextSpan(
-                text: action.label,
-                style: _style(16, FontWeight.w600, height: 1.25),
+      const gap = 7.0;
+      const visibleCards = 3;
+      const labelStyle = TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        height: 1.25,
+        color: AppPalette.primaryText,
+      );
+      final scaler = MediaQuery.textScalerOf(context);
+      var minimumWidth = 88.0;
+      // At larger text sizes, allow each word to remain legible in two lines.
+      // The row scrolls when these cards no longer fit the available width.
+      if (scaler.scale(12) > 12) {
+        for (final action in actions) {
+          for (final word in action.label.split(' ')) {
+            final painter = TextPainter(
+              text: TextSpan(
+                text: word,
+                style: DefaultTextStyle.of(context).style.merge(labelStyle),
               ),
-              width - 50,
-            ),
-          )
-          .reduce((a, b) => a > b ? a : b);
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: actions
-            .map(
-              (action) => Semantics(
+              textScaler: scaler,
+              textDirection: Directionality.of(context),
+            )..layout();
+            final wordWidth = painter.width.ceilToDouble() + 20;
+            if (wordWidth > minimumWidth) {
+              minimumWidth = wordWidth;
+            }
+            painter.dispose();
+          }
+        }
+      }
+      final fittedWidth =
+          (constraints.maxWidth - gap * (visibleCards - 1)) / visibleCards;
+      final width = fittedWidth < minimumWidth ? minimumWidth : fittedWidth;
+      final labelHeight = scaler.scale(12) * 1.25 * 2;
+      final height = labelHeight + 58;
+      return SingleChildScrollView(
+        key: const Key('tenant-quick-actions-row'),
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (var index = 0; index < actions.length; index++) ...[
+              if (index > 0) const SizedBox(width: gap),
+              Semantics(
                 button: true,
-                enabled: action.onTap != null,
-                label: action.label,
-                onTap: action.onTap,
+                enabled: actions[index].onTap != null,
+                label: actions[index].label,
+                onTap: actions[index].onTap,
                 child: ExcludeSemantics(
                   child: SizedBox(
                     width: width,
-                    child: AppCard(
-                      onTap: action.onTap,
-                      padding: const EdgeInsets.all(14),
-                      child: SizedBox(
-                        height: 54 + textHeight,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                color: AppPalette.softCream,
-                                borderRadius: BorderRadius.circular(12),
+                    height: height,
+                    child: Card(
+                      key: ValueKey('tenant-quick-action-$index'),
+                      margin: EdgeInsets.zero,
+                      elevation: 0,
+                      color: AppPalette.white,
+                      clipBehavior: Clip.antiAlias,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(color: AppPalette.outline),
+                      ),
+                      child: InkWell(
+                        onTap: actions[index].onTap,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: AppPalette.softCream,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  actions[index].icon,
+                                  color: AppPalette.olive,
+                                  size: 19,
+                                ),
                               ),
-                              child: Icon(
-                                action.icon,
-                                color: AppPalette.olive,
-                                size: 22,
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                Expanded(
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                height: labelHeight,
+                                child: Center(
                                   child: Text(
-                                    action.label,
-                                    style: _style(
-                                      16,
-                                      FontWeight.w600,
-                                      height: 1.25,
-                                    ),
+                                    actions[index].label,
+                                    maxLines: 2,
+                                    textAlign: TextAlign.center,
+                                    style: labelStyle,
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                const Icon(
-                                  Icons.chevron_right_rounded,
-                                  size: 18,
-                                  color: AppPalette.secondaryText,
-                                ),
-                              ],
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            )
-            .toList(),
+            ],
+          ],
+        ),
       );
     },
   );
