@@ -63,6 +63,16 @@ public class PaymentService : IPaymentService
                 "A completed payment already exists for this rent schedule item.");
         }
 
+        if (await _dbContext.Payments.AnyAsync(existingPayment =>
+                existingPayment.RentScheduleItemId == rentScheduleItem.Id
+                && existingPayment.Provider == PaymentProvider.Stripe
+                && existingPayment.Status == PaymentStatus.Pending,
+                cancellationToken))
+        {
+            throw PaymentServiceException.Conflict(
+                "A Stripe payment attempt is pending for this rent schedule item.");
+        }
+
         var payment = new Payment
         {
             RentScheduleItemId = rentScheduleItem.Id,
@@ -177,6 +187,16 @@ public class PaymentService : IPaymentService
         {
             throw PaymentServiceException.Conflict(
                 "A completed payment already exists for this rent schedule item.");
+        }
+
+        if (await _dbContext.Payments.AnyAsync(existingPayment =>
+                existingPayment.RentScheduleItemId == payment.RentScheduleItemId
+                && existingPayment.Provider == PaymentProvider.Stripe
+                && existingPayment.Status == PaymentStatus.Pending,
+                cancellationToken))
+        {
+            throw PaymentServiceException.Conflict(
+                "A Stripe payment attempt is pending for this rent schedule item.");
         }
 
         var previousPaidAt = payment.PaidAt;

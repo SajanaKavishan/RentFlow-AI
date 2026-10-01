@@ -3,6 +3,7 @@ namespace RentFlow.Api.Configuration;
 public sealed class StripePaymentOptions
 {
     public const string SectionName = "Payments";
+    public const string KeysSectionName = "Stripe";
 
     public string Currency { get; set; } = "LKR";
 

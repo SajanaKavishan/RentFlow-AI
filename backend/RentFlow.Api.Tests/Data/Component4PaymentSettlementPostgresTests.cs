@@ -1,7 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
+using RentFlow.Api.Configuration;
 using RentFlow.Api.Data;
 using RentFlow.Api.Models;
+using RentFlow.Api.Services;
+using RentFlow.Api.Services.Interfaces;
 using Xunit;
 
 namespace RentFlow.Api.Tests.Data;
@@ -129,6 +133,43 @@ public sealed class Component4PaymentSettlementPostgresTests
             Assert.Equal(2, await dbContext.Payments.CountAsync(payment =>
                 payment.RentScheduleItemId == stripeSchedule.Id
                 && payment.Provider == PaymentProvider.Stripe));
+
+            var settlementSchedule = CreateSchedule(lease.Id);
+            settlementSchedule.DueDate = settlementSchedule.DueDate.AddMonths(3);
+            dbContext.RentScheduleItems.Add(settlementSchedule);
+            await dbContext.SaveChangesAsync();
+            var settlementPayment = CreatePayment(settlementSchedule, PaymentStatus.Pending);
+            settlementPayment.TenantId = offer.TenantId;
+            settlementPayment.Provider = PaymentProvider.Stripe;
+            settlementPayment.StripePaymentIntentId = "pi_test_verified_settlement";
+            dbContext.Payments.Add(settlementPayment);
+            await dbContext.SaveChangesAsync();
+
+            var intent = new StripePaymentIntentResult(
+                settlementPayment.StripePaymentIntentId, null, "succeeded",
+                (long)(settlementPayment.Amount * 100m), "lkr",
+                new Dictionary<string, string>
+                {
+                    ["rentflowPaymentId"] = settlementPayment.Id.ToString("D"),
+                    ["rentScheduleItemId"] = settlementSchedule.Id.ToString("D"),
+                    ["tenantId"] = settlementPayment.TenantId.ToString("D")
+                });
+            var stripeService = new StripePaymentService(
+                dbContext, new SettlementGateway(intent),
+                Options.Create(new StripePaymentOptions()));
+            var firstSettlement = await stripeService.GetStatusAsync(
+                settlementPayment.Id, settlementPayment.TenantId);
+            var secondSettlement = await stripeService.GetStatusAsync(
+                settlementPayment.Id, settlementPayment.TenantId);
+            Assert.Equal(PaymentStatus.Completed, firstSettlement.PaymentStatus);
+            Assert.Equal(firstSettlement.PaidAt, secondSettlement.PaidAt);
+            dbContext.ChangeTracker.Clear();
+            Assert.Equal(PaymentStatus.Completed,
+                (await dbContext.Payments.SingleAsync(payment =>
+                    payment.Id == settlementPayment.Id)).Status);
+            Assert.Equal(RentScheduleStatus.Paid,
+                (await dbContext.RentScheduleItems.SingleAsync(item =>
+                    item.Id == settlementSchedule.Id)).Status);
         }
         finally
         {
@@ -222,4 +263,21 @@ public sealed class Component4PaymentSettlementPostgresTests
         PaymentMethod = "BankTransfer",
         Status = status
     };
+
+    private sealed class SettlementGateway(StripePaymentIntentResult intent)
+        : IStripePaymentGateway
+    {
+        public Task<StripePaymentIntentResult> CreateAsync(
+            StripePaymentIntentRequest request,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Settlement test must not create an intent.");
+
+        public Task<StripePaymentIntentResult> RetrieveAsync(
+            string paymentIntentId,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal(intent.Id, paymentIntentId);
+            return Task.FromResult(intent);
+        }
+    }
 }

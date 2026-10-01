@@ -84,6 +84,7 @@ builder.Services.AddOptions<PasswordResetOptions>()
 
 builder.Services.AddOptions<StripePaymentOptions>()
     .Bind(builder.Configuration.GetSection(StripePaymentOptions.SectionName))
+    .Bind(builder.Configuration.GetSection(StripePaymentOptions.KeysSectionName))
     .Validate(options => options.HasValidCurrency,
         "Payments:Currency must be LKR.")
     .ValidateOnStart();
@@ -390,6 +391,8 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IPaymentService,
     PaymentService>();
+builder.Services.AddScoped<IStripePaymentService, StripePaymentService>();
+builder.Services.AddSingleton<IStripePaymentGateway, StripePaymentGateway>();
 
 // =========================================================
 // MAINTENANCE SERVICES
