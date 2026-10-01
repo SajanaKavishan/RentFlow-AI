@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
@@ -46,6 +47,9 @@ class AuthService {
         body: jsonEncode(body),
         authenticated: false,
       );
+      if (kDebugMode) {
+        debugPrint('[AuthService] $path status=${response.statusCode}');
+      }
       _throwForError(
         response,
         fallback: 'Authentication could not be completed.',
@@ -62,7 +66,10 @@ class AuthService {
         accessToken: token,
         user: CurrentUser.fromJson(userJson),
       );
-    } on http.ClientException {
+    } on http.ClientException catch (error) {
+      if (kDebugMode) {
+        debugPrint('[AuthService] $path network error: $error');
+      }
       throw const AuthException('Unable to connect. Please try again.');
     } on FormatException {
       throw const AuthException(
@@ -78,7 +85,10 @@ class AuthService {
       );
       _throwForError(response, fallback: 'Your session is no longer valid.');
       return CurrentUser.fromJson(_object(response.body));
-    } on http.ClientException {
+    } on http.ClientException catch (error) {
+      if (kDebugMode) {
+        debugPrint('[AuthService] /api/auth/me network error: $error');
+      }
       throw const AuthException('Unable to connect. Please try again.');
     } on FormatException {
       throw const AuthException(

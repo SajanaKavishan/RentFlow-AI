@@ -14,11 +14,13 @@ class PropertyMatchingScreen extends StatefulWidget {
     required this.propertyApiService,
     this.viewingApiService,
     this.rentalApplicationApiService,
+    this.initialResult,
   });
 
   final PropertyApiService propertyApiService;
   final ViewingApiService? viewingApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
+  final PropertyMatchingResponse? initialResult;
 
   @override
   State<PropertyMatchingScreen> createState() => _PropertyMatchingScreenState();
@@ -34,6 +36,12 @@ class _PropertyMatchingScreenState extends State<PropertyMatchingScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   PropertyMatchingResponse? _result;
+
+  @override
+  void initState() {
+    super.initState();
+    _result = widget.initialResult;
+  }
 
   @override
   void dispose() {

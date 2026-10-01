@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../features/auth/models/current_user.dart';
+import '../../features/application_documents/screens/tenant_documents_screen.dart';
+import '../../features/tenant_lease_payments/screens/tenant_lease_payments_screen.dart';
+import '../../features/tenant_lease_payments/services/tenant_lease_payments_api_service.dart';
 import '../../features/maintenance/screens/assigned_work_screen.dart';
 import '../../features/maintenance/screens/my_maintenance_requests_screen.dart';
 import '../../features/maintenance/services/maintenance_api_service.dart';
@@ -91,11 +94,21 @@ class _SharedAppShellState extends State<SharedAppShell>
   }
 
   void _openDocuments() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => TenantDocumentsScreen(
+          rentalApplicationApiService: widget.rentalApplicationApiService,
+          propertyApiService: widget.propertyApiService,
+        ),
+      ),
+    );
+  }
+
+  void _openApplicationDocuments() {
     AppSnackbars.show(
       context,
       message: 'Open an application to view or manage its documents.',
     );
-
     _selectDestination(RoleDestinationId.applications);
   }
 
@@ -146,40 +159,24 @@ class _SharedAppShellState extends State<SharedAppShell>
     await _refreshUnreadCount();
   }
 
-  void _openLease() => _openPendingTenantModule(
-    title: 'My Lease',
-    explanation:
-        'Lease details will appear here after the lease module is integrated.',
-    owner: 'Lease management',
-  );
+  void _openLease() => _openTenantAccount(TenantAccountSection.lease);
+  void _openPayRent() => _openTenantAccount(TenantAccountSection.rent);
 
-  void _openPayRent() => _openPendingTenantModule(
-    title: 'Pay Rent',
-    explanation:
-        'Rent payments will appear here after the payment module is integrated.',
-    owner: 'Payments',
-  );
-
-  void _openPendingTenantModule({
-    required String title,
-    required String explanation,
-    required String owner,
-  }) {
+  void _openTenantAccount(TenantAccountSection section) {
+    final client =
+        widget.rentalApplicationApiService?.apiClient ??
+        widget.propertyApiService?.apiClient ??
+        widget.viewingApiService?.apiClient ??
+        widget.notificationApiService?.apiClient ??
+        widget.maintenanceApiService?.apiClient;
     Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => Scaffold(
-          appBar: AppBar(
-            title: Text(title),
-            bottom: const PreferredSize(
-              preferredSize: Size.fromHeight(1),
-              child: Divider(height: 1),
-            ),
-          ),
-          body: ModuleUnavailableState(
-            title: title,
-            explanation: explanation,
-            owner: owner,
-          ),
+      MaterialPageRoute(
+        builder: (_) => TenantLeasePaymentsScreen(
+          section: section,
+          apiService: client == null
+              ? null
+              : TenantLeasePaymentsApiService(client),
+          propertyApiService: widget.propertyApiService,
         ),
       ),
     );
@@ -300,7 +297,7 @@ class _SharedAppShellState extends State<SharedAppShell>
       DestinationExperience.profile => SharedProfileContent(
         user: widget.user,
         onOpenApplications: widget.user.role == UserRole.tenant
-            ? _openDocuments
+            ? _openApplicationDocuments
             : null,
       ),
 
@@ -375,6 +372,9 @@ class _SharedAppShellState extends State<SharedAppShell>
         user: widget.user,
         viewingApiService: widget.viewingApiService,
         rentalApplicationApiService: widget.rentalApplicationApiService,
+        propertyApiService: widget.propertyApiService,
+        notificationApiService: widget.notificationApiService,
+        maintenanceApiService: widget.maintenanceApiService,
         onDestinationSelected: _selectDestination,
         onOpenViewings: _openViewings,
         onOpenLease: _openLease,

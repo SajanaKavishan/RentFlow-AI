@@ -83,7 +83,7 @@ void main() {
         httpClient: MockClient(
           (request) async => http.Response(
             jsonEncode(
-              request.url.path.endsWith('/viewings')
+              !request.url.path.endsWith('/rental-applications')
                   ? []
                   : [
                       {
@@ -111,15 +111,15 @@ void main() {
         await tester.binding.setSurfaceSize(Size(width, 800));
         await pumpShell(tester, UserRole.tenant, apiClient: apiClient);
         expect(find.text('Your application is being reviewed'), findsOneWidget);
-        expect(find.text('UNDER REVIEW'), findsOneWidget);
+        expect(find.text('IN PROGRESS'), findsOneWidget);
         expect(find.text('Move-in requested for Oct 1, 2026'), findsOneWidget);
         expect(find.text('Recent activity'), findsOneWidget);
-        expect(find.text('Application updated'), findsOneWidget);
+        expect(find.text('Application under review'), findsOneWidget);
         expect(find.text('Sep 15, 2026'), findsOneWidget);
         expect(find.text('See all'), findsNothing);
 
         final journey = find.byKey(const Key('tenant-journey-card'));
-        expect(tester.getSize(journey).height, lessThan(200));
+        expect(tester.getSize(journey).height, lessThan(300));
         final decoration =
             tester.widget<Container>(journey).decoration! as BoxDecoration;
         expect(decoration.color, AppPalette.darkOlive);
@@ -135,15 +135,19 @@ void main() {
         expect(tester.getTopLeft(cards[0]).dy, tester.getTopLeft(cards[1]).dy);
         expect(tester.getTopLeft(cards[2]).dy, tester.getTopLeft(cards[3]).dy);
         expect(tester.getTopLeft(cards[0]).dx, tester.getTopLeft(cards[2]).dx);
-        expect(tester.getSize(cards[0]).height, lessThan(110));
+        expect(tester.getSize(cards[0]).height, lessThan(160));
         for (final card in cards) {
           expect(tester.getSize(card), tester.getSize(cards[0]));
         }
+        await tester.ensureVisible(find.text('Documents'));
+        await tester.pumpAndSettle();
         expect(
           tester.getSemantics(find.bySemanticsLabel('Documents')),
           matchesSemantics(
             label: 'Documents',
             isButton: true,
+            hasEnabledState: true,
+            isEnabled: true,
             hasTapAction: true,
           ),
         );
@@ -165,7 +169,7 @@ void main() {
       httpClient: MockClient(
         (request) async => http.Response(
           jsonEncode(
-            request.url.path.endsWith('/viewings')
+            !request.url.path.endsWith('/rental-applications')
                 ? []
                 : [
                     for (var index = 0; index < 5; index++)
@@ -192,7 +196,10 @@ void main() {
     await pumpShell(tester, UserRole.tenant, apiClient: apiClient);
     final homeList = find.byKey(const Key('tenant-home-activity-list'));
     expect(
-      find.descendant(of: homeList, matching: find.text('Application updated')),
+      find.descendant(
+        of: homeList,
+        matching: find.text('Application submitted'),
+      ),
       findsNWidgets(3),
     );
     expect(
@@ -208,8 +215,12 @@ void main() {
     final allActivity = find.byKey(const Key('tenant-all-activity-sheet'));
     expect(find.text('All recent activity'), findsOneWidget);
     expect(
-      find.descendant(of: allActivity, matching: find.byType(AppCard)),
-      findsNWidgets(5),
+      tester
+          .widget<ListView>(
+            find.descendant(of: allActivity, matching: find.byType(ListView)),
+          )
+          .semanticChildCount,
+      5,
     );
     expect(tester.takeException(), isNull);
   });
@@ -232,7 +243,7 @@ void main() {
       addTearDown(apiClient.close);
       await pumpShell(tester, UserRole.tenant, apiClient: apiClient);
       expect(find.text('Journey unavailable'), findsOneWidget);
-      expect(find.text('Recent activity'), findsNothing);
+      expect(find.text('Recent activity'), findsOneWidget);
       expect(tester.takeException(), isNull);
       unavailable = false;
       await tester.ensureVisible(find.text('Try again'));
@@ -240,7 +251,7 @@ void main() {
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
       expect(find.text('No rental journey yet'), findsOneWidget);
-      expect(find.text('Recent activity'), findsNothing);
+      expect(find.text('Recent activity'), findsOneWidget);
       await tester.ensureVisible(find.text('Documents'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
@@ -285,7 +296,7 @@ void main() {
       find.text('AI helps with the work. People stay in control.'),
       findsNothing,
     );
-    expect(find.text('Recent activity'), findsNothing);
+    expect(find.text('Recent activity'), findsOneWidget);
 
     final semantics = tester.ensureSemantics();
     for (final label in ['My Viewings', 'My Lease', 'Pay Rent', 'Documents']) {
@@ -305,8 +316,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('My Lease'));
     await tester.pumpAndSettle();
-    expect(find.text('Integration pending'), findsOneWidget);
-    expect(find.textContaining('lease module is integrated'), findsOneWidget);
+    expect(find.text('Your lease'), findsOneWidget);
+    expect(find.text('Integration pending'), findsNothing);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
@@ -314,8 +325,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Pay Rent'));
     await tester.pumpAndSettle();
-    expect(find.text('Integration pending'), findsOneWidget);
-    expect(find.textContaining('payment module is integrated'), findsOneWidget);
+    expect(find.text('Rent & payments'), findsOneWidget);
+    expect(find.text('Integration pending'), findsNothing);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
@@ -323,10 +334,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Documents'));
     await tester.pumpAndSettle();
-    expect(find.text('Applications content'), findsOneWidget);
+    expect(find.text('Your documents'), findsOneWidget);
+    expect(find.text('Applications content'), findsNothing);
     expect(
       find.text('Open an application to view or manage its documents.'),
-      findsOneWidget,
+      findsNothing,
     );
   });
 

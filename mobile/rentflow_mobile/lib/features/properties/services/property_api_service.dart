@@ -174,6 +174,27 @@ class PropertyApiService {
     return _parsePropertyMatchingResponse(response.body);
   }
 
+  Future<bool> hasSavedMatchPreferences() async {
+    final response = await _send(
+      () =>
+          apiClient.get(apiClient.buildUri('/api/tenant/property-preferences')),
+    );
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic> || decoded['isConfigured'] is! bool) {
+      throw const FormatException('Invalid saved preferences response.');
+    }
+    return decoded['isConfigured'] as bool;
+  }
+
+  Future<PropertyMatchingResponse> getSavedPropertyMatches() async {
+    final response = await _send(
+      () => apiClient.get(
+        apiClient.buildUri('${ApiConstants.propertiesPath}/matches'),
+      ),
+    );
+    return _parsePropertyMatchingResponse(response.body);
+  }
+
   Future<http.Response> _send(Future<http.Response> Function() request) async {
     late final http.Response response;
 
