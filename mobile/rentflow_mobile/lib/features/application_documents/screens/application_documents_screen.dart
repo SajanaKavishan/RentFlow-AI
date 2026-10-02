@@ -998,7 +998,10 @@ class _EmptyDocumentsState extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           const Text(
             'No documents uploaded',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              fontSize: AppTypography.sectionTitleSize,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(

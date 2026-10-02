@@ -98,7 +98,9 @@ public sealed class ViewingAvailabilityService(ApplicationDbContext context, Tim
         catch (InvalidTimeZoneException) { throw ViewingServiceException.Validation("The scheduling timezone is invalid."); }
     }
 
-    public async Task<ViewingSlotsDto> GetSlotsAsync(Guid id, DateOnly date, CancellationToken ct = default)
+    // Existing clients retain bookable-only slots. New clients explicitly request blocked metadata.
+    public async Task<ViewingSlotsDto> GetSlotsAsync(Guid id, DateOnly date, CancellationToken ct = default,
+        bool includeUnavailable = false)
     {
         var property = await GetPropertyAsync(id, ct);
         if (!property.IsAvailable) throw ViewingServiceException.Conflict("This property is not accepting viewing requests.");
@@ -129,11 +131,14 @@ public sealed class ViewingAvailabilityService(ApplicationDbContext context, Tim
             var instant = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(local, zone));
             var finish = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localEnd, zone));
             if (instant <= Now || finish - instant != TimeSpan.FromMinutes(schedule.SlotDurationMinutes)) continue;
-            if (approved.Any(v => Overlaps(v, instant, finish))) continue;
+            var blocked = approved.Any(v => Overlaps(v, instant, finish));
+            if (blocked && !includeUnavailable) continue;
             slots.Add(new(local.ToString("HH:mm", CultureInfo.InvariantCulture),
-                local.ToString("h:mm tt", CultureInfo.InvariantCulture), instant));
+                local.ToString("h:mm tt", CultureInfo.InvariantCulture), instant,
+                !blocked, blocked ? "ApprovedViewing" : null));
         }
-        return new(date, schedule.TimeZoneId, schedule.SlotDurationMinutes, slots, slots.Count == 0 ? "empty" : "available");
+        return new(date, schedule.TimeZoneId, schedule.SlotDurationMinutes, slots,
+            slots.Any(s => s.IsAvailable) ? "available" : "empty");
     }
 
     public async Task<bool> HasApprovedOverlapAsync(Guid id, DateTimeOffset start, int duration,

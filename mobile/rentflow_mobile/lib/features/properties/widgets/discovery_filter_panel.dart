@@ -209,7 +209,7 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
               Text(
                 _maxRent == null ? 'Any rent' : 'LKR ${_money(_maxRent!)}',
                 style: const TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTypography.bodySmallSize,
                   fontWeight: FontWeight.w700,
                   color: AppPalette.olive,
                 ),
@@ -245,7 +245,7 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
                 child: Text(
                   'LKR 0',
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: AppTypography.captionSize,
                     color: AppPalette.secondaryText,
                   ),
                 ),
@@ -256,7 +256,7 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
                   'LKR ${_money(_rentLimit)}+',
                   textAlign: TextAlign.end,
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: AppTypography.captionSize,
                     color: AppPalette.secondaryText,
                   ),
                 ),
@@ -270,7 +270,7 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
             key: const Key('filter-city'),
             controller: _city,
             enabled: !_selectingTown,
-            style: const TextStyle(fontSize: 13),
+            style: AppTypography.bodySmall,
             textCapitalization: TextCapitalization.words,
             inputFormatters: [LengthLimitingTextInputFormatter(100)],
             textInputAction: TextInputAction.done,
@@ -343,7 +343,7 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
                           Text(
                             town.town,
                             style: const TextStyle(
-                              fontSize: 13,
+                              fontSize: AppTypography.bodySmallSize,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -351,7 +351,7 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
                             Text(
                               town.description,
                               style: const TextStyle(
-                                fontSize: 11,
+                                fontSize: AppTypography.captionSize,
                                 color: AppPalette.secondaryText,
                               ),
                             ),
@@ -365,7 +365,7 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
                       child: Text(
                         'Google Maps',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: AppTypography.labelSize,
                           color: Color(0xFF5F6368),
                         ),
                       ),
@@ -381,7 +381,7 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
               child: Text(
                 _townError!,
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: AppTypography.captionSize,
                   color: AppPalette.secondaryText,
                 ),
               ),
@@ -436,7 +436,7 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
                   _more
                       ? 'View less'
                       : 'View more (${options.length - shown.length})',
-                  style: const TextStyle(fontSize: 12),
+                  style: AppTypography.label,
                 ),
               ),
             ),
@@ -457,7 +457,10 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
             ),
             child: const Text(
               'Show results',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                fontSize: AppTypography.bodySmallSize,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           if (!_draft.isEmpty)
@@ -467,10 +470,7 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
                 FocusScope.of(context).unfocus();
                 widget.onApply(const DiscoveryFilters());
               },
-              child: const Text(
-                'Clear filters',
-                style: TextStyle(fontSize: 12),
-              ),
+              child: const Text('Clear filters', style: AppTypography.label),
             ),
         ],
       ),
@@ -479,7 +479,10 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
 
   Widget _heading(String text) => Text(
     text,
-    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+    style: const TextStyle(
+      fontSize: AppTypography.bodySmallSize,
+      fontWeight: FontWeight.w600,
+    ),
   );
 
   Widget _chip(String label, bool selected, VoidCallback toggle, {Key? key}) =>
@@ -492,7 +495,7 @@ class _DiscoveryFilterPanelState extends State<DiscoveryFilterPanel> {
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: AppTypography.captionSize,
               color: selected ? AppPalette.darkOlive : AppPalette.secondaryText,
             ),
           ),

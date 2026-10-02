@@ -75,10 +75,7 @@ class SharedProfileContent extends StatelessWidget {
                 foregroundColor: AppPalette.darkOlive,
                 child: Text(
                   _initials(user.fullName),
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: AppTypography.pageTitle,
                 ),
               ),
               const SizedBox(height: AppSpacing.base),
@@ -186,7 +183,7 @@ class SharedProfileContent extends StatelessWidget {
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: AppPalette.secondaryText.withValues(alpha: 0.55),
-            fontSize: 11,
+            fontSize: AppTypography.captionSize,
           ),
         ),
         const SizedBox(height: AppSpacing.sm),

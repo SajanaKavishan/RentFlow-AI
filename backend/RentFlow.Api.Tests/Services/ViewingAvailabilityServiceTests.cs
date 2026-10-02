@@ -109,6 +109,14 @@ public sealed class ViewingAvailabilityServiceTests
         var result = await service.GetSlotsAsync(property.Id, Date);
         Assert.Equal(count, result.Slots.Count);
         Assert.Contains(result.Slots, slot => slot.LocalTime == "11:00");
+        Assert.All(result.Slots, slot => Assert.True(slot.IsAvailable));
+        var enriched = await service.GetSlotsAsync(property.Id, Date, includeUnavailable: true);
+        Assert.Equal(8, enriched.Slots.Count);
+        Assert.Equal(8 - count, enriched.Slots.Count(slot => !slot.IsAvailable));
+        Assert.All(enriched.Slots.Where(slot => !slot.IsAvailable),
+            slot => Assert.Equal("ApprovedViewing", slot.UnavailableReason));
+        Assert.All(enriched.Slots.Where(slot => slot.IsAvailable), slot => Assert.Null(slot.UnavailableReason));
+        Assert.True(enriched.Slots.Single(slot => slot.LocalTime == "11:00").IsAvailable);
     }
 
     [Fact]
@@ -141,7 +149,7 @@ public sealed class ViewingAvailabilityServiceTests
         await schedule.SaveAsync(property.Id, property.LandlordId, Schedule(property.Id));
         var slots = await schedule.GetSlotsAsync(property.Id, Date);
         var service = new ViewingService(db, Time);
-        var input = new CreateViewingRequestDto { PropertyId = property.Id, RequestedDateTime = slots.Slots[0].RequestedDateTime };
+        var input = new CreateViewingRequestDto { TenantMessage = "Please arrange a visit.", PropertyId = property.Id, RequestedDateTime = slots.Slots[0].RequestedDateTime };
         var first = await service.CreateAsync(Guid.NewGuid(), input);
         var second = await service.CreateAsync(Guid.NewGuid(), input);
         Assert.Equal(ViewingStatus.Pending, first.Status); Assert.Equal(60, first.DurationMinutes);
@@ -161,7 +169,7 @@ public sealed class ViewingAvailabilityServiceTests
         Assert.Equal(30, next.DurationMinutes); Assert.Equal(60, (await service.GetByIdAsync(first.Id))!.DurationMinutes);
         await service.CancelAsync(first.Id, first.TenantId);
         await Assert.ThrowsAsync<ViewingServiceException>(() => service.CreateAsync(first.TenantId,
-            new() { PropertyId = property.Id, RequestedDateTime = slots.Slots[0].RequestedDateTime }));
+            new() { TenantMessage = "Please arrange a visit.", PropertyId = property.Id, RequestedDateTime = slots.Slots[0].RequestedDateTime }));
     }
 
     [Fact]

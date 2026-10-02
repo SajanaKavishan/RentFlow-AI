@@ -31,7 +31,7 @@ class AuthShell extends StatelessWidget {
         primary: AppPalette.authPrimary,
         onPrimary: AppPalette.authCard,
       ),
-      inputDecorationTheme: InputDecorationTheme(
+      inputDecorationTheme: Theme.of(context).inputDecorationTheme.copyWith(
         filled: true,
         isDense: true,
         fillColor: AppPalette.authInput,
@@ -61,14 +61,14 @@ class AuthShell extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.authField),
           ),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          textStyle: AppTypography.button,
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppPalette.authPrimary,
           minimumSize: const Size(44, 44),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          textStyle: AppTypography.button,
         ),
       ),
     );
@@ -119,9 +119,11 @@ class AuthShell extends StatelessWidget {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              SizedBox(
+                              Container(
                                 width: double.infinity,
-                                height: 44,
+                                constraints: const BoxConstraints(
+                                  minHeight: 44,
+                                ),
                                 child: Stack(
                                   alignment: Alignment.center,
                                   children: [
@@ -150,20 +152,16 @@ class AuthShell extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              const FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  'Find your perfect home, smarter.',
-                                  key: Key('auth-hero'),
-                                  maxLines: 1,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: AppPalette.authCard,
-                                    fontSize: 23,
-                                    height: 1.15,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -0.65,
-                                  ),
+                              const Text(
+                                'Find your perfect home, smarter.',
+                                key: Key('auth-hero'),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppPalette.authCard,
+                                  fontSize: AppTypography.sectionTitleSize,
+                                  height: 1.15,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.65,
                                 ),
                               ),
                               SizedBox(height: gap),
@@ -218,7 +216,7 @@ class AuthFieldLabel extends StatelessWidget {
     label,
     style: const TextStyle(
       color: AppPalette.authText,
-      fontSize: 12,
+      fontSize: AppTypography.labelSize,
       fontWeight: FontWeight.w700,
     ),
   );

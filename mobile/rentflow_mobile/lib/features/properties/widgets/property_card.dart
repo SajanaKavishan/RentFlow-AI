@@ -236,7 +236,7 @@ class PropertyCard extends StatelessWidget {
             key: ValueKey('property-rent-${property.id}'),
             textAlign: stacked ? TextAlign.start : TextAlign.end,
             style: const TextStyle(
-              fontSize: 15,
+              fontSize: AppTypography.bodyLargeSize,
               fontWeight: FontWeight.w700,
               color: AppPalette.darkOlive,
             ),
@@ -245,7 +245,7 @@ class PropertyCard extends StatelessWidget {
             '/ month',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: AppPalette.secondaryText,
-              fontSize: 11,
+              fontSize: AppTypography.captionSize,
             ),
           ),
         ],

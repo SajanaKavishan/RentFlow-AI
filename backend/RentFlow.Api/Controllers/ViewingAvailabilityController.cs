@@ -31,13 +31,14 @@ public sealed class ViewingAvailabilityController(ViewingAvailabilityService ser
 
     [HttpGet("viewing-slots")]
     [Authorize(Roles = "Tenant")]
-    public Task<ActionResult<ViewingSlotsDto>> Slots(Guid propertyId, [FromQuery] string? date, CancellationToken ct) =>
+    public Task<ActionResult<ViewingSlotsDto>> Slots(Guid propertyId, [FromQuery] string? date, CancellationToken ct,
+        [FromQuery] bool includeUnavailable = false) =>
         Execute(async () =>
         {
             if (!DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
                 || parsed == DateOnly.MaxValue)
                 throw ViewingServiceException.Validation("Date must be a calendar date in YYYY-MM-DD format.");
-            return await service.GetSlotsAsync(propertyId, parsed, ct);
+            return await service.GetSlotsAsync(propertyId, parsed, ct, includeUnavailable);
         });
 
     private async Task EnsureOwner(Guid propertyId, CancellationToken ct)

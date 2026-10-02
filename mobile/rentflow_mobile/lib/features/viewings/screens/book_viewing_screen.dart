@@ -41,6 +41,10 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
   bool _submitting = false;
   bool _sent = false;
   int _loadVersion = 0;
+  bool get _noteValid =>
+      _messageController.text.trim().isNotEmpty &&
+      // Match the backend's existing UTF-16 string-length contract.
+      _messageController.text.trim().length <= 500;
 
   bool get _propertyValid =>
       widget.propertyId.trim().isNotEmpty &&
@@ -137,14 +141,10 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
         !_propertyValid ||
         _date == null ||
         slot == null ||
+        !slot.isAvailable ||
+        !_noteValid ||
         _loading ||
         !(_availability?.slots.contains(slot) ?? false)) {
-      return;
-    }
-    if (_messageController.text.characters.length > 500) {
-      setState(
-        () => _submissionError = 'The note must not exceed 500 characters.',
-      );
       return;
     }
     FocusScope.of(context).unfocus();
@@ -158,7 +158,7 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
         propertyId: widget.propertyId,
         requestedDateTime: slot.requestedDateTime,
         requestedDateTimeIso: slot.requestedDateTimeIso,
-        tenantMessage: message.isEmpty ? null : message,
+        tenantMessage: message,
       );
       if (!mounted) return;
       if (result.status != ViewingStatus.pending ||
@@ -199,12 +199,7 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
         : MaterialLocalizations.of(context).formatMediumDate(_date!);
     return Scaffold(
       backgroundColor: AppPalette.background,
-      appBar: AppBar(
-        title: const Text(
-          'REQUEST A VIEWING',
-          style: TextStyle(fontSize: 13, letterSpacing: 1.2),
-        ),
-      ),
+      appBar: AppBar(leading: const BackButton()),
       body: AuthenticatedPage(
         maxWidth: 580,
         child: _sent
@@ -213,15 +208,24 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Choose a time',
+                    'Request a viewing',
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Select your preferred date and time',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 18),
                   _propertyCard(),
                   const SizedBox(height: 24),
                   const SectionHeader(title: 'Choose a date'),
                   const SizedBox(height: 8),
                   AppCard(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     child: ListTile(
                       key: const ValueKey('viewing-date-selector'),
                       contentPadding: EdgeInsets.zero,
@@ -232,56 +236,40 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  const SectionHeader(title: 'Choose a time'),
+                  const SectionHeader(title: 'Available times'),
                   const SizedBox(height: 8),
                   _slotPicker(),
                   const SizedBox(height: 24),
                   const SectionHeader(
-                    title: 'A note for the landlord',
-                    subtitle: 'Optional',
+                    title: 'A note for the landlord *',
+                    subtitle: 'Required',
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     key: const ValueKey('viewing-message'),
                     controller: _messageController,
                     enabled: !_submitting,
-                    maxLines: 3,
+                    minLines: 3,
+                    maxLines: 5,
                     maxLength: 500,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      hintText: "Anything you'd like them to know?",
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppPalette.primaryText,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Add anything helpful about your visit.',
+                      counterText:
+                          '${_messageController.text.trim().length}/500',
+                      errorText:
+                          _messageController.text.isNotEmpty && !_noteValid
+                          ? _messageController.text.trim().isEmpty
+                                ? 'Add a note for the landlord.'
+                                : 'The note must not exceed 500 characters.'
+                          : null,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  AppCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Requested viewing',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(_title),
-                        Text(
-                          '$dateLabel · ${_slot?.displayTime ?? 'Choose a time'}',
-                        ),
-                        if (_availability != null)
-                          Text(
-                            'Times in ${_availability!.timeZoneId}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _messageController.text.trim().isEmpty
-                              ? 'No message added'
-                              : _messageController.text.trim(),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
+                  _summary(dateLabel),
                   if (_submissionError != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
@@ -298,16 +286,20 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
                         !_propertyValid ||
                             _date == null ||
                             _slot == null ||
+                            !_slot!.isAvailable ||
+                            !_noteValid ||
                             _loading ||
                             _submitting
                         ? null
                         : _submit,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppPalette.darkOlive,
-                      minimumSize: const Size.fromHeight(50),
+                      minimumSize: const Size.fromHeight(54),
                     ),
                     child: Text(
-                      _submitting ? 'Sending request...' : 'Confirm Viewing',
+                      _submitting
+                          ? 'Sending request...'
+                          : 'Send viewing request',
                     ),
                   ),
                 ],
@@ -329,7 +321,9 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
               height: 86,
               child: PropertyPhoto(
                 propertyId: widget.propertyId,
-              propertyApiService: _propertyValid ? widget.propertyApiService : null,
+                propertyApiService: _propertyValid
+                    ? widget.propertyApiService
+                    : null,
               ),
             ),
           ),
@@ -344,7 +338,7 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
                   Text(property.city),
                   const SizedBox(height: 4),
                   Text(
-                    'Rs. ${property.monthlyRent.toStringAsFixed(0)} / month',
+                    'Rs. ${_rent(property.monthlyRent)} / month',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ],
@@ -361,7 +355,7 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
   }
 
   Widget _slotPicker() {
-    if (_date == null) return const Text('Choose a date to see viewing times');
+    if (_date == null) return const Text('Choose a date to see viewing times.');
     if (_loading) {
       return const Padding(
         padding: EdgeInsets.all(12),
@@ -375,10 +369,10 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(_slotError!),
+          const Text('Viewing times could not be loaded.'),
           TextButton(
             onPressed: _submitting ? null : _loadSlots,
-            child: const Text('Retry viewing times'),
+            child: const Text('Retry'),
           ),
         ],
       );
@@ -388,11 +382,11 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('No viewing times are available on this date.'),
-          if (availability?.state == 'unconfigured')
-            const Text(
-              'The landlord has not configured viewing availability yet.',
-            ),
+          Text(
+            availability?.state == 'unconfigured'
+                ? 'Viewing times have not been configured for this property yet.'
+                : 'No viewing times are available on this date.',
+          ),
         ],
       );
     }
@@ -404,6 +398,10 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 8),
+        if (!availability.slots.any((slot) => slot.isAvailable)) ...[
+          const Text('No viewing times are available on this date.'),
+          const SizedBox(height: 8),
+        ],
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -411,15 +409,37 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
               .map(
                 (slot) => ChoiceChip(
                   key: ValueKey('viewing-slot-${slot.localTime}'),
-                  label: Text(slot.displayTime),
+                  label: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        slot.displayTime,
+                        style: TextStyle(
+                          decoration: slot.isAvailable
+                              ? null
+                              : TextDecoration.lineThrough,
+                        ),
+                      ),
+                      if (!slot.isAvailable)
+                        Text(
+                          slot.unavailableReason == 'ApprovedViewing'
+                              ? 'Booked'
+                              : 'Unavailable',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                    ],
+                  ),
                   selected: identical(_slot, slot),
                   selectedColor: AppPalette.darkOlive,
-                  labelStyle: TextStyle(
+                  labelStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: identical(_slot, slot)
                         ? AppPalette.white
-                        : AppPalette.darkOlive,
+                        : slot.isAvailable
+                        ? AppPalette.darkOlive
+                        : AppPalette.secondaryText,
                   ),
-                  onSelected: _submitting
+                  tooltip: slot.isAvailable ? null : 'Unavailable viewing time',
+                  onSelected: _submitting || !slot.isAvailable
                       ? null
                       : (_) => setState(() {
                           _slot = slot;
@@ -432,6 +452,69 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
       ],
     );
   }
+
+  String _rent(double rent) => rent
+      .toStringAsFixed(0)
+      .replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+$)'),
+        (match) => '${match[1]},',
+      );
+
+  Widget _summary(String dateLabel) => AppCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Request summary', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(_title, style: Theme.of(context).textTheme.titleMedium),
+        if (widget.property != null) Text(widget.property!.city),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 24,
+          runSpacing: 12,
+          children: [
+            _summaryValue('Date', dateLabel),
+            _summaryValue('Time', _slot?.displayTime ?? 'Select a time'),
+            _summaryValue(
+              'Duration',
+              _availability == null
+                  ? 'Choose a date'
+                  : '${_availability!.slotDurationMinutes} minutes',
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _summaryValue(
+          'Note',
+          _messageController.text.trim().isEmpty
+              ? 'Add a note above'
+              : _messageController.text.trim(),
+        ),
+        if (_availability != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Times in ${_availability!.timeZoneId}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
+    ),
+  );
+
+  Widget _summaryValue(String label, String value) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(label, style: Theme.of(context).textTheme.labelMedium),
+      const SizedBox(height: 4),
+      Text(
+        value,
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: AppPalette.primaryText),
+      ),
+    ],
+  );
 
   Widget _success() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,

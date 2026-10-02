@@ -238,7 +238,7 @@ class _PublicLandingScreenState extends State<PublicLandingScreen>
                                     'A BETTER WAY TO RENT',
                                     style: TextStyle(
                                       color: _LandingColors.sage,
-                                      fontSize: 11,
+                                      fontSize: AppTypography.captionSize,
                                       fontWeight: FontWeight.w800,
                                       letterSpacing: 1.8,
                                     ),
@@ -249,10 +249,10 @@ class _PublicLandingScreenState extends State<PublicLandingScreen>
                                     key: Key('public-hero-title'),
                                     style: TextStyle(
                                       color: Colors.white,
-                                      fontSize: 48,
-                                      height: .98,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: -2.7,
+                                      fontSize: AppTypography.displaySize,
+                                      height: 1.15,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: -0.4,
                                     ),
                                   ),
                                   SizedBox(height: 22),
@@ -260,7 +260,7 @@ class _PublicLandingScreenState extends State<PublicLandingScreen>
                                     'AI-powered rental search and management for a simpler rental journey.',
                                     style: TextStyle(
                                       color: Color(0xD9FFFFFF),
-                                      fontSize: 16,
+                                      fontSize: AppTypography.cardTitleSize,
                                       height: 1.55,
                                     ),
                                   ),
@@ -302,10 +302,7 @@ class _PublicLandingScreenState extends State<PublicLandingScreen>
                                               14,
                                             ),
                                           ),
-                                          textStyle: const TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w800,
-                                          ),
+                                          textStyle: AppTypography.button,
                                         ),
                                       ),
                                       const SizedBox(height: 20),
@@ -329,10 +326,7 @@ class _PublicLandingScreenState extends State<PublicLandingScreen>
                                               14,
                                             ),
                                           ),
-                                          textStyle: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w800,
-                                          ),
+                                          textStyle: AppTypography.button,
                                         ),
                                       ),
                                     ],
@@ -593,7 +587,7 @@ class _LandingSection extends StatelessWidget {
                 textAlign: centered ? TextAlign.center : TextAlign.start,
                 style: TextStyle(
                   color: dark ? _LandingColors.sage : _LandingColors.olive700,
-                  fontSize: 11,
+                  fontSize: AppTypography.captionSize,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 1.6,
                 ),
@@ -602,12 +596,8 @@ class _LandingSection extends StatelessWidget {
               Text(
                 title,
                 textAlign: centered ? TextAlign.center : TextAlign.start,
-                style: TextStyle(
+                style: AppTypography.pageTitle.copyWith(
                   color: dark ? Colors.white : _LandingColors.ink,
-                  fontSize: 34,
-                  height: 1.06,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -1.7,
                 ),
               ),
               if (subtitle != null) ...[
@@ -619,7 +609,7 @@ class _LandingSection extends StatelessWidget {
                     color: dark
                         ? const Color(0xB8FFFFFF)
                         : _LandingColors.muted,
-                    fontSize: 14,
+                    fontSize: AppTypography.bodySize,
                     height: 1.55,
                   ),
                 ),
@@ -680,7 +670,7 @@ class _JourneyStep extends StatelessWidget {
             number,
             style: const TextStyle(
               color: _LandingColors.olive900,
-              fontSize: 11,
+              fontSize: AppTypography.captionSize,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -976,7 +966,7 @@ class _HighlightCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: _LandingColors.olive900,
-              fontSize: 12.5,
+              fontSize: AppTypography.bodySmallSize,
               height: 1.25,
               fontWeight: FontWeight.w700,
             ),
@@ -1036,7 +1026,7 @@ class _CardCopy extends StatelessWidget {
         title,
         style: TextStyle(
           color: dark ? Colors.white : _LandingColors.ink,
-          fontSize: 15,
+          fontSize: AppTypography.bodyLargeSize,
           height: 1.25,
           fontWeight: FontWeight.w800,
         ),
@@ -1046,7 +1036,7 @@ class _CardCopy extends StatelessWidget {
         copy,
         style: TextStyle(
           color: dark ? const Color(0xB8FFFFFF) : _LandingColors.muted,
-          fontSize: 13,
+          fontSize: AppTypography.bodySmallSize,
           height: 1.5,
         ),
       ),
@@ -1231,7 +1221,7 @@ class _FeedbackSectionState extends State<_FeedbackSection> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   textStyle: const TextStyle(
-                    fontSize: 14,
+                    fontSize: AppTypography.bodySize,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -1263,7 +1253,7 @@ class _FeedbackSectionState extends State<_FeedbackSection> {
                   _status!,
                   style: const TextStyle(
                     color: _LandingColors.olive900,
-                    fontSize: 12,
+                    fontSize: AppTypography.labelSize,
                     height: 1.4,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1291,7 +1281,10 @@ class _LandingFooter extends StatelessWidget {
         child: Text(
           '© 2026 RentFlow AI. All rights reserved.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: _LandingColors.muted, fontSize: 11),
+          style: TextStyle(
+            color: _LandingColors.muted,
+            fontSize: AppTypography.captionSize,
+          ),
         ),
       ),
     ),

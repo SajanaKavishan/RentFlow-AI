@@ -5,10 +5,14 @@ class ViewingSlot {
     required this.localTime,
     required this.displayTime,
     required this.requestedDateTimeIso,
+    this.isAvailable = true,
+    this.unavailableReason,
   });
   final String localTime;
   final String displayTime;
   final String requestedDateTimeIso;
+  final bool isAvailable;
+  final String? unavailableReason;
   DateTime get requestedDateTime => DateTime.parse(requestedDateTimeIso);
   factory ViewingSlot.fromJson(Map<String, dynamic> json) {
     final local = json['localTime'],
@@ -19,13 +23,18 @@ class ViewingSlot {
         display is! String ||
         display.trim().isEmpty ||
         instant is! String ||
-        DateTime.tryParse(instant)?.isUtc != true) {
+        DateTime.tryParse(instant)?.isUtc != true ||
+        (json['isAvailable'] != null && json['isAvailable'] is! bool) ||
+        (json['unavailableReason'] != null &&
+            json['unavailableReason'] is! String)) {
       throw const FormatException('Invalid viewing slot.');
     }
     return ViewingSlot(
       localTime: local,
       displayTime: display,
       requestedDateTimeIso: instant,
+      isAvailable: json['isAvailable'] as bool? ?? true,
+      unavailableReason: json['unavailableReason'] as String?,
     );
   }
 }
@@ -36,11 +45,13 @@ class ViewingSlots {
     required this.timeZoneId,
     required this.slots,
     required this.state,
+    required this.slotDurationMinutes,
   });
   final String date;
   final String timeZoneId;
   final List<ViewingSlot> slots;
   final String state;
+  final int slotDurationMinutes;
   factory ViewingSlots.fromJson(Map<String, dynamic> json) {
     if (json['date'] is! String ||
         json['timeZoneId'] is! String ||
@@ -59,6 +70,7 @@ class ViewingSlots {
     return ViewingSlots(
       date: json['date'] as String,
       timeZoneId: json['timeZoneId'] as String,
+      slotDurationMinutes: json['slotDurationMinutes'] as int,
       slots: slots,
       state:
           json['state'] as String? ?? (slots.isEmpty ? 'empty' : 'available'),

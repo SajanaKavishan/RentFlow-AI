@@ -218,12 +218,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                   Text(
                     _property.title,
                     key: const Key('details-title'),
-                    style: const TextStyle(
-                      fontSize: 23,
-                      height: 1.15,
-                      fontWeight: FontWeight.w700,
-                      color: AppPalette.primaryText,
-                    ),
+                    style: AppTypography.pageTitle,
                   ),
                   const SizedBox(height: 7),
                   Row(
@@ -245,7 +240,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 13,
+                            fontSize: AppTypography.bodySmallSize,
                             height: 1.4,
                             color: AppPalette.secondaryText,
                           ),
@@ -289,14 +284,17 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
               TextSpan(
                 text: 'Rs. ${_formatMoney(_property.monthlyRent)}',
                 style: const TextStyle(
-                  fontSize: 23,
+                  fontSize: AppTypography.sectionTitleSize,
                   fontWeight: FontWeight.w700,
                   color: AppPalette.olive,
                 ),
               ),
               const TextSpan(
                 text: ' /mo',
-                style: TextStyle(fontSize: 12, color: AppPalette.secondaryText),
+                style: TextStyle(
+                  fontSize: AppTypography.labelSize,
+                  color: AppPalette.secondaryText,
+                ),
               ),
             ],
           ),
@@ -329,7 +327,10 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
       children: [
         const Text(
           'AI Match',
-          style: TextStyle(fontSize: 11, color: AppPalette.secondaryText),
+          style: TextStyle(
+            fontSize: AppTypography.captionSize,
+            color: AppPalette.secondaryText,
+          ),
         ),
         const SizedBox(height: 6),
         Row(
@@ -348,7 +349,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
             Text(
               '$_score%',
               style: const TextStyle(
-                fontSize: 16,
+                fontSize: AppTypography.cardTitleSize,
                 fontWeight: FontWeight.w700,
                 color: AppPalette.olive,
               ),
@@ -419,7 +420,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
               value,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: AppTypography.bodySmallSize,
                 height: 1.25,
                 fontWeight: FontWeight.w600,
                 color: AppPalette.primaryText,
@@ -431,7 +432,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                 caption,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 10,
+                  fontSize: AppTypography.captionSize,
                   color: AppPalette.secondaryText,
                 ),
               ),
@@ -481,7 +482,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
               Text(
                 available && date != null ? 'Available from' : 'Availability',
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: AppTypography.captionSize,
                   color: AppPalette.secondaryText,
                 ),
               ),
@@ -489,7 +490,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
               Text(
                 value,
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTypography.bodySize,
                   height: 1.25,
                   fontWeight: FontWeight.w600,
                   color: AppPalette.primaryText,
@@ -513,7 +514,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
           child: Text(
             availability.label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: AppTypography.captionSize,
               fontWeight: FontWeight.w600,
               color: statusColor,
             ),
@@ -599,7 +600,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                         child: Text(
                           name,
                           style: const TextStyle(
-                            fontSize: 12,
+                            fontSize: AppTypography.labelSize,
                             fontWeight: FontWeight.w500,
                             color: AppPalette.primaryText,
                           ),
@@ -638,7 +639,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
             LayoutBuilder(
               builder: (context, constraints) {
                 const style = TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTypography.bodySize,
                   height: 1.45,
                   color: AppPalette.secondaryText,
                 );
@@ -676,7 +677,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                         child: Text(
                           _descriptionExpanded ? 'Read less' : 'Read more',
                           style: const TextStyle(
-                            fontSize: 12,
+                            fontSize: AppTypography.labelSize,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -699,7 +700,10 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
     collapsedShape: const Border(),
     title: const Text(
       'Listing preferences',
-      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      style: TextStyle(
+        fontSize: AppTypography.bodySize,
+        fontWeight: FontWeight.w600,
+      ),
     ),
     children: [
       if (_property.advertisedSecurityDeposit != null)
@@ -731,7 +735,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
           Text(
             label,
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: AppTypography.labelSize,
               fontWeight: FontWeight.w600,
               color: AppPalette.primaryText,
             ),
@@ -740,7 +744,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
           Text(
             value,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: AppTypography.bodySize,
               color: AppPalette.secondaryText,
             ),
           ),
@@ -781,7 +785,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                     child: Text(
                       reason,
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: AppTypography.bodySmallSize,
                         height: 1.4,
                         color: AppPalette.secondaryText,
                       ),
@@ -830,7 +834,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                   Text(
                     _address,
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTypography.bodySmallSize,
                       height: 1.4,
                       color: AppPalette.primaryText,
                     ),
@@ -842,7 +846,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                         child: Text(
                           'Open in Maps',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: AppTypography.labelSize,
                             fontWeight: FontWeight.w600,
                             color: AppPalette.olive,
                           ),
@@ -882,7 +886,10 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
             if (summary == null || summary.displayName.trim().isEmpty) {
               return const Text(
                 'Landlord details unavailable',
-                style: TextStyle(fontSize: 13, color: AppPalette.secondaryText),
+                style: TextStyle(
+                  fontSize: AppTypography.bodySmallSize,
+                  color: AppPalette.secondaryText,
+                ),
               );
             }
             final initials = summary.displayName
@@ -917,7 +924,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                       Text(
                         summary.displayName,
                         style: const TextStyle(
-                          fontSize: 14,
+                          fontSize: AppTypography.bodySize,
                           height: 1.35,
                           fontWeight: FontWeight.w600,
                           color: AppPalette.primaryText,
@@ -928,7 +935,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                         Text(
                           'Member since ${summary.memberSinceYear}',
                           style: const TextStyle(
-                            fontSize: 12,
+                            fontSize: AppTypography.labelSize,
                             color: AppPalette.secondaryText,
                           ),
                         ),
@@ -954,7 +961,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
           child: Text(
             initials,
             style: const TextStyle(
-              fontSize: 16,
+              fontSize: AppTypography.cardTitleSize,
               fontWeight: FontWeight.w700,
               color: AppPalette.white,
             ),
@@ -986,7 +993,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
               child: Center(
                 child: Text(
                   'Checking current availability...',
-                  style: TextStyle(fontSize: 13),
+                  style: AppTypography.bodySmall,
                 ),
               ),
             )
@@ -997,7 +1004,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                 const Text(
                   'Current availability could not be verified.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13),
+                  style: AppTypography.bodySmall,
                 ),
                 TextButton(
                   onPressed: _refreshProperty,
@@ -1009,7 +1016,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
           ? const Text(
               'This property is currently unavailable for viewings or applications.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13),
+              style: AppTypography.bodySmall,
             )
           : IntrinsicHeight(
               child: Row(
@@ -1035,7 +1042,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                         'Book Viewing',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 15,
+                          fontSize: AppTypography.bodyLargeSize,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -1061,7 +1068,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                         'Apply Now',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 15,
+                          fontSize: AppTypography.bodyLargeSize,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -1076,7 +1083,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
   Widget _heading(String title) => Text(
     title,
     style: const TextStyle(
-      fontSize: 17,
+      fontSize: AppTypography.sectionTitleSize,
       height: 1.25,
       fontWeight: FontWeight.w700,
       color: AppPalette.primaryText,

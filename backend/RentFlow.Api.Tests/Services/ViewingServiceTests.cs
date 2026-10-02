@@ -48,7 +48,7 @@ public class ViewingServiceTests
 
         var exception = await Assert.ThrowsAsync<ViewingServiceException>(() =>
             service.CreateAsync(Guid.NewGuid(), new CreateViewingRequestDto
-            {
+            { TenantMessage = "Please arrange a visit.",
                 PropertyId = Guid.NewGuid(),
                 RequestedDateTime = DateTimeOffset.UtcNow.AddDays(-1)
             }));
@@ -69,7 +69,7 @@ public class ViewingServiceTests
         AddSchedule(context, propertyId);
         await context.SaveChangesAsync();
         var request = new CreateViewingRequestDto
-        {
+        { TenantMessage = "Please arrange a visit.",
             PropertyId = propertyId,
             RequestedDateTime = requestedDateTime
         };
@@ -97,7 +97,7 @@ public class ViewingServiceTests
 
         await Assert.ThrowsAsync<DbUpdateException>(() =>
             service.CreateAsync(Guid.NewGuid(), new CreateViewingRequestDto
-            {
+            { TenantMessage = "Please arrange a visit.",
                 PropertyId = property.Id,
                 RequestedDateTime = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(2).AddHours(3.5))
             }));

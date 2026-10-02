@@ -104,6 +104,19 @@ public sealed class ViewingPostgresTests
         Assert.Equal(1, await setup.ViewingRequests.CountAsync(v => v.Status == ViewingStatus.Approved));
         Assert.Equal(1, await setup.ViewingRequests.CountAsync(v => v.Status == ViewingStatus.Pending));
         Assert.Equal(1, await setup.Notifications.CountAsync(n => n.EventType == "viewing.approved"));
+        var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(slot.RequestedDateTime,
+            ViewingAvailabilityService.ResolveZone(property.ViewingTimeZoneId)).DateTime);
+        var availability = new ViewingAvailabilityService(setup);
+        var enriched = await availability.GetSlotsAsync(property.Id, day, includeUnavailable: true);
+        Assert.Equal(8, enriched.Slots.Count);
+        var blocked = enriched.Slots.Where(s => !s.IsAvailable).ToList();
+        Assert.Equal(results[0] ? 1 : 2, blocked.Count);
+        Assert.All(blocked, s => Assert.Equal("ApprovedViewing", s.UnavailableReason));
+        Assert.Equal(8 - blocked.Count, (await availability.GetSlotsAsync(property.Id, day)).Slots.Count);
+        var createService = new ViewingService(setup);
+        var conflict = await Assert.ThrowsAsync<ViewingServiceException>(() => createService.CreateAsync(Guid.NewGuid(),
+            new() { PropertyId = property.Id, RequestedDateTime = blocked[0].RequestedDateTime, TenantMessage = "Visit" }));
+        Assert.Equal(ViewingServiceError.Conflict, conflict.Error);
     }
 
     [PostgreSqlFact]
@@ -113,7 +126,7 @@ public sealed class ViewingPostgresTests
         await using var setup = new ApplicationDbContext(database.Options);
         var (property, slot) = await SeedAsync(setup);
         var tenant = Guid.NewGuid();
-        var input = new CreateViewingRequestDto { PropertyId = property.Id, RequestedDateTime = slot.RequestedDateTime };
+        var input = new CreateViewingRequestDto { TenantMessage = "Please arrange a visit.", PropertyId = property.Id, RequestedDateTime = slot.RequestedDateTime };
         await using var db1 = new ApplicationDbContext(database.Options); await using var db2 = new ApplicationDbContext(database.Options);
         async Task<bool> Create(ApplicationDbContext context)
         {

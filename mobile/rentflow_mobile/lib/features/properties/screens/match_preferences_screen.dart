@@ -229,7 +229,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
         surfaceTintColor: Colors.transparent,
         titleTextStyle: const TextStyle(
           color: AppPalette.darkOlive,
-          fontSize: 19,
+          fontSize: AppTypography.sectionTitleSize,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -275,7 +275,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
                             maxLength: 100,
                             textCapitalization: TextCapitalization.words,
                             textInputAction: TextInputAction.next,
-                            style: const TextStyle(fontSize: 14),
+                            style: AppTypography.body,
                             decoration: _inputDecoration('Preferred city')
                                 .copyWith(
                                   hintText: 'e.g. Kurunegala',
@@ -363,7 +363,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
               child: Text(
                 'MAKE IT YOURS',
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: AppTypography.captionSize,
                   letterSpacing: 1.2,
                   fontWeight: FontWeight.w700,
                   color: AppPalette.sage,
@@ -375,17 +375,16 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
         const SizedBox(height: 12),
         Text(
           _configured ? 'Your saved preferences' : 'Set match preferences',
-          style: const TextStyle(
-            fontSize: 22,
-            height: 1.2,
-            fontWeight: FontWeight.w600,
-            color: AppPalette.white,
-          ),
+          style: AppTypography.pageTitle.copyWith(color: AppPalette.white),
         ),
         const SizedBox(height: 8),
         const Text(
           'A home that fits your life. Leave any field empty if you have no preference.',
-          style: TextStyle(fontSize: 12, height: 1.5, color: AppPalette.sage),
+          style: TextStyle(
+            fontSize: AppTypography.labelSize,
+            height: 1.5,
+            color: AppPalette.sage,
+          ),
         ),
       ],
     ),
@@ -425,7 +424,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: AppTypography.bodyLargeSize,
                       fontWeight: FontWeight.w700,
                       color: AppPalette.darkOlive,
                     ),
@@ -434,7 +433,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
                   Text(
                     subtitle,
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: AppTypography.captionSize,
                       height: 1.4,
                       color: AppPalette.secondaryText,
                     ),
@@ -452,7 +451,10 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
 
   InputDecoration _inputDecoration(String label) => InputDecoration(
     labelText: label,
-    labelStyle: const TextStyle(fontSize: 12, color: AppPalette.secondaryText),
+    labelStyle: const TextStyle(
+      fontSize: AppTypography.labelSize,
+      color: AppPalette.secondaryText,
+    ),
     filled: true,
     fillColor: AppPalette.warmCream,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
@@ -485,7 +487,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
               key: Key('$key-choice-${value ?? 'any'}'),
               label: Text(
                 value == null ? 'Any' : '$value+',
-                style: const TextStyle(fontSize: 11),
+                style: AppTypography.caption,
               ),
               selected: value == null
                   ? controller.text.trim().isEmpty
@@ -532,7 +534,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
                 child: Text(
                   _actionError!,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTypography.labelSize,
                     color: AppPalette.danger,
                   ),
                 ),
@@ -547,7 +549,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
                   'Reset saved preferences',
                   textAlign: TextAlign.left,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: AppTypography.captionSize,
                     color: AppPalette.secondaryText,
                   ),
                 ),
@@ -616,7 +618,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
     enabled: !_busy,
     keyboardType: TextInputType.numberWithOptions(decimal: !rooms),
     textInputAction: TextInputAction.next,
-    style: const TextStyle(fontSize: 14),
+    style: AppTypography.body,
     decoration: _inputDecoration(label).copyWith(
       prefixText: rooms ? null : 'LKR ',
       hintText: rooms ? 'Any' : 'No maximum',
@@ -629,7 +631,10 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
     selected: _amenities.contains(key),
     label: Text(
       label,
-      style: const TextStyle(fontSize: 12, color: AppPalette.darkOlive),
+      style: const TextStyle(
+        fontSize: AppTypography.labelSize,
+        color: AppPalette.darkOlive,
+      ),
     ),
     avatar: Icon(_amenityIcon(key), size: 17, color: AppPalette.olive),
     selectedColor: AppPalette.sage,

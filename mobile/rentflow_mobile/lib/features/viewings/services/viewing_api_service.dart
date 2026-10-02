@@ -42,7 +42,7 @@ class ViewingApiService {
   }) async {
     final uri = apiClient.buildUri(
       '/api/properties/$propertyId/viewing-slots',
-      queryParameters: {'date': date},
+      queryParameters: {'date': date, 'includeUnavailable': 'true'},
     );
     final response = await _send(() => apiClient.get(uri));
     try {

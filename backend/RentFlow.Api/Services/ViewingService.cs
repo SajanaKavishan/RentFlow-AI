@@ -36,7 +36,10 @@ public class ViewingService(ApplicationDbContext dbContext, TimeProvider? timePr
             throw ViewingServiceException.Validation("The requested viewing date and time must be in the future.");
         }
 
-        if (request.TenantMessage?.Length > 500)
+        var tenantMessage = request.TenantMessage?.Trim();
+        if (string.IsNullOrWhiteSpace(tenantMessage))
+            throw ViewingServiceException.Validation("A note for the landlord is required.");
+        if (tenantMessage.Length > 500)
             throw ViewingServiceException.Validation("The tenant note must not exceed 500 characters.");
         await using var transaction = await ViewingPropertyLock.AcquireAsync(dbContext, request.PropertyId, cancellationToken);
         var property = await availability.GetPropertyAsync(request.PropertyId, cancellationToken);
@@ -44,7 +47,7 @@ public class ViewingService(ApplicationDbContext dbContext, TimeProvider? timePr
             throw ViewingServiceException.NotFound("The property was not found.");
         var local = TimeZoneInfo.ConvertTime(requestedDateTimeUtc, ViewingAvailabilityService.ResolveZone(property.ViewingTimeZoneId));
         var slots = await availability.GetSlotsAsync(request.PropertyId, DateOnly.FromDateTime(local.DateTime), cancellationToken);
-        if (!slots.Slots.Any(s => s.RequestedDateTime == requestedDateTimeUtc))
+        if (!slots.Slots.Any(s => s.IsAvailable && s.RequestedDateTime == requestedDateTimeUtc))
             throw ViewingServiceException.Conflict("That time is no longer available. Please choose another slot.");
 
         var duplicateExists = await dbContext.ViewingRequests.AnyAsync(
@@ -65,7 +68,7 @@ public class ViewingService(ApplicationDbContext dbContext, TimeProvider? timePr
             PropertyId = request.PropertyId,
             RequestedDateTime = requestedDateTimeUtc,
             DurationMinutes = slots.SlotDurationMinutes,
-            TenantMessage = string.IsNullOrWhiteSpace(request.TenantMessage) ? null : request.TenantMessage.Trim(),
+            TenantMessage = tenantMessage,
             Status = ViewingStatus.Pending,
             CreatedAt = now
         };

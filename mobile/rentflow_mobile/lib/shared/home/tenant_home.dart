@@ -169,7 +169,7 @@ class _TenantHomeState extends State<TenantHome> {
                         Text(
                           _formatHeaderDate(local).toUpperCase(),
                           style: _style(
-                            12,
+                            AppTypography.label,
                             FontWeight.w700,
                             color: AppPalette.olive,
                             spacing: 1.2,
@@ -179,7 +179,7 @@ class _TenantHomeState extends State<TenantHome> {
                         Text(
                           '${_greetingForHour(local.hour)}, ${_firstName(widget.user.fullName)}',
                           style: _style(
-                            24,
+                            AppTypography.pageTitle,
                             FontWeight.w700,
                             height: 1.1,
                             color: AppPalette.darkOlive,
@@ -427,7 +427,7 @@ class _TenantHomeState extends State<TenantHome> {
               child: Text(
                 'Some property details could not be loaded.',
                 style: _style(
-                  13,
+                  AppTypography.bodySmall,
                   FontWeight.w400,
                   color: AppPalette.secondaryText,
                 ),
@@ -476,7 +476,7 @@ class _TenantHomeState extends State<TenantHome> {
                     Text(
                       'Some activity could not be loaded (${data.failedSources.toSet().join(', ')}).',
                       style: _style(
-                        13,
+                        AppTypography.bodySmall,
                         FontWeight.w400,
                         color: AppPalette.secondaryText,
                       ),
@@ -569,13 +569,12 @@ class _TenantHomeState extends State<TenantHome> {
 }
 
 TextStyle _style(
-  double size,
+  TextStyle base,
   FontWeight weight, {
   double height = 1.4,
   Color color = AppPalette.primaryText,
   double? spacing,
-}) => TextStyle(
-  fontSize: size,
+}) => base.copyWith(
   fontWeight: weight,
   height: height,
   color: color,
@@ -616,13 +615,20 @@ class _SectionHeading extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: _style(18, FontWeight.w700, height: 1.2)),
+            Text(
+              title,
+              style: _style(
+                AppTypography.sectionTitle,
+                FontWeight.w700,
+                height: 1.2,
+              ),
+            ),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
               Text(
                 subtitle!,
                 style: _style(
-                  13,
+                  AppTypography.bodySmall,
                   FontWeight.w400,
                   color: AppPalette.secondaryText,
                 ),
@@ -638,7 +644,7 @@ class _SectionHeading extends StatelessWidget {
             minimumSize: const Size(48, 48),
             padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
-          child: const Text('See all', style: TextStyle(fontSize: 13)),
+          child: const Text('See all', style: AppTypography.bodySmall),
         ),
     ],
   );
@@ -699,7 +705,7 @@ class _JourneyCard extends StatelessWidget {
                         child: Text(
                           status.toUpperCase(),
                           style: _style(
-                            11,
+                            AppTypography.caption,
                             FontWeight.w700,
                             spacing: 0.8,
                             color: AppPalette.darkOlive,
@@ -719,7 +725,7 @@ class _JourneyCard extends StatelessWidget {
               Text(
                 title,
                 style: _style(
-                  20,
+                  AppTypography.sectionTitle,
                   FontWeight.w700,
                   height: 1.15,
                   color: AppPalette.white,
@@ -730,7 +736,7 @@ class _JourneyCard extends StatelessWidget {
                 Text(
                   subtitle,
                   style: _style(
-                    14,
+                    AppTypography.body,
                     FontWeight.w500,
                     height: 1.35,
                     color: AppPalette.sage,
@@ -749,7 +755,11 @@ class _JourneyCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   helper!,
-                  style: _style(12, FontWeight.w500, color: AppPalette.sage),
+                  style: _style(
+                    AppTypography.label,
+                    FontWeight.w500,
+                    color: AppPalette.sage,
+                  ),
                 ),
               ],
               if (loading) ...[
@@ -789,11 +799,15 @@ class _PanelMessage extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: _style(16, FontWeight.w600)),
+        Text(title, style: _style(AppTypography.cardTitle, FontWeight.w600)),
         const SizedBox(height: 6),
         Text(
           subtitle,
-          style: _style(13, FontWeight.w400, color: AppPalette.secondaryText),
+          style: _style(
+            AppTypography.bodySmall,
+            FontWeight.w400,
+            color: AppPalette.secondaryText,
+          ),
         ),
         if (loading) ...[
           const SizedBox(height: 12),
@@ -826,7 +840,7 @@ class _QuickActionsRow extends StatelessWidget {
       const gap = 7.0;
       const visibleCards = 3;
       const labelStyle = TextStyle(
-        fontSize: 12,
+        fontSize: AppTypography.labelSize,
         fontWeight: FontWeight.w600,
         height: 1.25,
         color: AppPalette.primaryText,
@@ -947,11 +961,19 @@ class _RecommendationCard extends StatelessWidget {
 
   static TextSpan rentSpan(TenantRecommendation item) => TextSpan(
     text: 'Rs. ${dashboardMoney(item.property.monthlyRent)}',
-    style: _style(16, FontWeight.w700, color: AppPalette.olive),
+    style: _style(
+      AppTypography.cardTitle,
+      FontWeight.w700,
+      color: AppPalette.olive,
+    ),
     children: [
       TextSpan(
         text: '/mo',
-        style: _style(13, FontWeight.w500, color: AppPalette.secondaryText),
+        style: _style(
+          AppTypography.bodySmall,
+          FontWeight.w500,
+          color: AppPalette.secondaryText,
+        ),
       ),
     ],
   );
@@ -972,7 +994,11 @@ class _RecommendationCard extends StatelessWidget {
           context,
           TextSpan(
             text: item.property.title,
-            style: _style(16, FontWeight.w700, height: 1.2),
+            style: _style(
+              AppTypography.cardTitle,
+              FontWeight.w700,
+              height: 1.2,
+            ),
           ),
           contentWidth,
           maxLines: 2,
@@ -981,7 +1007,7 @@ class _RecommendationCard extends StatelessWidget {
           context,
           TextSpan(
             text: item.property.city,
-            style: _style(13, FontWeight.w400),
+            style: _style(AppTypography.bodySmall, FontWeight.w400),
           ),
           contentWidth,
           maxLines: 1,
@@ -989,7 +1015,10 @@ class _RecommendationCard extends StatelessWidget {
         _measuredHeight(context, rentSpan(item), contentWidth) +
         _measuredHeight(
           context,
-          TextSpan(text: facts(item), style: _style(12, FontWeight.w500)),
+          TextSpan(
+            text: facts(item),
+            style: _style(AppTypography.label, FontWeight.w500),
+          ),
           contentWidth,
         );
   }
@@ -1036,7 +1065,7 @@ class _RecommendationCard extends StatelessWidget {
                           child: Text(
                             '$score% match',
                             style: _style(
-                              11,
+                              AppTypography.caption,
                               FontWeight.w700,
                               color: AppPalette.darkOlive,
                             ),
@@ -1057,7 +1086,11 @@ class _RecommendationCard extends StatelessWidget {
                       property.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: _style(16, FontWeight.w700, height: 1.2),
+                      style: _style(
+                        AppTypography.cardTitle,
+                        FontWeight.w700,
+                        height: 1.2,
+                      ),
                     ),
                     const SizedBox(height: 5),
                     Text(
@@ -1065,7 +1098,7 @@ class _RecommendationCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: _style(
-                        13,
+                        AppTypography.bodySmall,
                         FontWeight.w400,
                         color: AppPalette.secondaryText,
                       ),
@@ -1076,7 +1109,7 @@ class _RecommendationCard extends StatelessWidget {
                     Text(
                       facts(item),
                       style: _style(
-                        12,
+                        AppTypography.label,
                         FontWeight.w500,
                         color: AppPalette.secondaryText,
                       ),
@@ -1131,12 +1164,15 @@ class _ActivityTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(activity.title, style: _style(15, FontWeight.w600)),
+                  Text(
+                    activity.title,
+                    style: _style(AppTypography.bodyLarge, FontWeight.w600),
+                  ),
                   const SizedBox(height: 3),
                   Text(
                     activity.subtitle,
                     style: _style(
-                      13,
+                      AppTypography.bodySmall,
                       FontWeight.w400,
                       color: AppPalette.secondaryText,
                     ),
@@ -1145,7 +1181,7 @@ class _ActivityTile extends StatelessWidget {
                   Text(
                     timestamp,
                     style: _style(
-                      12,
+                      AppTypography.label,
                       FontWeight.w500,
                       color: AppPalette.secondaryText,
                     ),

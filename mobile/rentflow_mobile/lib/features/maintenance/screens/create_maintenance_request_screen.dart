@@ -65,7 +65,10 @@ class _CreateMaintenanceRequestScreenState
 
     final currentUser = AuthScope.of(context).currentUser;
     if (currentUser == null) {
-      setState(() => _errorMessage = 'You must be signed in to create a maintenance request.');
+      setState(
+        () => _errorMessage =
+            'You must be signed in to create a maintenance request.',
+      );
       return;
     }
 
@@ -109,10 +112,7 @@ class _CreateMaintenanceRequestScreenState
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
-            const SnackBar(
-              content: Text(message),
-              backgroundColor: Colors.red,
-            ),
+            const SnackBar(content: Text(message), backgroundColor: Colors.red),
           );
       }
     } finally {
@@ -128,7 +128,10 @@ class _CreateMaintenanceRequestScreenState
         )
         .replaceAll('_', ' ')
         .split(' ')
-        .map((part) => part.isEmpty ? part : part[0].toUpperCase() + part.substring(1))
+        .map(
+          (part) =>
+              part.isEmpty ? part : part[0].toUpperCase() + part.substring(1),
+        )
         .join(' ');
   }
 
@@ -140,7 +143,10 @@ class _CreateMaintenanceRequestScreenState
         )
         .replaceAll('_', ' ')
         .split(' ')
-        .map((part) => part.isEmpty ? part : part[0].toUpperCase() + part.substring(1))
+        .map(
+          (part) =>
+              part.isEmpty ? part : part[0].toUpperCase() + part.substring(1),
+        )
         .join(' ');
   }
 
@@ -170,9 +176,9 @@ class _CreateMaintenanceRequestScreenState
                 const SizedBox(height: 8),
                 Text(
                   'Provide the details so the request can be triaged properly.',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.black54,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(color: Colors.black54),
                 ),
                 const SizedBox(height: 24),
                 Card(
@@ -192,7 +198,9 @@ class _CreateMaintenanceRequestScreenState
                           ),
                           validator: (value) {
                             final trimmed = value?.trim() ?? '';
-                            return trimmed.isEmpty ? 'Please enter a title.' : null;
+                            return trimmed.isEmpty
+                                ? 'Please enter a title.'
+                                : null;
                           },
                         ),
                         const SizedBox(height: 16),
@@ -216,6 +224,8 @@ class _CreateMaintenanceRequestScreenState
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<MaintenanceCategory>(
+                          isExpanded: true,
+                          itemHeight: null,
                           initialValue: _selectedCategory,
                           decoration: const InputDecoration(
                             labelText: 'Category',
@@ -236,10 +246,13 @@ class _CreateMaintenanceRequestScreenState
                                     setState(() => _selectedCategory = value);
                                   }
                                 },
-                          validator: (value) => value == null ? 'Select a category.' : null,
+                          validator: (value) =>
+                              value == null ? 'Select a category.' : null,
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<MaintenancePriority>(
+                          isExpanded: true,
+                          itemHeight: null,
                           initialValue: _selectedPriority,
                           decoration: const InputDecoration(
                             labelText: 'Priority',
@@ -260,7 +273,8 @@ class _CreateMaintenanceRequestScreenState
                                     setState(() => _selectedPriority = value);
                                   }
                                 },
-                          validator: (value) => value == null ? 'Select a priority.' : null,
+                          validator: (value) =>
+                              value == null ? 'Select a priority.' : null,
                         ),
                         const SizedBox(height: 16),
                         TextFormField(

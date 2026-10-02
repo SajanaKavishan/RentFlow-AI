@@ -74,7 +74,7 @@ class PageHeader extends StatelessWidget {
         ],
       ),
       if (subtitle != null) ...[
-        const SizedBox(height: AppSpacing.sm),
+        const SizedBox(height: 6),
         Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium),
       ],
     ],

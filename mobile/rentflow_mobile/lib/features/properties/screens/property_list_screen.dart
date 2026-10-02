@@ -184,20 +184,16 @@ class _PropertyListScreenState extends State<PropertyListScreen>
                     const Text(
                       'EXPLORE HOMES',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: AppTypography.captionSize,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.3,
                         color: AppPalette.olive,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'Find your place',
-                      style: TextStyle(
-                        fontSize: 24,
-                        height: 1.2,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: -0.6,
+                      style: AppTypography.pageTitle.copyWith(
                         color: AppPalette.darkOlive,
                       ),
                     ),
@@ -208,7 +204,7 @@ class _PropertyListScreenState extends State<PropertyListScreen>
                           child: TextField(
                             key: const Key('property-search'),
                             controller: _searchController,
-                            style: const TextStyle(fontSize: 14),
+                            style: AppTypography.body,
                             textInputAction: TextInputAction.search,
                             onChanged: (_) => setState(() {}),
                             onSubmitted: (_) =>
@@ -322,7 +318,7 @@ class _PropertyListScreenState extends State<PropertyListScreen>
                               ? 'Properties unavailable'
                               : '${visible.length} ${visible.length == 1 ? 'property' : 'properties'}',
                           style: const TextStyle(
-                            fontSize: 14,
+                            fontSize: AppTypography.bodySize,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -363,7 +359,7 @@ class _PropertyListScreenState extends State<PropertyListScreen>
         child: Text(
           'SORT BY',
           style: TextStyle(
-            fontSize: 10,
+            fontSize: AppTypography.captionSize,
             letterSpacing: 1.2,
             fontWeight: FontWeight.w700,
             color: AppPalette.secondaryText,
@@ -450,7 +446,7 @@ class _PropertyListScreenState extends State<PropertyListScreen>
                             Text(
                               option.label,
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: AppTypography.bodySmallSize,
                                 fontWeight: FontWeight.w600,
                                 color: color,
                               ),
@@ -459,7 +455,7 @@ class _PropertyListScreenState extends State<PropertyListScreen>
                             Text(
                               option.description,
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: AppTypography.captionSize,
                                 color: enabled
                                     ? AppPalette.secondaryText
                                     : color,
@@ -495,7 +491,7 @@ class _PropertyListScreenState extends State<PropertyListScreen>
             child: Text(
               'Sort: ${_data.hasScores || _data.sort != 'AI Match' ? _data.sort : 'Newest'}',
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: AppTypography.labelSize,
                 color: AppPalette.darkOlive,
                 fontWeight: FontWeight.w600,
               ),
@@ -542,7 +538,10 @@ class _PropertyListScreenState extends State<PropertyListScreen>
                 : _data.preferences!.isConfigured
                 ? 'Edit your preferences'
                 : 'Enter your preference',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              fontSize: AppTypography.labelSize,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],
@@ -595,7 +594,7 @@ class _PropertyListScreenState extends State<PropertyListScreen>
         label: Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: AppTypography.labelSize,
             color: selected ? AppPalette.white : AppPalette.primaryText,
           ),
         ),
@@ -620,13 +619,13 @@ class _PropertyListScreenState extends State<PropertyListScreen>
           Text(
             message,
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: AppTypography.labelSize,
               color: AppPalette.secondaryText,
             ),
           ),
           TextButton(
             onPressed: retry,
-            child: Text(action, style: const TextStyle(fontSize: 12)),
+            child: Text(action, style: AppTypography.label),
           ),
         ],
       ),

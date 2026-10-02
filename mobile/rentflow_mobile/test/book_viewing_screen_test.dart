@@ -189,6 +189,7 @@ Future<void> _select(WidgetTester tester) async {
 }
 
 Future<void> _submit(WidgetTester tester) async {
+  await tester.pump();
   await tester.ensureVisible(find.byKey(const ValueKey('confirm-viewing')));
   await tester.tap(find.byKey(const ValueKey('confirm-viewing')));
   await tester.pump();
@@ -258,11 +259,21 @@ void main() {
           scale: spec.$2,
         );
         expect(find.text('Harbour View Residencies'), findsWidgets);
-        expect(find.text('Colombo'), findsOneWidget);
-        expect(find.text('Rs. 125000 / month'), findsOneWidget);
+        expect(find.text('Colombo'), findsWidgets);
+        expect(find.text('Rs. 125,000 / month'), findsOneWidget);
         expect(find.byType(PropertyPhoto), findsOneWidget);
         expect(find.text(_id), findsNothing);
-        expect(find.text('Choose a date to see viewing times'), findsOneWidget);
+        expect(
+          find.text('Choose a date to see viewing times.'),
+          findsOneWidget,
+        );
+        expect(find.text('Request a viewing'), findsOneWidget);
+        expect(
+          find.text('Select your preferred date and time'),
+          findsOneWidget,
+        );
+        expect(find.text('REQUEST A VIEWING'), findsNothing);
+        expect(find.text('Choose a time'), findsNothing);
         await tester.ensureVisible(
           find.byKey(const ValueKey('confirm-viewing')),
         );
@@ -316,6 +327,7 @@ void main() {
         '${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}',
       );
       expect(fetched!.headers['authorization'], 'Bearer tenant-token');
+      expect(fetched!.url.queryParameters['includeUnavailable'], 'true');
       await _select(tester);
       expect(
         tester
@@ -326,6 +338,17 @@ void main() {
         isTrue,
       );
       await tester.ensureVisible(find.byKey(const ValueKey('confirm-viewing')));
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('confirm-viewing')))
+            .onPressed,
+        isNull,
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('viewing-message')),
+        'Visit the home.',
+      );
+      await tester.pump();
       expect(
         tester
             .widget<FilledButton>(find.byKey(const ValueKey('confirm-viewing')))
@@ -361,8 +384,9 @@ void main() {
           : _slots(request),
     );
     await _date(tester);
-    await tester.ensureVisible(find.text('Retry viewing times'));
-    await tester.tap(find.text('Retry viewing times'));
+    expect(find.text('Viewing times could not be loaded.'), findsOneWidget);
+    await tester.ensureVisible(find.text('Retry'));
+    await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
     expect(calls, 2);
     expect(find.byKey(const ValueKey('viewing-slot-09:00')), findsOneWidget);
@@ -387,7 +411,7 @@ void main() {
       pending.complete(_slots(old!));
       await tester.pumpAndSettle();
       expect(find.text('9:00 AM'), findsNothing);
-      expect(find.text('10:00 AM'), findsOneWidget);
+      expect(find.text('10:00 AM'), findsWidgets);
       await _date(tester, offset: 3);
       expect(
         tester
@@ -438,7 +462,7 @@ void main() {
     },
   );
   testWidgets(
-    'optional note remains null; 500 character input limit is retained',
+    'required note rejects whitespace and allows a meaningful character with counter and summary',
     (tester) async {
       http.Request? posted;
       await _pump(tester, (request) async {
@@ -456,9 +480,30 @@ void main() {
       );
       await _date(tester);
       await _select(tester);
+      expect(find.text('0/500'), findsOneWidget);
+      await _submit(tester);
+      expect(posted, isNull);
+      await tester.enterText(
+        find.byKey(const ValueKey('viewing-message')),
+        '   ',
+      );
+      await tester.pump();
+      expect(find.text('Add a note for the landlord.'), findsOneWidget);
+      await _submit(tester);
+      expect(posted, isNull);
+      await tester.enterText(
+        find.byKey(const ValueKey('viewing-message')),
+        'x',
+      );
+      await tester.pump();
+      expect(find.text('1/500'), findsOneWidget);
+      expect(find.text('Request summary'), findsOneWidget);
+      expect(find.text('60 minutes'), findsOneWidget);
+      expect(find.text('No message added'), findsNothing);
+      expect(find.text('Send viewing request'), findsOneWidget);
       await _submit(tester);
       await tester.pumpAndSettle();
-      expect((jsonDecode(posted!.body) as Map)['tenantMessage'], isNull);
+      expect((jsonDecode(posted!.body) as Map)['tenantMessage'], 'x');
     },
   );
   testWidgets(
@@ -503,4 +548,144 @@ void main() {
       expect(find.text('Request sent'), findsNothing);
     },
   );
+  testWidgets(
+    'approved slot is disabled, labelled booked, and cannot be selected',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      await _pump(
+        tester,
+        (request) async => _json({
+          'date': request.url.queryParameters['date'],
+          'timeZoneId': 'Asia/Colombo',
+          'slotDurationMinutes': 60,
+          'state': 'available',
+          'slots': [
+            {
+              'localTime': '09:00',
+              'displayTime': '9:00 AM',
+              'requestedDateTime': _instant,
+              'isAvailable': true,
+              'unavailableReason': null,
+            },
+            {
+              'localTime': '10:00',
+              'displayTime': '10:00 AM',
+              'requestedDateTime': '2030-10-07T04:30:00Z',
+              'isAvailable': false,
+              'unavailableReason': 'ApprovedViewing',
+            },
+          ],
+        }),
+      );
+      await _date(tester);
+      final blocked = find.byKey(const ValueKey('viewing-slot-10:00'));
+      await tester.ensureVisible(blocked);
+      expect(tester.widget<ChoiceChip>(blocked).onSelected, isNull);
+      expect(
+        tester.widget<Text>(find.text('10:00 AM')).style!.decoration,
+        TextDecoration.lineThrough,
+      );
+      expect(find.text('Booked'), findsOneWidget);
+      await tester.tap(blocked);
+      await tester.pump();
+      expect(tester.widget<ChoiceChip>(blocked).selected, isFalse);
+      await _select(tester);
+      final selected = tester.widget<ChoiceChip>(
+        find.byKey(const ValueKey('viewing-slot-09:00')),
+      );
+      expect(selected.selectedColor, AppPalette.darkOlive);
+      expect(selected.labelStyle!.color, AppPalette.white);
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    },
+  );
+
+  testWidgets('unconfigured schedule has one truthful instruction', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      (request) async => _json({
+        'date': request.url.queryParameters['date'],
+        'timeZoneId': 'Asia/Colombo',
+        'slotDurationMinutes': 60,
+        'state': 'unconfigured',
+        'slots': [],
+      }),
+    );
+    await _date(tester);
+    expect(
+      find.text(
+        'Viewing times have not been configured for this property yet.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('No viewing times are available on this date.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+    'emoji note validation and counter match the backend length limit',
+    (tester) async {
+      await _pump(tester, (request) async => _slots(request));
+      await _date(tester);
+      await _select(tester);
+      final note = find.byKey(const ValueKey('viewing-message'));
+      await tester.enterText(note, List.filled(251, '🙂').join());
+      await tester.pump();
+      expect(find.text('502/500'), findsOneWidget);
+      expect(
+        find.text('The note must not exceed 500 characters.'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('confirm-viewing')))
+            .onPressed,
+        isNull,
+      );
+      await tester.enterText(note, List.filled(250, '🙂').join());
+      await tester.pump();
+      expect(find.text('500/500'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('confirm-viewing')))
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
+
+  for (final scale in [1.0, 1.3, 2.0]) {
+    testWidgets('complete booking remains usable at 320px and ${scale}x text', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 780);
+      addTearDown(tester.view.reset);
+      await _pump(
+        tester,
+        (request) async =>
+            request.method == 'POST' ? _created(request) : _slots(request),
+        scale: scale,
+      );
+      await _date(tester);
+      await _select(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('viewing-message')),
+        'I would like to see the parking area.',
+      );
+      await tester.pump();
+      await tester.ensureVisible(find.text('Request summary'));
+      expect(find.text('Date'), findsOneWidget);
+      expect(find.text('Time'), findsOneWidget);
+      expect(find.text('Duration'), findsOneWidget);
+      await _submit(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Request sent'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

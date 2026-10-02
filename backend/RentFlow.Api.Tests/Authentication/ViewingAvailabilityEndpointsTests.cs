@@ -44,20 +44,73 @@ public sealed class ViewingAvailabilityEndpointsTests
         var empty = await owner.GetFromJsonAsync<ViewingAvailabilityDto>($"{route}/viewing-availability"); Assert.Empty(empty!.Windows);
         Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync($"{route}/viewing-availability", ViewingAvailabilityServiceTests.Schedule(property.Id))).StatusCode);
         var slots = await tenant.GetFromJsonAsync<ViewingSlotsDto>($"{route}/viewing-slots?date=2030-10-07"); Assert.Equal(8, slots!.Slots.Count);
-        var created = await tenant.PostAsJsonAsync("/api/viewings", new CreateViewingRequestDto { PropertyId = property.Id, RequestedDateTime = slots.Slots[0].RequestedDateTime });
+        var created = await tenant.PostAsJsonAsync("/api/viewings", new CreateViewingRequestDto { TenantMessage = "Please arrange a visit.", PropertyId = property.Id, RequestedDateTime = slots.Slots[0].RequestedDateTime });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var result = await created.Content.ReadFromJsonAsync<ViewingResponseDto>();
         Assert.Equal(ViewingStatus.Pending, result!.Status); Assert.Equal("9:00 AM", result.RequestedDisplayTime);
         Assert.Equal("Asia/Colombo", result.TimeZoneId);
         using var otherTenant = Client(factory, Guid.NewGuid(), UserRole.Tenant);
         var competingResponse = await otherTenant.PostAsJsonAsync("/api/viewings", new CreateViewingRequestDto
-            { PropertyId = property.Id, RequestedDateTime = slots.Slots[0].RequestedDateTime });
+            { TenantMessage = "Please arrange a visit.", PropertyId = property.Id, RequestedDateTime = slots.Slots[0].RequestedDateTime });
         Assert.Equal(HttpStatusCode.Created, competingResponse.StatusCode);
         var competing = await competingResponse.Content.ReadFromJsonAsync<ViewingResponseDto>();
         Assert.Equal(HttpStatusCode.OK, (await owner.PatchAsJsonAsync($"/api/viewings/{result.Id}/approve", new UpdateViewingStatusDto())).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await owner.PatchAsJsonAsync($"/api/viewings/{competing!.Id}/approve", new UpdateViewingStatusDto())).StatusCode);
         Assert.Equal(ViewingStatus.Pending, (await otherTenant.GetFromJsonAsync<ViewingResponseDto>($"/api/viewings/{competing.Id}"))!.Status);
-        Assert.Equal(HttpStatusCode.Conflict, (await tenant.PostAsJsonAsync("/api/viewings", new CreateViewingRequestDto { PropertyId = property.Id, RequestedDateTime = slots.Slots[0].RequestedDateTime.AddMinutes(1) })).StatusCode);
+        var enriched = await tenant.GetFromJsonAsync<ViewingSlotsDto>($"{route}/viewing-slots?date=2030-10-07&includeUnavailable=true");
+        Assert.Equal(8, enriched!.Slots.Count);
+        Assert.False(enriched.Slots[0].IsAvailable);
+        Assert.Equal("ApprovedViewing", enriched.Slots[0].UnavailableReason);
+        var compatible = await tenant.GetFromJsonAsync<ViewingSlotsDto>($"{route}/viewing-slots?date=2030-10-07");
+        Assert.Equal(7, compatible!.Slots.Count);
+        Assert.All(compatible.Slots, slot => Assert.True(slot.IsAvailable));
+        Assert.Equal(HttpStatusCode.Conflict, (await otherTenant.PostAsJsonAsync("/api/viewings", new CreateViewingRequestDto
+            { PropertyId = property.Id, RequestedDateTime = enriched.Slots[0].RequestedDateTime, TenantMessage = "Another visit" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await tenant.PostAsJsonAsync("/api/viewings", new CreateViewingRequestDto { TenantMessage = "Please arrange a visit.", PropertyId = property.Id, RequestedDateTime = slots.Slots[0].RequestedDateTime.AddMinutes(1) })).StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null)] [InlineData("")] [InlineData("  \t\r\n ")]
+    public async Task RequiredNote_BlankInputsReturnControlled400WithoutPersisting(string? note)
+    {
+        using var factory = new AuthApiFactory(new ViewingAvailabilityServiceTests.Clock(new(2030, 10, 6, 0, 0, 0, TimeSpan.Zero)));
+        var property = await Seed(factory);
+        using var owner = Client(factory, property.LandlordId, UserRole.Landlord);
+        using var tenant = Client(factory, Guid.NewGuid(), UserRole.Tenant);
+        await owner.PutAsJsonAsync($"/api/properties/{property.Id}/viewing-availability", ViewingAvailabilityServiceTests.Schedule(property.Id));
+        var response = await tenant.PostAsJsonAsync("/api/viewings", new CreateViewingRequestDto
+        { PropertyId = property.Id, RequestedDateTime = new(2030, 10, 7, 3, 30, 0, TimeSpan.Zero), TenantMessage = note });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("note", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Empty(db.ViewingRequests); Assert.Empty(db.Notifications);
+    }
+
+    [Theory]
+    [InlineData(1, HttpStatusCode.Created)]
+    [InlineData(500, HttpStatusCode.Created)]
+    [InlineData(501, HttpStatusCode.BadRequest)]
+    public async Task RequiredNote_EnforcesTrimmedLengthAndAuthenticatedIdentity(int length, HttpStatusCode expected)
+    {
+        using var factory = new AuthApiFactory(new ViewingAvailabilityServiceTests.Clock(new(2030, 10, 6, 0, 0, 0, TimeSpan.Zero)));
+        var property = await Seed(factory); var tenantId = Guid.NewGuid();
+        using var owner = Client(factory, property.LandlordId, UserRole.Landlord);
+        using var tenant = Client(factory, tenantId, UserRole.Tenant);
+        await owner.PutAsJsonAsync($"/api/properties/{property.Id}/viewing-availability", ViewingAvailabilityServiceTests.Schedule(property.Id));
+        var response = await tenant.PostAsJsonAsync($"/api/viewings?tenantId={Guid.NewGuid()}", new CreateViewingRequestDto
+        { PropertyId = property.Id, RequestedDateTime = new(2030, 10, 7, 3, 30, 0, TimeSpan.Zero), TenantMessage = "  " + new string('x', length) + "  " });
+        Assert.Equal(expected, response.StatusCode);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        if (expected == HttpStatusCode.Created)
+        {
+            var created = await response.Content.ReadFromJsonAsync<ViewingResponseDto>();
+            Assert.Equal(new string('x', length), created!.TenantMessage);
+            Assert.Equal(tenantId, created.TenantId);
+            Assert.Equal(new string('x', length), Assert.Single(db.ViewingRequests).TenantMessage);
+        }
+        else { Assert.Empty(db.ViewingRequests); Assert.Empty(db.Notifications); }
     }
 
     [Theory]

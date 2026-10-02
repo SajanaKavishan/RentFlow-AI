@@ -17,6 +17,7 @@ public sealed class ViewingAvailabilityDto
     public List<ViewingWindowDto> Windows { get; set; } = [];
 }
 
-public sealed record ViewingSlotDto(string LocalTime, string DisplayTime, DateTimeOffset RequestedDateTime);
+public sealed record ViewingSlotDto(string LocalTime, string DisplayTime, DateTimeOffset RequestedDateTime,
+    bool IsAvailable = true, string? UnavailableReason = null);
 public sealed record ViewingSlotsDto(DateOnly Date, string TimeZoneId, int SlotDurationMinutes,
     IReadOnlyList<ViewingSlotDto> Slots, string State);
