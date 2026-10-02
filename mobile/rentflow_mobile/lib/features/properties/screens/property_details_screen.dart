@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/theme/app_theme.dart';
+import '../widgets/amenity_icon.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../rental_applications/screens/rental_application_form_screen.dart';
 import '../../rental_applications/services/rental_application_api_service.dart';
@@ -553,6 +555,11 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
   }
 
   Widget _amenities() {
+    final canonicalKeys = {
+      for (final detail
+          in _property.amenityDetails ?? <PropertyAmenityDetail>[])
+        detail.name.trim(): detail.canonicalKey,
+    };
     final items = <String>{
       ...?_property.amenityDetails
           ?.map((detail) => detail.name.trim())
@@ -590,9 +597,10 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
-                        Icons.check_rounded,
-                        size: 14,
+                      AmenityIcon(
+                        name: name,
+                        canonicalKey: canonicalKeys[name],
+                        size: 17,
                         color: AppPalette.olive,
                       ),
                       const SizedBox(width: 5),

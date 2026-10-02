@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
+import '../widgets/amenity_icon.dart';
 import '../models/property_matching.dart';
 import '../models/property_preferences.dart';
 import '../services/property_api_service.dart';
@@ -636,7 +637,12 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
         color: AppPalette.darkOlive,
       ),
     ),
-    avatar: Icon(_amenityIcon(key), size: 17, color: AppPalette.olive),
+    avatar: AmenityIcon(
+      name: label,
+      canonicalKey: key,
+      size: 17,
+      color: AppPalette.olive,
+    ),
     selectedColor: AppPalette.sage,
     backgroundColor: AppPalette.white,
     checkmarkColor: AppPalette.darkOlive,
@@ -654,20 +660,4 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
             }
           }),
   );
-
-  IconData _amenityIcon(String key) => switch (key) {
-    'wifi' => Icons.wifi_rounded,
-    'parking' => Icons.local_parking_rounded,
-    'air-conditioning' => Icons.ac_unit_rounded,
-    'washer-dryer' => Icons.local_laundry_service_outlined,
-    'gym' => Icons.fitness_center_rounded,
-    'swimming-pool' => Icons.pool_rounded,
-    'balcony' => Icons.balcony_outlined,
-    'elevator' => Icons.elevator_outlined,
-    'furnished' => Icons.chair_outlined,
-    'garden' => Icons.yard_outlined,
-    'security' => Icons.shield_outlined,
-    'rooftop' => Icons.roofing_rounded,
-    _ => Icons.check_circle_outline_rounded,
-  };
 }

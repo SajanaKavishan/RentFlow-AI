@@ -45,7 +45,8 @@ const paths = {
   sofa: <><path d="M5 12V8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v4" /><path d="M4 11a2 2 0 0 0-2 2v5h20v-5a2 2 0 0 0-2-2M5 18v2m14-2v2" /></>,
   leaf: <><path d="M20 4C10 4 5 9 5 15c0 3 2 5 5 5 6 0 10-6 10-16z" /><path d="M4 21c3-6 7-9 12-12" /></>,
   rooftop: <><path d="m3 11 9-7 9 7M6 10v10h12V10" /><path d="m12 11 .7 2.1 2.3.1-1.8 1.4.6 2.2-1.8-1.3-1.8 1.3.6-2.2-1.8-1.4 2.3-.1z" /></>,
-  amenity: <><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16 9" /></>,
+  balcony: <><path d="M7 12V3h10v9M12 3v9M3 12h18M4 12v9m4-9v9m4-9v9m4-9v9m4-9v9M3 21h18" /></>,
+  amenity: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
 }
 
 export default function Icon({ name, size = 20, className = '' }) {
