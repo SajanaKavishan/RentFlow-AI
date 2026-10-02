@@ -307,20 +307,35 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('LKR 125000 / month'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('details-rent')))
+            .textSpan!
+            .toPlainText(),
+        'Rs. 125,000 /mo',
+      );
       expect(find.text('Landlord management'), findsNothing);
       await tester.scrollUntilVisible(find.text('Amenities'), 250);
-      expect(find.byIcon(Icons.wifi), findsOneWidget);
-      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('details-amenity-Wi-Fi')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('details-amenity-Custom terrace')),
+        findsOneWidget,
+      );
       await tester.scrollUntilVisible(find.text('Listing preferences'), 250);
-      expect(find.text('LKR 250000'), findsOneWidget);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Listing preferences'));
+      await tester.pumpAndSettle();
+      expect(find.text('LKR 250,000'), findsOneWidget);
       expect(find.text('12 months'), findsOneWidget);
       expect(find.text('Pets considered with conditions'), findsOneWidget);
       expect(find.text('water'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('Maya Perera'), 250);
       expect(find.text('Maya Perera'), findsOneWidget);
       expect(find.text('Member since 2022'), findsOneWidget);
-      await tester.tap(find.text('Book a Viewing'));
+      await tester.tap(find.text('Book Viewing'));
       await tester.pumpAndSettle();
       expect(find.byType(BookViewingScreen), findsOneWidget);
       expect(
@@ -331,7 +346,7 @@ void main() {
       );
       await tester.pageBack();
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Apply for Rental'));
+      await tester.tap(find.text('Apply Now'));
       await tester.pumpAndSettle();
       expect(find.byType(RentalApplicationFormScreen), findsOneWidget);
       expect(
@@ -373,8 +388,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Book a Viewing'), findsNothing);
-    expect(find.text('Apply for Rental'), findsNothing);
+    expect(find.text('Book Viewing'), findsNothing);
+    expect(find.text('Apply Now'), findsNothing);
     expect(find.textContaining('currently unavailable'), findsOneWidget);
     expect(find.text('Listing preferences'), findsNothing);
     await tester.scrollUntilVisible(
@@ -432,7 +447,7 @@ void main() {
       250,
     );
     expect(tester.takeException(), isNull);
-    expect(find.text('Book a Viewing'), findsOneWidget);
+    expect(find.text('Book Viewing'), findsOneWidget);
   });
 
   testWidgets('failed listing refresh prevents create handoffs', (
@@ -460,8 +475,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Book a Viewing'), findsNothing);
-    expect(find.text('Apply for Rental'), findsNothing);
+    expect(find.text('Book Viewing'), findsNothing);
+    expect(find.text('Apply Now'), findsNothing);
     expect(
       find.text('Current availability could not be verified.'),
       findsOneWidget,

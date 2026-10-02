@@ -72,7 +72,7 @@ void main() {
   tearDown(() => backend.close());
 
   testWidgets(
-    'fresh GET fills city rent bedrooms bathrooms and canonical/custom amenity checkboxes',
+    'fresh GET fills city rent bedrooms bathrooms and canonical/custom amenity chips',
     (tester) async {
       await openEditor(tester, backend);
       expect(backend.calls(preferencesPath), 1);
@@ -92,18 +92,18 @@ void main() {
       );
       expect(
         tester
-            .widget<CheckboxListTile>(
+            .widget<FilterChip>(
               find.byKey(const Key('preference-amenity-wifi')),
             )
-            .value,
+            .selected,
         true,
       );
       expect(
         tester
-            .widget<CheckboxListTile>(
+            .widget<FilterChip>(
               find.byKey(const Key('preference-amenity-parking')),
             )
-            .value,
+            .selected,
         true,
       );
       await scrollToVisible(
@@ -113,10 +113,10 @@ void main() {
       );
       expect(
         tester
-            .widget<CheckboxListTile>(
+            .widget<FilterChip>(
               find.byKey(const Key('preference-amenity-Custom terrace')),
             )
-            .value,
+            .selected,
         true,
       );
     },
@@ -183,6 +183,112 @@ void main() {
     expect(backend.calls(preferencesPath), 2);
   });
 
+  testWidgets('room presets save minimums and Any preserves nullable values', (
+    tester,
+  ) async {
+    await openEditor(tester, backend);
+    await tapVisible(tester, find.byKey(const Key('preference-beds-choice-3')));
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const Key('preference-beds')))
+          .controller!
+          .text,
+      '3',
+    );
+    await tapVisible(
+      tester,
+      find.byKey(const Key('preference-baths-choice-any')),
+    );
+    await tester.tap(find.text('Save preferences'));
+    await tester.pumpAndSettle();
+    final put = backend.requests.singleWhere(
+      (request) => request.method == 'PUT',
+    );
+    expect(jsonDecode(put.body), {
+      'preferredCity': 'Kurunegala',
+      'maximumMonthlyRent': 100000,
+      'minimumBedrooms': 3,
+      'minimumBathrooms': null,
+      'preferredAmenities': ['wifi', 'parking', 'Custom terrace'],
+    });
+  });
+
+  testWidgets('Save stays visible while browsing the amenity chips', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 780);
+    addTearDown(tester.view.reset);
+    await openEditor(tester, backend);
+    final save = find.widgetWithText(FilledButton, 'Save preferences');
+    final before = tester.getRect(save);
+    final cancel = tester.getRect(
+      find.widgetWithText(OutlinedButton, 'Cancel'),
+    );
+    final reset = tester.getRect(
+      find.widgetWithText(TextButton, 'Reset saved preferences'),
+    );
+    expect(cancel.top, before.top);
+    expect(cancel.bottom, before.bottom);
+    expect(reset.left, cancel.left);
+    expect(reset.bottom, lessThanOrEqualTo(cancel.top));
+    await scrollToVisible(
+      tester,
+      find.byKey(const Key('preference-amenity-Custom terrace')),
+      150,
+    );
+    expect(tester.getRect(save), before);
+    expect(before.bottom, lessThanOrEqualTo(780));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Save tracks each field and amenities and mutes again on revert',
+    (tester) async {
+      await openEditor(tester, backend);
+      FilledButton save() => tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Save preferences'),
+      );
+      expect(save().onPressed, isNull);
+      for (final field in {
+        'preference-city': 'Colombo',
+        'preference-rent': '120000',
+        'preference-beds': '3',
+        'preference-baths': '2',
+      }.entries) {
+        final finder = find.byKey(Key(field.key));
+        await scrollToVisible(tester, finder, 150);
+        final original = tester.widget<TextFormField>(finder).controller!.text;
+        await tester.enterText(finder, field.value);
+        await tester.pump();
+        expect(save().onPressed, isNotNull);
+        await tester.enterText(finder, original);
+        await tester.pump();
+        expect(save().onPressed, isNull);
+      }
+      await scrollToVisible(
+        tester,
+        find.byKey(const Key('preference-rent')),
+        -150,
+      );
+      await tester.enterText(
+        find.byKey(const Key('preference-rent')),
+        '100000.0',
+      );
+      await tester.pump();
+      expect(save().onPressed, isNull);
+      await tapVisible(
+        tester,
+        find.byKey(const Key('preference-amenity-wifi')),
+      );
+      expect(save().onPressed, isNotNull);
+      await tester.tap(find.byKey(const Key('preference-amenity-wifi')));
+      await tester.pump();
+      expect(save().onPressed, isNull);
+      expect(backend.calls(preferencesPath, 'PUT'), 0);
+    },
+  );
+
   testWidgets('Reset requires confirmation and uses shared DELETE endpoint', (
     tester,
   ) async {
@@ -202,18 +308,25 @@ void main() {
     expect(backend.preferences['isConfigured'], false);
   });
 
-  testWidgets(
-    'No preferences permits normal draft creation and requires at least one value',
-    (tester) async {
-      backend.preferences = {'isConfigured': false};
-      await openEditor(tester, backend);
-      expect(find.text('Set match preferences'), findsOneWidget);
-      expect(find.text('Reset saved preferences'), findsNothing);
-      await tapVisible(tester, find.text('Save preferences'));
-      expect(find.text('Set at least one match preference.'), findsOneWidget);
-      expect(backend.calls(preferencesPath, 'PUT'), 0);
-    },
-  );
+  testWidgets('No preferences keeps Save disabled until the draft changes', (
+    tester,
+  ) async {
+    backend.preferences = {'isConfigured': false};
+    await openEditor(tester, backend);
+    expect(find.text('Set match preferences'), findsOneWidget);
+    expect(find.text('Reset saved preferences'), findsNothing);
+    FilledButton save() => tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Save preferences'),
+    );
+    expect(save().onPressed, isNull);
+    await tester.enterText(find.byKey(const Key('preference-city')), 'Galle');
+    await tester.pump();
+    expect(save().onPressed, isNotNull);
+    await tester.enterText(find.byKey(const Key('preference-city')), '');
+    await tester.pump();
+    expect(save().onPressed, isNull);
+    expect(backend.calls(preferencesPath, 'PUT'), 0);
+  });
 
   testWidgets('Invalid numbers cannot issue PUT', (tester) async {
     await openEditor(tester, backend);
@@ -286,6 +399,7 @@ void main() {
     };
     PreferenceChange? result;
     await openEditor(tester, backend, result: (value) => result = value);
+    await tester.enterText(find.byKey(const Key('preference-city')), 'Colombo');
     await scrollToVisible(tester, find.text('Save preferences'), 200);
     await tester.tap(find.text('Save preferences'));
     await tester.pump();
@@ -308,10 +422,10 @@ void main() {
       await openEditor(tester, backend);
       final custom = find.byKey(const Key('preference-amenity-Custom terrace'));
       await tapVisible(tester, custom);
-      expect(tester.widget<CheckboxListTile>(custom).value, false);
+      expect(tester.widget<FilterChip>(custom).selected, false);
       await tester.tap(custom);
       await tester.pumpAndSettle();
-      expect(tester.widget<CheckboxListTile>(custom).value, true);
+      expect(tester.widget<FilterChip>(custom).selected, true);
     },
   );
 

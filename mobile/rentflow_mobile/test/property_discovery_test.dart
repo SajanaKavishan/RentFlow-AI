@@ -164,6 +164,55 @@ void main() {
     }
   });
 
+  testWidgets('Liked puts saved homes first and reorders after unliking', (
+    tester,
+  ) async {
+    backend.properties.add({
+      ...fixture.propertyJson(),
+      'id': secondId,
+      'createdAt': '2026-10-01T00:00:00Z',
+    });
+    backend.favorites.add(fixture.id);
+    await openDiscovery(tester, backend);
+    await tester.tap(find.byKey(const Key('property-sort')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Liked'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sort: Liked'), findsOneWidget);
+    expect(find.text('2 properties'), findsOneWidget);
+    expect(
+      tester.widget<PropertyCard>(find.byType(PropertyCard).first).property.id,
+      fixture.id,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('property-favorite-${fixture.id}')),
+    );
+    await tester.pumpAndSettle();
+    expect(backend.favorites, isEmpty);
+    expect(
+      tester.widget<PropertyCard>(find.byType(PropertyCard).first).property.id,
+      secondId,
+    );
+  });
+
+  testWidgets('Liked is disabled when saved properties cannot be loaded', (
+    tester,
+  ) async {
+    backend.intercept = (request) async =>
+        request.url.path == favoritesPath ? http.Response('', 503) : null;
+    await openDiscovery(tester, backend);
+    await tester.tap(find.byKey(const Key('property-sort')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<PopupMenuItem<String>>(
+            find.widgetWithText(PopupMenuItem<String>, 'Liked'),
+          )
+          .enabled,
+      false,
+    );
+  });
+
   testWidgets('saving preferences refreshes server GET and backend matches', (
     tester,
   ) async {
@@ -325,6 +374,17 @@ void main() {
         await openDiscovery(tester, backend);
         await scrollToVisible(
           tester,
+          find.byKey(const Key('property-sort')),
+          100,
+        );
+        await tester.tap(find.byKey(const Key('property-sort')));
+        await tester.pumpAndSettle();
+        expect(find.text('Saved homes first'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.tapAt(const Offset(4, 4));
+        await tester.pumpAndSettle();
+        await scrollToVisible(
+          tester,
           find.byKey(const ValueKey('property-favorite-${fixture.id}')),
           100,
         );
@@ -332,11 +392,17 @@ void main() {
           find.byKey(const ValueKey('property-favorite-${fixture.id}')),
         );
         expect(heart.right, lessThanOrEqualTo(scenario.size.width));
+        expect(heart.width, greaterThanOrEqualTo(48));
+        expect(heart.height, greaterThanOrEqualTo(48));
+        expect(
+          tester.getRect(find.text('94% Match')).right,
+          lessThan(heart.left),
+        );
         await scrollToVisible(
           tester,
           find.descendant(
             of: find.byType(PropertyCard),
-            matching: find.text('Available'),
+            matching: find.text('Available now'),
           ),
           180,
         );
@@ -349,7 +415,7 @@ void main() {
   }
 
   testWidgets(
-    'reference card keeps rent beside the title and shows real amenity pills',
+    'card keeps rent beside the title and shows only beds baths and availability as facts',
     (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(360, 780);
@@ -357,6 +423,8 @@ void main() {
       backend.properties = [
         {
           ...fixture.propertyJson(),
+          'area': 15,
+          'areaUnit': 'perch',
           'amenities': ['Wi-Fi', 'Parking', 'Garden', 'Gym', 'Balcony'],
         },
       ];
@@ -375,10 +443,20 @@ void main() {
       expect(rent.left, greaterThan(title.right));
       expect(rent.top, title.top);
       expect(find.text('LKR 125,000'), findsOneWidget);
-      await scrollToVisible(tester, find.text('+2 more'), 150);
-      expect(find.text('Wi-Fi'), findsOneWidget);
-      expect(find.text('Parking'), findsOneWidget);
-      expect(find.text('Garden'), findsOneWidget);
+      expect(find.text('3 beds'), findsOneWidget);
+      expect(find.text('2 baths'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(PropertyCard),
+          matching: find.text('Available now'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('15 perch'), findsNothing);
+      expect(find.text('Wi-Fi'), findsNothing);
+      expect(find.text('Parking'), findsNothing);
+      expect(find.text('Garden'), findsNothing);
+      expect(find.text('+2 more'), findsNothing);
       expect(find.text('Gym'), findsNothing);
       expect(find.text('Verified'), findsNothing);
       expect(tester.takeException(), isNull);

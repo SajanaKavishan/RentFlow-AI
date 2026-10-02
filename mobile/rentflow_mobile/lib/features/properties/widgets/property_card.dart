@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../models/property.dart';
-import '../models/property_preferences.dart';
+import '../models/property_availability.dart';
 import '../services/property_api_service.dart';
 import 'property_photo.dart';
 
@@ -18,6 +18,7 @@ class PropertyCard extends StatelessWidget {
     this.favoritePending = false,
     this.onToggleFavorite,
     this.favoriteUnavailableReason,
+    this.todayProvider,
   });
 
   final Property property;
@@ -28,6 +29,7 @@ class PropertyCard extends StatelessWidget {
   final bool favoritePending;
   final VoidCallback? onToggleFavorite;
   final String? favoriteUnavailableReason;
+  final DateTime Function()? todayProvider;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -52,8 +54,8 @@ class PropertyCard extends StatelessWidget {
                   ),
                   if (saved != null)
                     Positioned(
-                      top: 10,
-                      right: 10,
+                      top: 6,
+                      right: 6,
                       child: Semantics(
                         toggled: saved,
                         child: IconButton(
@@ -67,26 +69,54 @@ class PropertyCard extends StatelessWidget {
                                   : 'Save ${property.title}'),
                           onPressed: favoritePending ? null : onToggleFavorite,
                           style: IconButton.styleFrom(
-                            backgroundColor: AppPalette.white,
-                            disabledBackgroundColor: AppPalette.softCream,
                             minimumSize: const Size(48, 48),
-                            foregroundColor: saved!
-                                ? AppPalette.danger
-                                : AppPalette.darkOlive,
+                            fixedSize: const Size(48, 48),
+                            padding: const EdgeInsets.all(6),
+                            shape: const CircleBorder(),
                           ),
-                          icon: favoritePending
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                          icon: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            width: 36,
+                            height: 36,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: saved!
+                                  ? AppPalette.sage
+                                  : AppPalette.white.withValues(alpha: 0.94),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppPalette.white.withValues(alpha: 0.8),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppPalette.darkOlive.withValues(
+                                    alpha: 0.1,
                                   ),
-                                )
-                              : Icon(
-                                  saved!
-                                      ? Icons.favorite_rounded
-                                      : Icons.favorite_border_rounded,
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
                                 ),
+                              ],
+                            ),
+                            child: favoritePending
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    saved!
+                                        ? Icons.favorite_rounded
+                                        : Icons.favorite_border_rounded,
+                                    size: 20,
+                                    color: onToggleFavorite == null
+                                        ? AppPalette.secondaryText
+                                        : saved!
+                                        ? AppPalette.success
+                                        : AppPalette.darkOlive,
+                                  ),
+                          ),
                         ),
                       ),
                     ),
@@ -94,9 +124,9 @@ class PropertyCard extends StatelessWidget {
                       matchScore! >= 0 &&
                       matchScore! <= 100)
                     Positioned(
-                      bottom: 12,
+                      top: 12,
                       left: 12,
-                      right: 12,
+                      right: saved != null ? 60 : 12,
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: StatusChip(
@@ -156,26 +186,9 @@ class PropertyCard extends StatelessWidget {
                         Icons.bathtub_outlined,
                         '${property.bathrooms} baths',
                       ),
-                      if (property.area != null && property.areaUnit != null)
-                        _Fact(
-                          Icons.square_foot_outlined,
-                          '${_area(property.area!)} ${property.areaUnit}',
-                        ),
-                      StatusChip(
-                        label: property.isAvailable
-                            ? 'Available'
-                            : 'Unavailable',
-                        tone: property.isAvailable
-                            ? StatusTone.success
-                            : StatusTone.neutral,
-                      ),
+                      _availabilityChip(),
                     ],
                   ),
-                  if (property.amenities.isNotEmpty ||
-                      property.amenityDetails?.isNotEmpty == true) ...[
-                    const SizedBox(height: 10),
-                    _amenityPills(),
-                  ],
                 ],
               ),
             ),
@@ -184,6 +197,21 @@ class PropertyCard extends StatelessWidget {
       ),
     ),
   );
+
+  Widget _availabilityChip() {
+    final availability = PropertyAvailability.fromProperty(
+      property,
+      today: todayProvider?.call(),
+    );
+    return StatusChip(
+      label: availability.label,
+      tone: switch (availability) {
+        PropertyAvailability.availableNow => StatusTone.success,
+        PropertyAvailability.availableSoon => StatusTone.progress,
+        PropertyAvailability.unavailable => StatusTone.neutral,
+      },
+    );
+  }
 
   Widget _titleAndRent(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -238,52 +266,7 @@ class PropertyCard extends StatelessWidget {
       );
     },
   );
-
-  Widget _amenityPills() {
-    final amenities =
-        (property.amenityDetails?.isNotEmpty == true
-                ? property.amenityDetails!.map(
-                    (item) =>
-                        propertyAmenityCatalog[item.canonicalKey] ?? item.name,
-                  )
-                : property.amenities)
-            .where((value) => value.trim().isNotEmpty)
-            .toSet()
-            .toList();
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        for (final amenity in amenities.take(3))
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppPalette.softCream,
-              border: Border.all(color: AppPalette.outline),
-              borderRadius: BorderRadius.circular(AppRadii.pill),
-            ),
-            child: Text(
-              amenity,
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppPalette.secondaryText,
-              ),
-            ),
-          ),
-        if (amenities.length > 3)
-          Text(
-            '+${amenities.length - 3} more',
-            style: const TextStyle(fontSize: 11, color: AppPalette.olive),
-          ),
-      ],
-    );
-  }
 }
-
-String _area(double value) => value == value.roundToDouble()
-    ? value.toStringAsFixed(0)
-    : value.toString();
 
 String _money(double value) => value
     .toStringAsFixed(0)

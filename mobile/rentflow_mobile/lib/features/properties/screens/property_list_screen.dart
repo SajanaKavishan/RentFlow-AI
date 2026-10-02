@@ -143,11 +143,19 @@ class _PropertyListScreenState extends State<PropertyListScreen>
     result.sort((a, b) {
       final order = switch (_data.sort) {
         'AI Match' => (_score(b) ?? -1).compareTo(_score(a) ?? -1),
+        'Liked' => (_data.favorites.contains(b.id) ? 1 : 0).compareTo(
+          _data.favorites.contains(a.id) ? 1 : 0,
+        ),
         'Lowest Rent' => a.monthlyRent.compareTo(b.monthlyRent),
         'Highest Rent' => b.monthlyRent.compareTo(a.monthlyRent),
         _ => b.createdAt.compareTo(a.createdAt),
       };
-      return order != 0 ? order : a.id.compareTo(b.id);
+      if (order != 0) return order;
+      if (_data.sort == 'Liked') {
+        final newest = b.createdAt.compareTo(a.createdAt);
+        if (newest != 0) return newest;
+      }
+      return a.id.compareTo(b.id);
     });
     return result;
   }
@@ -318,49 +326,7 @@ class _PropertyListScreenState extends State<PropertyListScreen>
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        PopupMenuButton<String>(
-                          key: const Key('property-sort'),
-                          tooltip: 'Sort properties',
-                          initialValue: _data.sort,
-                          onSelected: _data.selectSort,
-                          itemBuilder: (_) => [
-                            for (final option in [
-                              'AI Match',
-                              'Lowest Rent',
-                              'Highest Rent',
-                              'Newest',
-                            ])
-                              PopupMenuItem(
-                                value: option,
-                                enabled:
-                                    option != 'AI Match' || _data.hasScores,
-                                child: Text(option),
-                              ),
-                          ],
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    'Sort: ${_data.hasScores || _data.sort != 'AI Match' ? _data.sort : 'Newest'}',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: AppPalette.olive,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.expand_more_rounded,
-                                  size: 18,
-                                  color: AppPalette.olive,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                        _sortMenu(),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -372,6 +338,177 @@ class _PropertyListScreenState extends State<PropertyListScreen>
           ),
         );
       },
+    ),
+  );
+
+  Widget _sortMenu() => PopupMenuButton<String>(
+    key: const Key('property-sort'),
+    tooltip: 'Sort properties',
+    onSelected: _data.selectSort,
+    position: PopupMenuPosition.under,
+    offset: const Offset(0, 6),
+    color: AppPalette.white,
+    surfaceTintColor: Colors.transparent,
+    elevation: 8,
+    shadowColor: AppPalette.darkOlive.withValues(alpha: 0.18),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+      side: const BorderSide(color: AppPalette.outline),
+    ),
+    constraints: const BoxConstraints(minWidth: 250, maxWidth: 300),
+    itemBuilder: (_) => [
+      const PopupMenuItem<String>(
+        enabled: false,
+        height: 32,
+        child: Text(
+          'SORT BY',
+          style: TextStyle(
+            fontSize: 10,
+            letterSpacing: 1.2,
+            fontWeight: FontWeight.w700,
+            color: AppPalette.secondaryText,
+          ),
+        ),
+      ),
+      for (final option in [
+        (
+          label: 'AI Match',
+          icon: Icons.auto_awesome_rounded,
+          description: 'Best matches for you',
+        ),
+        (
+          label: 'Liked',
+          icon: Icons.favorite_rounded,
+          description: 'Saved homes first',
+        ),
+        (
+          label: 'Lowest Rent',
+          icon: Icons.trending_down_rounded,
+          description: 'Price: low to high',
+        ),
+        (
+          label: 'Highest Rent',
+          icon: Icons.trending_up_rounded,
+          description: 'Price: high to low',
+        ),
+        (
+          label: 'Newest',
+          icon: Icons.schedule_rounded,
+          description: 'Recently added homes',
+        ),
+      ])
+        PopupMenuItem<String>(
+          value: option.label,
+          enabled: switch (option.label) {
+            'AI Match' => _data.hasScores,
+            'Liked' => _data.favoritesReady,
+            _ => true,
+          },
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Builder(
+            builder: (context) {
+              final selected = _data.sort == option.label;
+              final enabled = switch (option.label) {
+                'AI Match' => _data.hasScores,
+                'Liked' => _data.favoritesReady,
+                _ => true,
+              };
+              final color = !enabled
+                  ? AppPalette.secondaryText.withValues(alpha: 0.45)
+                  : selected
+                  ? AppPalette.darkOlive
+                  : AppPalette.primaryText;
+              return Semantics(
+                selected: selected,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 13,
+                  ),
+                  decoration: BoxDecoration(
+                    color: selected ? AppPalette.sage : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? AppPalette.white.withValues(alpha: 0.7)
+                              : AppPalette.softCream,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(option.icon, size: 19, color: color),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              option.label,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: color,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              option.description,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: enabled
+                                    ? AppPalette.secondaryText
+                                    : color,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (selected)
+                        Icon(Icons.check_rounded, size: 18, color: color),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+    ],
+    child: Container(
+      constraints: const BoxConstraints(minHeight: 44),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppPalette.white,
+        border: Border.all(color: AppPalette.outline),
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.sort_rounded, size: 18, color: AppPalette.olive),
+          const SizedBox(width: 7),
+          Flexible(
+            child: Text(
+              'Sort: ${_data.hasScores || _data.sort != 'AI Match' ? _data.sort : 'Newest'}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppPalette.darkOlive,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Icon(
+            Icons.expand_more_rounded,
+            size: 18,
+            color: AppPalette.olive,
+          ),
+        ],
+      ),
     ),
   );
 

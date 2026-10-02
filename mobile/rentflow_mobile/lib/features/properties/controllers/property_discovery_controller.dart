@@ -159,6 +159,7 @@ class PropertyDiscoveryController extends ChangeNotifier {
 
   void selectSort(String value) {
     if (value == 'AI Match' && !hasScores) return;
+    if (value == 'Liked' && !favoritesReady) return;
     sort = value;
     _defaultSortChosen = true;
     _update();
