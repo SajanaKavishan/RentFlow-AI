@@ -112,10 +112,14 @@ class _LandlordViewingRequestDetailsScreenState
 
   @override
   Widget build(BuildContext context) {
-    final local = _viewing.requestedDateTime.toLocal();
+    final local = _viewing.requestedLocalDate == null
+        ? _viewing.requestedDateTime.toLocal()
+        : DateTime.parse(_viewing.requestedLocalDate!);
     final localizations = MaterialLocalizations.of(context);
     final date = localizations.formatMediumDate(local);
-    final time = localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local));
+    final time = _viewing.requestedDisplayTime == null
+        ? localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local))
+        : '${_viewing.requestedDisplayTime} (${_viewing.timeZoneId})';
     return Scaffold(
       backgroundColor: AppPalette.background,
       appBar: AppBar(

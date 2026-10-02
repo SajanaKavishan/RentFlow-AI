@@ -14,6 +14,10 @@ public class ViewingResponseDto
     public Guid PropertyId { get; set; }
 
     public DateTimeOffset RequestedDateTime { get; set; }
+    public int? DurationMinutes { get; set; }
+    public string? TimeZoneId { get; set; }
+    public string? RequestedLocalDate { get; set; }
+    public string? RequestedDisplayTime { get; set; }
 
     public ViewingStatus Status { get; set; }
 

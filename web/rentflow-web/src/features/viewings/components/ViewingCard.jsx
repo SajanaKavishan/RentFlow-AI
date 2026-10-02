@@ -25,6 +25,8 @@ function ViewingCard({ viewing, property, isUpdating, actionError, onApprove, on
   const [hasSubmitted, setHasSubmitted] = useState(false)
   const isPending = viewing.status === VIEWING_STATUS.PENDING
   const requestedDate = parseViewingDate(viewing.requestedDateTime)
+  const dateFormatter = viewing.timeZoneId ? new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeZone: viewing.timeZoneId }) : viewingDateFormatter
+  const timeFormatter = viewing.timeZoneId ? new Intl.DateTimeFormat(undefined, { timeStyle: 'short', timeZone: viewing.timeZoneId }) : viewingTimeFormatter
   const tenantMessage = viewing.tenantMessage?.trim()
   const landlordResponse = viewing.landlordResponse?.trim()
   const propertyLocation = property
@@ -92,8 +94,8 @@ function ViewingCard({ viewing, property, isUpdating, actionError, onApprove, on
             <span>Requested appointment</span>
             {requestedDate ? (
               <time dateTime={viewing.requestedDateTime}>
-                <strong>{viewingDateFormatter.format(requestedDate)}</strong>
-                <small>{viewingTimeFormatter.format(requestedDate)}</small>
+                <strong>{dateFormatter.format(requestedDate)}</strong>
+                <small>{timeFormatter.format(requestedDate)}{viewing.timeZoneId && ` (${viewing.timeZoneId})`}</small>
               </time>
             ) : (
               <strong>Date and time unavailable</strong>

@@ -27,6 +27,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
 
+    public DbSet<PropertyViewingAvailability> PropertyViewingAvailabilities => Set<PropertyViewingAvailability>();
+
     public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
 
     public DbSet<RentalOffer> RentalOffers => Set<RentalOffer>();
@@ -582,9 +584,29 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // =========================================================
         // VIEWING REQUESTS
         // =========================================================
+        modelBuilder.Entity<PropertyViewingAvailability>(entity =>
+        {
+            entity.HasKey(w => w.Id);
+            entity.HasOne<Property>().WithMany().HasForeignKey(w => w.PropertyId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(w => new { w.PropertyId, w.DayOfWeek }).IsUnique();
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ViewingWindow_Weekday", "\"DayOfWeek\" BETWEEN 0 AND 6");
+                t.HasCheckConstraint("CK_ViewingWindow_Times", "NOT \"IsEnabled\" OR \"StartTime\" < \"EndTime\"");
+            });
+        });
+        modelBuilder.Entity<Property>().Property(p => p.ViewingTimeZoneId).HasMaxLength(100).HasDefaultValue("Asia/Colombo");
+        modelBuilder.Entity<Property>().Property(p => p.ViewingSlotDurationMinutes).HasDefaultValue(60);
+        modelBuilder.Entity<Property>().ToTable(t => t.HasCheckConstraint("CK_Property_ViewingDuration", "\"ViewingSlotDurationMinutes\" IN (30,45,60,90)"));
         modelBuilder.Entity<ViewingRequest>(entity =>
         {
             entity.HasKey(viewing => viewing.Id);
+            entity.Property(v => v.DurationMinutes).HasDefaultValue(60);
+            entity.HasIndex(v => new { v.PropertyId, v.Status, v.RequestedDateTime });
+            entity.HasIndex(v => v.RequestedDateTime);
+            entity.HasIndex(v => v.Status);
+            entity.HasIndex(v => new { v.TenantId, v.PropertyId, v.RequestedDateTime });
+            entity.ToTable(t => t.HasCheckConstraint("CK_Viewing_Duration", "\"DurationMinutes\" > 0"));
 
             entity.Property(viewing => viewing.TenantId)
                 .IsRequired();

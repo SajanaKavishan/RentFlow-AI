@@ -506,6 +506,7 @@ builder.Services.AddSingleton<
     CloudflareR2StorageService>();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<ViewingAvailabilityService>();
 
 builder.Services.AddControllers();
 

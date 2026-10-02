@@ -53,7 +53,7 @@ public sealed class BusinessAuthorizationTests
             new
             {
                 propertyId = property.Id,
-                requestedDateTime = DateTimeOffset.UtcNow.AddDays(3),
+                requestedDateTime = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(3).AddHours(3.5)),
                 tenantMessage = "JWT owner"
             });
         var createdJson = await create.Content.ReadAsStringAsync();
@@ -283,7 +283,7 @@ public sealed class BusinessAuthorizationTests
         var create = await tenant.PostAsJsonAsync("/api/viewings", new
         {
             propertyId,
-            requestedDateTime = DateTimeOffset.UtcNow.AddDays(4),
+            requestedDateTime = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(4).AddHours(3.5)),
             tenantMessage = "Please confirm accessibility."
         });
         var created = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement;
@@ -1530,7 +1530,13 @@ public sealed class BusinessAuthorizationTests
             IsAvailable = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        await SeedAsync(factory, context => context.Properties.Add(property));
+        await SeedAsync(factory, context =>
+        {
+            context.Properties.Add(property);
+            context.PropertyViewingAvailabilities.AddRange(Enumerable.Range(0, 7).Select(day =>
+                new PropertyViewingAvailability { PropertyId = property.Id, DayOfWeek = day,
+                    IsEnabled = true, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0) }));
+        });
         return property;
     }
 

@@ -279,11 +279,13 @@ class _ViewingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localizations = MaterialLocalizations.of(context);
-    final scheduled = viewing.requestedDateTime.toLocal();
+    final scheduled = viewing.requestedLocalDate == null
+        ? viewing.requestedDateTime.toLocal()
+        : DateTime.parse(viewing.requestedLocalDate!);
     final date = localizations.formatFullDate(scheduled);
-    final time = localizations.formatTimeOfDay(
-      TimeOfDay.fromDateTime(scheduled),
-    );
+    final time = viewing.requestedDisplayTime == null
+        ? localizations.formatTimeOfDay(TimeOfDay.fromDateTime(scheduled))
+        : '${viewing.requestedDisplayTime} (${viewing.timeZoneId})';
 
     return AppCard(
       key: ValueKey('viewing-card-${viewing.id}'),

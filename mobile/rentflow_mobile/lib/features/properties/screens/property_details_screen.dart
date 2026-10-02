@@ -123,6 +123,8 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
         builder: (_) => BookViewingScreen(
           propertyId: _property.id,
           propertyTitle: _property.title,
+          property: _property,
+          propertyApiService: widget.propertyApiService,
           viewingApiService: widget.viewingApiService,
         ),
       ),

@@ -32,6 +32,9 @@ class Viewing {
     required this.landlordResponse,
     required this.createdAt,
     required this.updatedAt,
+    this.timeZoneId,
+    this.requestedLocalDate,
+    this.requestedDisplayTime,
   });
 
   final String id;
@@ -43,6 +46,9 @@ class Viewing {
   final String? landlordResponse;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final String? timeZoneId;
+  final String? requestedLocalDate;
+  final String? requestedDisplayTime;
 
   factory Viewing.fromJson(Map<String, dynamic> json) {
     return Viewing(
@@ -55,6 +61,9 @@ class Viewing {
       landlordResponse: _nullableString(json, 'landlordResponse'),
       createdAt: _requiredDateTime(json, 'createdAt'),
       updatedAt: _nullableDateTime(json, 'updatedAt'),
+      timeZoneId: _nullableString(json, 'timeZoneId'),
+      requestedLocalDate: _nullableString(json, 'requestedLocalDate'),
+      requestedDisplayTime: _nullableString(json, 'requestedDisplayTime'),
     );
   }
 

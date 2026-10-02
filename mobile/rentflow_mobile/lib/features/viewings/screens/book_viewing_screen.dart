@@ -1,23 +1,29 @@
 import 'package:flutter/material.dart';
-
 import '../../../core/network/api_client.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../../properties/models/property.dart';
+import '../../properties/services/property_api_service.dart';
+import '../../properties/widgets/property_photo.dart';
 import '../models/viewing.dart';
+import '../models/viewing_slots.dart';
 import '../services/viewing_api_service.dart';
+import 'my_viewings_screen.dart';
 
 class BookViewingScreen extends StatefulWidget {
   const BookViewingScreen({
     super.key,
     required this.propertyId,
     this.propertyTitle,
+    this.property,
+    this.propertyApiService,
     this.viewingApiService,
   });
-
   final String propertyId;
   final String? propertyTitle;
+  final Property? property;
+  final PropertyApiService? propertyApiService;
   final ViewingApiService? viewingApiService;
-
   @override
   State<BookViewingScreen> createState() => _BookViewingScreenState();
 }
@@ -25,37 +31,51 @@ class BookViewingScreen extends StatefulWidget {
 class _BookViewingScreenState extends State<BookViewingScreen> {
   final _messageController = TextEditingController();
   ApiClient? _ownedApiClient;
-  late final ViewingApiService _viewingApiService;
-
-  DateTime? _selectedDate;
-  TimeOfDay? _selectedTime;
+  late final ViewingApiService _api;
+  DateTime? _date;
+  ViewingSlots? _availability;
+  ViewingSlot? _slot;
+  String? _slotError;
   String? _submissionError;
-  bool _isSubmitting = false;
+  bool _loading = false;
+  bool _submitting = false;
+  bool _sent = false;
+  int _loadVersion = 0;
 
-  bool get _hasPropertyReference => widget.propertyId.trim().isNotEmpty;
+  bool get _propertyValid =>
+      widget.propertyId.trim().isNotEmpty &&
+      widget.property?.id == widget.propertyId &&
+      widget.property!.isAvailable;
+  String get _title =>
+      widget.property?.title ??
+      widget.propertyTitle ??
+      'Property details unavailable';
+  String _dateString(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
   @override
   void initState() {
     super.initState();
     if (widget.viewingApiService case final service?) {
-      _viewingApiService = service;
+      _api = service;
     } else {
       _ownedApiClient = ApiClient();
-      _viewingApiService = ViewingApiService(_ownedApiClient!);
+      _api = ViewingApiService(_ownedApiClient!);
     }
-    _messageController.addListener(_onMessageChanged);
+    _messageController.addListener(_messageChanged);
   }
 
   @override
   void dispose() {
+    _loadVersion++;
     _messageController
-      ..removeListener(_onMessageChanged)
+      ..removeListener(_messageChanged)
       ..dispose();
     _ownedApiClient?.close();
     super.dispose();
   }
 
-  void _onMessageChanged() {
+  void _messageChanged() {
     if (mounted) setState(() {});
   }
 
@@ -64,490 +84,388 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
     final today = DateTime(now.year, now.month, now.day);
     final selected = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? today,
+      initialDate: _date != null && !_date!.isBefore(today) ? _date! : today,
       firstDate: today,
       lastDate: today.add(const Duration(days: 365)),
       helpText: 'Choose a viewing date',
     );
-
     if (selected == null || !mounted) return;
     setState(() {
-      _selectedDate = selected;
+      _date = selected;
+      _slot = null;
       _submissionError = null;
-      if (_selectedTime != null && !_combinedDateTime().isAfter(now)) {
-        _selectedTime = null;
-      }
     });
+    await _loadSlots();
   }
 
-  Future<void> _pickTime() async {
-    final selected = await showTimePicker(
-      context: context,
-      initialTime:
-          _selectedTime ??
-          TimeOfDay.fromDateTime(DateTime.now().add(const Duration(hours: 1))),
-      helpText: 'Choose a viewing time',
-    );
-
-    if (selected == null || !mounted) return;
-    if (_selectedDate != null) {
-      final dateTime = _combine(_selectedDate!, selected);
-      if (!dateTime.isAfter(DateTime.now())) {
-        _setError('Please choose a time in the future.');
-        return;
-      }
-    }
-
+  Future<void> _loadSlots() async {
+    final date = _date;
+    if (date == null) return;
+    final version = ++_loadVersion;
     setState(() {
-      _selectedTime = selected;
-      _submissionError = null;
+      _loading = true;
+      _slot = null;
+      _availability = null;
+      _slotError = null;
     });
-  }
-
-  DateTime _combine(DateTime date, TimeOfDay time) {
-    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
-  }
-
-  DateTime _combinedDateTime() => _combine(_selectedDate!, _selectedTime!);
-
-  Future<void> _submit() async {
-    if (_isSubmitting) return;
-    if (!_hasPropertyReference) {
-      _setError(
-        'A real property reference is required before a viewing can be booked.',
-      );
-      return;
-    }
-
-    final date = _selectedDate;
-    final time = _selectedTime;
-    if (date == null || time == null) {
-      _setError('Choose a date and time before booking.');
-      return;
-    }
-
-    final requestedDateTime = _combine(date, time);
-    if (!requestedDateTime.isAfter(DateTime.now())) {
-      _setError('Please choose a viewing time in the future.');
-      return;
-    }
-
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _isSubmitting = true;
-      _submissionError = null;
-    });
-
     try {
-      final message = _messageController.text.trim();
-      final createdViewing = await _viewingApiService.createViewing(
+      final result = await _api.getViewingSlots(
         propertyId: widget.propertyId,
-        requestedDateTime: requestedDateTime,
-        tenantMessage: message.isEmpty ? null : message,
+        date: _dateString(date),
       );
-
-      if (!mounted) return;
-      setState(() {
-        _selectedDate = null;
-        _selectedTime = null;
-        _messageController.clear();
-      });
-      AppSnackbars.show(
-        context,
-        message:
-            'Viewing request created. Status: ${_statusLabel(createdViewing.status)}.',
-        tone: SnackTone.success,
-      );
+      if (!mounted || version != _loadVersion) return;
+      setState(() => _availability = result);
     } on ViewingApiException catch (error) {
-      if (mounted) _setError(error.message);
+      if (mounted && version == _loadVersion) {
+        setState(() => _slotError = error.message);
+      }
     } catch (_) {
-      if (mounted) {
-        _setError('Unable to book the viewing right now. Please try again.');
+      if (mounted && version == _loadVersion) {
+        setState(
+          () => _slotError =
+              'Viewing times could not be loaded. Please try again.',
+        );
       }
     } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+      if (mounted && version == _loadVersion) setState(() => _loading = false);
     }
   }
 
-  void _setError(String message) {
-    setState(() => _submissionError = message);
-    AppSnackbars.show(context, message: message, tone: SnackTone.error);
+  Future<void> _submit() async {
+    final slot = _slot;
+    if (_submitting ||
+        !_propertyValid ||
+        _date == null ||
+        slot == null ||
+        _loading ||
+        !(_availability?.slots.contains(slot) ?? false)) {
+      return;
+    }
+    if (_messageController.text.characters.length > 500) {
+      setState(
+        () => _submissionError = 'The note must not exceed 500 characters.',
+      );
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _submitting = true;
+      _submissionError = null;
+    });
+    try {
+      final message = _messageController.text.trim();
+      final result = await _api.createViewing(
+        propertyId: widget.propertyId,
+        requestedDateTime: slot.requestedDateTime,
+        requestedDateTimeIso: slot.requestedDateTimeIso,
+        tenantMessage: message.isEmpty ? null : message,
+      );
+      if (!mounted) return;
+      if (result.status != ViewingStatus.pending ||
+          result.propertyId != widget.propertyId ||
+          result.requestedDateTime.toUtc() != slot.requestedDateTime.toUtc()) {
+        throw const ViewingApiException(
+          'The viewing service returned an unexpected request response.',
+        );
+      }
+      setState(() => _sent = true);
+    } on ViewingApiException catch (error) {
+      if (!mounted) return;
+      if (error.statusCode == 409) {
+        setState(
+          () => _submissionError =
+              'That time is no longer available. Please choose another slot.',
+        );
+        await _loadSlots();
+      } else {
+        setState(() => _submissionError = error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _submissionError =
+              'Unable to send the request. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final localizations = MaterialLocalizations.of(context);
-    final dateLabel = _selectedDate == null
+    final dateLabel = _date == null
         ? 'Select a date'
-        : localizations.formatMediumDate(_selectedDate!);
-    final timeLabel = _selectedTime == null
-        ? 'Select a time'
-        : localizations.formatTimeOfDay(_selectedTime!);
-
+        : MaterialLocalizations.of(context).formatMediumDate(_date!);
     return Scaffold(
       backgroundColor: AppPalette.background,
       appBar: AppBar(
-        title: const Text('Book a Viewing'),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1),
+        title: const Text(
+          'REQUEST A VIEWING',
+          style: TextStyle(fontSize: 13, letterSpacing: 1.2),
         ),
       ),
       body: AuthenticatedPage(
         maxWidth: 580,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const PageHeader(
-              eyebrow: 'Viewing request',
-              title: 'Choose a time that works for you',
-              subtitle:
-                  'The property owner will review the request and respond.',
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            const SectionHeader(title: 'Selected property'),
-            const SizedBox(height: AppSpacing.md),
-            _PropertySummary(
-              propertyId: widget.propertyId,
-              propertyTitle: widget.propertyTitle,
-              isAvailable: _hasPropertyReference,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            const SectionHeader(title: 'Date and time'),
-            const SizedBox(height: AppSpacing.md),
-            AppCard(
-              child: Column(
+        child: _sent
+            ? _success()
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _SelectionTile(
-                    key: const ValueKey('viewing-date-selector'),
-                    icon: Icons.calendar_today_outlined,
-                    label: 'Date',
-                    value: dateLabel,
-                    isSelected: _selectedDate != null,
-                    onTap: _isSubmitting ? null : _pickDate,
+                  Text(
+                    'Choose a time',
+                    style: Theme.of(context).textTheme.headlineSmall,
                   ),
-                  const Divider(height: AppSpacing.lg),
-                  _SelectionTile(
-                    key: const ValueKey('viewing-time-selector'),
-                    icon: Icons.schedule_outlined,
-                    label: 'Time',
-                    value: timeLabel,
-                    isSelected: _selectedTime != null,
-                    onTap: _isSubmitting ? null : _pickTime,
+                  const SizedBox(height: 16),
+                  _propertyCard(),
+                  const SizedBox(height: 24),
+                  const SectionHeader(title: 'Choose a date'),
+                  const SizedBox(height: 8),
+                  AppCard(
+                    child: ListTile(
+                      key: const ValueKey('viewing-date-selector'),
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.calendar_today_outlined),
+                      title: Text(dateLabel),
+                      trailing: const Icon(Icons.expand_more),
+                      onTap: _submitting || !_propertyValid ? null : _pickDate,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const SectionHeader(title: 'Choose a time'),
+                  const SizedBox(height: 8),
+                  _slotPicker(),
+                  const SizedBox(height: 24),
+                  const SectionHeader(
+                    title: 'A note for the landlord',
+                    subtitle: 'Optional',
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const ValueKey('viewing-message'),
+                    controller: _messageController,
+                    enabled: !_submitting,
+                    maxLines: 3,
+                    maxLength: 500,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      hintText: "Anything you'd like them to know?",
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Requested viewing',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(_title),
+                        Text(
+                          '$dateLabel · ${_slot?.displayTime ?? 'Choose a time'}',
+                        ),
+                        if (_availability != null)
+                          Text(
+                            'Times in ${_availability!.timeZoneId}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _messageController.text.trim().isEmpty
+                              ? 'No message added'
+                              : _messageController.text.trim(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_submissionError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        _submissionError!,
+                        key: const ValueKey('book-viewing-error'),
+                        style: const TextStyle(color: AppPalette.danger),
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    key: const ValueKey('confirm-viewing'),
+                    onPressed:
+                        !_propertyValid ||
+                            _date == null ||
+                            _slot == null ||
+                            _loading ||
+                            _submitting
+                        ? null
+                        : _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppPalette.darkOlive,
+                      minimumSize: const Size.fromHeight(50),
+                    ),
+                    child: Text(
+                      _submitting ? 'Sending request...' : 'Confirm Viewing',
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            const SectionHeader(
-              title: 'Message',
-              subtitle: 'Optional note for the property owner.',
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              key: const ValueKey('viewing-message'),
-              controller: _messageController,
-              enabled: !_isSubmitting,
-              maxLines: 4,
-              maxLength: 500,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                hintText: 'Add anything helpful about your visit.',
-                alignLabelWithHint: true,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.base),
-            const SectionHeader(title: 'Booking summary'),
-            const SizedBox(height: AppSpacing.md),
-            _BookingSummary(
-              propertyId: widget.propertyId,
-              date: dateLabel,
-              time: timeLabel,
-              message: _messageController.text.trim(),
-            ),
-            if (_submissionError case final error?) ...[
-              const SizedBox(height: AppSpacing.base),
-              _SubmissionError(message: error),
-            ],
-            const SizedBox(height: AppSpacing.lg),
-            if (_isSubmitting) ...[
-              const LinearProgressIndicator(
-                key: ValueKey('viewing-submitting'),
-                color: AppPalette.olive,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Confirming your viewing with RentFlow...',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: AppSpacing.md),
-            ],
-            FilledButton.icon(
-              key: const ValueKey('confirm-viewing'),
-              onPressed: _isSubmitting || !_hasPropertyReference
-                  ? null
-                  : _submit,
-              icon: _isSubmitting
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppPalette.white,
-                      ),
-                    )
-                  : const Icon(Icons.check_circle_outline),
-              label: Text(_isSubmitting ? 'Confirming...' : 'Confirm Viewing'),
-            ),
-          ],
-        ),
       ),
     );
   }
-}
 
-class _PropertySummary extends StatelessWidget {
-  const _PropertySummary({
-    required this.propertyId,
-    required this.isAvailable,
-    this.propertyTitle,
-  });
-
-  final String propertyId;
-  final String? propertyTitle;
-  final bool isAvailable;
-
-  @override
-  Widget build(BuildContext context) => AppCard(
-    color: isAvailable ? AppPalette.sage : AppPalette.white,
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: const BoxDecoration(
-            color: AppPalette.darkOlive,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.home_work_outlined, color: AppPalette.white),
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                propertyTitle == null ? 'Property reference' : 'Selected home',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelMedium?.copyWith(color: AppPalette.muted),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                isAvailable ? (propertyTitle ?? propertyId) : 'Unavailable',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                isAvailable
-                    ? propertyTitle == null
-                          ? 'Property details are not available in the mobile integration. This reference will be sent with your request.'
-                          : 'This home will be included with your viewing request.'
-                    : 'Property selection is not integrated. A viewing cannot be booked without a real property reference.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              if (!isAvailable) ...[
-                const SizedBox(height: AppSpacing.sm),
-                const StatusChip(
-                  label: 'Integration pending',
-                  tone: StatusTone.warning,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _SelectionTile extends StatelessWidget {
-  const _SelectionTile({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final bool isSelected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(AppRadii.medium),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+  Widget _propertyCard() {
+    final property = widget.property;
+    return AppCard(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: isSelected ? AppPalette.sage : AppPalette.softCream,
-              borderRadius: BorderRadius.circular(AppRadii.medium),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 76,
+              height: 86,
+              child: PropertyPhoto(
+                propertyId: widget.propertyId,
+              propertyApiService: _propertyValid ? widget.propertyApiService : null,
+              ),
             ),
-            child: Icon(icon, color: AppPalette.darkOlive),
           ),
-          const SizedBox(width: AppSpacing.md),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: Theme.of(context).textTheme.labelMedium),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: isSelected
-                        ? AppPalette.primaryText
-                        : AppPalette.secondaryText,
+                Text(_title, style: Theme.of(context).textTheme.titleMedium),
+                if (property != null) ...[
+                  const SizedBox(height: 4),
+                  Text(property.city),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Rs. ${property.monthlyRent.toStringAsFixed(0)} / month',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                ),
+                ],
+                if (!_propertyValid)
+                  const Text(
+                    'This property is unavailable for viewing requests.',
+                  ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, color: AppPalette.olive),
         ],
       ),
-    ),
-  );
-}
+    );
+  }
 
-class _BookingSummary extends StatelessWidget {
-  const _BookingSummary({
-    required this.propertyId,
-    required this.date,
-    required this.time,
-    required this.message,
-  });
-
-  final String propertyId;
-  final String date;
-  final String time;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => AppCard(
-    child: Column(
+  Widget _slotPicker() {
+    if (_date == null) return const Text('Choose a date to see viewing times');
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: LinearProgressIndicator(
+          key: ValueKey('viewing-slots-loading'),
+          color: AppPalette.olive,
+        ),
+      );
+    }
+    if (_slotError != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_slotError!),
+          TextButton(
+            onPressed: _submitting ? null : _loadSlots,
+            child: const Text('Retry viewing times'),
+          ),
+        ],
+      );
+    }
+    final availability = _availability;
+    if (availability == null || availability.slots.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('No viewing times are available on this date.'),
+          if (availability?.state == 'unconfigured')
+            const Text(
+              'The landlord has not configured viewing availability yet.',
+            ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SummaryRow(
-          icon: Icons.home_work_outlined,
-          label: 'Property',
-          value: propertyId.trim().isEmpty ? 'Unavailable' : propertyId,
+        Text(
+          'Times in ${availability.timeZoneId}',
+          style: Theme.of(context).textTheme.bodySmall,
         ),
-        const Divider(height: AppSpacing.lg),
-        _SummaryRow(
-          icon: Icons.calendar_today_outlined,
-          label: 'Date',
-          value: date,
-        ),
-        const Divider(height: AppSpacing.lg),
-        _SummaryRow(icon: Icons.schedule_outlined, label: 'Time', value: time),
-        const Divider(height: AppSpacing.lg),
-        _SummaryRow(
-          icon: Icons.chat_bubble_outline,
-          label: 'Message',
-          value: message.isEmpty ? 'No message added.' : message,
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: availability.slots
+              .map(
+                (slot) => ChoiceChip(
+                  key: ValueKey('viewing-slot-${slot.localTime}'),
+                  label: Text(slot.displayTime),
+                  selected: identical(_slot, slot),
+                  selectedColor: AppPalette.darkOlive,
+                  labelStyle: TextStyle(
+                    color: identical(_slot, slot)
+                        ? AppPalette.white
+                        : AppPalette.darkOlive,
+                  ),
+                  onSelected: _submitting
+                      ? null
+                      : (_) => setState(() {
+                          _slot = slot;
+                          _submissionError = null;
+                        }),
+                ),
+              )
+              .toList(),
         ),
       ],
-    ),
-  );
-}
+    );
+  }
 
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _success() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Icon(icon, size: 19, color: AppPalette.olive),
-      const SizedBox(width: AppSpacing.md),
-      SizedBox(
-        width: 64,
-        child: Text(
-          label,
-          style: Theme.of(
-            context,
-          ).textTheme.labelMedium?.copyWith(color: AppPalette.muted),
-        ),
+      const SizedBox(height: 40),
+      const Icon(
+        Icons.check_circle_outline,
+        size: 64,
+        color: AppPalette.darkOlive,
       ),
-      const SizedBox(width: AppSpacing.sm),
-      Expanded(
-        child: Text(
-          value,
-          textAlign: TextAlign.end,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: AppPalette.text,
-            fontWeight: FontWeight.w600,
+      const SizedBox(height: 20),
+      Text(
+        'Request sent',
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.headlineSmall,
+      ),
+      const SizedBox(height: 12),
+      const Text(
+        "We'll let you know when the landlord responds.\nNothing is confirmed until they approve it.",
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: 28),
+      FilledButton(
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => MyViewingsScreen(viewingApiService: _api),
           ),
         ),
+        child: const Text('View my requests'),
+      ),
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Back to property'),
       ),
     ],
   );
 }
-
-class _SubmissionError extends StatelessWidget {
-  const _SubmissionError({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    key: const ValueKey('book-viewing-error'),
-    padding: const EdgeInsets.all(AppSpacing.md),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF5DDDC),
-      borderRadius: BorderRadius.circular(AppRadii.medium),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(Icons.error_outline, color: AppPalette.danger),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Text(
-            message,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppPalette.danger,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-String _statusLabel(ViewingStatus status) => switch (status) {
-  ViewingStatus.pending => 'Pending',
-  ViewingStatus.approved => 'Approved',
-  ViewingStatus.rejected => 'Rejected',
-  ViewingStatus.cancelled => 'Cancelled',
-  ViewingStatus.completed => 'Completed',
-};

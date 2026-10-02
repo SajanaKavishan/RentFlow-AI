@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import PropertyLocationPicker from '../components/PropertyLocationPicker.jsx'
+import ViewingAvailabilityEditor from '../components/ViewingAvailabilityEditor.jsx'
 import {
   createProperty,
   getMyProperties,
@@ -285,9 +286,9 @@ export default function PropertyFormPage() {
     return () => { active = false }
   }, [isEditing, loadAttempt, propertyId])
 
-  const isDirty = status === 'ready' && (
-    formSnapshot(form) !== initialSnapshot || files.length > 0
-  )
+  const [scheduleDirty, setScheduleDirty] = useState(false)
+  const listingDirty = status === 'ready' && (formSnapshot(form) !== initialSnapshot || files.length > 0)
+  const isDirty = listingDirty || scheduleDirty
 
   useEffect(() => {
     if (!isDirty) return undefined
@@ -457,7 +458,7 @@ export default function PropertyFormPage() {
       return
     }
 
-    if (isEditing && !isDirty) return
+    if (isEditing && !listingDirty) return
 
     for (const candidateStep of [0, 1, 2]) {
       const errors = validateStep(candidateStep, form, locationMode)
@@ -946,6 +947,7 @@ export default function PropertyFormPage() {
           )}
 
           <div className="property-editor-actions property-wizard-actions">
+            {scheduleDirty && <p>Save viewing availability below before saving other property changes.</p>}
             <div>
               {step > 0 && (
                 <button
@@ -979,7 +981,7 @@ export default function PropertyFormPage() {
               <button
                 type="submit"
                 className="property-button property-button--primary"
-                disabled={saving || (isEditing && !isDirty)}
+                disabled={saving || (isEditing && !listingDirty) || scheduleDirty}
               >
                 {saving
                   ? isEditing ? 'Saving changes...' : 'Creating property...'
@@ -989,6 +991,8 @@ export default function PropertyFormPage() {
           </div>
         </form>
       </section>
+      {isEditing && ownedPropertyId && <ViewingAvailabilityEditor key={ownedPropertyId}
+        propertyId={ownedPropertyId} onDirtyChange={setScheduleDirty} disabled={saving} />}
     </main>
   )
 }

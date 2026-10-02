@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../models/viewing.dart';
+import '../models/viewing_slots.dart';
 
 class ViewingApiService {
   const ViewingApiService(this.apiClient);
@@ -15,11 +16,13 @@ class ViewingApiService {
     required String propertyId,
     required DateTime requestedDateTime,
     String? tenantMessage,
+    String? requestedDateTimeIso,
   }) async {
     final uri = apiClient.buildUri(ApiConstants.viewingsPath);
     final body = jsonEncode({
       'propertyId': propertyId,
-      'requestedDateTime': requestedDateTime.toUtc().toIso8601String(),
+      'requestedDateTime':
+          requestedDateTimeIso ?? requestedDateTime.toUtc().toIso8601String(),
       'tenantMessage': tenantMessage,
     });
 
@@ -31,6 +34,34 @@ class ViewingApiService {
     final uri = apiClient.buildUri('${ApiConstants.viewingsPath}/$id');
     final response = await _send(() => apiClient.get(uri));
     return _parseViewing(response.body);
+  }
+
+  Future<ViewingSlots> getViewingSlots({
+    required String propertyId,
+    required String date,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/properties/$propertyId/viewing-slots',
+      queryParameters: {'date': date},
+    );
+    final response = await _send(() => apiClient.get(uri));
+    try {
+      final parsed = ViewingSlots.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+      if (parsed.date != date) {
+        throw const FormatException('Wrong availability date.');
+      }
+      return parsed;
+    } on FormatException {
+      throw const ViewingApiException(
+        'The viewing service returned invalid availability.',
+      );
+    } on TypeError {
+      throw const ViewingApiException(
+        'The viewing service returned invalid availability.',
+      );
+    }
   }
 
   Future<List<Viewing>> getMyViewings() async {

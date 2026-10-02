@@ -125,7 +125,7 @@ public sealed class NotificationEventsTests
             new
             {
                 propertyId = propertyA.Id,
-                requestedDateTime = DateTimeOffset.UtcNow.AddDays(3),
+                requestedDateTime = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(3).AddHours(3.5)),
                 tenantMessage = "I would like to view the property."
             });
         var applicationResponse = await tenant.PostAsJsonAsync(
@@ -302,7 +302,13 @@ public sealed class NotificationEventsTests
             IsAvailable = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        await SeedAsync(factory, context => context.Properties.Add(property));
+        await SeedAsync(factory, context =>
+        {
+            context.Properties.Add(property);
+            context.PropertyViewingAvailabilities.AddRange(Enumerable.Range(0, 7).Select(day =>
+                new PropertyViewingAvailability { PropertyId = property.Id, DayOfWeek = day,
+                    IsEnabled = true, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0) }));
+        });
         return property;
     }
 
