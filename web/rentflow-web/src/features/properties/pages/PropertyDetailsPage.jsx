@@ -416,7 +416,7 @@ export default function PropertyDetailsPage() {
             </div>
 
             <div className="property-details-actions">
-              <Link to={`/properties/${encodeURIComponent(property.id)}/edit#viewing-availability`}>
+              <Link to={`/properties/${encodeURIComponent(property.id)}/viewing-availability`}>
                 <Icon name="calendar" size={17} /> Viewing availability
               </Link>
               <Link to={`/properties/${encodeURIComponent(property.id)}/edit`}>

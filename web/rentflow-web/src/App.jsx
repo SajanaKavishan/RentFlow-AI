@@ -21,6 +21,7 @@ import PropertyDetailsPage from './features/properties/pages/PropertyDetailsPage
 import PropertyMatchingRedirect from './features/properties/pages/PropertyMatchingRedirect.jsx'
 import ManagePropertiesPage from './features/properties/pages/ManagePropertiesPage.jsx'
 import PropertyFormPage from './features/properties/pages/PropertyFormPage.jsx'
+import ViewingAvailabilityPage from './features/properties/pages/ViewingAvailabilityPage.jsx'
 import OwnedPropertiesProvider from './shared/property/OwnedPropertiesProvider.jsx'
 import PricingAnalysisPage from './features/pricingAnalysis/pages/PricingAnalysisPage.jsx'
 import RentalOffersPage from './features/rentalOffers/pages/RentalOffersPage.jsx'
@@ -62,6 +63,9 @@ export default function App() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/unauthorized" element={<UnauthorizedState />} />
         <Route path="/properties/:propertyId" element={<PropertyDetailsPage />} />
+        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD, USER_ROLES.ADMIN]} />}>
+          <Route path="/properties/:propertyId/viewing-availability" element={<ViewingAvailabilityPage />} />
+        </Route>
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT, USER_ROLES.LANDLORD]} />}>
           <Route path="/notifications/rental-application/:id" element={<NotificationResourcePage resourceType="RentalApplication" />} />

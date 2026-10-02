@@ -15,6 +15,9 @@ import {
   uploadPropertyImages,
 } from '../services/propertyApiService.js'
 import { loadGoogleLocationTools, loadGooglePlaces } from '../googleMapsLoader.js'
+import { getViewingAvailability } from '../services/viewingAvailabilityApi.js'
+
+vi.mock('../services/viewingAvailabilityApi.js', () => ({ getViewingAvailability: vi.fn(), saveViewingAvailability: vi.fn() }))
 
 vi.mock('../../notifications/notificationsApi.js', async (importOriginal) => ({
   ...(await importOriginal()), getUnreadCount: vi.fn().mockResolvedValue(0),
@@ -198,6 +201,7 @@ async function completePropertyDetails() {
 }
 
 beforeEach(() => {
+  getViewingAvailability.mockReset().mockResolvedValue({ propertyId, timeZoneId: 'Asia/Colombo', slotDurationMinutes: 60, windows: [] })
   vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', '')
   loadGooglePlaces.mockReset()
   loadGoogleLocationTools.mockReset()
@@ -222,6 +226,26 @@ afterEach(() => {
 })
 
 describe('property form wizard', () => {
+  it('replaces the full edit schedule with a link to this property’s dedicated settings', async () => {
+    const router = renderApp(`/properties/${propertyId}/edit`)
+    expect(await screen.findByLabelText('Property title')).toHaveValue(property.title)
+    expect(screen.queryByLabelText('Monday enabled')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Slot duration')).not.toBeInTheDocument()
+    expect(getViewingAvailability).not.toHaveBeenCalled()
+    const link = screen.getByRole('link', { name: 'Manage viewing availability' })
+    expect(link).toHaveAttribute('href', `/properties/${propertyId}/viewing-availability`)
+    await userEvent.click(link)
+    expect(router.state.location.pathname).toBe(`/properties/${propertyId}/viewing-availability`)
+    expect(await screen.findByLabelText('Monday enabled')).not.toBeChecked()
+    expect(getViewingAvailability).toHaveBeenCalledWith(propertyId)
+  })
+
+  it('does not embed availability controls in Add Property without a real property ID', () => {
+    renderApp('/properties/new')
+    expect(screen.queryByRole('link', { name: 'Manage viewing availability' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Monday enabled')).not.toBeInTheDocument()
+    expect(getViewingAvailability).not.toHaveBeenCalled()
+  })
   it('validates each step and preserves entered values while moving backward and forward', async () => {
     renderApp('/properties/new')
 

@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PropertyDetailsPage from './PropertyDetailsPage.jsx'
@@ -66,6 +67,7 @@ function renderPage() {
         <Route path="/properties/:propertyId" element={<PropertyDetailsPage />} />
         <Route path="/modules/my-viewings" element={<p>My viewings</p>} />
         <Route path="/modules/my-applications" element={<p>My applications</p>} />
+        <Route path="/properties/:propertyId/viewing-availability" element={<h1>Availability settings destination</h1>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -224,8 +226,17 @@ describe('tenant property details', () => {
     expect(await screen.findByRole('heading', { name: 'Manage this property' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Viewing Requests/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Rental Applications/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Viewing availability' }))
+      .toHaveAttribute('href', '/properties/property-1/viewing-availability')
     expect(screen.queryByRole('link', { name: 'Book a Viewing' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Listed by' })).not.toBeInTheDocument()
     expect(getPublicLandlordSummary).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('link', { name: 'Viewing availability' }))
+    expect(await screen.findByRole('heading', { name: 'Availability settings destination' })).toBeInTheDocument()
+  })
+  it('does not expose availability management to tenants', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: property.title })
+    expect(screen.queryByRole('link', { name: 'Viewing availability' })).not.toBeInTheDocument()
   })
 })

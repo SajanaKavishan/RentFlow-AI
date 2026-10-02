@@ -263,6 +263,11 @@ function ViewingRequestsPage() {
           )}
         </div>
         <div className="viewings-page__header-actions">
+          {selection.status === 'selected' && selection.property && (
+            <Link className="button button--quiet" to={`/properties/${encodeURIComponent(selection.property.id)}/viewing-availability`}>
+              Manage viewing availability <Icon name="arrow" size={16} />
+            </Link>
+          )}
           {pageStatus === 'success' && (
             <dl className="viewings-page__counts" role="group" aria-label="Viewing request counts">
               <div>

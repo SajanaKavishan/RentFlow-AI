@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import PropertyLocationPicker from '../components/PropertyLocationPicker.jsx'
-import ViewingAvailabilityEditor from '../components/ViewingAvailabilityEditor.jsx'
 import {
   createProperty,
   getMyProperties,
@@ -286,9 +285,8 @@ export default function PropertyFormPage() {
     return () => { active = false }
   }, [isEditing, loadAttempt, propertyId])
 
-  const [scheduleDirty, setScheduleDirty] = useState(false)
   const listingDirty = status === 'ready' && (formSnapshot(form) !== initialSnapshot || files.length > 0)
-  const isDirty = listingDirty || scheduleDirty
+  const isDirty = listingDirty
 
   useEffect(() => {
     if (!isDirty) return undefined
@@ -947,7 +945,6 @@ export default function PropertyFormPage() {
           )}
 
           <div className="property-editor-actions property-wizard-actions">
-            {scheduleDirty && <p>Save viewing availability below before saving other property changes.</p>}
             <div>
               {step > 0 && (
                 <button
@@ -981,7 +978,7 @@ export default function PropertyFormPage() {
               <button
                 type="submit"
                 className="property-button property-button--primary"
-                disabled={saving || (isEditing && !listingDirty) || scheduleDirty}
+                disabled={saving || (isEditing && !listingDirty)}
               >
                 {saving
                   ? isEditing ? 'Saving changes...' : 'Creating property...'
@@ -991,8 +988,15 @@ export default function PropertyFormPage() {
           </div>
         </form>
       </section>
-      {isEditing && ownedPropertyId && <ViewingAvailabilityEditor key={ownedPropertyId}
-        propertyId={ownedPropertyId} onDirtyChange={setScheduleDirty} disabled={saving} />}
+      {isEditing && ownedPropertyId && <section className="property-availability-link" aria-labelledby="property-availability-link-title">
+        <div>
+          <h2 id="property-availability-link-title">Viewing availability</h2>
+          <p>Manage tenant viewing times separately.</p>
+        </div>
+        <Link className="property-button property-button--quiet" to={`/properties/${encodeURIComponent(ownedPropertyId)}/viewing-availability`}>
+          Manage viewing availability <Icon name="arrow" size={17} />
+        </Link>
+      </section>}
     </main>
   )
 }

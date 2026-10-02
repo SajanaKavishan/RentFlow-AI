@@ -27,13 +27,13 @@ describe('Viewing availability editor', () => {
     expect(await screen.findByLabelText('Monday start')).toHaveValue('09:00')
     expect(screen.getByLabelText('Monday enabled')).toBeChecked()
     expect(screen.getByLabelText('Sunday enabled')).not.toBeChecked()
-    expect(screen.getByText('Timezone: Sri Lanka (Asia/Colombo)')).toBeInTheDocument()
+    expect(screen.getByText('Sri Lanka (Asia/Colombo)')).toBeInTheDocument()
   })
   it('requires actual times when enabling a weekday and validates window boundaries', async () => {
     render(<ViewingAvailabilityEditor propertyId={propertyId} />)
     fireEvent.click(await screen.findByLabelText('Monday enabled'))
     expect(screen.getByLabelText('Monday start')).toHaveValue('')
-    fireEvent.click(screen.getByRole('button', { name: 'Save viewing availability' }))
+    expect(screen.getByRole('button', { name: 'Save viewing availability' })).toBeDisabled()
     expect(await screen.findByRole('alert')).toHaveTextContent('Choose a start time before the end time.')
     fireEvent.change(screen.getByLabelText('Monday start'), { target: { value: '17:00' } })
     fireEvent.change(screen.getByLabelText('Monday end'), { target: { value: '09:00' } })
@@ -42,6 +42,7 @@ describe('Viewing availability editor', () => {
     fireEvent.change(screen.getByLabelText('Monday start'), { target: { value: '08:30' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save viewing availability' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('one complete slot')
+    expect(screen.getByRole('button', { name: 'Save viewing availability' })).toBeDisabled()
   })
   it('saves changed duration/hours only through API and acknowledges only API success', async () => {
     getViewingAvailability.mockResolvedValue(configured)

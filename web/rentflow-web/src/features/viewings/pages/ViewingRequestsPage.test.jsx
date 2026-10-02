@@ -78,6 +78,7 @@ describe('Landlord viewing requests', () => {
     renderPage(null)
     expect(screen.getByRole('heading', { name: 'Viewing Requests' })).toBeInTheDocument()
     expect(screen.queryByText('Landlord workspace')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Manage viewing availability' })).not.toBeInTheDocument()
   })
 
   it('prioritizes pending requests and shows real references and messages', async () => {
@@ -96,6 +97,8 @@ describe('Landlord viewing requests', () => {
     expect(cards).toHaveLength(2)
     expect(screen.getByRole('link', { name: 'Back to Property' }))
       .toHaveAttribute('href', `/properties/${propertyId}`)
+    expect(screen.getByRole('link', { name: 'Manage viewing availability' }))
+      .toHaveAttribute('href', `/properties/${propertyId}/viewing-availability`)
     expect(screen.getByRole('group', { name: 'Selected property' }))
       .toHaveTextContent('Harbour View Residence18 Marine Drive, Colombo')
     const counts = screen.getByRole('group', { name: 'Viewing request counts' })
