@@ -40,6 +40,8 @@ Map<String, dynamic> get _viewingJson => {
   'propertyId': _propertyId,
   'requestedDateTime': '2030-01-02T10:00:00Z',
   'status': 0,
+  'canCancel': true,
+  'cancellationDeadline': null,
   'tenantMessage': null,
   'landlordResponse': null,
   'createdAt': '2026-09-14T10:00:00Z',
@@ -170,6 +172,7 @@ void main() {
               jsonEncode({
                 ..._viewingJson,
                 'status': 3,
+                'canCancel': false,
                 'updatedAt': '2026-09-14T10:05:00Z',
               }),
               200,

@@ -234,20 +234,13 @@ public class ViewingService(
         await using var transaction = await ViewingPropertyLock.AcquireAsync(dbContext, reference.PropertyId, cancellationToken);
         var viewing = await GetTrackedViewingAsync(viewingId, cancellationToken);
 
-        if (viewing.Status is not (ViewingStatus.Pending or ViewingStatus.Approved))
-        {
-            throw ViewingServiceException.Conflict(
-                $"A {viewing.Status} viewing cannot be cancelled.");
-        }
-
-        if (viewing.RequestedDateTime.ToUniversalTime() <= Now)
-        {
-            throw ViewingServiceException.Conflict(
-                "A viewing cannot be cancelled at or after its requested date and time.");
-        }
+        var now = Now;
+        var cancellationError = GetCancellationError(viewing, now);
+        if (cancellationError is not null)
+            throw ViewingServiceException.Conflict(cancellationError);
 
         viewing.Status = ViewingStatus.Cancelled;
-        viewing.UpdatedAt = Now;
+        viewing.UpdatedAt = now;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
@@ -278,6 +271,24 @@ public class ViewingService(
             throw ViewingServiceException.Conflict(
                 $"Only pending viewings may be changed to {targetStatus}.");
         }
+    }
+
+    private static DateTimeOffset? CancellationDeadline(ViewingRequest viewing) =>
+        viewing.Status == ViewingStatus.Approved
+            ? viewing.RequestedDateTime - TimeSpan.FromHours(5)
+            : null;
+
+    // Shared by mutation validation and response eligibility. Compare absolute
+    // instants using server time; the exact Approved deadline is inclusive.
+    private static string? GetCancellationError(ViewingRequest viewing, DateTimeOffset now)
+    {
+        if (viewing.Status is not (ViewingStatus.Pending or ViewingStatus.Approved))
+            return $"A {viewing.Status} viewing cannot be cancelled.";
+        if (CancellationDeadline(viewing) is { } deadline && now > deadline)
+            return "Your cancellation window has closed. Approved viewings can only be cancelled up to 5 hours before the viewing.";
+        if (viewing.RequestedDateTime <= now)
+            return "A viewing cannot be cancelled at or after its requested date and time.";
+        return null;
     }
 
     private async Task<ViewingResponseDto> MapToResponseAsync(ViewingRequest viewing, CancellationToken ct)
@@ -317,7 +328,7 @@ public class ViewingService(
     private static string TenantDisplayName(string? name) =>
         string.IsNullOrWhiteSpace(name) ? "Tenant" : name.Trim();
 
-    private static ViewingResponseDto MapToResponse(
+    private ViewingResponseDto MapToResponse(
         ViewingRequest viewing, string? zoneId, ViewingTenantSummaryDto tenant)
     {
         var local = zoneId is null ? (DateTimeOffset?)null : TimeZoneInfo.ConvertTime(viewing.RequestedDateTime,
@@ -334,6 +345,8 @@ public class ViewingService(
             RequestedLocalDate = local?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             RequestedDisplayTime = local?.ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture),
             Status = viewing.Status,
+            CanCancel = GetCancellationError(viewing, Now) is null,
+            CancellationDeadline = CancellationDeadline(viewing),
             TenantMessage = viewing.TenantMessage,
             LandlordResponse = viewing.LandlordResponse,
             CreatedAt = viewing.CreatedAt,

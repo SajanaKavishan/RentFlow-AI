@@ -23,6 +23,12 @@ public class ViewingResponseDto
 
     public ViewingStatus Status { get; set; }
 
+    /// <summary>Server cancellation eligibility at the time of this response.</summary>
+    public bool CanCancel { get; set; }
+
+    /// <summary>Inclusive cancellation deadline for Approved viewings only.</summary>
+    public DateTimeOffset? CancellationDeadline { get; set; }
+
     public string? TenantMessage { get; set; }
 
     public string? LandlordResponse { get; set; }

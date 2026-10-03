@@ -4,10 +4,10 @@ import '../../../core/network/api_client.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../properties/models/property.dart';
-import '../../properties/screens/property_details_screen.dart';
 import '../../properties/services/property_api_service.dart';
 import '../models/viewing.dart';
 import '../services/viewing_api_service.dart';
+import 'tenant_viewing_details_screen.dart';
 
 class MyViewingsScreen extends StatefulWidget {
   const MyViewingsScreen({super.key, this.viewingApiService});
@@ -56,16 +56,17 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
     return viewings;
   }
 
-  void _openProperty(Property property) {
-    Navigator.of(context).push<void>(
+  Future<void> _openViewing(Viewing viewing) async {
+    await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => PropertyDetailsScreen(
-          property: property,
+        builder: (_) => TenantViewingDetailsScreen(
+          viewingId: viewing.id,
           propertyApiService: _propertyApiService,
           viewingApiService: _viewingApiService,
         ),
       ),
     );
+    if (mounted) await _refresh();
   }
 
   @override
@@ -87,8 +88,7 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
   }
 
   bool _canCancel(Viewing viewing) {
-    return viewing.status == ViewingStatus.pending ||
-        viewing.status == ViewingStatus.approved;
+    return viewing.canCancel;
   }
 
   Future<void> _confirmCancellation(Viewing viewing) async {
@@ -263,9 +263,7 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
                   child: _ViewingCard(
                     viewing: viewing,
                     property: property,
-                    onOpenProperty: property == null
-                        ? null
-                        : () => _openProperty(property),
+                    onOpenViewing: () => _openViewing(viewing),
                     canCancel: _canCancel(viewing),
                     isCancelling: _cancellingIds.contains(viewing.id),
                     onCancel: () => _confirmCancellation(viewing),
@@ -309,7 +307,7 @@ class _ViewingCard extends StatelessWidget {
   const _ViewingCard({
     required this.viewing,
     required this.property,
-    required this.onOpenProperty,
+    required this.onOpenViewing,
     required this.canCancel,
     required this.isCancelling,
     required this.onCancel,
@@ -317,7 +315,7 @@ class _ViewingCard extends StatelessWidget {
 
   final Viewing viewing;
   final Property? property;
-  final VoidCallback? onOpenProperty;
+  final VoidCallback onOpenViewing;
   final bool canCancel;
   final bool isCancelling;
   final VoidCallback onCancel;
@@ -347,6 +345,7 @@ class _ViewingCard extends StatelessWidget {
 
     return AppCard(
       key: ValueKey('viewing-card-${viewing.id}'),
+      onTap: onOpenViewing,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -354,19 +353,18 @@ class _ViewingCard extends StatelessWidget {
             children: [
               _CompactViewingStatus(status: viewing.status),
               const Spacer(),
-              if (onOpenProperty != null)
-                SizedBox.square(
-                  dimension: 32,
-                  child: IconButton(
-                    tooltip: 'View property',
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.chevron_right, size: 20),
-                    onPressed: onOpenProperty,
-                    style: IconButton.styleFrom(
-                      foregroundColor: AppPalette.darkOlive,
-                    ),
+              SizedBox.square(
+                dimension: 32,
+                child: IconButton(
+                  tooltip: 'View viewing details',
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.chevron_right, size: 20),
+                  onPressed: onOpenViewing,
+                  style: IconButton.styleFrom(
+                    foregroundColor: AppPalette.darkOlive,
                   ),
                 ),
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),

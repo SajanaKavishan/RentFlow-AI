@@ -35,6 +35,56 @@ public sealed class ViewingAvailabilityEndpointsTests
     }
 
     [Fact]
+    public async Task ApprovedCancellation_EnforcesDeadlineAndRetainsAuthorization()
+    {
+        var start = new DateTimeOffset(2030, 10, 7, 4, 30, 0, TimeSpan.Zero);
+        var clock = new ViewingCancellationTests.Clock(start.AddHours(-5));
+        using var factory = new AuthApiFactory(clock);
+        var property = await Seed(factory);
+        var tenantId = Guid.NewGuid();
+        using var tenant = Client(factory, tenantId, UserRole.Tenant);
+        using var otherTenant = Client(factory, Guid.NewGuid(), UserRole.Tenant);
+        using var landlord = Client(factory, property.LandlordId, UserRole.Landlord);
+        using var otherLandlord = Client(factory, Guid.NewGuid(), UserRole.Landlord);
+        var viewing = new ViewingRequest
+        {
+            TenantId = tenantId, PropertyId = property.Id, RequestedDateTime = start,
+            Status = ViewingStatus.Approved, DurationMinutes = 60, CreatedAt = start.AddDays(-1)
+        };
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.Add(viewing);
+            await db.SaveChangesAsync();
+        }
+        var route = $"/api/viewings/{viewing.Id}";
+        Assert.True((await tenant.GetFromJsonAsync<ViewingResponseDto>(route))!.CanCancel);
+        Assert.Equal(HttpStatusCode.NotFound, (await otherTenant.GetAsync(route)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await otherTenant.PatchAsync($"{route}/cancel", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await landlord.PatchAsync($"{route}/cancel", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await otherLandlord.GetAsync(route)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await landlord.GetAsync(route)).StatusCode);
+
+        clock.Now = clock.Now.AddTicks(1);
+        var rejected = await tenant.PatchAsync($"{route}/cancel", null);
+        Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
+        var problem = await rejected.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Mvc.ProblemDetails>();
+        Assert.Equal(409, problem!.Status);
+        Assert.Contains("cancellation window has closed", problem.Detail!);
+        var refreshed = await tenant.GetFromJsonAsync<ViewingResponseDto>(route);
+        Assert.False(refreshed!.CanCancel);
+        Assert.Equal(ViewingStatus.Approved, refreshed.Status);
+
+        clock.Now = start.AddHours(-5);
+        var allowed = await tenant.PatchAsync($"{route}/cancel", null);
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+        var cancelled = await allowed.Content.ReadFromJsonAsync<ViewingResponseDto>();
+        Assert.Equal(ViewingStatus.Cancelled, cancelled!.Status);
+        Assert.False(cancelled.CanCancel);
+        Assert.Null(cancelled.CancellationDeadline);
+    }
+
+    [Fact]
     public async Task OwnerSavesSchedule_TenantGetsSlotsAndSubmitsPendingBeforeAvailableFrom()
     {
         using var factory = new AuthApiFactory(new ViewingAvailabilityServiceTests.Clock(new(2030, 10, 6, 0, 0, 0, TimeSpan.Zero)));

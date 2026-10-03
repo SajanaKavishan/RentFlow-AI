@@ -37,6 +37,8 @@ Map<String, dynamic> _viewingJson({
   'propertyId': propertyId,
   'requestedDateTime': '2030-01-02T10:00:00Z',
   'status': status,
+  'canCancel': status == 0 || status == 1,
+  'cancellationDeadline': status == 1 ? '2030-01-02T05:00:00Z' : null,
   'tenantMessage': tenantMessage,
   'landlordResponse': landlordResponse,
   'createdAt': '2026-09-14T10:00:00Z',
@@ -101,7 +103,7 @@ Future<void> _pumpScreen(
 
 void main() {
   for (final width in [320.0, 360.0, 390.0, 430.0]) {
-    for (final scale in [1.0, 1.8]) {
+    for (final scale in [1.0, 2.0]) {
       testWidgets('compact cards fit ${width.toInt()}px at ${scale}x text', (
         tester,
       ) async {
