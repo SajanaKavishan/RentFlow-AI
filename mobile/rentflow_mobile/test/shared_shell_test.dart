@@ -306,7 +306,12 @@ void main() {
     await tester.tap(find.text('My Lease'));
     await tester.pumpAndSettle();
     expect(find.text('Integration pending'), findsOneWidget);
-    expect(find.textContaining('lease module is integrated'), findsOneWidget);
+    expect(
+      find.text(
+        'Lease services are unavailable right now. Return to Home and try again.',
+      ),
+      findsOneWidget,
+    );
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
@@ -315,7 +320,12 @@ void main() {
     await tester.tap(find.text('Pay Rent'));
     await tester.pumpAndSettle();
     expect(find.text('Integration pending'), findsOneWidget);
-    expect(find.textContaining('payment module is integrated'), findsOneWidget);
+    expect(
+      find.text(
+        'Payment services are unavailable right now. Return to Home and try again.',
+      ),
+      findsOneWidget,
+    );
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
