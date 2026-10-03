@@ -9,7 +9,10 @@ namespace RentFlow.Api.Services;
 /// <summary>
 /// Provides Viewing Booking operations.
 /// </summary>
-public class ViewingService(ApplicationDbContext dbContext, TimeProvider? timeProvider = null) : IViewingService
+public class ViewingService(
+    ApplicationDbContext dbContext,
+    TimeProvider? timeProvider = null,
+    ICurrentUserService? currentUser = null) : IViewingService
 {
     private DateTimeOffset Now => (timeProvider ?? TimeProvider.System).GetUtcNow();
     private readonly ViewingAvailabilityService availability = new(dbContext, timeProvider);
@@ -279,9 +282,22 @@ public class ViewingService(ApplicationDbContext dbContext, TimeProvider? timePr
 
     private async Task<ViewingResponseDto> MapToResponseAsync(ViewingRequest viewing, CancellationToken ct)
     {
-        var zoneId = await dbContext.Properties.AsNoTracking().Where(p => p.Id == viewing.PropertyId)
-            .Select(p => p.ViewingTimeZoneId).SingleOrDefaultAsync(ct);
-        return MapToResponse(viewing, zoneId);
+        var property = await dbContext.Properties.AsNoTracking().Where(p => p.Id == viewing.PropertyId)
+            .Select(p => new { p.ViewingTimeZoneId, p.LandlordId }).SingleOrDefaultAsync(ct);
+        // Never disclose contact data in lists or to tenants/admins. Recheck ownership
+        // here as well as retaining the controller's existing access guards.
+        var disclosePhone = viewing.Status == ViewingStatus.Approved
+            && currentUser is { IsAuthenticated: true, Role: UserRole.Landlord }
+            && currentUser.UserId is Guid landlordId
+            && property?.LandlordId == landlordId;
+        var tenant = await dbContext.Users.AsNoTracking().Where(u => u.Id == viewing.TenantId)
+            .Select(u => new { u.FullName, PhoneNumber = disclosePhone ? u.PhoneNumber : null })
+            .SingleOrDefaultAsync(ct);
+        return MapToResponse(viewing, property?.ViewingTimeZoneId, new ViewingTenantSummaryDto
+        {
+            DisplayName = TenantDisplayName(tenant?.FullName),
+            PhoneNumber = UsablePhoneNumber(tenant?.PhoneNumber)
+        });
     }
 
     private async Task<IReadOnlyList<ViewingResponseDto>> MapListAsync(List<ViewingRequest> viewings, CancellationToken ct)
@@ -289,10 +305,30 @@ public class ViewingService(ApplicationDbContext dbContext, TimeProvider? timePr
         var ids = viewings.Select(v => v.PropertyId).Distinct().ToArray();
         var zones = await dbContext.Properties.AsNoTracking().Where(p => ids.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, p => p.ViewingTimeZoneId, ct);
-        return viewings.Select(v => MapToResponse(v, zones.GetValueOrDefault(v.PropertyId))).ToList();
+        var tenantIds = viewings.Select(v => v.TenantId).Distinct().ToArray();
+        // Batch only the names needed by these viewings; no user directory or phone lookup.
+        var names = await dbContext.Users.AsNoTracking().Where(u => tenantIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+        return viewings.Select(v => MapToResponse(v, zones.GetValueOrDefault(v.PropertyId),
+            new ViewingTenantSummaryDto { DisplayName = TenantDisplayName(names.GetValueOrDefault(v.TenantId)) }))
+            .ToList();
     }
 
-    private static ViewingResponseDto MapToResponse(ViewingRequest viewing, string? zoneId)
+    private static string TenantDisplayName(string? name) =>
+        string.IsNullOrWhiteSpace(name) ? "Tenant" : name.Trim();
+
+    private static string? UsablePhoneNumber(string? value)
+    {
+        var phone = value?.Trim();
+        if (string.IsNullOrEmpty(phone)
+            || !System.Text.RegularExpressions.Regex.IsMatch(phone, @"^[+0-9][0-9\s().-]{6,31}$"))
+            return null;
+        var digits = phone.Count(c => c is >= '0' and <= '9');
+        return digits is >= 7 and <= 15 ? phone : null;
+    }
+
+    private static ViewingResponseDto MapToResponse(
+        ViewingRequest viewing, string? zoneId, ViewingTenantSummaryDto tenant)
     {
         var local = zoneId is null ? (DateTimeOffset?)null : TimeZoneInfo.ConvertTime(viewing.RequestedDateTime,
             ViewingAvailabilityService.ResolveZone(zoneId));
@@ -300,6 +336,7 @@ public class ViewingService(ApplicationDbContext dbContext, TimeProvider? timePr
         {
             Id = viewing.Id,
             TenantId = viewing.TenantId,
+            Tenant = tenant,
             PropertyId = viewing.PropertyId,
             RequestedDateTime = viewing.RequestedDateTime,
             DurationMinutes = viewing.DurationMinutes,

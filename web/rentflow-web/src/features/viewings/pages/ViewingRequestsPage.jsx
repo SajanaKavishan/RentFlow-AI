@@ -8,6 +8,7 @@ import Icon from '../../../shared/ui/Icons.jsx'
 import ViewingCard from '../components/ViewingCard.jsx'
 import {
   approveViewing,
+  getViewingById,
   getViewingsByProperty,
   rejectViewing,
   ViewingApiError,
@@ -53,6 +54,23 @@ function verifyPropertyViewings(viewings, propertyId) {
   return viewings
 }
 
+async function loadPropertyViewings(propertyId) {
+  const viewings = verifyPropertyViewings(await getViewingsByProperty(propertyId), propertyId)
+  return Promise.all(viewings.map(async (viewing) => {
+    const summary = { ...viewing, tenant: { ...viewing.tenant, phoneNumber: null } }
+    if (viewing.status !== VIEWING_STATUS.APPROVED) return summary
+    try {
+      // Lists carry names only. Contact comes from the authorized detail response.
+      const detail = await getViewingById(viewing.id)
+      if (!validPropertyViewing(detail, propertyId, viewing.id)
+        || detail.tenantId !== viewing.tenantId) return summary
+      return detail
+    } catch {
+      return summary
+    }
+  }))
+}
+
 const STATUS_FILTERS = [
   { value: 'all', label: 'All' },
   { value: VIEWING_STATUS.PENDING, label: 'Pending' },
@@ -62,7 +80,7 @@ const STATUS_FILTERS = [
 
 function requestSearchFields(viewing) {
   return [
-    viewing.tenantId,
+    viewing.tenant?.displayName,
     viewing.tenantMessage,
     viewing.landlordResponse,
     viewing.requestedDateTime,
@@ -115,7 +133,7 @@ function ViewingRequestsPage() {
 
     let isActive = true
 
-    getViewingsByProperty(propertyId)
+    loadPropertyViewings(propertyId)
       .then((viewings) => {
         if (isActive) {
           setPageState({
@@ -156,7 +174,7 @@ function ViewingRequestsPage() {
     setNotice({ propertyId: null, message: '' })
 
     try {
-      const viewings = await getViewingsByProperty(propertyId)
+      const viewings = await loadPropertyViewings(propertyId)
       setPageState({
         status: 'success',
         propertyId,

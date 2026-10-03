@@ -115,6 +115,7 @@ describe('dedicated property viewing availability', () => {
     fireEvent.change(screen.getByLabelText('Slot duration'), { target: { value: '45' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save viewing availability' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to save. Please try again.')
+    expect(screen.getByRole('alert')).toHaveClass('property-toast--error')
     expect(screen.getByLabelText('Monday end')).toHaveValue('18:00')
     expect(screen.getByLabelText('Slot duration')).toHaveValue('45')
     expect(router.state.location.pathname).toBe(pathFor(propertyId))

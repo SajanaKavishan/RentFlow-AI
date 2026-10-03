@@ -11,6 +11,8 @@ public class ViewingResponseDto
 
     public Guid TenantId { get; set; }
 
+    public ViewingTenantSummaryDto Tenant { get; set; } = new();
+
     public Guid PropertyId { get; set; }
 
     public DateTimeOffset RequestedDateTime { get; set; }

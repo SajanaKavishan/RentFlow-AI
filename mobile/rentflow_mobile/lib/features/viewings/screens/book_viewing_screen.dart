@@ -240,10 +240,7 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
                   const SizedBox(height: 8),
                   _slotPicker(),
                   const SizedBox(height: 24),
-                  const SectionHeader(
-                    title: 'A note for the landlord *',
-                    subtitle: 'Required',
-                  ),
+                  const SectionHeader(title: 'A note for the landlord'),
                   const SizedBox(height: 8),
                   TextField(
                     key: const ValueKey('viewing-message'),

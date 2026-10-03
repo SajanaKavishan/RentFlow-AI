@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getViewingAvailability, saveViewingAvailability } from '../services/viewingAvailabilityApi.js'
+import '../properties.css'
 import './viewing-availability.css'
 
 // Shared contract: Sunday=0 through Saturday=6. Display Monday first.
@@ -41,7 +42,7 @@ export default function ViewingAvailabilityEditor({ propertyId, onDirtyChange, d
   const [saved, setSaved] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [notice, setNotice] = useState('')
+  const [toast, setToast] = useState(null)
   const [attempt, setAttempt] = useState(0)
   const dirty = schedule !== null && JSON.stringify(schedule) !== saved
   const errors = schedule && dirty ? validation(schedule) : {}
@@ -58,10 +59,16 @@ export default function ViewingAvailabilityEditor({ propertyId, onDirtyChange, d
 
   useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
 
+  useEffect(() => {
+    if (!toast) return undefined
+    const timer = window.setTimeout(() => setToast(null), 3000)
+    return () => window.clearTimeout(timer)
+  }, [toast])
+
   function updateDay(dayOfWeek, update) {
     setSchedule(current => ({ ...current, windows: current.windows.map(row => row.dayOfWeek === dayOfWeek
       ? { ...row, ...update } : row) }))
-    setNotice('')
+    setToast(null)
   }
 
   async function save(event) {
@@ -69,19 +76,28 @@ export default function ViewingAvailabilityEditor({ propertyId, onDirtyChange, d
     if (saving || disabled || !schedule || !dirty) return
     const invalid = validation(schedule)
     if (Object.keys(invalid).length) return
-    setSaving(true); setError(''); setNotice('')
+    setSaving(true); setError(''); setToast(null)
     try {
       const result = parseSchedule(await saveViewingAvailability(propertyId, {
         ...schedule, windows: schedule.windows.map(row => ({ ...row,
           startTime: row.isEnabled ? `${row.startTime}:00` : null,
           endTime: row.isEnabled ? `${row.endTime}:00` : null }))
       }), propertyId)
-      setSchedule(result); setSaved(JSON.stringify(result)); setNotice('Viewing availability saved.')
-    } catch (err) { setError(err.message || 'Unable to save viewing availability.') }
+      setSchedule(result); setSaved(JSON.stringify(result))
+      setToast({ tone: 'success', message: 'Viewing availability saved.' })
+    } catch (err) {
+      setToast({ tone: 'error', message: err.message || 'Unable to save viewing availability.' })
+    }
     finally { setSaving(false) }
   }
 
   return <section id="viewing-availability" className="viewing-availability" aria-labelledby="viewing-availability-title">
+    {toast && <div className={`property-toast property-toast--${toast.tone}`}
+      role={toast.tone === 'error' ? 'alert' : 'status'}
+      aria-live={toast.tone === 'error' ? 'assertive' : 'polite'} aria-atomic="true">
+      <span className="property-toast__mark" aria-hidden="true">{toast.tone === 'success' ? '✓' : '×'}</span>
+      <p>{toast.message}</p>
+    </div>}
     <h2 id="viewing-availability-title">Schedule settings</h2>
     {error && <p className="viewing-feedback viewing-feedback--error" role="alert">{error}</p>}
     {!schedule && (error ? <button className="property-button property-button--quiet" type="button" onClick={() => { setError(''); setAttempt(a => a + 1) }}>Retry availability</button>
@@ -91,7 +107,7 @@ export default function ViewingAvailabilityEditor({ propertyId, onDirtyChange, d
       <div className="viewing-timezone"><span>Timezone</span><strong>{schedule.timeZoneId === 'Asia/Colombo' ? 'Sri Lanka (Asia/Colombo)' : schedule.timeZoneId}</strong></div>
       <label className="viewing-duration">Slot duration
         <select aria-label="Slot duration" value={schedule.slotDurationMinutes} disabled={saving || disabled}
-          onChange={event => { setSchedule(s => ({ ...s, slotDurationMinutes: Number(event.target.value) })); setNotice('') }}>
+          onChange={event => { setSchedule(s => ({ ...s, slotDurationMinutes: Number(event.target.value) })); setToast(null) }}>
           {DURATIONS.map(value => <option key={value} value={value}>{value} minutes</option>)}
         </select>
       </label>
@@ -118,7 +134,6 @@ export default function ViewingAvailabilityEditor({ propertyId, onDirtyChange, d
       <div className="viewing-availability__footer">
       <div aria-live="polite">
       {dirty && <p className="viewing-unsaved" role="status">Unsaved viewing availability changes</p>}
-      {notice && <p className="viewing-feedback viewing-feedback--success" role="status">{notice}</p>}
       </div>
       <button className="property-button property-button--primary" type="submit" disabled={saving || disabled || !dirty || !valid}>
         {saving ? 'Saving availability...' : 'Save viewing availability'}

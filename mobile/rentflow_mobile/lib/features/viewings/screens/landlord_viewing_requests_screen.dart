@@ -241,7 +241,7 @@ class _ViewingRequestCard extends StatelessWidget {
             value: viewing.propertyId,
           ),
           const SizedBox(height: AppSpacing.sm),
-          _QueueReference(label: 'Tenant reference', value: viewing.tenantId),
+          _QueueReference(label: 'Tenant', value: viewing.tenant.displayName),
           if (_hasText(viewing.tenantMessage)) ...[
             const SizedBox(height: AppSpacing.md),
             Container(

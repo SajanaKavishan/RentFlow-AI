@@ -21,6 +21,49 @@ enum ViewingStatus {
   }
 }
 
+class ViewingTenantSummary {
+  const ViewingTenantSummary({this.displayName = 'Tenant', this.phoneNumber});
+
+  final String displayName;
+  final String? phoneNumber;
+
+  factory ViewingTenantSummary.fromJson(Object? value) {
+    if (value == null) return const ViewingTenantSummary();
+    if (value is! Map<String, dynamic>) {
+      throw const FormatException('Invalid viewing tenant summary.');
+    }
+    final name = value['displayName'];
+    final phone = value['phoneNumber'];
+    if ((name != null && name is! String) ||
+        (phone != null && phone is! String)) {
+      throw const FormatException('Invalid viewing tenant summary.');
+    }
+    final displayName = (name as String?)?.trim();
+    return ViewingTenantSummary(
+      displayName: displayName == null || displayName.isEmpty
+          ? 'Tenant'
+          : displayName,
+      phoneNumber: usablePhone(phone as String?),
+    );
+  }
+
+  static String? usablePhone(String? value) {
+    final phone = value?.trim();
+    if (phone == null ||
+        !RegExp(r'^[+0-9][0-9\s().-]{6,31}$').hasMatch(phone)) {
+      return null;
+    }
+    final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    return digits.length >= 7 && digits.length <= 15 ? phone : null;
+  }
+
+  Uri? get dialerUri {
+    final phone = usablePhone(phoneNumber);
+    if (phone == null) return null;
+    return Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'[\s().-]'), ''));
+  }
+}
+
 class Viewing {
   const Viewing({
     required this.id,
@@ -35,10 +78,12 @@ class Viewing {
     this.timeZoneId,
     this.requestedLocalDate,
     this.requestedDisplayTime,
+    this.tenant = const ViewingTenantSummary(),
   });
 
   final String id;
   final String tenantId;
+  final ViewingTenantSummary tenant;
   final String propertyId;
   final DateTime requestedDateTime;
   final ViewingStatus status;
@@ -54,6 +99,7 @@ class Viewing {
     return Viewing(
       id: _requiredString(json, 'id'),
       tenantId: _requiredString(json, 'tenantId'),
+      tenant: ViewingTenantSummary.fromJson(json['tenant']),
       propertyId: _requiredString(json, 'propertyId'),
       requestedDateTime: _requiredDateTime(json, 'requestedDateTime'),
       status: ViewingStatus.fromJson(json['status']),

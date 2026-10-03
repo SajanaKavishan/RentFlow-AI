@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
@@ -22,27 +23,96 @@ class LandlordViewingRequestDetailsScreen extends StatefulWidget {
 }
 
 class _LandlordViewingRequestDetailsScreenState
-    extends State<LandlordViewingRequestDetailsScreen> {
+    extends State<LandlordViewingRequestDetailsScreen>
+    with WidgetsBindingObserver {
   late Viewing _viewing;
   late final TextEditingController _responseController;
   bool _isApproving = false;
   bool _isRejecting = false;
   String? _actionError;
+  bool _contactLoaded = false;
+  bool _isRefreshing = false;
 
-  bool get _isBusy => _isApproving || _isRejecting;
+  bool get _isBusy => _isApproving || _isRejecting || _isRefreshing;
   bool get _canRespond => _viewing.status == ViewingStatus.pending;
+  bool get _canCall =>
+      _contactLoaded &&
+      _viewing.status == ViewingStatus.approved &&
+      _viewing.tenant.dialerUri != null;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _viewing = widget.viewing;
     _responseController = TextEditingController(
       text: widget.viewing.landlordResponse ?? '',
     );
+    if (_viewing.status == ViewingStatus.approved) _refresh();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_viewing.status != ViewingStatus.approved) return;
+    if (state == AppLifecycleState.resumed) {
+      _refresh();
+    } else {
+      setState(() => _contactLoaded = false);
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (_isBusy) return;
+    setState(() {
+      _isRefreshing = true;
+      _contactLoaded = false;
+      _actionError = null;
+    });
+    try {
+      final updated = await widget.viewingApiService.getViewingById(
+        _viewing.id,
+      );
+      if (updated.id != _viewing.id ||
+          updated.propertyId != _viewing.propertyId ||
+          updated.tenantId != _viewing.tenantId) {
+        throw const ViewingApiException(
+          'The viewing service returned an invalid response.',
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _viewing = updated;
+        _contactLoaded = true;
+      });
+    } catch (_) {
+      if (mounted) {
+        _showError('Unable to refresh this viewing request. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+  }
+
+  Future<void> _callTenant() async {
+    if (!_canCall || _isBusy) return;
+    final uri = _viewing.tenant.dialerUri!;
+    try {
+      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+    } catch (_) {
+      // Unsupported devices and platform failures use the same concise feedback.
+    }
+    if (mounted) {
+      AppSnackbars.show(
+        context,
+        message: 'Calling is not available on this device.',
+        tone: SnackTone.error,
+      );
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _responseController.dispose();
     super.dispose();
   }
@@ -80,6 +150,7 @@ class _LandlordViewingRequestDetailsScreenState
       if (!mounted) return;
       setState(() {
         _viewing = updated;
+        _contactLoaded = true;
         _responseController.text = updated.landlordResponse ?? response;
       });
       AppSnackbars.show(
@@ -124,6 +195,13 @@ class _LandlordViewingRequestDetailsScreenState
       backgroundColor: AppPalette.background,
       appBar: AppBar(
         title: const Text('Viewing Request'),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh viewing request',
+            onPressed: _isBusy ? null : _refresh,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1),
@@ -176,9 +254,30 @@ class _LandlordViewingRequestDetailsScreenState
                   ),
                   const Divider(height: AppSpacing.lg),
                   _ReferenceRow(
-                    label: 'Tenant reference',
-                    value: _viewing.tenantId,
+                    label: 'Tenant',
+                    value: _viewing.tenant.displayName,
+                    emphasize: true,
                   ),
+                  if (_canCall) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SelectableText(
+                        _viewing.tenant.phoneNumber!.trim(),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppPalette.muted,
+                        ),
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: _isBusy ? null : _callTenant,
+                        icon: const Icon(Icons.phone_outlined),
+                        label: const Text('Call tenant'),
+                      ),
+                    ),
+                  ],
                   const Divider(height: AppSpacing.lg),
                   _ReferenceRow(label: 'Requested date', value: date),
                   const Divider(height: AppSpacing.lg),
@@ -260,10 +359,15 @@ class _LandlordViewingRequestDetailsScreenState
 }
 
 class _ReferenceRow extends StatelessWidget {
-  const _ReferenceRow({required this.label, required this.value});
+  const _ReferenceRow({
+    required this.label,
+    required this.value,
+    this.emphasize = false,
+  });
 
   final String label;
   final String value;
+  final bool emphasize;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -278,9 +382,10 @@ class _ReferenceRow extends StatelessWidget {
       const SizedBox(height: AppSpacing.xs),
       SelectableText(
         value,
-        style: Theme.of(
-          context,
-        ).textTheme.bodyMedium?.copyWith(color: AppPalette.text),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: AppPalette.text,
+          fontWeight: emphasize ? FontWeight.w600 : null,
+        ),
       ),
     ],
   );

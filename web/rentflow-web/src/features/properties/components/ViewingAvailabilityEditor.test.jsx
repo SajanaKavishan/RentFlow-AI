@@ -58,7 +58,8 @@ describe('Viewing availability editor', () => {
     expect(saveViewingAvailability).toHaveBeenCalledWith(propertyId, expect.objectContaining({ slotDurationMinutes: 45,
       windows: expect.arrayContaining([expect.objectContaining({ dayOfWeek: 1, startTime: '10:00:00' })]) }))
     resolve({ ...configured, slotDurationMinutes: 45, windows: [{ ...configured.windows[0], startTime: '10:00:00' }] })
-    expect(await screen.findByText('Viewing availability saved.')).toBeInTheDocument()
+    expect((await screen.findByText('Viewing availability saved.')).closest('.property-toast'))
+      .toHaveClass('property-toast--success')
     await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(false))
   })
   it('preserves unsaved input on save failure and can retry', async () => {
@@ -68,6 +69,7 @@ describe('Viewing availability editor', () => {
     fireEvent.change(await screen.findByLabelText('Monday end'), { target: { value: '18:00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save viewing availability' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Schedule could not be saved')
+    expect(screen.getByRole('alert')).toHaveClass('property-toast--error')
     expect(screen.getByLabelText('Monday end')).toHaveValue('18:00')
     expect(screen.getByText('Unsaved viewing availability changes')).toBeInTheDocument()
     expect(screen.queryByText('Viewing availability saved.')).not.toBeInTheDocument()
