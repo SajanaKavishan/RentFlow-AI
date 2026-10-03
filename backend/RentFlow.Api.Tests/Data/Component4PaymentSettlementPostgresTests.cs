@@ -1,7 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
+using RentFlow.Api.Configuration;
 using RentFlow.Api.Data;
 using RentFlow.Api.Models;
+using RentFlow.Api.Services;
+using RentFlow.Api.Services.Interfaces;
 using Xunit;
 
 namespace RentFlow.Api.Tests.Data;
@@ -59,6 +63,15 @@ public sealed class Component4PaymentSettlementPostgresTests
             dbContext.RentScheduleItems.Add(schedule);
             await dbContext.SaveChangesAsync();
 
+            var legacyPaymentId = Guid.NewGuid();
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO \"Payments\" (\"Id\", \"RentScheduleItemId\", \"TenantId\", \"Amount\", \"PaymentMethod\", \"Status\", \"CreatedAt\") VALUES ({legacyPaymentId}, {schedule.Id}, {offer.TenantId}, {schedule.Amount}, {"BankTransfer"}, {0}, {DateTimeOffset.UtcNow})");
+
+            var legacyPayment = await dbContext.Payments.AsNoTracking()
+                .SingleAsync(payment => payment.Id == legacyPaymentId);
+            Assert.Equal(PaymentProvider.Manual, legacyPayment.Provider);
+            Assert.Null(legacyPayment.StripePaymentIntentId);
+
             dbContext.Payments.AddRange(
                 CreatePayment(schedule, PaymentStatus.Pending),
                 CreatePayment(schedule, PaymentStatus.Pending),
@@ -77,6 +90,136 @@ public sealed class Component4PaymentSettlementPostgresTests
             dbContext.Payments.Add(CreatePayment(schedule, PaymentStatus.Completed));
             await Assert.ThrowsAsync<DbUpdateException>(
                 () => dbContext.SaveChangesAsync());
+            dbContext.ChangeTracker.Clear();
+
+            var stripeSchedule = CreateSchedule(lease.Id);
+            stripeSchedule.DueDate = stripeSchedule.DueDate.AddMonths(1);
+            var otherSchedule = CreateSchedule(lease.Id);
+            otherSchedule.DueDate = otherSchedule.DueDate.AddMonths(2);
+            dbContext.RentScheduleItems.AddRange(stripeSchedule, otherSchedule);
+            await dbContext.SaveChangesAsync();
+
+            var firstStripeAttempt = CreatePayment(stripeSchedule, PaymentStatus.Pending);
+            firstStripeAttempt.Provider = PaymentProvider.Stripe;
+            firstStripeAttempt.StripePaymentIntentId = "pi_test_first";
+            dbContext.Payments.Add(firstStripeAttempt);
+            await dbContext.SaveChangesAsync();
+            Assert.Equal("pi_test_first", (await dbContext.Payments.AsNoTracking()
+                .SingleAsync(payment => payment.Id == firstStripeAttempt.Id)).StripePaymentIntentId);
+
+            var duplicateActiveAttempt = CreatePayment(stripeSchedule, PaymentStatus.Pending);
+            duplicateActiveAttempt.Provider = PaymentProvider.Stripe;
+            duplicateActiveAttempt.StripePaymentIntentId = "pi_test_second";
+            dbContext.Payments.Add(duplicateActiveAttempt);
+            await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync());
+            dbContext.ChangeTracker.Clear();
+
+            var duplicateIntent = CreatePayment(otherSchedule, PaymentStatus.Pending);
+            duplicateIntent.Provider = PaymentProvider.Stripe;
+            duplicateIntent.StripePaymentIntentId = firstStripeAttempt.StripePaymentIntentId;
+            dbContext.Payments.Add(duplicateIntent);
+            await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync());
+            dbContext.ChangeTracker.Clear();
+
+            var persistedAttempt = await dbContext.Payments.SingleAsync(
+                payment => payment.Id == firstStripeAttempt.Id);
+            persistedAttempt.Status = PaymentStatus.Failed;
+            await dbContext.SaveChangesAsync();
+            var retry = CreatePayment(stripeSchedule, PaymentStatus.Pending);
+            retry.Provider = PaymentProvider.Stripe;
+            retry.StripePaymentIntentId = "pi_test_retry";
+            dbContext.Payments.Add(retry);
+            await dbContext.SaveChangesAsync();
+            Assert.Equal(2, await dbContext.Payments.CountAsync(payment =>
+                payment.RentScheduleItemId == stripeSchedule.Id
+                && payment.Provider == PaymentProvider.Stripe));
+
+            var settlementSchedule = CreateSchedule(lease.Id);
+            settlementSchedule.DueDate = settlementSchedule.DueDate.AddMonths(3);
+            dbContext.RentScheduleItems.Add(settlementSchedule);
+            await dbContext.SaveChangesAsync();
+            var settlementPayment = CreatePayment(settlementSchedule, PaymentStatus.Pending);
+            settlementPayment.TenantId = offer.TenantId;
+            settlementPayment.Provider = PaymentProvider.Stripe;
+            settlementPayment.StripePaymentIntentId = "pi_test_verified_settlement";
+            dbContext.Payments.Add(settlementPayment);
+            await dbContext.SaveChangesAsync();
+
+            var intent = new StripePaymentIntentResult(
+                settlementPayment.StripePaymentIntentId, null, "succeeded",
+                (long)(settlementPayment.Amount * 100m), "lkr",
+                new Dictionary<string, string>
+                {
+                    ["rentflowPaymentId"] = settlementPayment.Id.ToString("D"),
+                    ["rentScheduleItemId"] = settlementSchedule.Id.ToString("D"),
+                    ["tenantId"] = settlementPayment.TenantId.ToString("D")
+                });
+            var stripeService = new StripePaymentService(
+                dbContext, new SettlementGateway(intent),
+                Options.Create(new StripePaymentOptions()));
+            var firstSettlement = await stripeService.GetStatusAsync(
+                settlementPayment.Id, settlementPayment.TenantId);
+            var secondSettlement = await stripeService.GetStatusAsync(
+                settlementPayment.Id, settlementPayment.TenantId);
+            Assert.Equal(PaymentStatus.Completed, firstSettlement.PaymentStatus);
+            Assert.Equal(firstSettlement.PaidAt, secondSettlement.PaidAt);
+            dbContext.ChangeTracker.Clear();
+            Assert.Equal(PaymentStatus.Completed,
+                (await dbContext.Payments.SingleAsync(payment =>
+                    payment.Id == settlementPayment.Id)).Status);
+            Assert.Equal(RentScheduleStatus.Paid,
+                (await dbContext.RentScheduleItems.SingleAsync(item =>
+                    item.Id == settlementSchedule.Id)).Status);
+
+            var concurrentSchedule = CreateSchedule(lease.Id);
+            concurrentSchedule.DueDate = concurrentSchedule.DueDate.AddMonths(4);
+            dbContext.RentScheduleItems.Add(concurrentSchedule);
+            await dbContext.SaveChangesAsync();
+            var concurrentPayment = CreatePayment(concurrentSchedule, PaymentStatus.Pending);
+            concurrentPayment.TenantId = offer.TenantId;
+            concurrentPayment.Provider = PaymentProvider.Stripe;
+            concurrentPayment.StripePaymentIntentId = "pi_test_concurrent_settlement";
+            dbContext.Payments.Add(concurrentPayment);
+            await dbContext.SaveChangesAsync();
+
+            var concurrentIntent = new StripePaymentIntentResult(
+                concurrentPayment.StripePaymentIntentId, null, "succeeded",
+                (long)(concurrentPayment.Amount * 100m), "lkr",
+                new Dictionary<string, string>
+                {
+                    ["rentflowPaymentId"] = concurrentPayment.Id.ToString("D"),
+                    ["rentScheduleItemId"] = concurrentSchedule.Id.ToString("D"),
+                    ["tenantId"] = concurrentPayment.TenantId.ToString("D")
+                });
+            await using var webhookContext = new ApplicationDbContext(options);
+            await using var statusContext = new ApplicationDbContext(options);
+            var webhookService = new StripePaymentService(
+                webhookContext, new SettlementGateway(concurrentIntent),
+                Options.Create(new StripePaymentOptions()));
+            var statusService = new StripePaymentService(
+                statusContext, new SettlementGateway(concurrentIntent),
+                Options.Create(new StripePaymentOptions()));
+
+            await Task.WhenAll(
+                webhookService.ProcessWebhookAsync(concurrentIntent.Id),
+                statusService.GetStatusAsync(concurrentPayment.Id, concurrentPayment.TenantId));
+
+            dbContext.ChangeTracker.Clear();
+            var settledPayment = await dbContext.Payments.AsNoTracking()
+                .SingleAsync(payment => payment.Id == concurrentPayment.Id);
+            Assert.Equal(PaymentStatus.Completed, settledPayment.Status);
+            Assert.NotNull(settledPayment.PaidAt);
+            Assert.Equal(RentScheduleStatus.Paid,
+                (await dbContext.RentScheduleItems.AsNoTracking().SingleAsync(item =>
+                    item.Id == concurrentSchedule.Id)).Status);
+            Assert.Equal(1, await dbContext.Payments.CountAsync(payment =>
+                payment.RentScheduleItemId == concurrentSchedule.Id
+                && payment.Status == PaymentStatus.Completed));
+
+            await webhookService.ProcessWebhookAsync(concurrentIntent.Id);
+            Assert.Equal(settledPayment.PaidAt,
+                (await dbContext.Payments.AsNoTracking().SingleAsync(payment =>
+                    payment.Id == concurrentPayment.Id)).PaidAt);
         }
         finally
         {
@@ -170,4 +313,21 @@ public sealed class Component4PaymentSettlementPostgresTests
         PaymentMethod = "BankTransfer",
         Status = status
     };
+
+    private sealed class SettlementGateway(StripePaymentIntentResult intent)
+        : IStripePaymentGateway
+    {
+        public Task<StripePaymentIntentResult> CreateAsync(
+            StripePaymentIntentRequest request,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Settlement test must not create an intent.");
+
+        public Task<StripePaymentIntentResult> RetrieveAsync(
+            string paymentIntentId,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal(intent.Id, paymentIntentId);
+            return Task.FromResult(intent);
+        }
+    }
 }

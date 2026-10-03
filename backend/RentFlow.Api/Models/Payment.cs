@@ -13,6 +13,11 @@ public class Payment
 
     public decimal Amount { get; set; }
 
+    public PaymentProvider Provider { get; set; } = PaymentProvider.Manual;
+
+    // Stripe's PaymentIntent ID is an identifier, never a client secret.
+    public string? StripePaymentIntentId { get; set; }
+
     public string PaymentMethod { get; set; } = string.Empty;
 
     public string? TransactionReference { get; set; }

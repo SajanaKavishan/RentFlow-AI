@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using RentFlow.Api.Data;
@@ -11,9 +12,11 @@ using RentFlow.Api.Data;
 namespace RentFlow.Api.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261001093232_AddStripePaymentFoundation")]
+    partial class AddStripePaymentFoundation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -855,25 +858,6 @@ namespace RentFlow.Api.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<decimal?>("AdvertisedSecurityDeposit")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal?>("Area")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("AreaType")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("AreaUnit")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateOnly?>("AvailableFrom")
-                        .HasColumnType("date");
-
                     b.Property<int>("Bathrooms")
                         .HasColumnType("integer");
 
@@ -893,39 +877,15 @@ namespace RentFlow.Api.Data.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
-                    b.Property<string>("GooglePlaceId")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string[]>("IncludedUtilities")
-                        .HasColumnType("text[]");
-
                     b.Property<bool>("IsAvailable")
                         .HasColumnType("boolean");
 
                     b.Property<Guid>("LandlordId")
                         .HasColumnType("uuid");
 
-                    b.Property<double?>("Latitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<double?>("Longitude")
-                        .HasColumnType("double precision");
-
                     b.Property<decimal>("MonthlyRent")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("PetPolicy")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("PetPolicyNotes")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int?>("PreferredLeaseTermMonths")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -954,10 +914,6 @@ namespace RentFlow.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("CanonicalKey")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -969,10 +925,6 @@ namespace RentFlow.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("PropertyId");
-
-                    b.HasIndex("PropertyId", "CanonicalKey")
-                        .IsUnique()
-                        .HasFilter("\"CanonicalKey\" IS NOT NULL");
 
                     b.ToTable("PropertyAmenities");
                 });
@@ -991,11 +943,6 @@ namespace RentFlow.Api.Data.Migrations
                     b.Property<long>("FileSizeBytes")
                         .HasColumnType("bigint");
 
-                    b.Property<bool>("IsPrimary")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
                     b.Property<string>("OriginalFileName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -1003,11 +950,6 @@ namespace RentFlow.Api.Data.Migrations
 
                     b.Property<Guid>("PropertyId")
                         .HasColumnType("uuid");
-
-                    b.Property<int>("SortOrder")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
 
                     b.Property<string>("StorageKey")
                         .IsRequired()
@@ -1020,12 +962,6 @@ namespace RentFlow.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("PropertyId");
-
-                    b.HasIndex("PropertyId", "IsPrimary")
-                        .IsUnique()
-                        .HasFilter("\"IsPrimary\" = TRUE");
-
-                    b.HasIndex("PropertyId", "SortOrder");
 
                     b.ToTable("PropertyImages");
                 });
@@ -1336,57 +1272,6 @@ namespace RentFlow.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("TechnicianPasswordSetupTokens");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.TenantPropertyFavorite", b =>
-                {
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PropertyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("TenantId", "PropertyId");
-
-                    b.HasIndex("PropertyId");
-
-                    b.HasIndex("TenantId", "CreatedAt");
-
-                    b.ToTable("TenantPropertyFavorites");
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.TenantPropertyPreference", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal?>("MaximumMonthlyRent")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<int?>("MinimumBathrooms")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("MinimumBedrooms")
-                        .HasColumnType("integer");
-
-                    b.Property<string[]>("PreferredAmenities")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
-                    b.Property<string>("PreferredCity")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("UserId");
-
-                    b.ToTable("TenantPropertyPreferences");
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.UserProfileImage", b =>
@@ -1703,30 +1588,6 @@ namespace RentFlow.Api.Data.Migrations
                     b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
                         .WithOne()
                         .HasForeignKey("RentFlow.Api.Models.TechnicianPasswordSetupToken", "UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.TenantPropertyFavorite", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.Property", null)
-                        .WithMany()
-                        .HasForeignKey("PropertyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("RentFlow.Api.Models.TenantPropertyPreference", b =>
-                {
-                    b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
-                        .WithOne()
-                        .HasForeignKey("RentFlow.Api.Models.TenantPropertyPreference", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

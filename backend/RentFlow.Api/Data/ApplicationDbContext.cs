@@ -977,6 +977,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(payment => payment.Amount)
                 .HasPrecision(18, 2)
                 .IsRequired();
+            entity.Property(payment => payment.Provider)
+                .HasDefaultValue(PaymentProvider.Manual)
+                .IsRequired();
+            entity.Property(payment => payment.StripePaymentIntentId)
+                .HasMaxLength(255)
+                .IsRequired(false);
 
             entity.Property(payment => payment.PaymentMethod)
                 .HasMaxLength(100)
@@ -1007,6 +1013,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(payment => payment.RentScheduleItemId, "IX_Payments_RentScheduleItemId_Completed")
                 .IsUnique()
                 .HasFilter("\"Status\" = 1");
+            entity.HasIndex(payment => payment.RentScheduleItemId, "IX_Payments_RentScheduleItemId_PendingStripe")
+                .IsUnique()
+                .HasFilter("\"Provider\" = 1 AND \"Status\" = 0");
+            entity.HasIndex(payment => payment.StripePaymentIntentId)
+                .IsUnique()
+                .HasFilter("\"StripePaymentIntentId\" IS NOT NULL");
             entity.HasIndex(payment => payment.TenantId);
             entity.HasIndex(payment => payment.Status);
             entity.HasIndex(payment => payment.TransactionReference);

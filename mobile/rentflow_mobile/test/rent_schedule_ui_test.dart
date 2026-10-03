@@ -111,7 +111,7 @@ void main() {
     expect(find.text('Pending'), findsNWidgets(2));
     expect(find.text('Due date'), findsOneWidget);
     expect(find.text('2030-02-28'), findsOneWidget);
-    expect(find.text('1250.75'), findsNWidgets(3));
+    expect(find.text('Rs. 1,250.75'), findsNWidgets(3));
     expect(requests.map((request) => request.url.path), [
       '/api/rent-schedules/lease/$_leaseId',
       '/api/rent-schedules/lease/$_leaseId/outstanding',
@@ -180,7 +180,7 @@ void main() {
     addTearDown(client.close);
     await _show(tester, RentScheduleApiService(client));
     await tester.pumpAndSettle();
-    expect(find.text('0.00'), findsNWidgets(3));
+    expect(find.text('Rs. 0.00'), findsNWidgets(3));
     expect(find.text('Paid'), findsOneWidget);
     expect(find.text('No rent schedule items'), findsNothing);
     expect(
@@ -206,7 +206,7 @@ void main() {
     await _show(tester, RentScheduleApiService(client));
     await tester.pumpAndSettle();
     expect(find.text('No rent schedule items'), findsOneWidget);
-    expect(find.text('0.00'), findsNWidgets(3));
+    expect(find.text('Rs. 0.00'), findsNWidgets(3));
   });
 
   for (final (status, message) in [
@@ -359,7 +359,7 @@ void main() {
       find.byKey(ValueKey('rent-payment-placeholder-$_pendingId')),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Record payment'), findsNWidgets(2));
+    expect(find.text('Pay securely'), findsNWidgets(2));
     expect(
       find.text(
         'Payment services are unavailable right now. Return to the lease and try again. No payment has been made.',

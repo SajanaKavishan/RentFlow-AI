@@ -121,6 +121,96 @@ void main() {
 
   group('PaymentApiService', () {
     test(
+      'Stripe create uses only schedule ID and parses backend contract',
+      () async {
+        late http.Request recorded;
+        final client = _client((request) async {
+          recorded = request;
+          return http.Response(
+            jsonEncode({
+              'paymentId': _paymentId,
+              'clientSecret': 'test-client-secret',
+              'publishableKey': 'test-publishable-key',
+              'amount': 1250.75,
+              'currency': 'lkr',
+              'paymentStatus': 0,
+              'status': 'requires_payment_method',
+            }),
+            200,
+          );
+        });
+        addTearDown(client.close);
+        final intent = await PaymentApiService(
+          client,
+        ).createStripeIntent(_scheduleItemId);
+        expect(recorded.method, 'POST');
+        expect(recorded.url.path, '/api/payments/stripe/create-intent');
+        expect(recorded.headers['Authorization'], 'Bearer payment-test-token');
+        expect(jsonDecode(recorded.body), {
+          'rentScheduleItemId': _scheduleItemId,
+        });
+        expect(intent.paymentId, _paymentId);
+        expect(intent.clientSecret, 'test-client-secret');
+        expect(intent.publishableKey, 'test-publishable-key');
+        expect(intent.amount, 1250.75);
+        expect(intent.currency, 'lkr');
+        expect(intent.paymentStatus, PaymentStatus.pending);
+        expect(intent.status, 'requires_payment_method');
+      },
+    );
+
+    test('Stripe status uses exact route and parses settled state', () async {
+      late http.Request recorded;
+      final client = _client((request) async {
+        recorded = request;
+        return http.Response(
+          jsonEncode({
+            'paymentId': _paymentId,
+            'paymentStatus': 1,
+            'status': 'succeeded',
+            'paidAt': '2030-02-01T12:15:00Z',
+          }),
+          200,
+        );
+      });
+      addTearDown(client.close);
+      final status = await PaymentApiService(
+        client,
+      ).getStripeStatus(_paymentId);
+      expect(recorded.method, 'GET');
+      expect(recorded.url.path, '/api/payments/$_paymentId/stripe-status');
+      expect(status.paymentStatus, PaymentStatus.completed);
+      expect(status.status, 'succeeded');
+      expect(status.paidAt, DateTime.utc(2030, 2, 1, 12, 15));
+    });
+
+    test(
+      'Stripe endpoints reject unsafe responses and hide server failures',
+      () async {
+        final malformed = _client((_) async => http.Response('{}', 200));
+        addTearDown(malformed.close);
+        await expectLater(
+          PaymentApiService(malformed).createStripeIntent(_scheduleItemId),
+          throwsA(isA<PaymentApiException>()),
+        );
+        final failed = _client(
+          (_) async => http.Response('private provider data', 503),
+        );
+        addTearDown(failed.close);
+        await expectLater(
+          PaymentApiService(failed).getStripeStatus(_paymentId),
+          throwsA(
+            isA<PaymentApiException>().having(
+              (error) => error.message,
+              'message',
+              'The payment request failed. Please try again.',
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
       'POST uses exact route, bearer header, contract body, and 201 response',
       () async {
         late http.Request recorded;
