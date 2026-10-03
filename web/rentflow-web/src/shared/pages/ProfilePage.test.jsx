@@ -51,7 +51,7 @@ function renderProfile(role = 'Tenant', overrides = {}) {
   const updateProfile = vi.fn().mockResolvedValue(account(role))
   const uploadProfileImage = vi.fn().mockResolvedValue({ ...account(role), hasProfileImage: true })
   const changePassword = overrides.changePassword || vi.fn().mockResolvedValue({ message: 'Your password was changed successfully.' })
-  const result = render(<MemoryRouter><AuthContext.Provider value={{ user: account(role), updateProfile, uploadProfileImage, changePassword, isAuthenticated: true, isLoading: false }}><ProfilePage /></AuthContext.Provider></MemoryRouter>)
+  const result = render(<MemoryRouter><AuthContext.Provider value={{ user: { ...account(role), ...overrides.user }, updateProfile, uploadProfileImage, changePassword, isAuthenticated: true, isLoading: false }}><ProfilePage /></AuthContext.Provider></MemoryRouter>)
   return { ...result, updateProfile, uploadProfileImage, changePassword }
 }
 
@@ -77,11 +77,95 @@ beforeEach(() => {
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('shared profile', () => {
+  it('copies the selected profile phone only on explicit enabled save', async () => {
+    const { updateProfile } = renderProfile('Landlord')
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    expect(screen.getByRole('radio', { name: 'Use my profile phone number' })).toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Show contact number on my property listings' })).not.toBeChecked()
+    expect(updateProfile).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('switch', { name: 'Show contact number on my property listings' }))
+    expect(updateProfile).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(updateProfile).toHaveBeenCalledWith(expect.objectContaining({
+      publicContactPhone: '+94 77 123 4567', publicContactEnabled: true,
+    }))
+  })
+
+  it('source selection and disabled save do not copy the profile phone', async () => {
+    const { updateProfile } = renderProfile('Landlord')
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Use a different number' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Use my profile phone number' }))
+    expect(updateProfile).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(updateProfile).toHaveBeenCalledWith(expect.objectContaining({ publicContactPhone: '', publicContactEnabled: false }))
+  })
+
+  it.each(['', '12-----'])('blocks enabled profile-phone publication when the profile phone is invalid: %s', async (phoneNumber) => {
+    const { updateProfile } = renderProfile('Landlord', { user: { phoneNumber } })
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    expect(screen.getByText('Add a profile phone number first, or use a different number.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('switch', { name: 'Show contact number on my property listings' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(updateProfile).not.toHaveBeenCalled()
+    expect(screen.getByRole('form', { name: 'Edit profile' })).toBeInTheDocument()
+  })
+
+  it.each([
+    { publicContactPhone: '+94 77 123 4567', source: 'Use my profile phone number' },
+    { publicContactPhone: '+44 (20) 7123-4567', source: 'Use a different number' },
+    { publicContactPhone: '+94771234567', source: 'Use a different number' },
+  ])('initializes and preserves stored public phone $publicContactPhone', async ({ publicContactPhone, source }) => {
+    const { updateProfile } = renderProfile('Landlord', { user: { publicContactPhone, publicContactEnabled: true } })
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    expect(screen.getByRole('radio', { name: source })).toBeChecked()
+    if (source === 'Use a different number') expect(screen.getByLabelText('Public contact number')).toHaveValue(publicContactPhone)
+    await userEvent.click(screen.getByRole('switch', { name: 'Show contact number on my property listings' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(updateProfile).toHaveBeenCalledWith(expect.objectContaining({ publicContactPhone, publicContactEnabled: false }))
+  })
+
+  it('preserves the published snapshot when only the private phone changes', async () => {
+    const { updateProfile } = renderProfile('Landlord', { user: { publicContactPhone: '+94 77 123 4567', publicContactEnabled: true } })
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    fireEvent.change(screen.getByLabelText('Phone number'), { target: { value: '+94112223344' } })
+    expect(screen.getByRole('radio', { name: 'Use a different number' })).toBeChecked()
+    expect(screen.getByLabelText('Public contact number')).toHaveValue('+94 77 123 4567')
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(updateProfile).toHaveBeenCalledWith(expect.objectContaining({ phoneNumber: '+94112223344',
+      publicContactPhone: '+94 77 123 4567', publicContactEnabled: true }))
+  })
+
+  it('copies the edited profile phone when publication is explicitly chosen in the same save', async () => {
+    const { updateProfile } = renderProfile('Landlord')
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    fireEvent.change(screen.getByLabelText('Phone number'), { target: { value: '+94112223344' } })
+    await userEvent.click(screen.getByRole('switch', { name: 'Show contact number on my property listings' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(updateProfile).toHaveBeenCalledWith(expect.objectContaining({ phoneNumber: '+94112223344',
+      publicContactPhone: '+94112223344', publicContactEnabled: true }))
+  })
+
+  it('keeps the custom draft when switching between sources', async () => {
+    renderProfile('Landlord')
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Use a different number' }))
+    await userEvent.type(screen.getByLabelText('Public contact number'), '+442071234567')
+    await userEvent.click(screen.getByRole('radio', { name: 'Use my profile phone number' }))
+    expect(screen.queryByLabelText('Public contact number')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: 'Use a different number' }))
+    expect(screen.getByLabelText('Public contact number')).toHaveValue('+442071234567')
+  })
+
   it('publishes only a deliberately entered landlord number after successful save', async () => {
     const { updateProfile } = renderProfile('Landlord')
     await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    expect(screen.getByRole('radio', { name: 'Use my profile phone number' })).toBeChecked()
+    expect(screen.queryByLabelText('Public contact number')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: 'Use a different number' }))
     expect(screen.getByLabelText('Public contact number')).toHaveValue('')
-    const toggle = screen.getByLabelText('Show my contact number on my property listings')
+    const toggle = screen.getByRole('switch', { name: 'Show contact number on my property listings' })
     expect(toggle).not.toBeChecked()
     await userEvent.click(toggle)
     await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
@@ -97,8 +181,9 @@ describe('shared profile', () => {
     const { updateProfile } = renderProfile('Landlord')
     updateProfile.mockRejectedValueOnce(new Error('Unable to save profile.'))
     await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Use a different number' }))
     await userEvent.type(screen.getByLabelText('Public contact number'), '+94771234567')
-    const toggle = screen.getByLabelText('Show my contact number on my property listings')
+    const toggle = screen.getByRole('switch', { name: 'Show contact number on my property listings' })
     await userEvent.click(toggle)
     await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
     await screen.findByText('Unable to save profile.')

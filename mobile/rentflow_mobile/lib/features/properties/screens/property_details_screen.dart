@@ -907,7 +907,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
             }
             return Semantics(
               button: true,
-              label: 'View landlord profile for ${summary.displayName}',
+              label: 'View other properties by ${summary.displayName}',
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -940,7 +940,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                               Text(
                                 summary.displayName,
                                 style: const TextStyle(
-                                  fontSize: AppTypography.bodySize,
+                                  fontSize: AppTypography.cardTitleSize,
                                   height: 1.35,
                                   fontWeight: FontWeight.w600,
                                   color: AppPalette.primaryText,
@@ -951,7 +951,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                                 Text(
                                   'Member since ${summary.memberSinceYear}',
                                   style: const TextStyle(
-                                    fontSize: AppTypography.labelSize,
+                                    fontSize: AppTypography.bodySmallSize,
                                     color: AppPalette.secondaryText,
                                   ),
                                 ),
@@ -961,10 +961,10 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                                 children: [
                                   Flexible(
                                     child: Text(
-                                      'View landlord profile',
+                                      'View other properties',
                                       style: TextStyle(
                                         color: AppPalette.olive,
-                                        fontSize: AppTypography.labelSize,
+                                        fontSize: AppTypography.bodySmallSize,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),

@@ -83,6 +83,22 @@ void main() {
         ? details.openDetails(tester, backend)
         : profile.openProfile(tester, backend);
 
+    testWidgets('$screen Call landlord still opens the native dialer', (
+      tester,
+    ) async {
+      MethodCall? launched;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            launched = call;
+            return true;
+          });
+      await open(tester);
+      await tapVisible(tester, find.text('Call landlord'));
+      expect(launched?.method, 'launch');
+      expect((launched?.arguments as Map)['url'], 'tel:+94771234567');
+      expect(find.text(phone), findsOneWidget);
+    });
+
     testWidgets(
       '$screen shows only protected real contact and sends the bearer token',
       (tester) async {

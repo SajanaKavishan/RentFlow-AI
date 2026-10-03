@@ -198,13 +198,7 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: AppPalette.background,
-    appBar: AppBar(
-      title: const Text('My Viewings'),
-      bottom: const PreferredSize(
-        preferredSize: Size.fromHeight(1),
-        child: Divider(height: 1),
-      ),
-    ),
+    appBar: AppBar(),
     body: SafeArea(
       top: false,
       child: FutureBuilder<List<Viewing>>(
@@ -247,7 +241,7 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(
                 20,
-                AppSpacing.lg,
+                AppSpacing.xs,
                 20,
                 AppSpacing.xl,
               ),
@@ -297,21 +291,15 @@ class _ListHeader extends StatelessWidget {
         'YOUR SCHEDULE',
         style: AppTypography.eyebrow.copyWith(
           color: AppPalette.darkOlive,
-          fontSize: 10,
-          fontWeight: FontWeight.w500,
+          fontSize: AppTypography.labelSize,
         ),
       ),
       const SizedBox(height: AppSpacing.xs),
-      Text(
-        'My viewings',
-        style: Theme.of(
-          context,
-        ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w400),
-      ),
-      const SizedBox(height: AppSpacing.base),
+      Text('My viewings', style: AppTypography.pageTitle),
+      const SizedBox(height: AppSpacing.sm),
       Text(
         'Pending requests appear first.',
-        style: Theme.of(context).textTheme.bodySmall,
+        style: AppTypography.body.copyWith(color: AppPalette.secondaryText),
       ),
     ],
   );
@@ -386,8 +374,7 @@ class _ViewingCard extends StatelessWidget {
             property?.title.trim().isNotEmpty == true
                 ? property!.title.trim()
                 : 'Property details unavailable',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w500,
+            style: AppTypography.cardTitle.copyWith(
               color: AppPalette.darkOlive,
             ),
           ),
@@ -413,25 +400,27 @@ class _ViewingCard extends StatelessWidget {
                     Flexible(
                       child: Text(
                         date,
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: AppPalette.text,
-                              fontWeight: FontWeight.w500,
-                            ),
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppPalette.text,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
                 );
                 final timeText = Text(
                   time,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  style: AppTypography.bodySmall.copyWith(
                     color: AppPalette.text,
                     fontWeight: FontWeight.w500,
                   ),
                 );
                 final schedule =
                     constraints.maxWidth <
-                        MediaQuery.textScalerOf(context).scale(12) * 24
+                        MediaQuery.textScalerOf(
+                              context,
+                            ).scale(AppTypography.bodySmallSize) *
+                            24
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -481,9 +470,7 @@ class _ViewingCard extends StatelessWidget {
                 foregroundColor: AppPalette.danger,
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                 alignment: Alignment.centerLeft,
-                textStyle: Theme.of(
-                  context,
-                ).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w500),
+                textStyle: AppTypography.button,
               ),
               child: isCancelling
                   ? const Row(
@@ -552,7 +539,7 @@ class _CompactViewingStatus extends StatelessWidget {
           label,
           style: TextStyle(
             color: foreground,
-            fontSize: 10,
+            fontSize: AppTypography.labelSize,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5,
           ),
@@ -585,7 +572,7 @@ class _DetailBlock extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.xs),
-        Text(value, style: Theme.of(context).textTheme.bodySmall),
+        Text(value, style: AppTypography.body),
       ],
     ),
   );

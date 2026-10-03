@@ -67,6 +67,7 @@ abstract final class AppTypography {
   static const displaySize = 28.0;
   static const pageTitleSize = 24.0;
   static const sectionTitleSize = 18.0;
+  static const identityNameSize = 20.0;
   static const cardTitleSize = 16.0;
   static const bodyLargeSize = 15.0;
   static const bodySize = 14.0;
@@ -88,6 +89,11 @@ abstract final class AppTypography {
     fontSize: sectionTitleSize,
     fontWeight: FontWeight.w700,
     height: 1.2,
+  );
+  static const identityName = TextStyle(
+    fontSize: identityNameSize,
+    fontWeight: FontWeight.w700,
+    height: 1.3,
   );
   static const cardTitle = TextStyle(
     fontSize: cardTitleSize,

@@ -104,14 +104,15 @@ class _LandlordContactCardState extends State<LandlordContactCard>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Contact landlord',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Contact landlord', style: AppTypography.sectionTitle),
             const SizedBox(height: AppSpacing.sm),
-            SelectableText(contact.phoneNumber),
-            const SizedBox(height: AppSpacing.base),
+            SelectableText(contact.phoneNumber, style: AppTypography.body),
+            const SizedBox(height: AppSpacing.sm),
             FilledButton.icon(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                textStyle: AppTypography.button,
+              ),
               onPressed: _call,
               icon: const Icon(Icons.phone_outlined),
               label: const Text('Call landlord'),

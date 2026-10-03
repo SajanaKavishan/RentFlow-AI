@@ -3,6 +3,8 @@ import '../../core/validation/phone_number.dart';
 import '../../features/auth/models/current_user.dart';
 import '../theme/app_theme.dart';
 
+enum _ContactPhoneSource { profile, different }
+
 class PublicContactEditor extends StatefulWidget {
   const PublicContactEditor({
     super.key,
@@ -20,6 +22,7 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
   final _phone = TextEditingController();
   CurrentUser? _user;
   bool _enabled = false;
+  _ContactPhoneSource _source = _ContactPhoneSource.profile;
   bool _saving = false;
   String? _error;
 
@@ -37,6 +40,10 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
       setState(() {
         _user = user;
         _phone.text = user.publicContactPhone ?? '';
+        final storedPhone = (user.publicContactPhone ?? '').trim();
+        _source = storedPhone.isEmpty || storedPhone == user.phoneNumber.trim()
+            ? _ContactPhoneSource.profile
+            : _ContactPhoneSource.different;
         _enabled = user.publicContactEnabled;
       });
     } catch (_) {
@@ -49,8 +56,23 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
   Future<void> _save() async {
     final user = _user;
     if (user == null || _saving) return;
-    if ((_enabled || _phone.text.trim().isNotEmpty) &&
-        usablePhoneNumber(_phone.text) == null) {
+    if (_enabled &&
+        _source == _ContactPhoneSource.profile &&
+        usablePhoneNumber(user.phoneNumber) == null) {
+      setState(
+        () => _error =
+            'Add a profile phone number first, or use a different number.',
+      );
+      return;
+    }
+    // Source choice is edit state, never a live reference to the private phone.
+    final publicPhone = _source == _ContactPhoneSource.different
+        ? _phone.text.trim()
+        : _enabled
+        ? user.phoneNumber.trim()
+        : (user.publicContactPhone ?? '').trim();
+    if ((_enabled || publicPhone.isNotEmpty) &&
+        usablePhoneNumber(publicPhone) == null) {
       setState(
         () => _error =
             'Enter a valid public contact number (7 to 15 digits, maximum 32 characters).',
@@ -62,7 +84,7 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
       _error = null;
     });
     try {
-      await widget.save(user, _phone.text.trim(), _enabled);
+      await widget.save(user, publicPhone, _enabled);
       if (mounted) Navigator.of(context).pop();
     } catch (_) {
       if (mounted) {
@@ -99,25 +121,64 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
           ),
           const SizedBox(height: AppSpacing.base),
           if (_user == null && _error == null) const LinearProgressIndicator(),
-          TextField(
-            controller: _phone,
-            enabled: _user != null && !_saving,
-            maxLength: 32,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Public contact number',
+          Text(
+            'Which number would you like to publish?',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          RadioGroup<_ContactPhoneSource>(
+            groupValue: _source,
+            onChanged: (source) {
+              if (source != null && _user != null && !_saving) {
+                setState(() => _source = source);
+              }
+            },
+            child: Column(
+              children: [
+                RadioListTile<_ContactPhoneSource>(
+                  contentPadding: EdgeInsets.zero,
+                  value: _ContactPhoneSource.profile,
+                  enabled: _user != null && !_saving,
+                  title: const Text('Use my profile phone number'),
+                  subtitle: Text(
+                    usablePhoneNumber(_user?.phoneNumber) ??
+                        'Add a profile phone number first, or use a different number.',
+                  ),
+                ),
+                RadioListTile<_ContactPhoneSource>(
+                  contentPadding: EdgeInsets.zero,
+                  value: _ContactPhoneSource.different,
+                  enabled: _user != null && !_saving,
+                  title: const Text('Use a different number'),
+                ),
+              ],
             ),
           ),
-          CheckboxListTile(
+          if (_source == _ContactPhoneSource.different)
+            Padding(
+              padding: const EdgeInsets.only(left: AppSpacing.base),
+              child: TextField(
+                controller: _phone,
+                enabled: _user != null && !_saving,
+                maxLength: 32,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Public contact number',
+                  hintText: 'Enter public contact number',
+                ),
+              ),
+            ),
+          const SizedBox(height: AppSpacing.base),
+          const Divider(),
+          SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _enabled,
             onChanged: _user == null || _saving
                 ? null
-                : (value) => setState(() => _enabled = value ?? false),
-            title: const Text('Show my contact number on my property listings'),
+                : (value) => setState(() => _enabled = value),
+            title: const Text('Show contact number on my property listings'),
           ),
           const Text(
-            'Your account phone remains private. Only this public contact number is shown when you enable it.',
+            'Your profile phone stays private unless you explicitly choose to use it here.',
           ),
           if (_error != null)
             Padding(

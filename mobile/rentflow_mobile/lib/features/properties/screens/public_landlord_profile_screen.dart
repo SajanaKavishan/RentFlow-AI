@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
@@ -74,7 +76,16 @@ class _PublicLandlordProfileScreenState
         throw const FormatException('Invalid public landlord listings.');
       }
       if (mounted && version == _loadVersion) {
-        setState(() => _properties = properties);
+        // This route is anchored to the property the tenant just viewed.
+        setState(
+          () => _properties = properties
+              .where(
+                (property) =>
+                    property.id.toLowerCase() !=
+                    widget.propertyId.toLowerCase(),
+              )
+              .toList(),
+        );
       }
     } catch (_) {
       if (mounted && version == _loadVersion) {
@@ -119,15 +130,75 @@ class _PublicLandlordProfileScreenState
     if (mounted) await _load();
   }
 
+  Widget _identityCard() => AppCard(
+    key: const Key('landlord-listings-identity'),
+    color: AppPalette.white,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final avatar = PublicLandlordAvatar(
+          propertyId: widget.propertyId,
+          summary: _summary!,
+          service: widget.propertyApiService,
+          size: 64,
+        );
+        final identity = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_summary!.displayName, style: AppTypography.identityName),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Member since ${_summary!.memberSinceYear}',
+              style: AppTypography.bodySmall.copyWith(
+                color: AppPalette.secondaryText,
+              ),
+            ),
+          ],
+        );
+        if (constraints.maxWidth < 240 ||
+            MediaQuery.textScalerOf(context).scale(AppTypography.bodySize) >
+                21) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              avatar,
+              const SizedBox(height: AppSpacing.sm),
+              identity,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            avatar,
+            const SizedBox(width: AppSpacing.md),
+            Expanded(child: identity),
+          ],
+        );
+      },
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: AppPalette.background,
-    appBar: AppBar(title: const Text('Landlord profile')),
+    appBar: AppBar(
+      toolbarHeight: math.max(
+        kToolbarHeight,
+        MediaQuery.textScalerOf(context).scale(AppTypography.pageTitleSize) *
+                1.15 +
+            16,
+      ),
+      title: Text(
+        _summary?.displayName ?? 'Landlord properties',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTypography.pageTitle,
+      ),
+    ),
     body: SafeArea(
       top: false,
       child: _profileError
           ? SharedState(
-              title: 'Landlord profile unavailable',
+              title: 'Landlord properties unavailable',
               message: 'This profile could not be found or loaded.',
               icon: Icons.person_off_outlined,
               actionLabel: 'Try again',
@@ -135,45 +206,35 @@ class _PublicLandlordProfileScreenState
             )
           : _summary == null
           ? const LoadingState(
-              title: 'Loading landlord profile',
+              title: 'Loading landlord properties',
               message: 'Getting landlord details.',
             )
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: AppSpacing.page,
+                padding: const EdgeInsets.all(AppSpacing.base),
                 children: [
-                  AppCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        PublicLandlordAvatar(
-                          propertyId: widget.propertyId,
-                          summary: _summary!,
-                          service: widget.propertyApiService,
-                          size: 88,
-                        ),
-                        const SizedBox(height: AppSpacing.base),
-                        Text(
-                          _summary!.displayName,
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Text(
-                          'Member since ${_summary!.memberSinceYear}',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
+                  _identityCard(),
                   LandlordContactCard(
                     propertyId: widget.propertyId,
                     service: widget.propertyApiService,
                     refreshVersion: _loadVersion,
                   ),
-                  const SectionHeader(title: 'Properties by this landlord'),
+                  const SizedBox(height: AppSpacing.lg),
+                  const Text(
+                    'Other properties',
+                    style: AppTypography.sectionTitle,
+                  ),
+                  if (_properties != null && !_listingsError) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      '${_properties!.length} available ${_properties!.length == 1 ? 'property' : 'properties'}',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppPalette.secondaryText,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.base),
                   if (_listingsError)
                     SharedState(

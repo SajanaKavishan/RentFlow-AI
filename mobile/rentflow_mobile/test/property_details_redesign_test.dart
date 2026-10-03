@@ -488,6 +488,13 @@ void main() {
           find.byKey(const Key('details-landlord')),
           180,
         );
+        await tester.ensureVisible(find.text('View other properties'));
+        await tester.pumpAndSettle();
+        expect(find.text('View landlord profile'), findsNothing);
+        expect(
+          tester.getTopLeft(find.text('View other properties')).dy,
+          greaterThanOrEqualTo(24),
+        );
         expect(
           tester.getRect(find.byKey(const Key('details-cta-bar'))),
           before,
