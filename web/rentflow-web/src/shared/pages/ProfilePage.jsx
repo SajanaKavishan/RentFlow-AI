@@ -8,6 +8,7 @@ import TenantApplicationDocuments from './TenantApplicationDocuments.jsx'
 import NotificationPreferencesSection from './NotificationPreferencesSection.jsx'
 import ChangePasswordDialog from './ChangePasswordDialog.jsx'
 import SupportRequestsSection from './SupportRequestsSection.jsx'
+import TenantMatchPreferencesSection from '../../features/properties/components/TenantMatchPreferencesSection.jsx'
 import './profile.css'
 
 const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -182,6 +183,13 @@ export default function ProfilePage() {
       {showsNotificationPreferences && <section className="profile-section profile-section--preferences" aria-labelledby="profile-preferences-title">
         <h2 id="profile-preferences-title">Preferences</h2>
         <NotificationPreferencesSection key={user.id} userId={user.id} showToast={showToast} />
+      </section>}
+
+      {user.role === USER_ROLES.TENANT && <section className="profile-section profile-section--match" aria-labelledby="profile-match-title">
+        <h2 id="profile-match-title">Match Preferences</h2>
+        <AppCard className="profile-section__card">
+          <TenantMatchPreferencesSection key={user.id} userId={user.id} showToast={showToast} />
+        </AppCard>
       </section>}
 
       {!isAdmin && <section className="profile-section profile-section--support" aria-labelledby="profile-support-title">

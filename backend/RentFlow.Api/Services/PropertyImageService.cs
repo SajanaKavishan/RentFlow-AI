@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs;
 using RentFlow.Api.Models;
@@ -62,6 +63,13 @@ public class PropertyImageService : IPropertyImageService
                 "The property was not found or does not belong to this landlord.");
         }
 
+
+        var existingImages = await _dbContext.PropertyImages
+            .AsNoTracking()
+            .Where(image => image.PropertyId == propertyId)
+            .Select(image => new { image.SortOrder, image.IsPrimary })
+            .ToListAsync(cancellationToken);
+
         var normalizedContentType =
             contentType.Trim().ToLowerInvariant();
 
@@ -85,6 +93,10 @@ public class PropertyImageService : IPropertyImageService
             StorageKey = storageKey,
             ContentType = normalizedContentType,
             FileSizeBytes = fileSizeBytes,
+            IsPrimary = existingImages.Count == 0,
+            SortOrder = existingImages.Count == 0
+                ? 0
+                : existingImages.Max(item => item.SortOrder) + 1,
             UploadedAt = DateTimeOffset.UtcNow
         };
 
@@ -118,7 +130,9 @@ public class PropertyImageService : IPropertyImageService
         var images = await _dbContext.PropertyImages
             .AsNoTracking()
             .Where(image => image.PropertyId == propertyId)
-            .OrderBy(image => image.UploadedAt)
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.UploadedAt)
+            .ThenBy(image => image.Id)
             .ToListAsync(cancellationToken);
 
         return images
@@ -155,11 +169,12 @@ public class PropertyImageService : IPropertyImageService
     }
 
     public async Task<bool> DeleteAsync(
+        Guid propertyId,
         Guid imageId,
         Guid landlordId,
         CancellationToken cancellationToken = default)
     {
-        if (imageId == Guid.Empty || landlordId == Guid.Empty)
+        if (propertyId == Guid.Empty || imageId == Guid.Empty || landlordId == Guid.Empty)
         {
             return false;
         }
@@ -168,6 +183,7 @@ public class PropertyImageService : IPropertyImageService
             .FirstOrDefaultAsync(
                 item =>
                     item.Id == imageId &&
+                    item.PropertyId == propertyId &&
                     _dbContext.Properties.Any(property =>
                         property.Id == item.PropertyId &&
                         property.LandlordId == landlordId),
@@ -182,11 +198,129 @@ public class PropertyImageService : IPropertyImageService
             image.StorageKey,
             cancellationToken);
 
+        var remainingImages = await _dbContext.PropertyImages
+            .Where(item => item.PropertyId == propertyId && item.Id != imageId)
+            .OrderBy(item => item.SortOrder)
+            .ThenBy(item => item.UploadedAt)
+            .ThenBy(item => item.Id)
+            .ToListAsync(cancellationToken);
+
+        await using var transaction = await BeginTransactionIfSupportedAsync(cancellationToken);
+
+        if (image.IsPrimary)
+        {
+            image.IsPrimary = false;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            if (remainingImages.Count > 0)
+            {
+                remainingImages[0].IsPrimary = true;
+            }
+        }
+
+        for (var index = 0; index < remainingImages.Count; index++)
+        {
+            remainingImages[index].SortOrder = index;
+        }
+
         _dbContext.PropertyImages.Remove(image);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return true;
+    }
+
+    public async Task<PropertyImageResponseDto?> SetPrimaryAsync(
+        Guid propertyId,
+        Guid imageId,
+        Guid landlordId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateIdentifiers(propertyId, landlordId);
+
+        var images = await _dbContext.PropertyImages
+            .Where(image => image.PropertyId == propertyId &&
+                _dbContext.Properties.Any(property =>
+                    property.Id == image.PropertyId &&
+                    property.LandlordId == landlordId))
+            .ToListAsync(cancellationToken);
+
+        var selected = images.FirstOrDefault(image => image.Id == imageId);
+        if (selected is null)
+        {
+            return null;
+        }
+
+        if (selected.IsPrimary)
+        {
+            return MapToResponse(selected);
+        }
+
+        await using var transaction = await BeginTransactionIfSupportedAsync(cancellationToken);
+
+        foreach (var image in images.Where(image => image.IsPrimary))
+        {
+            image.IsPrimary = false;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        selected.IsPrimary = true;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        return MapToResponse(selected);
+    }
+
+    public async Task<IReadOnlyList<PropertyImageResponseDto>?> ReorderAsync(
+        Guid propertyId,
+        Guid landlordId,
+        IReadOnlyList<Guid> imageIds,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateIdentifiers(propertyId, landlordId);
+
+        var propertyExists = await _dbContext.Properties
+            .AsNoTracking()
+            .AnyAsync(property => property.Id == propertyId &&
+                property.LandlordId == landlordId, cancellationToken);
+
+        if (!propertyExists)
+        {
+            return null;
+        }
+
+        var images = await _dbContext.PropertyImages
+            .Where(image => image.PropertyId == propertyId)
+            .ToListAsync(cancellationToken);
+
+        if (imageIds.Count != images.Count ||
+            imageIds.Distinct().Count() != imageIds.Count ||
+            imageIds.Any(id => images.All(image => image.Id != id)))
+        {
+            throw new ArgumentException(
+                "Image order must contain every property image exactly once.",
+                nameof(imageIds));
+        }
+
+        var imagesById = images.ToDictionary(image => image.Id);
+        for (var index = 0; index < imageIds.Count; index++)
+        {
+            imagesById[imageIds[index]].SortOrder = index;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return imageIds
+            .Select(id => MapToResponse(imagesById[id]))
+            .ToList();
     }
 
     // Delete all images belonging to a property.
@@ -303,6 +437,14 @@ public class PropertyImageService : IPropertyImageService
         }
     }
 
+    private async Task<IDbContextTransaction?> BeginTransactionIfSupportedAsync(
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.Database.IsRelational()
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+    }
+
     private static string SanitizeFileName(
         string originalFileName)
     {
@@ -338,6 +480,8 @@ public class PropertyImageService : IPropertyImageService
             OriginalFileName = image.OriginalFileName,
             ContentType = image.ContentType,
             FileSizeBytes = image.FileSizeBytes,
+            IsPrimary = image.IsPrimary,
+            SortOrder = image.SortOrder,
             UploadedAt = image.UploadedAt
         };
     }

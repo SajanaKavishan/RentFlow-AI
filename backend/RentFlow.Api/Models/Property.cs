@@ -19,11 +19,43 @@ public class Property
 
     public string City { get; set; } = string.Empty;
 
+    public double? Latitude { get; set; }
+
+    public double? Longitude { get; set; }
+
+    public string? GooglePlaceId { get; set; }
+
     public decimal MonthlyRent { get; set; }
+
+    /// <summary>
+    /// Public, non-binding deposit advertised before an application is made.
+    /// Rental offers and leases remain authoritative for their own deposits.
+    /// </summary>
+    public decimal? AdvertisedSecurityDeposit { get; set; }
+
+    public int? PreferredLeaseTermMonths { get; set; }
+
+    public PetPolicyStatus? PetPolicy { get; set; }
+
+    public string? PetPolicyNotes { get; set; }
+
+    /// <summary>
+    /// Canonical utilities included in advertised monthly rent. Null means the
+    /// landlord did not provide utility information; an empty array means none.
+    /// </summary>
+    public string[]? IncludedUtilities { get; set; }
 
     public int Bedrooms { get; set; }
 
     public int Bathrooms { get; set; }
+
+    public decimal? Area { get; set; }
+
+    public string? AreaUnit { get; set; }
+
+    public string? AreaType { get; set; }
+
+    public DateOnly? AvailableFrom { get; set; }
 
     public bool IsAvailable { get; set; } = true;
 

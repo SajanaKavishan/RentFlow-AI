@@ -8,16 +8,14 @@ import PublicFooter from '../components/PublicFooter.jsx'
 import PublicHeader from '../components/PublicHeader.jsx'
 import SmartAssistanceSection from '../components/SmartAssistanceSection.jsx'
 import { useLandingMotion } from '../useLandingMotion.js'
-import { useLandingSignIn } from '../useLandingSignIn.js'
 import '../landing.css'
 
 export default function LandingPage() {
-  const signIn = useLandingSignIn()
   const motionRoot = useLandingMotion()
 
   return <div className="landing-page" ref={motionRoot}>
     <div className="landing-hero-wrap">
-      <PublicHeader {...signIn} />
+      <PublicHeader />
       <HeroSection />
     </div>
     <main>

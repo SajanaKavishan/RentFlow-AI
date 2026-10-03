@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../core/network/api_client.dart';
+import '../../properties/models/property.dart';
+import '../models/repair_estimate.dart';
 import '../models/maintenance_request.dart';
 
 class MaintenanceApiService {
@@ -10,10 +12,18 @@ class MaintenanceApiService {
 
   final ApiClient apiClient;
 
+  Future<List<Property>> getTenantProperties() async {
+    final uri = apiClient.buildUri('/api/properties/tenant/mine');
+    final response = await _send(() => apiClient.get(uri));
+    return _parsePropertyList(response.body);
+  }
+
   Future<List<MaintenanceRequest>> getMyMaintenanceRequests({
     required String tenantId,
   }) async {
-    final uri = apiClient.buildUri('/api/maintenance-requests/tenant/$tenantId');
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/tenant/$tenantId',
+    );
     final response = await _send(() => apiClient.get(uri));
     return _parseList(response.body);
   }
@@ -21,7 +31,9 @@ class MaintenanceApiService {
   Future<List<MaintenanceRequest>> getAssignedWork({
     required String technicianId,
   }) async {
-    final uri = apiClient.buildUri('/api/maintenance-requests/technician/$technicianId');
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/technician/$technicianId',
+    );
     final response = await _send(() => apiClient.get(uri));
     return _parseList(response.body);
   }
@@ -63,6 +75,68 @@ class MaintenanceApiService {
     return _parseObject(response.body);
   }
 
+  Future<List<RepairEstimate>> getRepairEstimates({
+    required String maintenanceRequestId,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$maintenanceRequestId/estimates',
+    );
+    final response = await _send(() => apiClient.get(uri));
+    return _parseEstimateList(response.body);
+  }
+
+  Future<RepairEstimate?> getLatestRepairEstimate({
+    required String maintenanceRequestId,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$maintenanceRequestId/estimates/latest',
+    );
+    final response = await _send(() => apiClient.get(uri));
+    if (response.statusCode == 204 || response.body.trim().isEmpty) return null;
+    return _parseNullableEstimate(response.body);
+  }
+
+  Future<RepairEstimate> createRepairEstimate({
+    required String maintenanceRequestId,
+    required String technicianId,
+    required double laborCost,
+    required double partsCost,
+    required double additionalCost,
+    String? notes,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$maintenanceRequestId/estimates',
+      queryParameters: {'technicianId': technicianId},
+    );
+    final response = await _send(
+      () => apiClient.post(
+        uri,
+        body: jsonEncode({
+          'laborCost': laborCost,
+          'partsCost': partsCost,
+          'additionalCost': additionalCost,
+          'notes': notes,
+        }),
+      ),
+    );
+    return _parseEstimate(response.body);
+  }
+
+  Future<MaintenanceRequest> submitEstimateForReview({
+    required String maintenanceRequestId,
+    required String estimateId,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$maintenanceRequestId/estimates/'
+      '$estimateId/submit-for-review',
+    );
+    final response = await _send(() => apiClient.patch(uri));
+    return _parseStatusTransition(
+      response.body,
+      expectedStatus: MaintenanceRequestStatus.awaitingLandlordApproval,
+    );
+  }
+
   Future<MaintenanceRequest> startWork({required String id}) async {
     final uri = apiClient.buildUri('/api/maintenance-requests/$id/start-work');
     final response = await _send(() => apiClient.patch(uri));
@@ -73,7 +147,9 @@ class MaintenanceApiService {
   }
 
   Future<MaintenanceRequest> completeWork({required String id}) async {
-    final uri = apiClient.buildUri('/api/maintenance-requests/$id/complete-work');
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$id/complete-work',
+    );
     final response = await _send(() => apiClient.patch(uri));
     return _parseStatusTransition(
       response.body,
@@ -138,6 +214,77 @@ class MaintenanceApiService {
       );
     }
     return request;
+  }
+
+  RepairEstimate _parseEstimate(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException();
+      }
+      return RepairEstimate.fromJson(decoded);
+    } on FormatException {
+      throw const MaintenanceApiException(
+        'The maintenance service returned an invalid estimate.',
+      );
+    }
+  }
+
+  RepairEstimate? _parseNullableEstimate(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded == null) return null;
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException();
+      }
+      return RepairEstimate.fromJson(decoded);
+    } on FormatException {
+      throw const MaintenanceApiException(
+        'The maintenance service returned an invalid estimate.',
+      );
+    }
+  }
+
+  List<RepairEstimate> _parseEstimateList(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! List<dynamic>) {
+        throw const FormatException();
+      }
+      return decoded
+          .map((item) {
+            if (item is! Map<String, dynamic>) {
+              throw const FormatException();
+            }
+            return RepairEstimate.fromJson(item);
+          })
+          .toList(growable: false);
+    } on FormatException {
+      throw const MaintenanceApiException(
+        'The maintenance service returned invalid estimates.',
+      );
+    }
+  }
+
+  List<Property> _parsePropertyList(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! List<dynamic>) {
+        throw const FormatException();
+      }
+      return decoded
+          .map((item) {
+            if (item is! Map<String, dynamic>) {
+              throw const FormatException();
+            }
+            return Property.fromJson(item);
+          })
+          .toList(growable: false);
+    } on FormatException {
+      throw const MaintenanceApiException(
+        'The property service returned an invalid response.',
+      );
+    }
   }
 
   List<MaintenanceRequest> _parseList(String body) {

@@ -70,6 +70,7 @@ describe('notification bell preview', () => {
     vi.stubGlobal('fetch', vi.fn((url, options) => {
       const path = new URL(url, 'http://localhost').pathname
       if (path === '/api/notification-preferences') return Promise.resolve(json(preferences))
+      if (path === '/api/tenant/property-preferences') return Promise.resolve(json({ isConfigured: false, preferredAmenities: [] }))
       if (path === '/api/support-tickets/mine') return Promise.resolve(json([]))
       if (path === '/api/notifications/unread-count') return Promise.resolve(json({ unreadCount: read ? 0 : 1 }))
       if (path === '/api/notifications') return Promise.resolve(json(page([{ ...first, isRead: read, readAt: read ? '2026-09-22T10:00:00Z' : null }])))
@@ -101,6 +102,7 @@ describe('notification bell preview', () => {
     vi.stubGlobal('fetch', vi.fn((url) => {
       const path = new URL(url, 'http://localhost').pathname
       if (path === '/api/notification-preferences') return Promise.resolve(json(preferences))
+      if (path === '/api/tenant/property-preferences') return Promise.resolve(json({ isConfigured: false, preferredAmenities: [] }))
       if (path === '/api/support-tickets/mine') return Promise.resolve(json([]))
       if (path === '/api/notifications/unread-count') return Promise.resolve(json({ unreadCount: 0 }))
       attempts++
@@ -109,7 +111,7 @@ describe('notification bell preview', () => {
     }))
     renderApp()
     await userEvent.click(screen.getByRole('link', { name: 'Notifications' }))
-    expect(screen.getByRole('status')).toHaveTextContent('Loading notifications')
+    expect(within(screen.getByRole('dialog', { name: 'Recent notifications' })).getByRole('status')).toHaveTextContent('Loading notifications')
     await act(async () => { finishRequest(json({ message: 'Unavailable' }, 500)) })
     expect(await screen.findByRole('alert')).toHaveTextContent('Notifications could not be loaded')
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))

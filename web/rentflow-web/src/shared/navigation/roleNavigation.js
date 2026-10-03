@@ -109,10 +109,9 @@ export const NAV_ITEMS = Object.freeze([
     label: 'Maintenance',
     path: '/modules/maintenance',
     roles: [T],
-    available: false,
+    available: true,
     owner: 'Maintenance',
-    description:
-      'Maintenance requests and updates will appear here when this feature is available.',
+    description: 'Create maintenance requests and track their progress.',
   },
 
   {
@@ -140,10 +139,9 @@ export const NAV_ITEMS = Object.freeze([
     label: 'Maintenance',
     path: '/modules/maintenance',
     roles: [L],
-    available: false,
+    available: true,
     owner: 'Maintenance',
-    description:
-      'Maintenance management will be connected when that module is merged.',
+    description: 'Review and coordinate maintenance requests for a property.',
   },
 
   // =========================================================

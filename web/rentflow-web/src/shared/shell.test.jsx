@@ -37,7 +37,7 @@ describe('shared React shell', () => {
 
   it('renders a role dashboard and a landlord sidebar with working workflow links', async () => {
     renderApp('Landlord')
-    expect(await screen.findByRole('heading', { name: 'Welcome, Taylor Example' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Good (morning|afternoon|evening), Taylor/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'RentFlow dashboard' }).querySelector('img')).toHaveAttribute('src', expect.stringContaining('rentflow-wordmark'))
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
     await userEvent.click(within(nav).getByRole('link', { name: 'Viewing Requests' }))
@@ -59,6 +59,9 @@ describe('shared React shell', () => {
     expect(brand).toHaveTextContent('A better way to rent')
     const labels = within(nav).getAllByRole('link').map((link) => link.textContent.replace('Soon', ''))
     expect(labels).toEqual(expectedLabels)
+    const account = screen.getByRole('button', { name: 'Profile for Taylor Example' })
+    expect(account.children[0]).toHaveClass('shared-avatar')
+    expect(account.children[1]).toHaveClass('shared-topbar__identity')
   })
 
   it('opens the tenant Lease & Payments page and blocks landlords', async () => {
@@ -72,9 +75,53 @@ describe('shared React shell', () => {
     expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
   })
 
+  it('renders the existing tenant maintenance page for the maintenance module', async () => {
+    fetch.mockImplementation((url) => Promise.resolve(new Response(
+      JSON.stringify(String(url).includes('/api/properties/tenant/mine')
+        ? [{ id: propertyId, title: 'Riverside flat', city: 'Colombo' }]
+        : [],
+      ),
+      { status: 200 },
+    )))
+    renderApp('Tenant', `/modules/maintenance?propertyId=${propertyId}`)
+
+    expect(await screen.findByRole('heading', { name: 'Maintenance requests' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Report an issue' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('Associated property')).toHaveValue(propertyId)
+    expect(screen.queryByText('Integration pending')).not.toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/maintenance-requests/tenant/user-id'),
+      expect.any(Object),
+    )
+  })
+
+  it('renders the preserved landlord maintenance workspace with an authenticated property selector', async () => {
+    fetch.mockImplementation((url) => Promise.resolve(new Response(
+      JSON.stringify(String(url).includes('/api/properties/mine')
+        ? [{ id: propertyId, title: 'Riverside flat', address: '10 Main Road', city: 'Colombo' }]
+        : [],
+      ),
+      { status: 200 },
+    )))
+    renderApp('Landlord', '/modules/maintenance')
+
+    expect(await screen.findByRole('heading', { name: 'Maintenance & support management' })).toBeInTheDocument()
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Property' }), propertyId)
+    expect(await screen.findByRole('heading', { name: 'No maintenance requests yet' })).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/properties/mine'),
+      expect.any(Object),
+    )
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining(`/api/maintenance-requests/property/${propertyId}`),
+      expect.any(Object),
+    )
+    expect(screen.queryByText('Maintenance management will be connected when that module is merged.')).not.toBeInTheDocument()
+  })
+
   it('opens the landlord property management route without inventing property context', async () => {
     renderApp('Landlord', '/modules/manage-properties')
-    expect(await screen.findByRole('heading', { name: 'Manage your properties' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'My Properties' })).toBeInTheDocument()
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
     const propertiesLink = within(nav).getByRole('link', { name: 'Manage Properties' })
     expect(propertiesLink).toHaveAttribute('href', '/modules/manage-properties')
@@ -178,7 +225,7 @@ describe('shared React shell', () => {
 
   it('closes the drawer when a route is selected and keeps logout available', async () => {
     renderApp('Landlord')
-    await screen.findByRole('heading', { name: 'Welcome, Taylor Example' })
+    await screen.findByRole('heading', { name: /Good (morning|afternoon|evening), Taylor/ })
     await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
     expect(within(nav).queryByRole('link', { name: 'Profile' })).not.toBeInTheDocument()

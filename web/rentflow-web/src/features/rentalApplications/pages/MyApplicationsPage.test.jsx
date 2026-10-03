@@ -16,10 +16,10 @@ const application = (id, status, extra = {}) => ({
   landlordResponse: null, ...extra,
 })
 
-function renderPage(role = 'Tenant') {
+function renderPage(role = 'Tenant', entry = '/modules/my-applications') {
   const session = { user: { id: tenantId, fullName: 'Taylor Example', email: 'taylor@example.com', role },
     isAuthenticated: true, isLoading: false, logout: vi.fn() }
-  return render(<MemoryRouter initialEntries={['/modules/my-applications']}><AuthContext.Provider value={session}><App /></AuthContext.Provider></MemoryRouter>)
+  return render(<MemoryRouter initialEntries={[entry]}><AuthContext.Provider value={session}><App /></AuthContext.Provider></MemoryRouter>)
 }
 
 beforeEach(() => {
@@ -96,6 +96,26 @@ describe('Tenant My Applications', () => {
     expect(await screen.findByRole('heading', { name: 'No applications yet' })).toBeInTheDocument()
     expect(screen.queryByText(propertyId)).not.toBeInTheDocument()
     expect(requests).toBe(3)
+  })
+
+  it('keeps selected property context across the property-aware handoff without creating an application', async () => {
+    fetch.mockImplementation((url) => Promise.resolve(json(
+      url.endsWith(`/api/properties/${propertyId}`)
+        ? { id: propertyId, title: 'Lake View Apartment', address: '18 Lake Road', city: 'Colombo', isAvailable: false }
+        : url.endsWith('/api/rental-applications')
+          ? [application(firstId, 2, { submittedAt: '2026-09-12T10:00:00Z' })]
+          : { unreadCount: 0 },
+    )))
+
+    renderPage('Tenant', `/modules/my-applications?propertyId=${propertyId}`)
+
+    expect(await screen.findByRole('heading', { name: 'Lake View Apartment' })).toBeInTheDocument()
+    expect(screen.getByText('18 Lake Road, Colombo')).toBeInTheDocument()
+    expect(screen.getByText(/currently unavailable.*Existing applications remain available/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Back to property/ }))
+      .toHaveAttribute('href', `/properties/${propertyId}`)
+    expect(fetch.mock.calls.some(([url]) => url.endsWith(`/api/properties/${propertyId}`))).toBe(true)
+    expect(fetch.mock.calls.every(([, options = {}]) => !options.method || options.method === 'GET')).toBe(true)
   })
 
   it('rejects another tenant record and blocks non-tenant roles', async () => {

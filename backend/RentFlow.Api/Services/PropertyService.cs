@@ -57,22 +57,29 @@ public class PropertyService : IPropertyService
             Description = dto.Description.Trim(),
             Address = dto.Address.Trim(),
             City = dto.City.Trim(),
+            Latitude = dto.Latitude,
+            Longitude = dto.Longitude,
+            GooglePlaceId = NormalizeGooglePlaceId(dto.GooglePlaceId),
             MonthlyRent = dto.MonthlyRent,
+            AdvertisedSecurityDeposit = dto.AdvertisedSecurityDeposit,
+            PreferredLeaseTermMonths = dto.PreferredLeaseTermMonths,
+            PetPolicy = dto.PetPolicy,
+            PetPolicyNotes = NormalizePetNotes(dto.PetPolicy, dto.PetPolicyNotes),
+            IncludedUtilities = PropertyListingCatalog.NormalizeUtilities(dto.IncludedUtilities),
             Bedrooms = dto.Bedrooms,
             Bathrooms = dto.Bathrooms,
-            IsAvailable = true,
+            Area = dto.Area,
+            AreaUnit = NormalizeAreaUnit(dto.Area, dto.AreaUnit),
+            AreaType = NormalizeAreaType(dto.Area, dto.AreaType),
+            AvailableFrom = dto.AvailableFrom,
+            IsAvailable = dto.IsAvailable,
             CreatedAt = DateTimeOffset.UtcNow
         };
 
-        foreach (var amenityName in CleanAmenities(dto.Amenities))
+        foreach (var amenity in PropertyListingCatalog.NormalizeAmenities(
+            property.Id, dto.Amenities, dto.AmenityDetails))
         {
-            property.Amenities.Add(
-                new PropertyAmenity
-                {
-                    Id = Guid.NewGuid(),
-                    PropertyId = property.Id,
-                    Name = amenityName
-                });
+            property.Amenities.Add(amenity);
         }
 
         _dbContext.Properties.Add(property);
@@ -99,31 +106,17 @@ public class PropertyService : IPropertyService
             return null;
         }
 
-        // Update property information
-        property.Title = dto.Title.Trim();
-        property.Description = dto.Description.Trim();
-        property.Address = dto.Address.Trim();
-        property.City = dto.City.Trim();
-        property.MonthlyRent = dto.MonthlyRent;
-        property.Bedrooms = dto.Bedrooms;
-        property.Bathrooms = dto.Bathrooms;
-        property.IsAvailable = dto.IsAvailable;
-        property.UpdatedAt = DateTimeOffset.UtcNow;
+        ApplyCoreFields(property, dto);
 
         // Remove the existing amenities.
         _dbContext.PropertyAmenities.RemoveRange(
             property.Amenities);
 
         // Add the replacement amenities directly to the DbSet.
-        foreach (var amenityName in CleanAmenities(dto.Amenities))
+        foreach (var amenity in PropertyListingCatalog.NormalizeAmenities(
+            property.Id, dto.Amenities, null))
         {
-            _dbContext.PropertyAmenities.Add(
-                new PropertyAmenity
-                {
-                    Id = Guid.NewGuid(),
-                    PropertyId = property.Id,
-                    Name = amenityName
-                });
+            _dbContext.PropertyAmenities.Add(amenity);
         }
 
         await _dbContext.SaveChangesAsync();
@@ -133,6 +126,36 @@ public class PropertyService : IPropertyService
             .Collection(item => item.Amenities)
             .LoadAsync();
 
+        return MapToResponseDto(property);
+    }
+
+    public async Task<PropertyResponseDto?> UpdateListingAsync(
+        Guid id,
+        Guid landlordId,
+        UpdatePropertyListingDto dto)
+    {
+        var property = await _dbContext.Properties
+            .Include(item => item.Amenities)
+            .FirstOrDefaultAsync(item => item.Id == id && item.LandlordId == landlordId);
+
+        if (property is null) return null;
+
+        ApplyCoreFields(property, dto);
+        property.AdvertisedSecurityDeposit = dto.AdvertisedSecurityDeposit;
+        property.PreferredLeaseTermMonths = dto.PreferredLeaseTermMonths;
+        property.PetPolicy = dto.PetPolicy;
+        property.PetPolicyNotes = NormalizePetNotes(dto.PetPolicy, dto.PetPolicyNotes);
+        property.IncludedUtilities = PropertyListingCatalog.NormalizeUtilities(dto.IncludedUtilities);
+
+        _dbContext.PropertyAmenities.RemoveRange(property.Amenities);
+        foreach (var amenity in PropertyListingCatalog.NormalizeAmenities(
+            property.Id, dto.Amenities, dto.AmenityDetails))
+        {
+            _dbContext.PropertyAmenities.Add(amenity);
+        }
+
+        await _dbContext.SaveChangesAsync();
+        await _dbContext.Entry(property).Collection(item => item.Amenities).LoadAsync();
         return MapToResponseDto(property);
     }
 
@@ -174,14 +197,58 @@ public class PropertyService : IPropertyService
         return true;
     }
 
-    // Clean up amenities before storing them.
-    private static IEnumerable<string> CleanAmenities(
-        IEnumerable<string>? amenities)
+    private static void ApplyCoreFields(Property property, UpdatePropertyDto dto)
     {
-        return (amenities ?? Enumerable.Empty<string>())
-            .Where(amenity => !string.IsNullOrWhiteSpace(amenity))
-            .Select(amenity => amenity.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase);
+        property.Title = dto.Title.Trim();
+        property.Description = dto.Description.Trim();
+        property.Address = dto.Address.Trim();
+        property.City = dto.City.Trim();
+        property.Latitude = dto.Latitude;
+        property.Longitude = dto.Longitude;
+        property.GooglePlaceId = NormalizeGooglePlaceId(dto.GooglePlaceId);
+        property.MonthlyRent = dto.MonthlyRent;
+        property.Bedrooms = dto.Bedrooms;
+        property.Bathrooms = dto.Bathrooms;
+        property.Area = dto.Area;
+        property.AreaUnit = NormalizeAreaUnit(dto.Area, dto.AreaUnit);
+        property.AreaType = NormalizeAreaType(dto.Area, dto.AreaType);
+        property.AvailableFrom = dto.AvailableFrom;
+        property.IsAvailable = dto.IsAvailable;
+        property.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static string? NormalizePetNotes(PetPolicyStatus? policy, string? notes) =>
+        policy == PetPolicyStatus.NotAllowed || string.IsNullOrWhiteSpace(notes)
+            ? null
+            : notes.Trim();
+
+    private static string? NormalizeAreaUnit(decimal? area, string? areaUnit)
+    {
+        if (!area.HasValue)
+        {
+            return null;
+        }
+
+        return string.IsNullOrWhiteSpace(areaUnit)
+            ? null
+            : areaUnit.Trim().ToLowerInvariant();
+    }
+
+    private static string? NormalizeAreaType(decimal? area, string? areaType)
+    {
+        if (!area.HasValue || string.IsNullOrWhiteSpace(areaType))
+        {
+            return null;
+        }
+
+        return areaType.Trim();
+    }
+
+    private static string? NormalizeGooglePlaceId(string? googlePlaceId)
+    {
+        return string.IsNullOrWhiteSpace(googlePlaceId)
+            ? null
+            : googlePlaceId.Trim();
     }
 
     // Convert Property entity to PropertyResponseDto.
@@ -196,15 +263,34 @@ public class PropertyService : IPropertyService
             Description = property.Description,
             Address = property.Address,
             City = property.City,
+            Latitude = property.Latitude,
+            Longitude = property.Longitude,
+            GooglePlaceId = property.GooglePlaceId,
             MonthlyRent = property.MonthlyRent,
+            AdvertisedSecurityDeposit = property.AdvertisedSecurityDeposit,
+            PreferredLeaseTermMonths = property.PreferredLeaseTermMonths,
+            PetPolicy = property.PetPolicy,
+            PetPolicyNotes = property.PetPolicyNotes,
+            IncludedUtilities = property.IncludedUtilities?.ToList(),
             Bedrooms = property.Bedrooms,
             Bathrooms = property.Bathrooms,
+            Area = property.Area,
+            AreaUnit = property.AreaUnit,
+            AreaType = property.AreaType,
+            AvailableFrom = property.AvailableFrom,
             IsAvailable = property.IsAvailable,
             CreatedAt = property.CreatedAt,
             UpdatedAt = property.UpdatedAt,
 
             Amenities = property.Amenities
                 .Select(amenity => amenity.Name)
+                .ToList(),
+            AmenityDetails = property.Amenities
+                .Select(amenity => new PropertyAmenityResponseDto
+                {
+                    CanonicalKey = amenity.CanonicalKey,
+                    Name = amenity.Name
+                })
                 .ToList()
         };
     }

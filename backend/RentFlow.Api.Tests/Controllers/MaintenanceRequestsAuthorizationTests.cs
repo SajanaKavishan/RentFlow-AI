@@ -124,6 +124,148 @@ public sealed class MaintenanceRequestsAuthorizationTests
     }
 
     [Fact]
+    public async Task GetTechnicians_WithoutToken_ReturnsUnauthorized()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+
+        var response = await client.GetAsync("/api/maintenance-requests/technicians");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetTechnicians_WithTenantRole_ReturnsForbidden()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        await AuthenticateAsync(client, "tenant-technician-directory@example.com", UserRole.Tenant);
+
+        var response = await client.GetAsync("/api/maintenance-requests/technicians");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Landlord)]
+    [InlineData(UserRole.Admin)]
+    public async Task GetTechnicians_ReturnsOnlyActiveTechnicianChoices(UserRole role)
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        await AuthenticateAsync(client, $"directory-{role.ToString().ToLowerInvariant()}@example.com", role, factory);
+        var activeTechnicianId = await SeedUserAsync(
+            factory,
+            "active-directory-technician@example.com",
+            UserRole.MaintenanceTechnician);
+        await SeedUserAsync(
+            factory,
+            "inactive-directory-technician@example.com",
+            UserRole.MaintenanceTechnician,
+            isActive: false);
+        await SeedUserAsync(factory, "directory-tenant@example.com", UserRole.Tenant);
+
+        var response = await client.GetAsync("/api/maintenance-requests/technicians");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = await ParseAsync(response);
+        var choice = Assert.Single(body.RootElement.EnumerateArray());
+        Assert.Equal(activeTechnicianId, choice.GetProperty("id").GetGuid());
+        Assert.Equal("Maintenance Technician", choice.GetProperty("name").GetString());
+        Assert.Equal(
+            new[] { "id", "name" },
+            choice.EnumerateObject().Select(property => property.Name).OrderBy(name => name));
+    }
+
+    [Fact]
+    public async Task GetMyTenantProperties_ReturnsOnlyVerifiedCurrentActiveOccupancy()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        var tenantId = await AuthenticateAsync(client, "property-tenant@example.com", UserRole.Tenant);
+        using var landlordClient = factory.CreateHttpsClient();
+        var landlordId = await AuthenticateAsync(
+            landlordClient,
+            "property-landlord@example.com",
+            UserRole.Landlord,
+            factory);
+        using var otherTenantClient = factory.CreateHttpsClient();
+        var otherTenantId = await AuthenticateAsync(
+            otherTenantClient,
+            "property-other-tenant@example.com",
+            UserRole.Tenant);
+
+        var occupiedPropertyId = await SeedPropertyWithLeaseAsync(
+            factory,
+            landlordId,
+            leaseTenantId: tenantId);
+        var pendingPropertyId = await SeedPropertyWithLeaseAsync(
+            factory,
+            landlordId,
+            leaseTenantId: tenantId,
+            leaseStatus: LeaseAgreementStatus.Pending);
+        var expiredPropertyId = await SeedPropertyWithLeaseAsync(
+            factory,
+            landlordId,
+            leaseTenantId: tenantId,
+            currentlyInTerm: false);
+        var otherTenantPropertyId = await SeedPropertyWithLeaseAsync(
+            factory,
+            landlordId,
+            leaseTenantId: otherTenantId);
+        var inconsistentPropertyId = await SeedPropertyWithLeaseAsync(
+            factory,
+            landlordId,
+            leaseTenantId: tenantId,
+            offerTenantId: otherTenantId);
+
+        var response = await client.GetAsync(
+            $"/api/properties/tenant/mine?tenantId={otherTenantId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = await ParseAsync(response);
+        var returnedProperties = body.RootElement.EnumerateArray().ToArray();
+        var property = Assert.Single(returnedProperties);
+        var returnedPropertyId = property.GetProperty("id").GetGuid();
+        Assert.Equal(occupiedPropertyId, returnedPropertyId);
+        Assert.DoesNotContain(pendingPropertyId, returnedProperties
+            .Select(property => property.GetProperty("id").GetGuid()));
+        Assert.DoesNotContain(expiredPropertyId, returnedProperties
+            .Select(property => property.GetProperty("id").GetGuid()));
+        Assert.DoesNotContain(otherTenantPropertyId, returnedProperties
+            .Select(property => property.GetProperty("id").GetGuid()));
+        Assert.DoesNotContain(inconsistentPropertyId, returnedProperties
+            .Select(property => property.GetProperty("id").GetGuid()));
+        Assert.Equal(occupiedPropertyId, property.GetProperty("id").GetGuid());
+        Assert.Equal(landlordId, property.GetProperty("landlordId").GetGuid());
+        Assert.Equal("Current occupied property", property.GetProperty("title").GetString());
+        Assert.True(property.TryGetProperty("amenities", out _));
+    }
+
+    [Fact]
+    public async Task GetMyTenantProperties_WithoutToken_ReturnsUnauthorized()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+
+        var response = await client.GetAsync("/api/properties/tenant/mine");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetMyTenantProperties_WithLandlordRole_ReturnsForbidden()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        await AuthenticateAsync(client, "property-role-landlord@example.com", UserRole.Landlord);
+
+        var response = await client.GetAsync("/api/properties/tenant/mine");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task SubmitEstimate_WithTenantRole_ReturnsForbidden()
     {
         using var factory = new AuthApiFactory();
@@ -236,19 +378,25 @@ public sealed class MaintenanceRequestsAuthorizationTests
         return body.RootElement.GetProperty("user").GetProperty("id").GetGuid();
     }
 
-    private static async Task SeedUserAsync(AuthApiFactory factory, string email, UserRole role)
+    private static async Task<Guid> SeedUserAsync(
+        AuthApiFactory factory,
+        string email,
+        UserRole role,
+        bool isActive = true)
     {
         using var scope = factory.Services.CreateScope();
         var services = scope.ServiceProvider;
         var user = new ApplicationUser
         {
             Id = Guid.NewGuid(),
-            FullName = "Maintenance Technician",
+            FullName = role == UserRole.MaintenanceTechnician
+                ? "Maintenance Technician"
+                : "Maintenance Auth User",
             Email = email,
             NormalizedEmail = AuthService.NormalizeEmail(email),
             PhoneNumber = "+94770000000",
             Role = role,
-            IsActive = true,
+            IsActive = isActive,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -257,6 +405,79 @@ public sealed class MaintenanceRequestsAuthorizationTests
             .HashPassword(user, ValidPassword);
         services.GetRequiredService<ApplicationDbContext>().Users.Add(user);
         await services.GetRequiredService<ApplicationDbContext>().SaveChangesAsync();
+        return user.Id;
+    }
+
+    private static async Task<Guid> SeedPropertyWithLeaseAsync(
+        AuthApiFactory factory,
+        Guid landlordId,
+        Guid leaseTenantId,
+        Guid? offerTenantId = null,
+        LeaseAgreementStatus leaseStatus = LeaseAgreementStatus.Active,
+        bool currentlyInTerm = true)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var tenantIdForOffer = offerTenantId ?? leaseTenantId;
+        var property = new Property
+        {
+            LandlordId = landlordId,
+            Title = "Current occupied property",
+            Description = "Test property",
+            Address = "123 Test Road",
+            City = "Test City",
+            MonthlyRent = 1000m,
+            Bedrooms = 2,
+            Bathrooms = 1,
+            IsAvailable = false,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        var application = new RentalApplication
+        {
+            TenantId = tenantIdForOffer,
+            PropertyId = property.Id,
+            MoveInDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            MonthlyIncome = 5000m,
+            Occupation = "Test",
+            NumberOfOccupants = 1,
+            Status = RentalApplicationStatus.Approved
+        };
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var startDate = today.AddDays(currentlyInTerm ? -1 : -30);
+        var endDate = today.AddDays(currentlyInTerm ? 30 : -1);
+        var offer = new RentalOffer
+        {
+            RentalApplicationId = application.Id,
+            RentalApplication = application,
+            TenantId = tenantIdForOffer,
+            PropertyId = property.Id,
+            MonthlyRent = property.MonthlyRent,
+            SecurityDeposit = 1000m,
+            ProposedStartDate = startDate,
+            ProposedEndDate = endDate,
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(1),
+            Status = RentalOfferStatus.Accepted
+        };
+        var lease = new LeaseAgreement
+        {
+            RentalOfferId = offer.Id,
+            RentalOffer = offer,
+            TenantId = leaseTenantId,
+            PropertyId = property.Id,
+            MonthlyRent = offer.MonthlyRent,
+            SecurityDeposit = offer.SecurityDeposit,
+            StartDate = offer.ProposedStartDate,
+            EndDate = offer.ProposedEndDate,
+            Status = leaseStatus,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        dbContext.Properties.Add(property);
+        dbContext.RentalApplications.Add(application);
+        dbContext.RentalOffers.Add(offer);
+        dbContext.LeaseAgreements.Add(lease);
+        await dbContext.SaveChangesAsync();
+        return property.Id;
     }
 
     private static async Task<Guid> SeedRequestAsync(

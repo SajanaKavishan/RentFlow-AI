@@ -22,8 +22,21 @@ public interface IPropertyImageService
         CancellationToken cancellationToken = default);
 
     Task<bool> DeleteAsync(
+        Guid propertyId,
         Guid imageId,
         Guid landlordId,
+        CancellationToken cancellationToken = default);
+
+    Task<PropertyImageResponseDto?> SetPrimaryAsync(
+        Guid propertyId,
+        Guid imageId,
+        Guid landlordId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PropertyImageResponseDto>?> ReorderAsync(
+        Guid propertyId,
+        Guid landlordId,
+        IReadOnlyList<Guid> imageIds,
         CancellationToken cancellationToken = default);
 
     Task DeleteAllForPropertyAsync(

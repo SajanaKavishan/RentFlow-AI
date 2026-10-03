@@ -1,11 +1,19 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import OwnedPropertiesContext from '../../../shared/property/OwnedPropertiesContext.js'
 import RentalApplicationsPage from './RentalApplicationsPage.jsx'
 
 const propertyId = '22222222-2222-2222-2222-222222222222'
 const tenantId = '11111111-1111-1111-1111-111111111111'
+const property = {
+  id: propertyId,
+  title: 'Harbour View Residence',
+  address: '18 Marine Drive',
+  city: 'Colombo',
+  isAvailable: true,
+}
 
 function application(overrides = {}) {
   return {
@@ -51,16 +59,24 @@ function mockApplicationApi(applications, options = {}) {
   return fetchMock
 }
 
-function renderPage(selectedPropertyId = propertyId, route = 'rental-applications') {
+function renderPage(selectedPropertyId = propertyId, route = 'rental-applications', properties = [property]) {
   const routePath = route.startsWith('/') ? route : `/${route}`
+  const isScopedRoute = routePath.startsWith('/properties/')
   const entry = selectedPropertyId
-    ? `${routePath}?propertyId=${selectedPropertyId}`
+    ? (isScopedRoute ? routePath : `/properties/${selectedPropertyId}${routePath}`)
     : routePath
 
   return render(
-    <MemoryRouter initialEntries={[entry]}>
-      <RentalApplicationsPage />
-    </MemoryRouter>,
+    <OwnedPropertiesContext.Provider value={{ status: 'ready', properties, error: '', retry: vi.fn() }}>
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route path="/rental-applications" element={<RentalApplicationsPage />} />
+          <Route path="/ai-review" element={<RentalApplicationsPage />} />
+          <Route path="/properties/:propertyId/rental-applications" element={<RentalApplicationsPage />} />
+          <Route path="/properties/:propertyId/ai-review" element={<RentalApplicationsPage />} />
+        </Routes>
+      </MemoryRouter>
+    </OwnedPropertiesContext.Provider>,
   )
 }
 
@@ -92,7 +108,13 @@ describe('Landlord rental applications', () => {
       expect.any(Object),
     )
     expect(cards).toHaveLength(7)
-    expect(screen.getByRole('heading', { name: 'Rental Applications' }).parentElement).toHaveTextContent('7 total · 2 awaiting review')
+    expect(screen.getByRole('link', { name: 'Back to Property' }))
+      .toHaveAttribute('href', `/properties/${propertyId}`)
+    expect(screen.getByRole('group', { name: 'Selected property' }))
+      .toHaveTextContent('Harbour View Residence18 Marine Drive, Colombo')
+    const counts = screen.getByRole('group', { name: 'Rental application counts' })
+    expect(within(counts).getByText('Total').parentElement).toHaveTextContent('7')
+    expect(within(counts).getByText('Awaiting review').parentElement).toHaveTextContent('2')
     expect(within(cards[0]).getByLabelText('Application status: Submitted')).toBeInTheDocument()
     expect(within(cards[1]).getByLabelText('Application status: Under review')).toBeInTheDocument()
     expect(within(cards[2]).getByLabelText('Application status: Changes requested')).toBeInTheDocument()
@@ -103,7 +125,11 @@ describe('Landlord rental applications', () => {
     }
 
     expect(within(cards[0]).getByText(tenantId)).toBeInTheDocument()
-    expect(within(cards[0]).getByText(propertyId)).toBeInTheDocument()
+    expect(within(cards[0]).getByText('submitted')).toBeInTheDocument()
+    expect(within(cards[0]).getByText('Harbour View Residence')).toBeInTheDocument()
+    expect(within(cards[0]).getByText('18 Marine Drive, Colombo')).toBeInTheDocument()
+    expect(cards[0].querySelector(`time[datetime="${application().submittedAt}"]`)).toBeInTheDocument()
+    expect(cards[0].querySelector(`time[datetime="${application().updatedAt}"]`)).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Start review' })).toHaveLength(1)
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Application validation' })).not.toBeInTheDocument()
@@ -209,10 +235,12 @@ describe('Landlord rental applications', () => {
       await screen.findByRole('heading', { name: 'No rental applications yet' }),
     ).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(screen.getByRole('heading', { name: 'Rental Applications' }).parentElement).toHaveTextContent('0 total · 0 awaiting review')
+    const counts = screen.getByRole('group', { name: 'Rental application counts' })
+    expect(within(counts).getByText('Total').parentElement).toHaveTextContent('0')
+    expect(within(counts).getByText('Awaiting review').parentElement).toHaveTextContent('0')
   })
 
-  it('combines client-side status and reference search without searching unrelated fields', async () => {
+  it('combines the supported status filters with search over real returned fields', async () => {
     const secondTenantId = '99999999-9999-9999-9999-999999999999'
     mockApplicationApi([
       application({ id: 'first', tenantId, status: 1 }),
@@ -222,20 +250,24 @@ describe('Landlord rental applications', () => {
     renderPage()
     const list = await screen.findByRole('region', { name: 'Rental applications' })
     const filters = screen.getByRole('group', { name: 'Filter applications by status' })
+    expect(within(filters).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'All', 'Submitted', 'Under Review', 'Changes Requested', 'Approved', 'Rejected',
+    ])
     expect(within(list).getAllByRole('article')).toHaveLength(3)
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search tenant or property reference' }), '99999999')
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search rental applications' }), '99999999')
     expect(within(list).getAllByRole('article')).toHaveLength(2)
-    await userEvent.click(within(filters).getByRole('button', { name: 'Under review' }))
+    await userEvent.click(within(filters).getByRole('button', { name: 'Under Review' }))
     expect(within(list).getAllByRole('article')).toHaveLength(1)
     expect(within(list).getByText('Architect')).toBeInTheDocument()
-    expect(within(filters).getByRole('button', { name: 'Under review' })).toHaveAttribute('aria-pressed', 'true')
-    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search tenant or property reference' }))
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search tenant or property reference' }), 'Product designer')
-    expect(screen.getByRole('heading', { name: 'No matching applications' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(within(filters).getByRole('button', { name: 'Under Review' })).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search rental applications' }))
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search rental applications' }), 'Architect')
+    expect(within(list).getByText('Architect')).toBeInTheDocument()
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search rental applications' }))
+    await userEvent.click(within(filters).getByRole('button', { name: 'All' }))
     expect(within(screen.getByRole('region', { name: 'Rental applications' })).getAllByRole('article')).toHaveLength(3)
     expect(within(filters).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('heading', { name: 'Rental Applications' }).parentElement).toHaveTextContent('3 total · 2 awaiting review')
+    expect(within(screen.getByRole('group', { name: 'Rental application counts' })).getByText('Total').parentElement).toHaveTextContent('3')
   })
 
   it('refreshes the scoped list and removes stale cards', async () => {
@@ -271,6 +303,31 @@ describe('Landlord rental applications', () => {
     expect(screen.queryByRole('article')).not.toBeInTheDocument()
   })
 
+  it('rejects duplicate applications from the scoped endpoint', async () => {
+    const duplicate = application()
+    mockApplicationApi([duplicate, { ...duplicate }])
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'We could not load the applications' })).toBeInTheDocument()
+    expect(screen.queryByRole('article')).not.toBeInTheDocument()
+  })
+
+  it('does not show a successful transition for a mismatched mutation response', async () => {
+    const submitted = application()
+    mockApplicationApi([submitted], {
+      actionResponse: application({ id: 'different-application', status: 2 }),
+    })
+    renderPage()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Unable to update this rental application. Please try again.',
+    )
+    expect(screen.getByLabelText('Application status: Submitted')).toBeInTheDocument()
+    expect(screen.queryByText('Application marked as under review.')).not.toBeInTheDocument()
+  })
+
   it('keeps decision feedback and action availability aligned with API state', async () => {
     const submitted = application()
     const approved = application({ status: 4, landlordResponse: 'Application approved after review.' })
@@ -304,15 +361,23 @@ describe('Landlord rental applications', () => {
     expect(
       screen.getByRole('heading', { name: 'Select a property' }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/Property integration pending/)).toBeInTheDocument()
+    expect(screen.getByText(/Choose one of your owned properties/)).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('treats an invalid property reference as unselected', () => {
+  it('treats a malformed property reference as unselected', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     renderPage('not-a-property-id')
     expect(screen.getByRole('heading', { name: 'Select a property' })).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects a property outside the authenticated ownership context without loading applications', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    renderPage(propertyId, 'rental-applications', [{ ...property, id: '99999999-9999-9999-9999-999999999999' }])
+    expect(screen.getByRole('heading', { name: 'Property unavailable' })).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

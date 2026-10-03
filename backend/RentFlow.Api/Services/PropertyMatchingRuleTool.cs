@@ -96,7 +96,8 @@ public sealed class PropertyMatchingRuleTool : IPropertyMatchingRuleTool
 
             var preferredAmenities = preferences.PreferredAmenities
                 .Where(item => !string.IsNullOrWhiteSpace(item))
-                .Select(item => item.Trim())
+                .Select(PropertyListingCatalog.NormalizeForMatching)
+                .Where(item => item.Length > 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
@@ -105,7 +106,8 @@ public sealed class PropertyMatchingRuleTool : IPropertyMatchingRuleTool
                 possiblePoints += 20;
 
                 var propertyAmenities = property.Amenities
-                    .Select(item => item.Name)
+                    .Select(item => item.CanonicalKey
+                        ?? PropertyListingCatalog.NormalizeForMatching(item.Name))
                     .Where(name => !string.IsNullOrWhiteSpace(name))
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 

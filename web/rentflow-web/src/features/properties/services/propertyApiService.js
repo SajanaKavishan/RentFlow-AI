@@ -1,4 +1,5 @@
 import { apiRequest } from '../../../core/api/apiClient.js'
+import { API_BASE_URL } from '../../../core/api/apiConfig.js'
 
 export function getProperties(filters = {}) {
   const params = new URLSearchParams()
@@ -105,11 +106,86 @@ export function deletePropertyImage(propertyId, imageId) {
   )
 }
 
-export function matchProperties(preferences) {
-  return apiRequest('/api/properties/match', {
+export function updatePropertyListing(propertyId, property) {
+  return apiRequest(`/api/properties/${propertyId}/listing`, {
+    method: 'PUT',
+    body: JSON.stringify(property),
+    errorMessage: 'Unable to update the property listing.',
+  })
+}
+
+export function getPublicLandlordSummary(propertyId) {
+  return apiRequest(`/api/properties/${encodeURIComponent(propertyId)}/landlord-summary`, {
     authenticated: false,
-    method: 'POST',
+    errorMessage: 'Landlord details are unavailable.',
+  })
+}
+
+export function getPublicLandlordImageUrl(propertyId) {
+  return `${API_BASE_URL}/api/properties/${encodeURIComponent(propertyId)}/landlord-summary/image`
+}
+
+export function setPrimaryPropertyImage(propertyId, imageId) {
+  return apiRequest(`/api/properties/${propertyId}/images/${imageId}/primary`, {
+    method: 'PUT',
+    errorMessage: 'Unable to set the cover photo.',
+  })
+}
+
+export function reorderPropertyImages(propertyId, imageIds) {
+  return apiRequest(`/api/properties/${propertyId}/images/order`, {
+    method: 'PUT',
+    body: JSON.stringify({ imageIds }),
+    errorMessage: 'Unable to reorder property photos.',
+  })
+}
+
+export function getMatchPreferences() {
+  return apiRequest('/api/tenant/property-preferences', {
+    errorMessage: "We couldn't load your match preferences.",
+  })
+}
+
+export function saveMatchPreferences(preferences) {
+  return apiRequest('/api/tenant/property-preferences', {
+    method: 'PUT',
     body: JSON.stringify(preferences),
-    errorMessage: 'Unable to generate property recommendations.',
+    errorMessage: "We couldn't save your match preferences.",
+  })
+}
+
+export function resetMatchPreferences() {
+  return apiRequest('/api/tenant/property-preferences', {
+    method: 'DELETE',
+    parse: 'none',
+    errorMessage: "We couldn't reset your match preferences.",
+  })
+}
+
+export function getSavedPropertyMatches() {
+  return apiRequest('/api/properties/matches', {
+    errorMessage: "We couldn't calculate your matches.",
+  })
+}
+
+export function getPropertyFavorites() {
+  return apiRequest('/api/tenant/property-favorites', {
+    errorMessage: "We couldn't load your liked properties.",
+  })
+}
+
+export function addPropertyFavorite(propertyId) {
+  return apiRequest(`/api/tenant/property-favorites/${propertyId}`, {
+    method: 'PUT',
+    parse: 'none',
+    errorMessage: "We couldn't add this property to your liked properties.",
+  })
+}
+
+export function removePropertyFavorite(propertyId) {
+  return apiRequest(`/api/tenant/property-favorites/${propertyId}`, {
+    method: 'DELETE',
+    parse: 'none',
+    errorMessage: "We couldn't remove this property from your liked properties.",
   })
 }

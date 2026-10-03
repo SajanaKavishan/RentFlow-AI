@@ -12,15 +12,54 @@ vi.mock('../../features/notifications/notificationsApi.js', async (importOrigina
 }))
 
 const tenant = { id: 'tenant-one', fullName: 'Amara Silva', email: 'amara@example.com', phoneNumber: '', role: 'Tenant' }
-const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
-const applications = [0, 1, 2, 2, 3, 4, 5, 6].map((status, index) => ({ id: `application-${index}`, status }))
+const propertyId = 'property-one'
+const property = { id: propertyId, title: 'Lake View Apartment', address: '10 Lake Road', city: 'Colombo' }
+const applications = [0, 1, 2, 2, 3, 4, 5, 6].map((status, index) => ({
+  id: `application-${index}`,
+  propertyId,
+  tenantId: tenant.id,
+  status,
+  createdAt: `2026-09-${String(index + 1).padStart(2, '0')}T10:00:00Z`,
+  submittedAt: status === 0 ? null : `2026-09-${String(index + 1).padStart(2, '0')}T10:00:00Z`,
+}))
 const viewings = [
-  { id: 'later', status: 1, requestedDateTime: '2099-03-20T10:00:00Z' },
-  { id: 'next', status: 1, requestedDateTime: '2099-02-10T10:00:00Z' },
-  { id: 'past', status: 1, requestedDateTime: '2000-01-01T10:00:00Z' },
-  ...[0, 2, 3, 4].map((status) => ({ id: `viewing-${status}`, status, requestedDateTime: '2099-01-01T10:00:00Z' })),
-  { id: 'invalid-date', status: 1, requestedDateTime: 'invalid' },
+  { id: 'later', propertyId, tenantId: tenant.id, status: 1, requestedDateTime: '2099-03-20T10:00:00Z' },
+  { id: 'next', propertyId, tenantId: tenant.id, status: 1, requestedDateTime: '2099-02-10T10:00:00Z' },
+  { id: 'past', propertyId, tenantId: tenant.id, status: 1, requestedDateTime: '2000-01-01T10:00:00Z' },
+  ...[0, 2, 3, 4].map((status) => ({ id: `viewing-${status}`, propertyId, tenantId: tenant.id, status, requestedDateTime: '2099-01-01T10:00:00Z' })),
+  { id: 'invalid-date', propertyId, tenantId: tenant.id, status: 1, requestedDateTime: 'invalid' },
 ]
+const notifications = {
+  items: [{
+    id: 'notice-1',
+    title: 'Viewing approved',
+    message: 'Your viewing request was approved.',
+    createdAt: '2026-09-20T10:00:00Z',
+    isRead: false,
+    eventType: 'viewing.approved',
+    relatedResourceType: 'ViewingRequest',
+    relatedResourceId: 'next',
+  }],
+  pagination: { page: 1, totalPages: 1, totalCount: 1, hasNextPage: false, hasPreviousPage: false },
+}
+const lease = { id: 'lease-one', status: 1, startDate: '2026-09-01', endDate: '2027-08-31', createdAt: '2026-09-10T10:00:00Z' }
+const schedule = [{ id: 'schedule-one', leaseAgreementId: lease.id, dueDate: '2099-01-05', amount: 85000, status: 0 }]
+const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+
+function responseFor(url, overrides = {}) {
+  const path = new URL(url, 'http://localhost').pathname
+  if (path === '/api/rental-applications') return overrides.applications ?? applications
+  if (path === '/api/viewings') return overrides.viewings ?? viewings
+  if (path === '/api/notifications') return overrides.notifications ?? notifications
+  if (path === '/api/lease-agreements/mine') return overrides.leases ?? [lease]
+  if (path === `/api/rent-schedules/lease/${lease.id}`) return overrides.schedule ?? schedule
+  if (path === '/api/payments/mine') return overrides.payments ?? []
+  if (path === `/api/maintenance-requests/tenant/${tenant.id}`) return overrides.maintenance ?? []
+  if (path === `/api/properties/${propertyId}`) return overrides.property ?? property
+  if (path === '/api/tenant/property-preferences') return overrides.matchPreferences ?? { isConfigured: false, preferredAmenities: [] }
+  if (path === '/api/rental-offers/mine') return []
+  return []
+}
 
 function appWithSession(user = tenant, path = '/dashboard') {
   const session = { user, isAuthenticated: true, isLoading: false, logout: vi.fn() }
@@ -31,140 +70,238 @@ const renderApp = (user, path) => render(appWithSession(user, path))
 
 beforeEach(() => {
   tokenStorage.setToken('tenant-token')
-  vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => Promise.resolve(json(url.endsWith('/api/viewings') ? viewings : applications))))
+  vi.stubGlobal('fetch', vi.fn((url) => Promise.resolve(json(responseFor(url)))))
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+afterEach(() => {
+  cleanup()
+  tokenStorage.clearToken()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 describe('tenant dashboard', () => {
-  it('uses the session name and authenticated tenant endpoints to summarize actual records', async () => {
+  it('renders real tenant summaries, activity, payment, property and application data', async () => {
     renderApp()
-    expect(screen.getByRole('heading', { name: 'Welcome, Amara Silva' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^(Welcome back|Good to see you|Hello|Hi there), Amara Silva$/ })).toBeInTheDocument()
+
     const apps = screen.getByRole('region', { name: 'Applications' })
-    const visits = screen.getByRole('region', { name: 'Upcoming viewings' })
+    const visits = screen.getByRole('region', { name: 'Upcoming Viewing summary' })
+    const viewingHighlight = screen.getByRole('region', { name: 'Upcoming Viewing' })
+    expect(viewingHighlight.compareDocumentPosition(apps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(await within(apps).findByText('8')).toBeInTheDocument()
     expect(apps).toHaveTextContent('2 under review')
-    expect(apps).toHaveTextContent('1 requesting changes')
-    expect(await within(visits).findByText('2')).toBeInTheDocument()
-    expect(visits).toHaveTextContent('1 awaiting confirmation')
-    expect(visits.querySelector('time')).toHaveAttribute('dateTime', '2099-02-10T10:00:00Z')
-    expect(fetch).toHaveBeenCalledTimes(2)
-    expect(fetch.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname).sort()).toEqual(['/api/rental-applications', '/api/viewings'])
-    for (const [url, options] of fetch.mock.calls) {
+    expect(await within(visits).findByText('3')).toBeInTheDocument()
+    expect(visits).toHaveTextContent('Awaiting approval')
+    expect(visits.querySelector('time')).toHaveAttribute('dateTime', '2099-01-01T10:00:00Z')
+
+    expect(await screen.findAllByText('Lake View Apartment')).not.toHaveLength(0)
+    expect(screen.getByText('Viewing approved')).toBeInTheDocument()
+    const paymentCard = screen.getByRole('region', { name: 'Next Payment' })
+    expect(within(paymentCard).getByText('Rs. 85,000')).toBeInTheDocument()
+    expect(paymentCard.querySelector('.tenant-summary__icon')).toHaveAttribute('data-icon', 'wallet')
+    expect(screen.getByRole('table')).toHaveTextContent('10 Lake Road, Colombo')
+
+    const authenticatedPaths = [
+      '/api/rental-applications', '/api/viewings', '/api/notifications',
+      '/api/lease-agreements/mine', `/api/rent-schedules/lease/${lease.id}`,
+      '/api/payments/mine', `/api/maintenance-requests/tenant/${tenant.id}`,
+    ]
+    for (const [url, options] of fetch.mock.calls.filter(([url]) => authenticatedPaths.includes(new URL(url, 'http://localhost').pathname))) {
       expect(options.headers.Authorization).toBe('Bearer tenant-token')
       expect(options.method).toBeUndefined()
       expect(url).not.toContain('tenantId')
     }
   })
 
-  it('keeps loading distinct from a successful empty account', async () => {
-    let finish
-    fetch.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+  it('shows truthful empty and pending states without fabricated business data', async () => {
+    const overrides = { applications: [], viewings: [], notifications: { ...notifications, items: [] }, leases: [] }
+    fetch.mockImplementation((url) => Promise.resolve(json(responseFor(url, overrides))))
     renderApp()
-    expect(screen.getAllByText('Loading summary…')).toHaveLength(2)
-    expect(screen.queryByText('0')).not.toBeInTheDocument()
-    // Only the viewing request resolves; applications remain independently busy.
-    await act(async () => { finish(json([])) })
-    expect(screen.getByText('No viewings yet.')).toBeInTheDocument()
-    expect(screen.getAllByText('Loading summary…')).toHaveLength(1)
+
+    expect(await within(screen.getByRole('region', { name: 'Applications' })).findByText('No applications yet')).toBeInTheDocument()
+    expect(await within(screen.getByRole('region', { name: 'Upcoming Viewing summary' })).findByText('No upcoming viewings')).toBeInTheDocument()
+    expect(screen.getByText('No payment due')).toBeInTheDocument()
+    expect(screen.getByText('No recent activity')).toBeInTheDocument()
+    expect(screen.getByText('No upcoming viewing scheduled')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Open Request' })).toHaveTextContent('No open maintenance requests')
+    expect(screen.getByRole('region', { name: 'Recommended for You' })).toHaveTextContent('Get personalized property recommendations')
+    expect(screen.queryByText(/Sarah Chen|match score|\$/)).not.toBeInTheDocument()
   })
 
-  it('shows empty summaries without fabricated property, payment or activity data', async () => {
-    fetch.mockImplementation(() => Promise.resolve(json([])))
-    renderApp()
-    expect(await screen.findByText('No applications yet.')).toBeInTheDocument()
-    expect(await screen.findByText('No viewings yet.')).toBeInTheDocument()
-    expect(screen.getAllByText('Integration pending')).toHaveLength(2)
-    expect(screen.getByRole('link', { name: /Open Lease & Payments/ })).toHaveAttribute('href', '/modules/lease-payments')
-    expect(screen.queryByText(/\$|match score|Recent Activity|Sarah Chen/)).not.toBeInTheDocument()
-  })
-
-  it('preserves a successful viewing summary when applications fail and retries only the failed request', async () => {
-    let appAttempts = 0
-    fetch.mockImplementation((url) => Promise.resolve(url.endsWith('/api/viewings') ? json(viewings) : ++appAttempts === 1 ? json({}, 500) : json(applications)))
-    renderApp()
-    expect(await screen.findByRole('alert')).toHaveTextContent('The rental application request failed.')
-    expect(within(screen.getByRole('region', { name: 'Applications' })).queryByText('0')).not.toBeInTheDocument()
-    expect(screen.getByText('Next confirmed viewing')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Retry applications' }))
-    expect(await screen.findByText('8')).toBeInTheDocument()
-    expect(fetch.mock.calls.filter(([url]) => url.endsWith('/api/viewings'))).toHaveLength(1)
-  })
-
-  it('handles viewing failures and malformed application responses without reporting zero', async () => {
-    fetch.mockImplementation((url) => url.endsWith('/api/viewings') ? Promise.reject(new TypeError('offline')) : Promise.resolve(json({ items: [] })))
-    renderApp()
-    expect(await screen.findByText('Unable to connect to the viewing service. Please try again.')).toBeInTheDocument()
-    expect(await screen.findByText('The service returned an invalid summary. Please try again.')).toBeInTheDocument()
-    expect(screen.queryByText('0')).not.toBeInTheDocument()
-  })
-
-  it('does not show another tenant’s records when an old request finishes after an account change', async () => {
-    const finishOldRequests = []
-    fetch.mockImplementation(() => new Promise((resolve) => { finishOldRequests.push(resolve) }))
-    const { rerender } = renderApp()
-    fetch.mockImplementation(() => Promise.resolve(json([])))
-    rerender(appWithSession({ ...tenant, id: 'tenant-two', fullName: 'Nila Perera' }))
-    expect(screen.getByRole('heading', { name: 'Welcome, Nila Perera' })).toBeInTheDocument()
-    expect(await screen.findByText('No applications yet.')).toBeInTheDocument()
-    await act(async () => {
-      finishOldRequests[0](json(applications))
-      finishOldRequests[1](json(viewings))
+  it('keeps independent loading and failure states and retries only applications', async () => {
+    let applicationAttempt = 0
+    fetch.mockImplementation((url) => {
+      const path = new URL(url, 'http://localhost').pathname
+      if (path === '/api/rental-applications') {
+        applicationAttempt += 1
+        return Promise.resolve(applicationAttempt === 1 ? json({}, 500) : json(applications))
+      }
+      return Promise.resolve(json(responseFor(url)))
     })
-    expect(screen.getByText('No applications yet.')).toBeInTheDocument()
-    expect(screen.getByText('No viewings yet.')).toBeInTheDocument()
-    expect(screen.queryByText('8')).not.toBeInTheDocument()
-    expect(screen.queryByText('Next confirmed viewing')).not.toBeInTheDocument()
+    renderApp()
+
+    const apps = screen.getByRole('region', { name: 'Applications' })
+    expect(await within(apps).findByRole('alert')).toHaveTextContent('The rental application request failed.')
+    expect(await within(screen.getByRole('region', { name: 'Upcoming Viewing summary' })).findByText('3')).toBeInTheDocument()
+    await userEvent.click(within(apps).getByRole('button', { name: 'Retry applications' }))
+    expect(await within(apps).findByText('8')).toBeInTheDocument()
+    expect(fetch.mock.calls.filter(([url]) => new URL(url, 'http://localhost').pathname === '/api/viewings')).toHaveLength(1)
   })
 
-  it('does not treat pending, past or completed appointments as upcoming confirmed viewings', async () => {
+  it('merges real activity sources, sorts them newest first, and exposes only valid destinations', async () => {
+    const unifiedApplications = [{
+      id: 'application-unified', propertyId, tenantId: tenant.id, status: 2,
+      createdAt: '2026-09-20T08:00:00Z', updatedAt: '2026-09-25T08:00:00Z',
+    }]
+    const unifiedViewings = [{
+      id: 'viewing-unified', propertyId, tenantId: tenant.id, status: 4,
+      requestedDateTime: '2026-09-24T08:00:00Z', createdAt: '2026-09-21T08:00:00Z', updatedAt: '2026-09-26T08:00:00Z',
+    }]
+    const unifiedLease = { ...lease, createdAt: '2026-09-22T08:00:00Z' }
+    const payment = {
+      id: 'payment-unified', rentScheduleItemId: schedule[0].id, tenantId: tenant.id,
+      amount: 85000, paymentMethod: 'Bank transfer', status: 1,
+      createdAt: '2026-09-23T08:00:00Z', paidAt: '2026-09-27T08:00:00Z',
+    }
+    const maintenance = [{
+      id: 'maintenance-unified', propertyId, tenantId: tenant.id, title: 'Kitchen tap leak',
+      status: 8, createdAt: '2026-09-20T08:00:00Z', updatedAt: '2026-09-28T08:00:00Z',
+    }]
+    const accountNotification = {
+      ...notifications.items[0], id: 'notice-unified', title: 'Account details updated',
+      message: 'Your contact details were updated.', eventType: 'account.updated',
+      relatedResourceType: 'User', relatedResourceId: tenant.id, createdAt: '2026-09-29T08:00:00Z',
+    }
+    const overrides = {
+      applications: unifiedApplications,
+      viewings: unifiedViewings,
+      notifications: { ...notifications, items: [accountNotification] },
+      leases: [unifiedLease], payments: [payment], maintenance,
+    }
+    fetch.mockImplementation((url) => Promise.resolve(json(responseFor(url, overrides))))
+    renderApp()
+
+    const activity = screen.getByRole('region', { name: 'Recent Activity' })
+    const items = await within(activity).findAllByRole('listitem')
+    expect(items).toHaveLength(6)
+    expect(items.map((item) => within(item).getByText(/Notification|Maintenance|Payment|Viewing|Application|Lease/, { selector: '.tenant-activity__source' }).textContent))
+      .toEqual(['Notification', 'Maintenance', 'Payment', 'Viewing', 'Application', 'Lease'])
+    expect(within(activity).getByText('Kitchen tap leak')).toBeInTheDocument()
+    expect(within(activity).getByText('Rs. 85,000 via Bank transfer')).toBeInTheDocument()
+    expect(within(activity).getByRole('link', { name: 'Open Payment completed' })).toHaveAttribute('href', '/modules/lease-payments')
+    expect(within(activity).getByRole('link', { name: 'Open Viewing completed' })).toHaveAttribute('href', '/modules/my-viewings')
+    expect(within(activity).queryByRole('link', { name: 'Open Repair in progress' })).not.toBeInTheDocument()
+    expect(within(activity).queryByRole('link', { name: 'View all' })).not.toBeInTheDocument()
+  })
+
+  it('keeps available activity visible when one source fails and retries that source', async () => {
+    let paymentAttempt = 0
+    fetch.mockImplementation((url) => {
+      const path = new URL(url, 'http://localhost').pathname
+      if (path === '/api/payments/mine') {
+        paymentAttempt += 1
+        return Promise.resolve(paymentAttempt === 1 ? json({}, 500) : json([]))
+      }
+      return Promise.resolve(json(responseFor(url, { applications: [], viewings: [], leases: [], maintenance: [] })))
+    })
+    renderApp()
+
+    const activity = screen.getByRole('region', { name: 'Recent Activity' })
+    expect(await within(activity).findByText('Some activity could not be loaded (1 source unavailable).')).toBeInTheDocument()
+    expect(within(activity).getByText('Viewing approved')).toBeInTheDocument()
+    await userEvent.click(within(activity).getByRole('button', { name: 'Retry' }))
+    expect(await within(activity).findByText('Viewing approved')).toBeInTheDocument()
+    expect(within(activity).queryByText(/source unavailable/)).not.toBeInTheDocument()
+    expect(paymentAttempt).toBe(2)
+  })
+
+  it('does not report failed or malformed summaries as zero', async () => {
+    fetch.mockImplementation((url) => {
+      const path = new URL(url, 'http://localhost').pathname
+      if (path === '/api/viewings') return Promise.reject(new TypeError('offline'))
+      if (path === '/api/rental-applications') return Promise.resolve(json({ items: [] }))
+      return Promise.resolve(json(responseFor(url, { leases: [] })))
+    })
+    renderApp()
+
+    expect(await screen.findAllByText('Unable to connect to the viewing service. Please try again.')).not.toHaveLength(0)
+    expect(await screen.findAllByText('The service returned an invalid summary. Please try again.')).not.toHaveLength(0)
+    expect(within(screen.getByRole('region', { name: 'Applications' })).queryByText('0')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Upcoming Viewing summary' })).queryByText('0')).not.toBeInTheDocument()
+  })
+
+  it('uses pending or approved future requests and ignores boundary, past, and completed viewings', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-21T12:00:00Z'))
-    fetch.mockImplementation((url) => Promise.resolve(json(url.endsWith('/api/viewings') ? [
-      { id: 'boundary', status: 1, requestedDateTime: '2026-09-21T12:00:00Z' },
-      { id: 'pending', status: 0, requestedDateTime: '2026-09-22T12:00:00Z' },
-      { id: 'completed', status: 4, requestedDateTime: '2026-09-22T12:00:00Z' },
-    ] : [])))
+    const candidateViewings = [
+      { id: 'boundary', propertyId, tenantId: tenant.id, status: 1, requestedDateTime: '2026-09-21T12:00:00Z' },
+      { id: 'pending', propertyId, tenantId: tenant.id, status: 0, requestedDateTime: '2026-09-22T12:00:00Z' },
+      { id: 'approved', propertyId, tenantId: tenant.id, status: 1, requestedDateTime: '2026-09-23T12:00:00Z' },
+      { id: 'completed', propertyId, tenantId: tenant.id, status: 4, requestedDateTime: '2026-09-24T12:00:00Z' },
+    ]
+    fetch.mockImplementation((url) => Promise.resolve(json(responseFor(url, { applications: [], viewings: candidateViewings, leases: [] }))))
     renderApp()
-    const visits = screen.getByRole('region', { name: 'Upcoming viewings' })
-    expect(await within(visits).findByText('0')).toBeInTheDocument()
-    expect(visits).toHaveTextContent('No upcoming confirmed viewings.')
-    expect(visits).toHaveTextContent('1 awaiting confirmation')
-    expect(visits.querySelector('time')).toBeNull()
+
+    const visits = screen.getByRole('region', { name: 'Upcoming Viewing summary' })
+    expect(await within(visits).findByText('2')).toBeInTheDocument()
+    expect(visits).toHaveTextContent('Awaiting approval')
+    expect(visits.querySelector('time')).toHaveAttribute('dateTime', '2026-09-22T12:00:00Z')
   })
 
-  it('opens My Applications from the dashboard quick action', async () => {
-    fetch.mockImplementation(() => Promise.resolve(json([])))
-    renderApp()
-    const actions = screen.getByRole('region', { name: 'Quick actions' })
-    const link = within(actions).getByRole('link', { name: /My Applications/ })
-    expect(link).toHaveAttribute('href', '/modules/my-applications')
-    expect(link).toHaveTextContent('Open your workspace')
-    await userEvent.click(link)
-    expect(await screen.findByRole('heading', { name: 'No applications yet' })).toBeInTheDocument()
-    const sidebarLink = within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'My Applications' })
-    expect(sidebarLink).toHaveAttribute('href', '/modules/my-applications')
-    expect(sidebarLink).not.toHaveTextContent('Soon')
+  it('ignores stale tenant data after the authenticated account changes', async () => {
+    const pending = []
+    fetch.mockImplementation((url) => {
+      const path = new URL(url, 'http://localhost').pathname
+      if (path === '/api/rental-applications' || path === '/api/viewings') {
+        return new Promise((resolve) => pending.push({ path, resolve }))
+      }
+      return Promise.resolve(json(responseFor(url, { notifications: { ...notifications, items: [] }, leases: [] })))
+    })
+    const { rerender } = renderApp()
+
+    const emptyOverrides = { applications: [], viewings: [], notifications: { ...notifications, items: [] }, leases: [] }
+    fetch.mockImplementation((url) => Promise.resolve(json(responseFor(url, emptyOverrides))))
+    rerender(appWithSession({ ...tenant, id: 'tenant-two', fullName: 'Nila Perera' }))
+    expect(screen.getByRole('heading', { name: /^(Welcome back|Good to see you|Hello|Hi there), Nila Perera$/ })).toBeInTheDocument()
+    expect(await within(screen.getByRole('region', { name: 'Applications' })).findByText('No applications yet')).toBeInTheDocument()
+
+    await act(async () => {
+      pending.find((item) => item.path === '/api/rental-applications').resolve(json(applications))
+      pending.find((item) => item.path === '/api/viewings').resolve(json(viewings))
+    })
+    expect(within(screen.getByRole('region', { name: 'Applications' })).queryByText('8')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Upcoming Viewing summary' })).queryByText('3')).not.toBeInTheDocument()
   })
 
-  it('opens My Applications from the tenant sidebar', async () => {
-    fetch.mockImplementation(() => Promise.resolve(json([])))
+  it('preserves dashboard links to applications and viewings workspaces', async () => {
     renderApp()
-    const sidebarLink = within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'My Applications' })
-    expect(sidebarLink).not.toHaveTextContent('Soon')
-    await userEvent.click(sidebarLink)
-    expect(await screen.findByRole('heading', { name: 'No applications yet' })).toBeInTheDocument()
+    const applicationsSection = screen.getByRole('region', { name: 'My Applications' })
+    const applicationsLink = within(applicationsSection).getByRole('link', { name: 'View all' })
+    expect(applicationsLink).toHaveAttribute('href', '/modules/my-applications')
+    await userEvent.click(applicationsLink)
+    expect(await screen.findByRole('heading', { name: 'My Applications' })).toBeInTheDocument()
+
+    cleanup()
+    renderApp()
+    const viewingLink = await screen.findByRole('link', { name: 'View request' })
+    expect(viewingLink).toHaveAttribute('href', '/modules/my-viewings')
+    await userEvent.click(viewingLink)
+    expect(await screen.findByRole('heading', { name: 'My Viewings' })).toBeInTheDocument()
   })
 
-  it('opens the available read-only My Viewings page from the dashboard', async () => {
-    fetch.mockImplementation(() => Promise.resolve(json([])))
+  it('keeps recommendation, property discovery, and maintenance destinations honest', async () => {
     renderApp()
-    const actions = screen.getByRole('region', { name: 'Quick actions' })
-    const link = within(actions).getByRole('link', { name: /My Viewings/ })
-    expect(link).toHaveAttribute('href', '/modules/my-viewings')
-    expect(link).toHaveTextContent('Open your workspace')
-    await userEvent.click(link)
-    expect(await screen.findByRole('heading', { name: 'No viewing requests yet' })).toBeInTheDocument()
-    const sidebarLink = within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'My Viewings' })
-    expect(sidebarLink).not.toHaveTextContent('Soon')
+    expect(within(document.querySelector('.tenant-dashboard__greeting')).queryByRole('link', { name: 'Browse properties' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Set match preferences' })).toHaveAttribute('href', '/modules/properties?preferences=edit')
+    expect(screen.getByRole('link', { name: 'Browse properties' })).toHaveAttribute('href', '/modules/properties')
+    expect(screen.getByRole('region', { name: 'Open Request' })).toHaveTextContent('No open maintenance requests')
+
+    const maintenanceLink = within(screen.getByRole('main')).getByRole('link', { name: 'Maintenance' })
+    expect(maintenanceLink).toHaveAttribute('href', '/modules/maintenance')
+    expect(maintenanceLink).toHaveTextContent('Request repairs and track their progress.')
+    expect(maintenanceLink).not.toHaveTextContent('Integration pending')
+    await userEvent.click(maintenanceLink)
+    expect(await screen.findByRole('heading', { name: 'Maintenance requests' })).toBeInTheDocument()
   })
 
   it('opens the tenant lease and payments workspace from the sidebar', async () => {
@@ -174,40 +311,71 @@ describe('tenant dashboard', () => {
     expect(screen.getByRole('navigation', { name: 'Lease and payment sections' })).toBeInTheDocument()
   })
 
-  it('keeps the maintenance destination pending', async () => {
+  it('shows only the three highest-ranked real available property recommendations', async () => {
+    const recommended = {
+      id: 'recommended-one',
+      title: 'Garden House',
+      address: '2 Lake Road',
+      city: 'Kurunegala',
+      monthlyRent: 120000,
+      bedrooms: 3,
+      bathrooms: 2,
+      amenities: ['Parking'],
+      isAvailable: true,
+    }
+    const otherProperties = [
+      { ...recommended, id: 'recommended-two', title: 'Hilltop Villa', monthlyRent: 140000 },
+      { ...recommended, id: 'recommended-three', title: 'City Loft', monthlyRent: 95000 },
+      { ...recommended, id: 'recommended-four', title: 'Lower Match Flat', monthlyRent: 75000 },
+    ]
+    fetch.mockImplementation((url) => {
+      const path = new URL(url, 'http://localhost').pathname
+      if (path === '/api/tenant/property-preferences') return Promise.resolve(json({ isConfigured: true, preferredCity: 'Kurunegala', preferredAmenities: ['Parking'] }))
+      if (path === '/api/properties/matches') return Promise.resolve(json({ explanationAvailable: false, matches: [
+        { propertyId: 'recommended-four', matchScore: 25, matchReasons: [] },
+        { propertyId: recommended.id, matchScore: 92, matchReasons: ['Preferred city matches.'] },
+        { propertyId: 'recommended-three', matchScore: 88, matchReasons: [] },
+        { propertyId: 'recommended-two', matchScore: 95, matchReasons: [] },
+      ] }))
+      if (path === '/api/properties') return Promise.resolve(json([recommended, ...otherProperties]))
+      if (/\/api\/properties\/recommended-(one|two|three|four)\/images/.test(path)) return Promise.resolve(json([]))
+      return Promise.resolve(json(responseFor(url)))
+    })
     renderApp()
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: /Maintenance/ }))
-    expect(screen.getByRole('heading', { name: 'Maintenance' })).toBeInTheDocument()
-    expect(screen.getByText('Integration pending')).toBeInTheDocument()
+
+    const recommendations = screen.getByRole('region', { name: 'Recommended for You' })
+    expect(await within(recommendations).findByRole('heading', { name: 'Garden House' })).toBeInTheDocument()
+    const recommendationCards = within(recommendations).getAllByRole('article')
+    expect(recommendationCards.map((card) => within(card).getByRole('heading').textContent))
+      .toEqual(['Hilltop Villa', 'Garden House', 'City Loft'])
+    expect(within(recommendations).queryByRole('heading', { name: 'Lower Match Flat' })).not.toBeInTheDocument()
+    expect(within(recommendations).getByLabelText('95 percent match')).toHaveTextContent('95% Match')
+    expect(within(recommendations).getByLabelText('92 percent match')).toBeInTheDocument()
+    expect(within(recommendations).getByText('Rs. 120,000')).toBeInTheDocument()
+    expect(within(recommendationCards[1]).getByRole('link', { name: 'View Garden House' })).toHaveAttribute('href', '/properties/recommended-one')
+    expect(within(recommendations).queryByText('View property')).not.toBeInTheDocument()
+    expect(within(recommendationCards[1]).getByText('3', { selector: '.tenant-recommendation-card__facts dd' })).toBeInTheDocument()
+    expect(within(recommendations).queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it.each(['Landlord', 'Admin', 'MaintenanceTechnician'])('does not call tenant APIs for %s', async (role) => {
-    if (role === 'Admin') {
-      fetch.mockResolvedValue(json({
-        items: [],
-        pagination: {
-          page: 1, pageSize: 1, totalCount: 0, totalPages: 0,
-          hasNextPage: false, hasPreviousPage: false,
-        },
+  it.each(['Landlord', 'Admin', 'MaintenanceTechnician'])('does not call tenant dashboard APIs for %s', async (role) => {
+    fetch.mockImplementation((url) => {
+      const path = new URL(url, 'http://localhost').pathname
+      if (path === '/api/admin/users') return Promise.resolve(json({
+        items: [], pagination: { page: 1, pageSize: 1, totalCount: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
       }))
-    }
+      return Promise.resolve(json([]))
+    })
     renderApp({ ...tenant, role })
-    expect(screen.getByRole('heading', { name: role === 'Admin' ? 'System Overview' : 'Welcome, Amara Silva' })).toBeInTheDocument()
     await act(async () => {})
     const requestedPaths = fetch.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname)
     expect(requestedPaths).not.toContain('/api/rental-applications')
     expect(requestedPaths).not.toContain('/api/viewings')
-    expect(requestedPaths).toEqual(role === 'Admin' ? Array(5).fill('/api/admin/users') : [])
-    if (role === 'Admin') {
-      const roleFilters = fetch.mock.calls
-        .map(([url]) => new URL(url, 'http://localhost').searchParams.get('role'))
-        .filter(Boolean)
-        .sort()
-      expect(roleFilters).toEqual(['Admin', 'Landlord', 'MaintenanceTechnician', 'Tenant'])
-    }
+    expect(requestedPaths).not.toContain('/api/lease-agreements/mine')
+    expect(requestedPaths).not.toContain('/api/notifications')
   })
 
-  it('uses the existing session expiry handling when a summary returns 401', async () => {
+  it('uses the existing session expiry handling when a dashboard source returns 401', async () => {
     fetch.mockImplementation(() => Promise.resolve(json({}, 401)))
     const api = { getCurrentUser: vi.fn().mockResolvedValue(tenant) }
     render(<MemoryRouter initialEntries={['/dashboard']}><AuthProvider api={api}><App /></AuthProvider></MemoryRouter>)

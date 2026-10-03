@@ -171,18 +171,9 @@ public class PropertyImagesController : ControllerBase
             return Forbid();
         }
 
-        var images =
-            await _propertyImageService.GetByPropertyAsync(
-                propertyId,
-                cancellationToken);
-
-        if (!images.Any(image => image.Id == imageId))
-        {
-            return NotFound();
-        }
-
         var deleted =
             await _propertyImageService.DeleteAsync(
+                propertyId,
                 imageId,
                 landlordId.Value,
                 cancellationToken);
@@ -193,6 +184,57 @@ public class PropertyImagesController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    [HttpPut("{imageId:guid}/primary")]
+    [Authorize(Roles = nameof(UserRole.Landlord))]
+    public async Task<ActionResult<PropertyImageResponseDto>> SetPrimaryImage(
+        Guid propertyId,
+        Guid imageId,
+        CancellationToken cancellationToken)
+    {
+        var landlordId = GetCurrentLandlordId();
+        if (landlordId is null)
+        {
+            return Forbid();
+        }
+
+        var image = await _propertyImageService.SetPrimaryAsync(
+            propertyId,
+            imageId,
+            landlordId.Value,
+            cancellationToken);
+
+        return image is null ? NotFound() : Ok(image);
+    }
+
+    [HttpPut("order")]
+    [Authorize(Roles = nameof(UserRole.Landlord))]
+    public async Task<ActionResult<IReadOnlyList<PropertyImageResponseDto>>> ReorderImages(
+        Guid propertyId,
+        [FromBody] ReorderPropertyImagesDto request,
+        CancellationToken cancellationToken)
+    {
+        var landlordId = GetCurrentLandlordId();
+        if (landlordId is null)
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var images = await _propertyImageService.ReorderAsync(
+                propertyId,
+                landlordId.Value,
+                request.ImageIds,
+                cancellationToken);
+
+            return images is null ? NotFound() : Ok(images);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
     }
 
     // =========================================================

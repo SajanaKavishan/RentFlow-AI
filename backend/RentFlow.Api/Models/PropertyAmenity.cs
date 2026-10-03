@@ -8,5 +8,7 @@ public class PropertyAmenity
 
     public string Name { get; set; } = string.Empty;
 
+    public string? CanonicalKey { get; set; }
+
     public Property Property { get; set; } = null!;
 }

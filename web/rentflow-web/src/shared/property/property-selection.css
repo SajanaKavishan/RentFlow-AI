@@ -1,0 +1,5 @@
+.property-selection__list { width: min(100%, 720px); display: grid; gap: 10px; margin-top: 20px; text-align: left; }
+.property-selection__list a { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; color: var(--ink); background: var(--surface); text-decoration: none; }
+.property-selection__list a:hover { border-color: var(--olive-700); background: var(--olive-50); }
+.property-selection__list span { color: var(--muted); font-size: .82rem; }
+.property-selection__button { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; margin-top: 18px; padding: 9px 15px; border: 1px solid var(--olive-900); border-radius: 10px; color: var(--surface); background: var(--olive-900); text-decoration: none; font: inherit; font-size: .82rem; font-weight: 800; cursor: pointer; }
