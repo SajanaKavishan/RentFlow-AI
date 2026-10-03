@@ -125,6 +125,13 @@ export function getPublicLandlordImageUrl(propertyId) {
   return `${API_BASE_URL}/api/properties/${encodeURIComponent(propertyId)}/landlord-summary/image`
 }
 
+export function getPublicLandlordProperties(propertyId) {
+  return apiRequest(`/api/properties/${encodeURIComponent(propertyId)}/landlord-summary/properties`, {
+    authenticated: false,
+    errorMessage: 'This landlord’s properties are unavailable.',
+  })
+}
+
 export function setPrimaryPropertyImage(propertyId, imageId) {
   return apiRequest(`/api/properties/${propertyId}/images/${imageId}/primary`, {
     method: 'PUT',

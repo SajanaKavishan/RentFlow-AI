@@ -43,13 +43,44 @@ Map<String, dynamic> _viewingJson({
   'updatedAt': updatedAt,
 };
 
+Map<String, dynamic> _propertyJson(String id) => {
+  'id': id,
+  'landlordId': 'landlord',
+  'title': id == '33333333-3333-3333-3333-333333333333'
+      ? 'Orchard House'
+      : 'Harbour View Residence',
+  'description': 'A real property returned by the API.',
+  'address': 'Kureepoththa, Pothuhera',
+  'city': 'Kurunegala',
+  'monthlyRent': 100000,
+  'bedrooms': 2,
+  'bathrooms': 1,
+  'isAvailable': true,
+  'createdAt': '2026-09-14T10:00:00Z',
+  'updatedAt': null,
+  'amenities': <String>[],
+};
+
 Future<void> _pumpScreen(
   WidgetTester tester,
-  Future<http.Response> Function(http.Request request) handler,
-) async {
+  Future<http.Response> Function(http.Request request) handler, {
+  double textScale = 1,
+  bool resolveProperties = true,
+}) async {
   final apiClient = ApiClient(
     baseUrl: 'http://test',
-    httpClient: MockClient(handler),
+    httpClient: MockClient((request) {
+      if (resolveProperties &&
+          request.url.path.startsWith('/api/properties/')) {
+        return Future.value(
+          http.Response(
+            jsonEncode(_propertyJson(request.url.pathSegments.last)),
+            200,
+          ),
+        );
+      }
+      return handler(request);
+    }),
     tokenStorage: _MemoryTokenStorage(),
   );
   addTearDown(apiClient.close);
@@ -57,12 +88,98 @@ Future<void> _pumpScreen(
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.build(),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
       home: MyViewingsScreen(viewingApiService: ViewingApiService(apiClient)),
     ),
   );
 }
 
 void main() {
+  for (final width in [320.0, 360.0, 390.0, 430.0]) {
+    for (final scale in [1.0, 1.8]) {
+      testWidgets('compact cards fit ${width.toInt()}px at ${scale}x text', (
+        tester,
+      ) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = Size(width, 900);
+        addTearDown(tester.view.reset);
+        await _pumpScreen(
+          tester,
+          (_) async => http.Response(
+            jsonEncode([
+              _viewingJson(
+                id: 'pending',
+                propertyId: 'property',
+                status: 0,
+                tenantMessage:
+                    'Could I see the outdoor space during the viewing?',
+              ),
+              _viewingJson(
+                id: 'approved',
+                propertyId: 'property',
+                status: 1,
+                landlordResponse:
+                    'Your viewing is confirmed. Please meet at reception.',
+              ),
+            ]),
+            200,
+          ),
+          textScale: scale,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Pending requests appear first.'), findsOneWidget);
+        expect(
+          find.text('Could I see the outdoor space during the viewing?'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.scrollUntilVisible(
+          find.text('Your viewing is confirmed. Please meet at reception.'),
+          200,
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets(
+    'property lookups are shared by viewings and failure preserves the schedule',
+    (tester) async {
+      var propertyCalls = 0;
+      await _pumpScreen(tester, (request) async {
+        if (request.url.path.startsWith('/api/properties/')) {
+          propertyCalls++;
+          return http.Response('{}', 404);
+        }
+        return http.Response(
+          jsonEncode([
+            _viewingJson(id: 'pending', propertyId: 'same-property', status: 0),
+            _viewingJson(
+              id: 'approved',
+              propertyId: 'same-property',
+              status: 1,
+            ),
+          ]),
+          200,
+        );
+      }, resolveProperties: false);
+      await tester.pumpAndSettle();
+      expect(propertyCalls, 1);
+      expect(find.text('Property details unavailable'), findsNWidgets(2));
+      expect(find.text('same-property'), findsNothing);
+      expect(find.text('Pending'), findsOneWidget);
+      expect(find.text('Approved'), findsOneWidget);
+      expect(find.text('Cancel request'), findsNWidgets(2));
+      expect(find.byTooltip('View property'), findsNothing);
+    },
+  );
+
   testWidgets('viewing cards prioritize schedule, property, and status', (
     tester,
   ) async {
@@ -92,30 +209,34 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Viewing schedule'), findsOneWidget);
-    expect(find.text('2 viewings'), findsOneWidget);
-    expect(find.text('PROPERTY VIEWING'), findsOneWidget);
+    expect(find.text('YOUR SCHEDULE'), findsOneWidget);
+    expect(find.text('My viewings'), findsOneWidget);
+    expect(find.text('Pending requests appear first.'), findsOneWidget);
+    expect(find.text('PROPERTY VIEWING'), findsNothing);
     expect(
       find.byKey(const ValueKey('viewing-card-pending-viewing')),
       findsOneWidget,
     );
     expect(
       find.byKey(const ValueKey('viewing-card-completed-viewing')),
-      findsNothing,
+      findsOneWidget,
     );
-    expect(find.text('Date'), findsOneWidget);
-    expect(find.text('Time'), findsOneWidget);
-    expect(find.text('Property reference'), findsOneWidget);
-    expect(find.text(pendingProperty), findsOneWidget);
+    expect(find.text('Date'), findsNothing);
+    expect(find.text('Time'), findsNothing);
+    expect(find.text('Property reference'), findsNothing);
+    expect(find.text(pendingProperty), findsNothing);
+    expect(find.text('Harbour View Residence'), findsOneWidget);
+    expect(find.text('Kureepoththa, Pothuhera, Kurunegala'), findsNWidgets(2));
     expect(find.text('Pending'), findsOneWidget);
-    expect(find.text('No message provided.'), findsOneWidget);
-    expect(find.text('No response yet.'), findsOneWidget);
-    expect(find.textContaining('Requested:'), findsOneWidget);
-    expect(find.text('Cancel viewing'), findsOneWidget);
+    expect(find.text('No message provided.'), findsNothing);
+    expect(find.text('No response yet.'), findsNothing);
+    expect(find.textContaining('Requested:'), findsNothing);
+    expect(find.text('Cancel request'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text(completedProperty), 500);
+    await tester.scrollUntilVisible(find.text('Orchard House'), 300);
     await tester.pumpAndSettle();
-    expect(find.text(completedProperty), findsOneWidget);
+    expect(find.text(completedProperty), findsNothing);
+    expect(find.text('Orchard House'), findsOneWidget);
     expect(find.text('Completed'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -179,10 +300,10 @@ void main() {
     for (final status in ['Pending', 'Approved', 'Rejected', 'Cancelled']) {
       expect(find.text(status), findsOneWidget);
     }
-    expect(find.text('Cancel viewing'), findsNWidgets(2));
+    expect(find.text('Cancel request'), findsNWidgets(2));
     expect(find.text('Afternoon works best.'), findsOneWidget);
     expect(find.text('Please arrive at 2 PM.'), findsOneWidget);
-    expect(find.textContaining('Last updated:'), findsOneWidget);
+    expect(find.textContaining('Last updated '), findsNWidgets(4));
     expect(
       tester
           .getTopLeft(

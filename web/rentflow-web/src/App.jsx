@@ -18,6 +18,7 @@ import NotificationsPage from './features/notifications/NotificationsPage.jsx'
 import NotificationResourcePage from './features/notifications/NotificationResourcePage.jsx'
 import PropertiesPage from './features/properties/pages/PropertiesPage.jsx'
 import PropertyDetailsPage from './features/properties/pages/PropertyDetailsPage.jsx'
+import PublicLandlordProfilePage from './features/properties/pages/PublicLandlordProfilePage.jsx'
 import PropertyMatchingRedirect from './features/properties/pages/PropertyMatchingRedirect.jsx'
 import ManagePropertiesPage from './features/properties/pages/ManagePropertiesPage.jsx'
 import PropertyFormPage from './features/properties/pages/PropertyFormPage.jsx'
@@ -80,6 +81,7 @@ export default function App() {
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT]} />}>
+          <Route path="/properties/:propertyId/landlord" element={<PublicLandlordProfilePage />} />
           <Route path="/modules/lease-payments" element={<TenantLeasePaymentsPage />} />
           <Route path="/modules/my-viewings" element={<MyViewingsPage />} />
           <Route path="/modules/my-applications" element={<MyApplicationsPage />} />

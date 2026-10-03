@@ -101,6 +101,18 @@ class PropertyApiService {
       )
       .toString();
 
+  Future<List<Property>> getLandlordProperties(String propertyId) async {
+    final response = await _send(
+      () => apiClient.get(
+        apiClient.buildUri(
+          '${ApiConstants.propertiesPath}/$propertyId/landlord-summary/properties',
+        ),
+        authenticated: false,
+      ),
+    );
+    return _parsePropertyList(response.body);
+  }
+
   Future<List<Property>> getProperties({
     String? city,
     double? minRent,

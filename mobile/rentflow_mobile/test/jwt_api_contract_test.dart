@@ -201,9 +201,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Cancel viewing'));
+      await tester.ensureVisible(find.text('Cancel request'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel viewing'));
+      await tester.tap(find.text('Cancel request'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Cancel viewing'));
       await tester.pumpAndSettle();
@@ -245,9 +245,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Cancel viewing'));
+    await tester.ensureVisible(find.text('Cancel request'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel viewing'));
+    await tester.tap(find.text('Cancel request'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Cancel viewing'));
     await tester.pumpAndSettle();

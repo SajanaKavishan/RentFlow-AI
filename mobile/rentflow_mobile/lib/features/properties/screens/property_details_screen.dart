@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/theme/app_theme.dart';
 import '../widgets/amenity_icon.dart';
+import '../widgets/public_landlord_avatar.dart';
+import 'public_landlord_profile_screen.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../rental_applications/screens/rental_application_form_screen.dart';
 import '../../rental_applications/services/rental_application_api_service.dart';
@@ -900,82 +902,87 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                 ),
               );
             }
-            final initials = summary.displayName
-                .trim()
-                .split(RegExp(r'\s+'))
-                .take(2)
-                .map(
-                  (part) => String.fromCharCode(part.runes.first).toUpperCase(),
-                )
-                .join();
-            return Row(
-              children: [
-                ClipOval(
-                  child: SizedBox.square(
-                    dimension: 44,
-                    child: summary.hasProfileImage
-                        ? Image.network(
-                            widget.propertyApiService.landlordImageUrl(
-                              _property.id,
-                            ),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => _initials(initials),
-                          )
-                        : _initials(initials),
-                  ),
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        summary.displayName,
-                        style: const TextStyle(
-                          fontSize: AppTypography.bodySize,
-                          height: 1.35,
-                          fontWeight: FontWeight.w600,
-                          color: AppPalette.primaryText,
-                        ),
+            return Semantics(
+              button: true,
+              label: 'View landlord profile for ${summary.displayName}',
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(AppRadii.small),
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => PublicLandlordProfileScreen(
+                        propertyId: _property.id,
+                        propertyApiService: widget.propertyApiService,
                       ),
-                      if (summary.memberSinceYear != null) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          'Member since ${summary.memberSinceYear}',
-                          style: const TextStyle(
-                            fontSize: AppTypography.labelSize,
-                            color: AppPalette.secondaryText,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        PublicLandlordAvatar(
+                          propertyId: _property.id,
+                          summary: summary,
+                          service: widget.propertyApiService,
+                        ),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                summary.displayName,
+                                style: const TextStyle(
+                                  fontSize: AppTypography.bodySize,
+                                  height: 1.35,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppPalette.primaryText,
+                                ),
+                              ),
+                              if (summary.memberSinceYear != null) ...[
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Member since ${summary.memberSinceYear}',
+                                  style: const TextStyle(
+                                    fontSize: AppTypography.labelSize,
+                                    color: AppPalette.secondaryText,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+                              const Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      'View landlord profile',
+                                      style: TextStyle(
+                                        color: AppPalette.olive,
+                                        fontSize: AppTypography.labelSize,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 5),
+                                  Icon(
+                                    Icons.arrow_forward,
+                                    size: 14,
+                                    color: AppPalette.olive,
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ],
+              ),
             );
           },
         ),
       ],
-    ),
-  );
-
-  Widget _initials(String initials) => ColoredBox(
-    color: AppPalette.olive,
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            initials,
-            style: const TextStyle(
-              fontSize: AppTypography.cardTitleSize,
-              fontWeight: FontWeight.w700,
-              color: AppPalette.white,
-            ),
-          ),
-        ),
-      ),
     ),
   );
 

@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/useAuth.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import PropertyLocationMap from '../components/PropertyLocationMap.jsx'
+import PublicLandlordAvatar from '../components/PublicLandlordAvatar.jsx'
 import { formatPropertyArea } from '../propertyArea.js'
 import {
   UTILITY_CATALOG,
@@ -15,7 +16,6 @@ import {
   deleteProperty,
   getMyProperties,
   getProperty,
-  getPublicLandlordImageUrl,
   getPublicLandlordSummary,
   getSavedPropertyMatches,
   updateProperty,
@@ -34,11 +34,6 @@ const ACTIVE_APPLICATION_STATUSES = new Set([
   RENTAL_APPLICATION_STATUS.UNDER_REVIEW,
   RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED,
 ])
-
-function getInitials(name) {
-  const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
-  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'L'
-}
 
 function formatAvailableFrom(value) {
   if (!value) return null
@@ -76,7 +71,6 @@ export default function PropertyDetailsPage() {
   const [toast, setToast] = useState(null)
   const [matchResult, setMatchResult] = useState({ propertyId: null, score: null, reasons: [] })
   const [loadedLandlordState, setLandlordState] = useState({ propertyId: null, status: 'loading', summary: null })
-  const [landlordImageFailedFor, setLandlordImageFailedFor] = useState(null)
   const [loadedWorkflowState, setWorkflowState] = useState({
     propertyId: null,
     viewings: 0,
@@ -554,18 +548,13 @@ export default function PropertyDetailsPage() {
               <div className="property-listed-by__profile">
                 {landlordState.status === 'ready' ? (
                   <>
-                    <span className="property-listed-by__avatar" aria-hidden="true">
-                      {landlordState.summary.hasProfileImage && landlordImageFailedFor !== property.id ? (
-                        <img
-                          src={getPublicLandlordImageUrl(property.id)}
-                          alt=""
-                          onError={() => setLandlordImageFailedFor(property.id)}
-                        />
-                      ) : getInitials(landlordState.summary.displayName)}
-                    </span>
+                    <PublicLandlordAvatar propertyId={property.id} summary={landlordState.summary} />
                     <div>
                       <strong>{landlordState.summary.displayName}</strong>
                       <p>Member since {landlordState.summary.memberSinceYear}</p>
+                      <Link className="property-listed-by__link" to={`/properties/${encodeURIComponent(property.id)}/landlord`}>
+                        View landlord profile <span aria-hidden="true">→</span>
+                      </Link>
                     </div>
                   </>
                 ) : (

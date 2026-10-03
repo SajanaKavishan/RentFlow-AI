@@ -11,6 +11,10 @@ public interface IPublicLandlordSummaryService
     Task<PublicLandlordImage?> GetImageForPropertyAsync(
         Guid propertyId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PropertyResponseDto>?> GetListingsForPropertyAsync(
+        Guid propertyId,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record PublicLandlordImage(byte[] Content, string ContentType);

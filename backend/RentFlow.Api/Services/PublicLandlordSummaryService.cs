@@ -77,4 +77,29 @@ public sealed class PublicLandlordSummaryService(
 
         return new PublicLandlordImage(content, metadata.ContentType);
     }
+
+    public async Task<IReadOnlyList<PropertyResponseDto>?> GetListingsForPropertyAsync(
+        Guid propertyId,
+        CancellationToken cancellationToken = default)
+    {
+        // Resolve only through a browsable property, never an arbitrary user ID.
+        var landlordId = await dbContext.Properties.AsNoTracking()
+            .Where(property => property.Id == propertyId
+                && property.Landlord.IsActive
+                && property.Landlord.Role == UserRole.Landlord)
+            .Select(property => (Guid?)property.LandlordId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (landlordId is null) return null;
+
+        // Tenant discovery uses IsAvailable=true, including upcoming availability.
+        var listings = await dbContext.Properties.AsNoTracking()
+            .Where(property => property.LandlordId == landlordId.Value
+                && property.IsAvailable
+                && property.Landlord.IsActive
+                && property.Landlord.Role == UserRole.Landlord)
+            .Include(property => property.Amenities)
+            .OrderByDescending(property => property.CreatedAt)
+            .ToListAsync(cancellationToken);
+        return listings.Select(PropertyService.MapToResponseDto).ToList();
+    }
 }

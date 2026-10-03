@@ -65,6 +65,7 @@ function renderPage() {
     <MemoryRouter initialEntries={['/properties/property-1']}>
       <Routes>
         <Route path="/properties/:propertyId" element={<PropertyDetailsPage />} />
+        <Route path="/properties/:propertyId/landlord" element={<h1>Public landlord profile destination</h1>} />
         <Route path="/modules/my-viewings" element={<p>My viewings</p>} />
         <Route path="/modules/my-applications" element={<p>My applications</p>} />
         <Route path="/properties/:propertyId/viewing-availability" element={<h1>Availability settings destination</h1>} />
@@ -101,6 +102,14 @@ afterEach(() => {
 })
 
 describe('tenant property details', () => {
+  it('opens the property-scoped landlord profile through an accessible link', async () => {
+    renderPage()
+    const link = await screen.findByRole('link', { name: 'View landlord profile' })
+    expect(link).toHaveAttribute('href', '/properties/property-1/landlord')
+    await userEvent.click(link)
+    expect(screen.getByRole('heading', { name: 'Public landlord profile destination' })).toBeInTheDocument()
+  })
+
   it('uses real listing data in the redesigned marketplace layout', async () => {
     renderPage()
 

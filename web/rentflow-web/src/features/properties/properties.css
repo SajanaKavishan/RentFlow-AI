@@ -3399,3 +3399,8 @@
   .property-image-gallery__thumbnails button,
   .property-details-summary__actions > a { transition: none; }
 }
+
+.property-listed-by__link { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--olive-700, #303c1f); font-size: .8rem; font-weight: 600; text-decoration: none; }
+.property-listed-by__link:hover { text-decoration: underline; }
+.property-listed-by:focus-within { border-color: var(--olive-500, #5f7144); }
+.property-listed-by__link:focus-visible { outline: 2px solid var(--olive-500, #5f7144); outline-offset: 5px; border-radius: 3px; }
