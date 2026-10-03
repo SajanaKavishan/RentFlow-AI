@@ -719,6 +719,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(offer => offer.PropertyId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(offer => offer.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasIndex(offer => offer.RentalApplicationId);
             entity.HasIndex(offer => offer.TenantId);
             entity.HasIndex(offer => offer.PropertyId);
@@ -772,6 +777,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne<Property>()
                 .WithMany()
                 .HasForeignKey(lease => lease.PropertyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(lease => lease.TenantId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(lease => lease.RentalOfferId)
@@ -1007,6 +1017,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne(payment => payment.RentScheduleItem)
                 .WithMany()
                 .HasForeignKey(payment => payment.RentScheduleItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(payment => payment.TenantId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(payment => payment.RentScheduleItemId);

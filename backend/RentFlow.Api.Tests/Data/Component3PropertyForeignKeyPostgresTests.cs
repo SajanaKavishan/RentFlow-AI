@@ -57,7 +57,9 @@ public sealed class Component3PropertyForeignKeyPostgresTests
                 var leaseApplication = CreateApplication(leaseProperty.Id);
                 dbContext.Users.AddRange(
                     CreateLandlord(offerProperty.LandlordId),
-                    CreateLandlord(leaseProperty.LandlordId));
+                    CreateLandlord(leaseProperty.LandlordId),
+                    CreateTenant(offerApplication.TenantId),
+                    CreateTenant(leaseApplication.TenantId));
                 dbContext.Properties.AddRange(offerProperty, leaseProperty);
                 dbContext.RentalApplications.AddRange(offerApplication, leaseApplication);
                 await dbContext.SaveChangesAsync();
@@ -132,6 +134,19 @@ public sealed class Component3PropertyForeignKeyPostgresTests
         PhoneNumber = "0000000000",
         PasswordHash = "test-only",
         Role = UserRole.Landlord,
+        CreatedAt = DateTimeOffset.UtcNow,
+        UpdatedAt = DateTimeOffset.UtcNow
+    };
+
+    private static ApplicationUser CreateTenant(Guid id) => new()
+    {
+        Id = id,
+        FullName = "PostgreSQL Test Tenant",
+        Email = $"{id:N}@example.test",
+        NormalizedEmail = $"{id:N}@EXAMPLE.TEST".ToUpperInvariant(),
+        PhoneNumber = "0000000000",
+        PasswordHash = "test-only",
+        Role = UserRole.Tenant,
         CreatedAt = DateTimeOffset.UtcNow,
         UpdatedAt = DateTimeOffset.UtcNow
     };
