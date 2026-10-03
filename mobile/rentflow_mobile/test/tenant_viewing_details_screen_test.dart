@@ -13,6 +13,7 @@ import 'package:rentflow_mobile/features/viewings/models/viewing.dart';
 import 'package:rentflow_mobile/features/viewings/screens/my_viewings_screen.dart';
 import 'package:rentflow_mobile/features/viewings/screens/tenant_viewing_details_screen.dart';
 import 'package:rentflow_mobile/features/viewings/services/viewing_api_service.dart';
+import 'package:rentflow_mobile/features/viewings/widgets/viewing_page_header.dart';
 import 'package:rentflow_mobile/shared/theme/app_theme.dart';
 
 const _id = '33333333-3333-4333-8333-333333333333';
@@ -100,6 +101,7 @@ Future<void> _pump(
   String? title,
   bool missingProperty = false,
   double bottomInset = 0,
+  double topInset = 0,
   DateTime Function()? nowProvider,
   http.Response? Function(http.Request)? respond,
 }) async {
@@ -134,7 +136,7 @@ Future<void> _pump(
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(
           textScaler: TextScaler.linear(scale),
-          padding: EdgeInsets.only(bottom: bottomInset),
+          padding: EdgeInsets.only(top: topInset, bottom: bottomInset),
         ),
         child: child!,
       ),
@@ -538,7 +540,7 @@ void main() {
     expect(reads, 2);
     expect(find.byType(TenantViewingDetailsScreen), findsOneWidget);
     expect(find.text('Your viewing is confirmed'), findsOneWidget);
-    await tester.tap(find.byTooltip('Back to my viewings'));
+    await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
     expect(find.byType(MyViewingsScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -873,7 +875,28 @@ void main() {
               ),
               width: width,
               scale: scale,
+              topInset: 32,
               title: List.filled(6, 'Harbour View Residence').join(' '),
+            );
+            expect(find.text('MY VIEWINGS'), findsOneWidget);
+            expect(find.text('Viewing details'), findsOneWidget);
+            final header = find.byType(ViewingPageHeader);
+            final back = find.byTooltip('Back');
+            expect(tester.getRect(header).top, greaterThanOrEqualTo(32));
+            expect(tester.getSize(back).width, greaterThanOrEqualTo(48));
+            expect(tester.getSize(back).height, greaterThanOrEqualTo(48));
+            final button = tester.widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.arrow_back),
+            );
+            expect(
+              button.style?.backgroundColor?.resolve({}),
+              Colors.transparent,
+            );
+            expect(button.style?.side?.resolve({}), BorderSide.none);
+            expect(button.style?.elevation?.resolve({}), 0);
+            expect(
+              tester.getRect(back).right,
+              lessThan(tester.getRect(find.text('Viewing details')).left),
             );
             expect(tester.takeException(), isNull);
             await _reveal(tester, find.text('Back to my viewings'));

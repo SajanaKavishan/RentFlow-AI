@@ -14,6 +14,7 @@ import '../../properties/widgets/landlord_contact_card.dart'
 import '../../properties/widgets/property_photo.dart';
 import '../models/viewing.dart';
 import '../services/viewing_api_service.dart';
+import '../widgets/viewing_page_header.dart';
 
 class TenantViewingDetailsScreen extends StatefulWidget {
   const TenantViewingDetailsScreen({
@@ -270,36 +271,9 @@ class _TenantViewingDetailsScreenState extends State<TenantViewingDetailsScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      IconButton.outlined(
-                        tooltip: 'Back to my viewings',
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppPalette.white,
-                          side: const BorderSide(color: AppPalette.outline),
-                        ),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                        icon: const Icon(Icons.arrow_back, size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('MY VIEWINGS', style: _eyebrow),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Viewing details',
-                              style: AppTypography.pageTitle.copyWith(
-                                fontWeight: FontWeight.w500,
-                                color: AppPalette.darkOlive,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  const ViewingPageHeader(
+                    eyebrow: 'MY VIEWINGS',
+                    title: 'Viewing details',
                   ),
                   const SizedBox(height: 24),
                   if (_refreshing) const LinearProgressIndicator(minHeight: 2),

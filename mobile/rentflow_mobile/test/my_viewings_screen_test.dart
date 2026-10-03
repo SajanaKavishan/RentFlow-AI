@@ -9,6 +9,7 @@ import 'package:rentflow_mobile/core/auth/token_storage.dart';
 import 'package:rentflow_mobile/core/network/api_client.dart';
 import 'package:rentflow_mobile/features/viewings/screens/my_viewings_screen.dart';
 import 'package:rentflow_mobile/features/viewings/services/viewing_api_service.dart';
+import 'package:rentflow_mobile/features/viewings/widgets/viewing_page_header.dart';
 import 'package:rentflow_mobile/shared/theme/app_theme.dart';
 
 class _MemoryTokenStorage implements TokenStorage {
@@ -68,6 +69,8 @@ Future<void> _pumpScreen(
   Future<http.Response> Function(http.Request request) handler, {
   double textScale = 1,
   bool resolveProperties = true,
+  bool pushScreen = false,
+  double topInset = 0,
 }) async {
   final apiClient = ApiClient(
     baseUrl: 'http://test',
@@ -91,17 +94,62 @@ Future<void> _pumpScreen(
     MaterialApp(
       theme: AppTheme.build(),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(
-          context,
-        ).copyWith(textScaler: TextScaler.linear(textScale)),
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScale),
+          padding: EdgeInsets.only(top: topInset),
+        ),
         child: child!,
       ),
-      home: MyViewingsScreen(viewingApiService: ViewingApiService(apiClient)),
+      home: pushScreen
+          ? Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => MyViewingsScreen(
+                        viewingApiService: ViewingApiService(apiClient),
+                      ),
+                    ),
+                  ),
+                  child: const Text('Open viewings'),
+                ),
+              ),
+            )
+          : MyViewingsScreen(viewingApiService: ViewingApiService(apiClient)),
     ),
   );
 }
 
 void main() {
+  testWidgets('bare Back arrow returns My Viewings to its previous route', (
+    tester,
+  ) async {
+    await _pumpScreen(
+      tester,
+      (_) async => http.Response('[]', 200),
+      pushScreen: true,
+    );
+    await tester.tap(find.text('Open viewings'));
+    await tester.pumpAndSettle();
+    expect(find.text('YOUR SCHEDULE'), findsOneWidget);
+    expect(find.text('My viewings'), findsOneWidget);
+    expect(find.text('Pending requests appear first.'), findsOneWidget);
+    final back = find.byTooltip('Back');
+    expect(tester.getSize(back).width, greaterThanOrEqualTo(48));
+    expect(tester.getSize(back).height, greaterThanOrEqualTo(48));
+    final button = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.arrow_back),
+    );
+    expect(button.style?.backgroundColor?.resolve({}), Colors.transparent);
+    expect(button.style?.side?.resolve({}), BorderSide.none);
+    expect(button.style?.elevation?.resolve({}), 0);
+    await tester.tap(back);
+    await tester.pumpAndSettle();
+    expect(find.byType(MyViewingsScreen), findsNothing);
+    expect(find.text('Open viewings'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final width in [320.0, 360.0, 390.0, 430.0]) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('compact cards fit ${width.toInt()}px at ${scale}x text', (
@@ -132,8 +180,25 @@ void main() {
             200,
           ),
           textScale: scale,
+          topInset: 32,
         );
         await tester.pumpAndSettle();
+        expect(find.text('YOUR SCHEDULE'), findsOneWidget);
+        expect(find.text('My viewings'), findsOneWidget);
+        final header = find.byType(ViewingPageHeader);
+        final back = find.byTooltip('Back');
+        final title = find.text('My viewings');
+        expect(tester.getRect(header).top, greaterThanOrEqualTo(32));
+        expect(tester.getSize(back).width, greaterThanOrEqualTo(48));
+        expect(tester.getSize(back).height, greaterThanOrEqualTo(48));
+        expect(
+          tester.getRect(back).right,
+          lessThan(tester.getRect(title).left),
+        );
+        expect(
+          MediaQuery.textScalerOf(tester.element(title)).scale(24),
+          24 * scale,
+        );
         expect(find.text('Pending requests appear first.'), findsOneWidget);
         expect(
           find.text('Could I see the outdoor space during the viewing?'),
@@ -250,6 +315,9 @@ void main() {
 
     expect(find.text('Loading your viewings'), findsOneWidget);
     expect(find.text('Getting your latest viewing schedule.'), findsOneWidget);
+    expect(find.text('YOUR SCHEDULE'), findsOneWidget);
+    expect(find.text('My viewings'), findsOneWidget);
+    expect(find.byTooltip('Back'), findsOneWidget);
 
     response.complete(http.Response('[]', 200));
     await tester.pumpAndSettle();

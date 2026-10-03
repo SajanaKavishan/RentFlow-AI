@@ -7,6 +7,7 @@ import '../../properties/models/property.dart';
 import '../../properties/services/property_api_service.dart';
 import '../models/viewing.dart';
 import '../services/viewing_api_service.dart';
+import '../widgets/viewing_page_header.dart';
 import 'tenant_viewing_details_screen.dart';
 
 class MyViewingsScreen extends StatefulWidget {
@@ -198,81 +199,86 @@ class _MyViewingsScreenState extends State<MyViewingsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: AppPalette.background,
-    appBar: AppBar(),
     body: SafeArea(
-      top: false,
-      child: FutureBuilder<List<Viewing>>(
-        future: _viewings,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const _LoadingState(
-              title: 'Loading your viewings',
-              message: 'Getting your latest viewing schedule.',
-            );
-          }
-
-          if (snapshot.hasError) {
-            return _MessageState(
-              icon: Icons.cloud_off_outlined,
-              title: 'Could not load viewings',
-              message: _safeErrorMessage(snapshot.error),
-              actionLabel: 'Try again',
-              onAction: _refresh,
-              isError: true,
-            );
-          }
-
-          final viewings = _pendingFirst(snapshot.data ?? const <Viewing>[]);
-          if (viewings.isEmpty) {
-            return _MessageState(
-              icon: Icons.event_available_outlined,
-              title: 'No viewings yet',
-              message:
-                  'When you request a property viewing, its schedule and status will appear here.',
-              actionLabel: 'Refresh',
-              onAction: _refresh,
-            );
-          }
-
-          return RefreshIndicator(
-            color: AppPalette.olive,
-            onRefresh: _refresh,
-            child: ListView.builder(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                AppSpacing.xs,
-                20,
-                AppSpacing.xl,
-              ),
-              itemCount: viewings.length + 1,
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.base),
-                    child: const _ListHeader(),
+      child: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 12, 20, 24),
+            child: _ListHeader(),
+          ),
+          Expanded(
+            child: FutureBuilder<List<Viewing>>(
+              future: _viewings,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const _LoadingState(
+                    title: 'Loading your viewings',
+                    message: 'Getting your latest viewing schedule.',
                   );
                 }
 
-                final viewing = viewings[index - 1];
-                final property = _properties[viewing.propertyId];
-                return Padding(
-                  padding: EdgeInsets.only(
-                    bottom: index == viewings.length ? 0 : AppSpacing.md,
-                  ),
-                  child: _ViewingCard(
-                    viewing: viewing,
-                    property: property,
-                    onOpenViewing: () => _openViewing(viewing),
-                    canCancel: _canCancel(viewing),
-                    isCancelling: _cancellingIds.contains(viewing.id),
-                    onCancel: () => _confirmCancellation(viewing),
+                if (snapshot.hasError) {
+                  return _MessageState(
+                    icon: Icons.cloud_off_outlined,
+                    title: 'Could not load viewings',
+                    message: _safeErrorMessage(snapshot.error),
+                    actionLabel: 'Try again',
+                    onAction: _refresh,
+                    isError: true,
+                  );
+                }
+
+                final viewings = _pendingFirst(
+                  snapshot.data ?? const <Viewing>[],
+                );
+                if (viewings.isEmpty) {
+                  return _MessageState(
+                    icon: Icons.event_available_outlined,
+                    title: 'No viewings yet',
+                    message:
+                        'When you request a property viewing, its schedule and status will appear here.',
+                    actionLabel: 'Refresh',
+                    onAction: _refresh,
+                  );
+                }
+
+                return RefreshIndicator(
+                  color: AppPalette.olive,
+                  onRefresh: _refresh,
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(
+                      20,
+                      AppSpacing.xs,
+                      20,
+                      AppSpacing.xl,
+                    ),
+                    itemCount: viewings.length,
+                    itemBuilder: (context, index) {
+                      final viewing = viewings[index];
+                      final property = _properties[viewing.propertyId];
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          bottom: index == viewings.length - 1
+                              ? 0
+                              : AppSpacing.md,
+                        ),
+                        child: _ViewingCard(
+                          viewing: viewing,
+                          property: property,
+                          onOpenViewing: () => _openViewing(viewing),
+                          canCancel: _canCancel(viewing),
+                          isCancelling: _cancellingIds.contains(viewing.id),
+                          onCancel: () => _confirmCancellation(viewing),
+                        ),
+                      );
+                    },
                   ),
                 );
               },
             ),
-          );
-        },
+          ),
+        ],
       ),
     ),
   );
@@ -285,15 +291,7 @@ class _ListHeader extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(
-        'YOUR SCHEDULE',
-        style: AppTypography.eyebrow.copyWith(
-          color: AppPalette.darkOlive,
-          fontSize: AppTypography.labelSize,
-        ),
-      ),
-      const SizedBox(height: AppSpacing.xs),
-      Text('My viewings', style: AppTypography.pageTitle),
+      const ViewingPageHeader(eyebrow: 'YOUR SCHEDULE', title: 'My viewings'),
       const SizedBox(height: AppSpacing.sm),
       Text(
         'Pending requests appear first.',
