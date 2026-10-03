@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -190,5 +190,116 @@ describe('tenant property matching', () => {
     await userEvent.type(screen.getByRole('searchbox', { name: 'Search properties' }), 'studio')
     expect(screen.getByRole('heading', { name: 'City Studio' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Garden House' })).not.toBeInTheDocument()
+  })
+
+  it.each(['before', 'during', 'after'])('keeps search focused when rematching finishes %s typing', async (matchTiming) => {
+    getMatchPreferences.mockResolvedValue({ isConfigured: false, preferredAmenities: [] })
+    let confirmSave
+    let confirmMatches
+    let restoreFocus
+    saveMatchPreferences.mockReturnValue(new Promise((resolve) => { confirmSave = resolve }))
+    getSavedPropertyMatches.mockReturnValue(new Promise((resolve) => { confirmMatches = resolve }))
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      restoreFocus = callback
+      return 1
+    })
+    const user = userEvent.setup()
+    renderPage('/modules/properties?preferences=edit')
+
+    const dialog = await screen.findByRole('dialog', { name: 'Set match preferences' })
+    await user.type(within(dialog).getByLabelText('Preferred city'), 'Kurunegala')
+    await user.click(within(dialog).getByRole('button', { name: 'Save preferences' }))
+    expect(getSavedPropertyMatches).not.toHaveBeenCalled()
+    await act(async () => { confirmSave(preferences) })
+    expect(getSavedPropertyMatches).toHaveBeenCalledTimes(1)
+
+    if (matchTiming === 'before') await act(async () => { confirmMatches(matches) })
+    const search = screen.getByRole('searchbox', { name: 'Search properties' })
+    await user.type(search, 's')
+    if (matchTiming === 'during') await act(async () => { confirmMatches(matches) })
+
+    // Deliver the pending focus restoration between search keystrokes.
+    if (matchTiming !== 'after') act(() => { restoreFocus(0) })
+    await user.keyboard('tudio')
+    expect(screen.queryByRole('heading', { name: 'Garden House' })).not.toBeInTheDocument()
+    if (matchTiming === 'after') {
+      await act(async () => { confirmMatches(matches) })
+      act(() => { restoreFocus(0) })
+    }
+    expect(screen.queryByRole('heading', { name: 'Garden House' })).not.toBeInTheDocument()
+    expect(search).toHaveValue('studio')
+    expect(search).toHaveFocus()
+    expect(screen.getByRole('heading', { name: 'City Studio' })).toBeInTheDocument()
+  })
+
+  it('restores focus to the preference action when no other control has been focused', async () => {
+    getMatchPreferences.mockResolvedValue(preferences)
+    let restoreFocus
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      restoreFocus = callback
+      return 1
+    })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Edit preferences' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(document.activeElement).toBe(document.body)
+    act(() => { restoreFocus(0) })
+    expect(screen.getByRole('button', { name: 'Edit preferences' })).toHaveFocus()
+  })
+
+  it.each([
+    ['Search properties', 'studio', 'City Studio', 'Garden House'],
+    ['City', 'Colombo', 'City Studio', 'Garden House'],
+    ['Maximum rent', '90000', 'City Studio', 'Garden House'],
+    ['Bedrooms', '2', 'Garden House', 'City Studio'],
+    ['Bathrooms', '2', 'Garden House', 'City Studio'],
+    ['Amenity', 'Parking', 'Garden House', 'City Studio'],
+    ['Sort properties', 'liked', 'City Studio', 'Garden House'],
+  ])('preserves the %s filter and selected sort through a late rematch', async (label, value, visible, hidden) => {
+    getMatchPreferences.mockResolvedValue({ isConfigured: false, preferredAmenities: [] })
+    getPropertyFavorites.mockResolvedValue({ propertyIds: ['one'] })
+    let confirmSave
+    let confirmMatches
+    saveMatchPreferences.mockReturnValue(new Promise((resolve) => { confirmSave = resolve }))
+    getSavedPropertyMatches.mockReturnValue(new Promise((resolve) => { confirmMatches = resolve }))
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'City Studio' })
+    await user.click(screen.getByRole('button', { name: 'Filters' }))
+    const filter = screen.getByLabelText(label)
+    if (label !== 'Sort properties') {
+      if (filter.tagName === 'SELECT') await user.selectOptions(filter, value)
+      else await user.type(filter, value)
+    }
+    await user.click(screen.getByRole('button', { name: 'Set match preferences' }))
+    const dialog = screen.getByRole('dialog', { name: 'Set match preferences' })
+    await user.type(within(dialog).getByLabelText('Preferred city'), 'Kurunegala')
+    await user.click(within(dialog).getByRole('button', { name: 'Save preferences' }))
+    expect(getSavedPropertyMatches).not.toHaveBeenCalled()
+    await act(async () => { confirmSave(preferences) })
+    expect(getSavedPropertyMatches).toHaveBeenCalledTimes(1)
+
+    const sort = screen.getByRole('combobox', { name: 'Sort properties' })
+    const selectedSort = label === 'Sort properties' ? 'liked' : 'highestRent'
+    await user.selectOptions(sort, selectedSort)
+    expect(screen.getByRole('heading', { name: visible })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: hidden })).not.toBeInTheDocument()
+
+    await act(async () => { confirmMatches(matches) })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(filter).toHaveValue(label === 'Maximum rent' ? Number(value) : value)
+    expect(sort).toHaveValue(selectedSort)
+    expect(screen.getByRole('heading', { name: visible })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: hidden })).not.toBeInTheDocument()
+
+    if (label !== 'Sort properties') {
+      await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+      const cards = screen.getAllByRole('article')
+      expect(within(cards[0]).getByRole('heading', { name: 'Garden House' })).toBeInTheDocument()
+      expect(within(cards[1]).getByRole('link', { name: 'City Studio' })).toHaveAttribute('href', '/properties/one')
+    }
   })
 })
