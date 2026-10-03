@@ -296,7 +296,7 @@ public class ViewingService(
         return MapToResponse(viewing, property?.ViewingTimeZoneId, new ViewingTenantSummaryDto
         {
             DisplayName = TenantDisplayName(tenant?.FullName),
-            PhoneNumber = UsablePhoneNumber(tenant?.PhoneNumber)
+            PhoneNumber = PhoneNumberValidation.UsablePhoneNumber(tenant?.PhoneNumber)
         });
     }
 
@@ -316,16 +316,6 @@ public class ViewingService(
 
     private static string TenantDisplayName(string? name) =>
         string.IsNullOrWhiteSpace(name) ? "Tenant" : name.Trim();
-
-    private static string? UsablePhoneNumber(string? value)
-    {
-        var phone = value?.Trim();
-        if (string.IsNullOrEmpty(phone)
-            || !System.Text.RegularExpressions.Regex.IsMatch(phone, @"^[+0-9][0-9\s().-]{6,31}$"))
-            return null;
-        var digits = phone.Count(c => c is >= '0' and <= '9');
-        return digits is >= 7 and <= 15 ? phone : null;
-    }
 
     private static ViewingResponseDto MapToResponse(
         ViewingRequest viewing, string? zoneId, ViewingTenantSummaryDto tenant)

@@ -199,7 +199,9 @@ public sealed class AuthService(
                 user.Email,
                 user.PhoneNumber,
                 user.Role,
-                user.ProfileImage != null))
+                user.ProfileImage != null,
+                user.Role == UserRole.Landlord ? user.PublicContactPhone : null,
+                user.Role == UserRole.Landlord ? user.PublicContactEnabled : (bool?)null))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -220,6 +222,22 @@ public sealed class AuthService(
             .Include(candidate => candidate.ProfileImage)
             .SingleOrDefaultAsync(candidate => candidate.Id == userId && candidate.IsActive, cancellationToken);
         if (user is null) return null;
+
+        if (request.PublicContactEnabled.HasValue || request.PublicContactPhone is not null)
+        {
+            if (user.Role != UserRole.Landlord)
+                throw AuthServiceException.Validation("Only landlords can edit public contact settings.");
+
+            var phone = request.PublicContactPhone?.Trim();
+            phone = string.IsNullOrEmpty(phone) ? null : phone;
+            var enabled = request.PublicContactEnabled ?? user.PublicContactEnabled;
+            // A toggle-only request preserves the stored number; send an empty string to clear it.
+            if (request.PublicContactPhone is null) phone = user.PublicContactPhone;
+            if ((phone is not null || enabled) && PhoneNumberValidation.UsablePhoneNumber(phone) is null)
+                throw AuthServiceException.Validation("Enter a valid public contact number (7 to 15 digits, maximum 32 characters).");
+            user.PublicContactPhone = phone;
+            user.PublicContactEnabled = enabled;
+        }
 
         user.FullName = request.FullName.Trim();
         user.PhoneNumber = request.PhoneNumber.Trim();
@@ -324,7 +342,9 @@ public sealed class AuthService(
     }
 
     private static UserProfileDto ToProfile(ApplicationUser user) =>
-        new(user.Id, user.FullName, user.Email, user.PhoneNumber, user.Role, user.ProfileImage is not null);
+        new(user.Id, user.FullName, user.Email, user.PhoneNumber, user.Role, user.ProfileImage is not null,
+            user.Role == UserRole.Landlord ? user.PublicContactPhone : null,
+            user.Role == UserRole.Landlord ? user.PublicContactEnabled : null);
 
     private static bool HasValidImageSignature(byte[] content, string contentType) => contentType switch
     {

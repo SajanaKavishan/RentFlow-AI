@@ -10,6 +10,12 @@ import ChangePasswordDialog from './ChangePasswordDialog.jsx'
 import SupportRequestsSection from './SupportRequestsSection.jsx'
 import TenantMatchPreferencesSection from '../../features/properties/components/TenantMatchPreferencesSection.jsx'
 import './profile.css'
+import { usablePublicContactPhone } from '../../features/properties/publicContactPhone.js'
+
+function profileForm(user) {
+  return { fullName: user.fullName, phoneNumber: user.phoneNumber,
+    publicContactPhone: user.publicContactPhone || '', publicContactEnabled: user.publicContactEnabled === true }
+}
 
 const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const maximumImageBytes = 5 * 1024 * 1024
@@ -26,8 +32,9 @@ export default function ProfilePage() {
   const { user, updateProfile, uploadProfileImage, changePassword } = useAuth()
   const showsNotificationPreferences = [USER_ROLES.TENANT, USER_ROLES.LANDLORD].includes(user.role)
   const isAdmin = user.role === USER_ROLES.ADMIN
+  const isLandlord = user.role === USER_ROLES.LANDLORD
   const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState(() => ({ fullName: user.fullName, phoneNumber: user.phoneNumber }))
+  const [form, setForm] = useState(() => profileForm(user))
   const [imageFile, setImageFile] = useState(null)
   const [imageError, setImageError] = useState('')
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -39,6 +46,8 @@ export default function ProfilePage() {
   const hasProfileChanges = form.fullName.trim() !== user.fullName.trim()
     || (form.phoneNumber || '').trim() !== (user.phoneNumber?.trim() || '')
     || imageFile !== null
+    || (isLandlord && (form.publicContactPhone.trim() !== (user.publicContactPhone || '').trim()
+      || form.publicContactEnabled !== (user.publicContactEnabled === true)))
   const profileLayoutClassName = isAdmin
     ? 'profile-layout profile-layout--account-only'
     : `profile-layout${showsNotificationPreferences ? '' : ' profile-layout--without-preferences'}`
@@ -66,7 +75,7 @@ export default function ProfilePage() {
   }
 
   const startEditing = () => {
-    setForm({ fullName: user.fullName, phoneNumber: user.phoneNumber })
+    setForm(profileForm(user))
     clearSelectedImage()
     setImageError('')
     setSubmitState({ status: 'idle', message: '' })
@@ -106,6 +115,9 @@ export default function ProfilePage() {
     event.preventDefault()
     if (!hasProfileChanges) return
     const validationError = validateProfile(form.fullName, form.phoneNumber)
+      || (isLandlord && (form.publicContactEnabled || form.publicContactPhone.trim())
+        && !usablePublicContactPhone(form.publicContactPhone)
+        ? 'Enter a valid public contact number (7 to 15 digits, maximum 32 characters).' : null)
     if (validationError || imageError) {
       const message = validationError || imageError
       setSubmitState({ status: 'error', message })
@@ -114,7 +126,8 @@ export default function ProfilePage() {
     }
     setSubmitState({ status: 'submitting', message: '' })
     try {
-      await updateProfile({ fullName: form.fullName.trim(), phoneNumber: form.phoneNumber.trim() })
+      await updateProfile({ fullName: form.fullName.trim(), phoneNumber: form.phoneNumber.trim(),
+        ...(isLandlord ? { publicContactPhone: form.publicContactPhone.trim(), publicContactEnabled: form.publicContactEnabled } : {}) })
       if (imageFile) await uploadProfileImage(imageFile)
       setEditing(false)
       clearSelectedImage()
@@ -159,6 +172,17 @@ export default function ProfilePage() {
               <label htmlFor="profilePhoneNumber">Phone number<input id="profilePhoneNumber" type="tel" value={form.phoneNumber} maxLength="32" autoComplete="tel" disabled={submitState.status === 'submitting'} onChange={(event) => setForm((current) => ({ ...current, phoneNumber: event.target.value }))} /></label>
               <label className="profile-edit__image" htmlFor="profileImage">Profile image<span>JPEG, PNG, or WEBP. Maximum 5 MB.</span><input id="profileImage" type="file" accept="image/jpeg,image/png,image/webp" disabled={submitState.status === 'submitting'} onChange={chooseImage} /></label>
             </div>
+            {isLandlord && <fieldset className="profile-public-contact" disabled={submitState.status === 'submitting'}>
+              <legend>Public contact</legend>
+              <p>Let tenants contact you with questions about your property listings.</p>
+              <label htmlFor="publicContactPhone">Public contact number</label>
+              <input id="publicContactPhone" type="tel" maxLength={32} autoComplete="off" value={form.publicContactPhone}
+                onChange={(event) => setForm((current) => ({ ...current, publicContactPhone: event.target.value }))} />
+              <label className="profile-public-contact__toggle"><input type="checkbox" checked={form.publicContactEnabled}
+                onChange={(event) => setForm((current) => ({ ...current, publicContactEnabled: event.target.checked }))} />
+                Show my contact number on my property listings</label>
+              <p>Your account phone remains private. Only this public contact number is shown when you enable it.</p>
+            </fieldset>}
             <div className="profile-edit__buttons">
               <button className="shared-button shared-button--outline" type="button" disabled={submitState.status === 'submitting'} onClick={cancelEditing}>Cancel</button>
               <button className="shared-button profile-edit__save" type="submit" disabled={submitState.status === 'submitting' || !hasProfileChanges}>{submitState.status === 'submitting' ? 'Saving…' : 'Save profile'}</button>

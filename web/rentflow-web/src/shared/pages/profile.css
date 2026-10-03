@@ -156,3 +156,10 @@
   .profile-application__toggle { align-items: flex-start; flex-direction: column; }
 }
 @media (prefers-reduced-motion: reduce) { .profile-toast { animation: none; } }
+
+.profile-public-contact { margin: 20px 0; padding: 18px; border: 1px solid var(--olive-100); border-radius: 12px; }
+.profile-public-contact legend { font-weight: 700; }
+.profile-public-contact p { color: var(--muted); font-size: .85rem; line-height: 1.5; }
+.profile-public-contact > label { display: block; margin: 12px 0 6px; }
+.profile-public-contact > input { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid var(--olive-100); border-radius: 8px; }
+.profile-public-contact .profile-public-contact__toggle { display: flex; align-items: flex-start; gap: 10px; }

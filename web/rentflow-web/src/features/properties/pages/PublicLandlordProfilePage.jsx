@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Icon from '../../../shared/ui/Icons.jsx'
 import PublicLandlordAvatar from '../components/PublicLandlordAvatar.jsx'
+import LandlordContact from '../components/LandlordContact.jsx'
+import { useAuth } from '../../auth/useAuth.js'
+import { USER_ROLES } from '../../auth/authModel.js'
 import PropertyListingCard from '../components/PropertyListingCard.jsx'
 import {
   getPublicLandlordSummary, getPublicLandlordProperties,
@@ -12,6 +15,7 @@ import './public-landlord-profile.css'
 
 export default function PublicLandlordProfilePage() {
   const { propertyId } = useParams()
+  const { user } = useAuth()
   const [retry, setRetry] = useState(0)
   const [profile, setProfile] = useState({ propertyId: null, status: 'loading', summary: null })
   const [listings, setListings] = useState({ propertyId: null, status: 'loading', properties: [], images: {} })
@@ -82,6 +86,7 @@ export default function PublicLandlordProfilePage() {
           <h1>{profile.summary.displayName}</h1><p>Member since {profile.summary.memberSinceYear}</p>
         </div>
       </header>
+      <LandlordContact key={`${propertyId}:${retry}`} propertyId={propertyId} isTenant={user?.role === USER_ROLES.TENANT} />
       <section aria-labelledby="public-landlord-properties">
         <div className="public-landlord-page__listings-heading">
           <h2 id="public-landlord-properties">Properties by {profile.summary.displayName}</h2>

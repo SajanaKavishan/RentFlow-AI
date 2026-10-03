@@ -4,6 +4,7 @@ import '../../features/auth/controllers/auth_controller.dart';
 import '../../features/auth/models/current_user.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
+import 'public_contact_editor.dart';
 
 class SharedProfileContent extends StatelessWidget {
   const SharedProfileContent({
@@ -122,6 +123,25 @@ class SharedProfileContent extends StatelessWidget {
               title: 'Password & security',
               subtitle: 'Not available yet',
             ),
+            if (user.role == UserRole.landlord)
+              _ProfileTile(
+                icon: Icons.phone_outlined,
+                title: 'Public contact',
+                subtitle: 'Manage contact for your property listings',
+                onTap: () {
+                  final auth = AuthScope.of(context);
+                  showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    useSafeArea: true,
+                    showDragHandle: true,
+                    builder: (_) => PublicContactEditor(
+                      loadUser: auth.authService.getCurrentUser,
+                      save: auth.updatePublicContact,
+                    ),
+                  );
+                },
+              ),
             if (user.role == UserRole.tenant)
               _ProfileTile(
                 icon: Icons.folder_outlined,

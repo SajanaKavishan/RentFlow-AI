@@ -8,6 +8,7 @@ import '../models/property_image.dart';
 import '../services/property_api_service.dart';
 import '../widgets/property_card.dart';
 import '../widgets/public_landlord_avatar.dart';
+import '../widgets/landlord_contact_card.dart';
 import 'property_details_screen.dart';
 
 class PublicLandlordProfileScreen extends StatefulWidget {
@@ -115,7 +116,7 @@ class _PublicLandlordProfileScreenState
         ),
       ),
     );
-    if (mounted) await _loadFavorites();
+    if (mounted) await _load();
   }
 
   @override
@@ -167,6 +168,11 @@ class _PublicLandlordProfileScreenState
                     ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
+                  LandlordContactCard(
+                    propertyId: widget.propertyId,
+                    service: widget.propertyApiService,
+                    refreshVersion: _loadVersion,
+                  ),
                   const SectionHeader(title: 'Properties by this landlord'),
                   const SizedBox(height: AppSpacing.base),
                   if (_listingsError)

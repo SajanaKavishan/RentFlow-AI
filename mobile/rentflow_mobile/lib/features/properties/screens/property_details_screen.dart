@@ -17,6 +17,7 @@ import '../models/property_availability.dart';
 import '../models/property_image.dart';
 import '../services/property_api_service.dart';
 import '../widgets/property_details_gallery.dart';
+import '../widgets/landlord_contact_card.dart';
 
 class PropertyDetailsScreen extends StatefulWidget {
   const PropertyDetailsScreen({
@@ -48,6 +49,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
   late final PropertyDiscoveryController _favorites;
   bool _isVerifying = true;
   bool _verificationFailed = false;
+  int _contactRefreshVersion = 0;
   bool _descriptionExpanded = false;
 
   int? get _score {
@@ -85,6 +87,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
   }
 
   Future<void> _refreshProperty() async {
+    setState(() => _contactRefreshVersion++);
     if (!_isVerifying || _verificationFailed) {
       setState(() {
         _isVerifying = true;
@@ -909,14 +912,17 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                 color: Colors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(AppRadii.small),
-                  onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute<void>(
-                      builder: (_) => PublicLandlordProfileScreen(
-                        propertyId: _property.id,
-                        propertyApiService: widget.propertyApiService,
+                  onTap: () async {
+                    await Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => PublicLandlordProfileScreen(
+                          propertyId: _property.id,
+                          propertyApiService: widget.propertyApiService,
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                    if (mounted) setState(() => _contactRefreshVersion++);
+                  },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Row(
@@ -981,6 +987,11 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
               ),
             );
           },
+        ),
+        LandlordContactCard(
+          propertyId: _property.id,
+          service: widget.propertyApiService,
+          refreshVersion: _contactRefreshVersion,
         ),
       ],
     ),

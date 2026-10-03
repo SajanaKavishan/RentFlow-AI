@@ -12,4 +12,8 @@ public sealed class UpdateProfileRequestDto
     [StringLength(32, MinimumLength = 7)]
     [RegularExpression(@"^[+\d][\d\s().-]{6,31}$", ErrorMessage = "Enter a valid phone number.")]
     public string PhoneNumber { get; init; } = string.Empty;
+
+    // Omitted settings preserve compatibility with existing profile clients.
+    public string? PublicContactPhone { get; init; }
+    public bool? PublicContactEnabled { get; init; }
 }

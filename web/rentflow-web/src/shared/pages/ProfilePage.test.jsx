@@ -77,6 +77,45 @@ beforeEach(() => {
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('shared profile', () => {
+  it('publishes only a deliberately entered landlord number after successful save', async () => {
+    const { updateProfile } = renderProfile('Landlord')
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    expect(screen.getByLabelText('Public contact number')).toHaveValue('')
+    const toggle = screen.getByLabelText('Show my contact number on my property listings')
+    expect(toggle).not.toBeChecked()
+    await userEvent.click(toggle)
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(updateProfile).not.toHaveBeenCalled()
+    await userEvent.type(screen.getByLabelText('Public contact number'), '+44 (20) 7123-4567')
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(updateProfile).toHaveBeenCalledWith({ fullName: 'Amara Silva', phoneNumber: '+94 77 123 4567',
+      publicContactPhone: '+44 (20) 7123-4567', publicContactEnabled: true })
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Edit profile' })).not.toBeInTheDocument())
+  })
+
+  it('retains landlord public contact input after a failed save and allows disabling', async () => {
+    const { updateProfile } = renderProfile('Landlord')
+    updateProfile.mockRejectedValueOnce(new Error('Unable to save profile.'))
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    await userEvent.type(screen.getByLabelText('Public contact number'), '+94771234567')
+    const toggle = screen.getByLabelText('Show my contact number on my property listings')
+    await userEvent.click(toggle)
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await screen.findByText('Unable to save profile.')
+    expect(screen.getByLabelText('Public contact number')).toHaveValue('+94771234567')
+    expect(toggle).toBeChecked()
+    await userEvent.click(toggle)
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(updateProfile).toHaveBeenLastCalledWith(expect.objectContaining({ publicContactPhone: '+94771234567', publicContactEnabled: false }))
+  })
+
+  it.each(['Tenant', 'Admin', 'MaintenanceTechnician'])('hides public contact editing for %s', async (role) => {
+    renderProfile(role)
+    await userEvent.click(screen.getByRole('button', { name: /Edit profile/ }))
+    expect(screen.queryByText('Public contact')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Public contact number')).not.toBeInTheDocument()
+  })
+
   it.each([
     { role: USER_ROLES.TENANT, showsPreferences: true, isAdmin: false, showsDocuments: true },
     { role: USER_ROLES.LANDLORD, showsPreferences: true, isAdmin: false, showsDocuments: false },

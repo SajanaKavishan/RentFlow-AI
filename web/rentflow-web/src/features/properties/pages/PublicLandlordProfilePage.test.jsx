@@ -3,10 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PublicLandlordProfilePage from './PublicLandlordProfilePage.jsx'
-import { getPublicLandlordSummary, getPublicLandlordProperties, getPropertyImages, getPropertyImageUrl } from '../services/propertyApiService.js'
+import { getLandlordContact, getPublicLandlordSummary, getPublicLandlordProperties, getPropertyImages, getPropertyImageUrl } from '../services/propertyApiService.js'
+import { useAuth } from '../../auth/useAuth.js'
+
+vi.mock('../../auth/useAuth.js', () => ({ useAuth: vi.fn() }))
 
 vi.mock('../services/propertyApiService.js', () => ({
   getPublicLandlordSummary: vi.fn(), getPublicLandlordProperties: vi.fn(),
+  getLandlordContact: vi.fn(),
   getPropertyImages: vi.fn(), getPropertyImageUrl: vi.fn(),
   getPublicLandlordImageUrl: vi.fn((id) => `/api/properties/${id}/landlord-summary/image`),
 }))
@@ -22,8 +26,38 @@ function renderProfile() {
   </Routes></MemoryRouter>)
 }
 
+describe('protected landlord contact', () => {
+  it('shows the separately loaded phone as plain text and removes it on authoritative refresh', async () => {
+    getLandlordContact.mockResolvedValue({ displayName: summary.displayName, phoneNumber: '+94771234567' })
+    const { container } = renderProfile()
+    expect(await screen.findByText('+94771234567')).toBeInTheDocument()
+    expect(container.querySelector('a[href^="tel:"]')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Call/ })).not.toBeInTheDocument()
+    getLandlordContact.mockResolvedValue(null)
+    await act(async () => { window.dispatchEvent(new Event('focus')) })
+    expect(screen.queryByRole('region', { name: 'Contact landlord' })).not.toBeInTheDocument()
+  })
+
+  it.each(['Landlord', 'Admin', 'MaintenanceTechnician', null])('does not fetch contact for %s', async (role) => {
+    useAuth.mockReturnValue({ user: role ? { role } : null })
+    renderProfile()
+    await screen.findByRole('heading', { name: 'Lena Landlord' })
+    expect(getLandlordContact).not.toHaveBeenCalled()
+    expect(screen.queryByText('Contact landlord')).not.toBeInTheDocument()
+  })
+
+  it('omits failed contact requests without losing the public profile', async () => {
+    getLandlordContact.mockRejectedValue(new Error('Unavailable contact'))
+    renderProfile()
+    await screen.findByRole('heading', { name: 'Lena Landlord' })
+    expect(screen.queryByText('Contact landlord')).not.toBeInTheDocument()
+  })
+})
+
 beforeEach(() => {
   vi.resetAllMocks()
+  useAuth.mockReturnValue({ user: { role: 'Tenant' } })
+  getLandlordContact.mockResolvedValue(null)
   getPublicLandlordSummary.mockResolvedValue(summary)
   getPublicLandlordProperties.mockResolvedValue([property])
   getPropertyImages.mockResolvedValue([])

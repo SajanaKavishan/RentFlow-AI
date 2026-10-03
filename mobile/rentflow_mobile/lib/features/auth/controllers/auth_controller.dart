@@ -73,6 +73,17 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<CurrentUser> updatePublicContact(
+    CurrentUser user,
+    String phone,
+    bool enabled,
+  ) async {
+    final updated = await authService.updatePublicContact(user, phone, enabled);
+    _currentUser = updated;
+    notifyListeners();
+    return updated;
+  }
+
   Future<void> logout() async {
     await tokenStorage.deleteToken();
     _currentUser = null;

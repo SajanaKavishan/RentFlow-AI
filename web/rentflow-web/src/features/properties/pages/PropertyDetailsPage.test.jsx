@@ -8,6 +8,7 @@ import {
   getMyProperties,
   getProperty,
   getPublicLandlordSummary,
+  getLandlordContact,
   getSavedPropertyMatches,
 } from '../services/propertyApiService.js'
 import { getMyViewings } from '../../viewings/services/viewingApiService.js'
@@ -20,6 +21,7 @@ vi.mock('../services/propertyApiService.js', () => ({
   getProperty: vi.fn(),
   getPublicLandlordImageUrl: vi.fn(() => 'https://example.test/landlord-image'),
   getPublicLandlordSummary: vi.fn(),
+  getLandlordContact: vi.fn(),
   getSavedPropertyMatches: vi.fn(),
   updateProperty: vi.fn(),
 }))
@@ -74,7 +76,25 @@ function renderPage() {
   )
 }
 
+describe('protected landlord contact', () => {
+  it('shows a real public phone as plain text without call actions', async () => {
+    getLandlordContact.mockResolvedValue({ displayName: 'Lena Landlord', phoneNumber: '+94771234567' })
+    const { container } = renderPage()
+    expect(await screen.findByText('+94771234567')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Contact landlord' })).toBeInTheDocument()
+    expect(container.querySelector('a[href^="tel:"]')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Call/ })).not.toBeInTheDocument()
+  })
+  it.each([null, { phoneNumber: '' }, { phoneNumber: 'invalid' }])('omits unavailable/invalid contact %j', async (contact) => {
+    getLandlordContact.mockResolvedValue(contact)
+    renderPage()
+    await screen.findByText('Lena Landlord')
+    expect(screen.queryByRole('region', { name: 'Contact landlord' })).not.toBeInTheDocument()
+  })
+})
+
 beforeEach(() => {
+  getLandlordContact.mockResolvedValue(null)
   useAuth.mockReturnValue({
     user: { id: 'tenant-1', role: 'Tenant', fullName: 'Taylor Tenant' },
   })

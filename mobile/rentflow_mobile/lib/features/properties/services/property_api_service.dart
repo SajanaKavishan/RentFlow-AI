@@ -6,6 +6,7 @@ import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../models/property.dart';
 import '../models/property_image.dart';
+import '../models/landlord_contact.dart';
 import '../models/property_matching.dart';
 import '../models/property_preferences.dart';
 
@@ -13,6 +14,21 @@ class PropertyApiService {
   PropertyApiService(this.apiClient);
 
   final ApiClient apiClient;
+
+  Future<LandlordContact?> getLandlordContact(String propertyId) async {
+    final response = await _send(
+      () => apiClient.get(
+        apiClient.buildUri(
+          '${ApiConstants.propertiesPath}/$propertyId/landlord-contact',
+        ),
+      ),
+    );
+    if (response.statusCode == 204) return null;
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) return null;
+    return LandlordContact.fromJson(decoded);
+  }
+
   final Map<String, Future<List<PropertyImage>>> _imageCache = {};
   final Map<String, ({DateTime fetchedAt, Future<String?> value})> _urlCache =
       {};

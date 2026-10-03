@@ -97,6 +97,27 @@ class AuthService {
     }
   }
 
+  Future<CurrentUser> updatePublicContact(
+    CurrentUser user,
+    String phone,
+    bool enabled,
+  ) async {
+    final response = await apiClient.put(
+      apiClient.buildUri('${ApiConstants.authPath}/profile'),
+      body: jsonEncode({
+        'fullName': user.fullName,
+        'phoneNumber': user.phoneNumber,
+        'publicContactPhone': phone.trim(),
+        'publicContactEnabled': enabled,
+      }),
+    );
+    _throwForError(
+      response,
+      fallback: 'Your public contact could not be updated.',
+    );
+    return CurrentUser.fromJson(_object(response.body));
+  }
+
   Map<String, dynamic> _object(String body) {
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) throw const FormatException();

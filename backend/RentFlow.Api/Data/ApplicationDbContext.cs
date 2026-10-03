@@ -107,6 +107,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasMaxLength(512)
                 .IsRequired(false);
 
+            entity.Property(user => user.PublicContactPhone).HasMaxLength(32);
+            entity.Property(user => user.PublicContactEnabled).HasDefaultValue(false);
+
             entity.Property(user => user.Role)
                 .HasConversion<string>()
                 .HasMaxLength(32)

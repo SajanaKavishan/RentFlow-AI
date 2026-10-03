@@ -1,6 +1,13 @@
 import { apiRequest } from '../../../core/api/apiClient.js'
 import { API_BASE_URL } from '../../../core/api/apiConfig.js'
 
+export function getLandlordContact(propertyId) {
+  return apiRequest(`/api/properties/${encodeURIComponent(propertyId)}/landlord-contact`, {
+    cache: 'no-store',
+    errorMessage: 'Landlord contact unavailable.',
+  })
+}
+
 export function getProperties(filters = {}) {
   const params = new URLSearchParams()
 

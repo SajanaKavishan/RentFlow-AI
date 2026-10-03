@@ -12,6 +12,10 @@ public sealed class ApplicationUser
 
     public string PhoneNumber { get; set; } = string.Empty;
 
+    public string? PublicContactPhone { get; set; }
+
+    public bool PublicContactEnabled { get; set; }
+
     public string? PasswordHash { get; set; }
 
     public UserRole Role { get; set; }

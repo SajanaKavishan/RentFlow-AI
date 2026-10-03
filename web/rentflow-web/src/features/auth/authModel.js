@@ -25,5 +25,9 @@ export function parseCurrentUser(value) {
   }
   return { id: value.id, fullName: value.fullName, email: value.email,
     phoneNumber: value.phoneNumber, role: value.role,
-    hasProfileImage: value.hasProfileImage === true }
+    hasProfileImage: value.hasProfileImage === true,
+    ...(value.role === USER_ROLES.LANDLORD ? {
+      publicContactPhone: typeof value.publicContactPhone === 'string' ? value.publicContactPhone : null,
+      publicContactEnabled: value.publicContactEnabled === true,
+    } : {}) }
 }

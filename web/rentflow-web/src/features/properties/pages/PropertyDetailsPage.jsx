@@ -6,6 +6,7 @@ import Icon from '../../../shared/ui/Icons.jsx'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import PropertyLocationMap from '../components/PropertyLocationMap.jsx'
 import PublicLandlordAvatar from '../components/PublicLandlordAvatar.jsx'
+import LandlordContact from '../components/LandlordContact.jsx'
 import { formatPropertyArea } from '../propertyArea.js'
 import {
   UTILITY_CATALOG,
@@ -569,6 +570,7 @@ export default function PropertyDetailsPage() {
                   </>
                 )}
               </div>
+              <LandlordContact key={property.id} propertyId={property.id} isTenant={isTenant} />
             </section>
           )}
         </div>
