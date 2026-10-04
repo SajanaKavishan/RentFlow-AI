@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/validation/phone_number.dart';
 import '../../features/auth/models/current_user.dart';
 import '../theme/app_theme.dart';
+import 'profile_page.dart';
 
 enum _ContactPhoneSource { profile, different }
 
@@ -105,99 +106,119 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: SingleChildScrollView(
-      padding: AppSpacing.page.add(
-        EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Public contact', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: AppSpacing.sm),
-          const Text(
-            'Let tenants contact you with questions about your property listings.',
-          ),
-          const SizedBox(height: AppSpacing.base),
-          if (_user == null && _error == null) const LinearProgressIndicator(),
-          Text(
-            'Which number would you like to publish?',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          RadioGroup<_ContactPhoneSource>(
-            groupValue: _source,
-            onChanged: (source) {
-              if (source != null && _user != null && !_saving) {
-                setState(() => _source = source);
-              }
-            },
-            child: Column(
+  Widget build(BuildContext context) => ProfileSurface(
+    child: SafeArea(
+      child: SingleChildScrollView(
+        padding: AppSpacing.page.add(
+          EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
               children: [
-                RadioListTile<_ContactPhoneSource>(
-                  contentPadding: EdgeInsets.zero,
-                  value: _ContactPhoneSource.profile,
-                  enabled: _user != null && !_saving,
-                  title: const Text('Use my profile phone number'),
-                  subtitle: Text(
-                    usablePhoneNumber(_user?.phoneNumber) ??
-                        'Add a profile phone number first, or use a different number.',
-                  ),
+                IconButton(
+                  tooltip: 'Back to Profile',
+                  onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back),
                 ),
-                RadioListTile<_ContactPhoneSource>(
-                  contentPadding: EdgeInsets.zero,
-                  value: _ContactPhoneSource.different,
-                  enabled: _user != null && !_saving,
-                  title: const Text('Use a different number'),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Public contact',
+                    style: AppTypography.pageTitle.copyWith(
+                      color: AppPalette.primaryText,
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-          if (_source == _ContactPhoneSource.different)
-            Padding(
-              padding: const EdgeInsets.only(left: AppSpacing.base),
-              child: TextField(
-                controller: _phone,
-                enabled: _user != null && !_saving,
-                maxLength: 32,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Public contact number',
-                  hintText: 'Enter public contact number',
+            const SizedBox(height: AppSpacing.sm),
+            const Text(
+              'Let tenants contact you with questions about your property listings.',
+            ),
+            const SizedBox(height: AppSpacing.base),
+            if (_user == null && _error == null)
+              const LinearProgressIndicator(),
+            Text(
+              'Which number would you like to publish?',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            RadioGroup<_ContactPhoneSource>(
+              groupValue: _source,
+              onChanged: (source) {
+                if (source != null && _user != null && !_saving) {
+                  setState(() => _source = source);
+                }
+              },
+              child: Column(
+                children: [
+                  RadioListTile<_ContactPhoneSource>(
+                    contentPadding: EdgeInsets.zero,
+                    value: _ContactPhoneSource.profile,
+                    enabled: _user != null && !_saving,
+                    title: const Text('Use my profile phone number'),
+                    subtitle: Text(
+                      usablePhoneNumber(_user?.phoneNumber) ??
+                          'Add a profile phone number first, or use a different number.',
+                    ),
+                  ),
+                  RadioListTile<_ContactPhoneSource>(
+                    contentPadding: EdgeInsets.zero,
+                    value: _ContactPhoneSource.different,
+                    enabled: _user != null && !_saving,
+                    title: const Text('Use a different number'),
+                  ),
+                ],
+              ),
+            ),
+            if (_source == _ContactPhoneSource.different)
+              Padding(
+                padding: const EdgeInsets.only(left: AppSpacing.base),
+                child: TextField(
+                  controller: _phone,
+                  enabled: _user != null && !_saving,
+                  maxLength: 32,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Public contact number',
+                    hintText: 'Enter public contact number',
+                  ),
                 ),
               ),
+            const SizedBox(height: AppSpacing.base),
+            const Divider(),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _enabled,
+              onChanged: _user == null || _saving
+                  ? null
+                  : (value) => setState(() => _enabled = value),
+              title: const Text('Show contact number on my property listings'),
             ),
-          const SizedBox(height: AppSpacing.base),
-          const Divider(),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _enabled,
-            onChanged: _user == null || _saving
-                ? null
-                : (value) => setState(() => _enabled = value),
-            title: const Text('Show contact number on my property listings'),
-          ),
-          const Text(
-            'Your profile phone stays private unless you explicitly choose to use it here.',
-          ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
-              child: Text(
-                _error!,
-                style: const TextStyle(color: AppPalette.danger),
+            const Text(
+              'Your profile phone stays private unless you explicitly choose to use it here.',
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: AppPalette.danger),
+                ),
               ),
+            const SizedBox(height: AppSpacing.base),
+            FilledButton(
+              onPressed: _user == null || _saving ? null : _save,
+              child: Text(_saving ? 'Saving…' : 'Save'),
             ),
-          const SizedBox(height: AppSpacing.base),
-          FilledButton(
-            onPressed: _user == null || _saving ? null : _save,
-            child: Text(_saving ? 'Saving…' : 'Save'),
-          ),
-          TextButton(
-            onPressed: _saving ? null : () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-        ],
+            TextButton(
+              onPressed: _saving ? null : () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
       ),
     ),
   );

@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:rentflow_mobile/features/properties/screens/match_preferences_screen.dart';
@@ -70,6 +72,102 @@ void main() {
   late DiscoveryBackend backend;
   setUp(() => backend = DiscoveryBackend());
   tearDown(() => backend.close());
+
+  for (final device in [
+    (320.0, 780.0, 1.0),
+    (720.0, 1560.0, 2.0),
+    (1080.0, 2340.0, 3.0),
+  ]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'all real room choices have readable rendered labels at ${device.$1}×${device.$2} ${scale}x',
+        (tester) async {
+          tester.view.physicalSize = Size(device.$1, device.$2);
+          tester.view.devicePixelRatio = device.$3;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          final semantics = tester.ensureSemantics();
+          try {
+            await openEditor(tester, backend);
+            expect(find.text('PROFILE'), findsNothing);
+            expect(find.text('Match Preferences'), findsOneWidget);
+            for (final group in ['preference-beds', 'preference-baths']) {
+              for (final value in ['any', '1', '2', '3', '4']) {
+                final finder = find.byKey(Key('$group-choice-$value'));
+                await tapVisible(tester, finder);
+                final selected = tester.widget<ChoiceChip>(finder);
+                expect(selected.selected, isTrue);
+                expect(
+                  tester
+                      .widget<TextFormField>(find.byKey(Key(group)))
+                      .controller!
+                      .text,
+                  value == 'any' ? '' : value,
+                );
+                for (final option in ['any', '1', '2', '3', '4']) {
+                  final chipFinder = find.byKey(Key('$group-choice-$option'));
+                  await scrollToVisible(tester, chipFinder, 200);
+                  final chip = tester.widget<ChoiceChip>(chipFinder);
+                  final paragraph = tester.renderObject<RenderParagraph>(
+                    find
+                        .descendant(
+                          of: chipFinder,
+                          matching: find.byType(RichText),
+                        )
+                        .first,
+                  );
+                  expect(
+                    paragraph.text.toPlainText(),
+                    option == 'any' ? 'Any' : '$option+',
+                  );
+                  final foreground = paragraph.text.style!.color;
+                  expect(foreground, isNotNull);
+                  final background = chip.selected
+                      ? chip.selectedColor!
+                      : chip.backgroundColor!;
+                  final a = foreground!.computeLuminance(),
+                      b = background.computeLuminance();
+                  expect(
+                    ((a > b ? a : b) + 0.05) / ((a < b ? a : b) + 0.05),
+                    greaterThanOrEqualTo(4.5),
+                  );
+                  expect(
+                    tester
+                        .getSemantics(chipFinder)
+                        .getSemanticsData()
+                        .flagsCollection
+                        .isSelected,
+                    chip.selected ? Tristate.isTrue : Tristate.isFalse,
+                  );
+                  expect(
+                    tester.getSize(chipFinder).width,
+                    greaterThan(
+                      tester
+                          .getSize(
+                            find
+                                .descendant(
+                                  of: chipFinder,
+                                  matching: find.byType(RichText),
+                                )
+                                .first,
+                          )
+                          .width,
+                    ),
+                  );
+                }
+              }
+            }
+            expect(backend.calls(preferencesPath, 'PUT'), 0);
+            expect(tester.takeException(), isNull);
+          } finally {
+            semantics.dispose();
+          }
+        },
+      );
+    }
+  }
 
   testWidgets(
     'fresh GET fills city rent bedrooms bathrooms and canonical/custom amenity chips',
@@ -411,6 +509,27 @@ void main() {
           .onPressed,
       isNull,
     );
+    final semantics = tester.ensureSemantics();
+    try {
+      final chipFinder = find.byKey(const Key('preference-beds-choice-2'));
+      await tester.ensureVisible(chipFinder);
+      await tester.pumpAndSettle();
+      expect(tester.widget<ChoiceChip>(chipFinder).onSelected, isNull);
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(of: chipFinder, matching: find.byType(RichText)).first,
+      );
+      expect(paragraph.text.style!.color, AppPalette.neutral);
+      expect(
+        tester
+            .getSemantics(chipFinder)
+            .getSemanticsData()
+            .flagsCollection
+            .isEnabled,
+        Tristate.isFalse,
+      );
+    } finally {
+      semantics.dispose();
+    }
     gate.complete();
     await tester.pumpAndSettle();
     expect(result, PreferenceChange.saved);

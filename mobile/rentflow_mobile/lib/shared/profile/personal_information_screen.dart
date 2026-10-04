@@ -9,6 +9,7 @@ import '../../features/auth/services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
 import 'profile_avatar.dart';
+import 'profile_page.dart';
 
 typedef ProfileImagePicker = Future<ProfileImageFile?> Function();
 
@@ -151,158 +152,155 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
   @override
   Widget build(BuildContext context) {
     final user = AuthScope.of(context).currentUser ?? _saved;
-    return PopScope(
-      canPop: !_busy,
-      child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            tooltip: 'Back to Profile',
-            onPressed: _busy ? null : () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back),
+    return ProfileSurface(
+      child: PopScope(
+        canPop: !_busy,
+        child: Scaffold(
+          appBar: profilePageAppBar(
+            context,
+            title: 'Personal information',
+            canGoBack: !_busy,
           ),
-          title: const Text('PROFILE', style: AppTypography.eyebrow),
-        ),
-        body: AuthenticatedPage(
-          maxWidth: 580,
-          child: Form(
-            key: _form,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Personal information',
-                  style: AppTypography.pageTitle,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Profile photo',
-                        style: AppTypography.cardTitle,
-                      ),
-                      const SizedBox(height: AppSpacing.base),
-                      Wrap(
-                        spacing: AppSpacing.base,
-                        runSpacing: AppSpacing.md,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          ProfileAvatar(user: user, preview: _selected?.bytes),
-                          OutlinedButton.icon(
-                            onPressed: _busy ? null : _choosePhoto,
-                            icon: const Icon(
-                              Icons.add_a_photo_outlined,
-                              size: 18,
+          body: AuthenticatedPage(
+            maxWidth: 580,
+            child: Form(
+              key: _form,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'Profile photo',
+                          style: AppTypography.cardTitle,
+                        ),
+                        const SizedBox(height: AppSpacing.base),
+                        Wrap(
+                          spacing: AppSpacing.base,
+                          runSpacing: AppSpacing.md,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            ProfileAvatar(
+                              user: user,
+                              preview: _selected?.bytes,
                             ),
-                            label: Text(
-                              _picking ? 'Choosing photo…' : 'Change photo',
+                            OutlinedButton.icon(
+                              onPressed: _busy ? null : _choosePhoto,
+                              icon: const Icon(
+                                Icons.add_a_photo_outlined,
+                                size: 18,
+                              ),
+                              label: Text(
+                                _picking ? 'Choosing photo…' : 'Change photo',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        const Text(
+                          'JPEG, PNG, or WEBP. Maximum 5 MB.',
+                          style: AppTypography.bodySmall,
+                        ),
+                        if (_selected != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: AppSpacing.sm),
+                            child: Text(
+                              'Selected: ${_selected!.name}',
+                              style: AppTypography.bodySmall,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      const Text(
-                        'JPEG, PNG, or WEBP. Maximum 5 MB.',
-                        style: AppTypography.bodySmall,
-                      ),
-                      if (_selected != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: AppSpacing.sm),
-                          child: Text(
-                            'Selected: ${_selected!.name}',
-                            style: AppTypography.bodySmall,
+                        const SizedBox(height: AppSpacing.lg),
+                        TextFormField(
+                          key: const Key('profile-full-name'),
+                          controller: _name,
+                          enabled: !_busy,
+                          maxLength: 200,
+                          textCapitalization: TextCapitalization.words,
+                          autofillHints: const [AutofillHints.name],
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: 'Full name',
+                            errorMaxLines: 3,
+                          ),
+                          validator: (value) {
+                            final name = (value ?? '').trim();
+                            return name.length < 2 || name.length > 200
+                                ? 'Full name must be between 2 and 200 characters.'
+                                : null;
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.base),
+                        TextFormField(
+                          key: const Key('profile-email'),
+                          initialValue: user.email,
+                          readOnly: true,
+                          enabled: !_busy,
+                          enableInteractiveSelection: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Email (read-only)',
+                            helperText:
+                                'Your account email cannot be changed here.',
+                            helperMaxLines: 3,
+                            filled: true,
+                            fillColor: AppPalette.softCream,
+                            suffixIcon: Icon(Icons.lock_outline, size: 18),
                           ),
                         ),
-                      const SizedBox(height: AppSpacing.lg),
-                      TextFormField(
-                        key: const Key('profile-full-name'),
-                        controller: _name,
-                        enabled: !_busy,
-                        maxLength: 200,
-                        textCapitalization: TextCapitalization.words,
-                        autofillHints: const [AutofillHints.name],
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Full name',
-                          errorMaxLines: 3,
+                        const SizedBox(height: AppSpacing.lg),
+                        TextFormField(
+                          key: const Key('profile-phone-number'),
+                          controller: _phone,
+                          enabled: !_busy,
+                          maxLength: 32,
+                          keyboardType: TextInputType.phone,
+                          autofillHints: const [AutofillHints.telephoneNumber],
+                          decoration: const InputDecoration(
+                            labelText: 'Phone number',
+                            errorMaxLines: 3,
+                          ),
+                          validator: (value) => isValidProfilePhone(value ?? '')
+                              ? null
+                              : 'Enter a valid phone number (7–32 characters).',
                         ),
-                        validator: (value) {
-                          final name = (value ?? '').trim();
-                          return name.length < 2 || name.length > 200
-                              ? 'Full name must be between 2 and 200 characters.'
-                              : null;
-                        },
-                      ),
-                      const SizedBox(height: AppSpacing.base),
-                      TextFormField(
-                        key: const Key('profile-email'),
-                        initialValue: user.email,
-                        readOnly: true,
-                        enabled: !_busy,
-                        enableInteractiveSelection: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Email (read-only)',
-                          helperText:
-                              'Your account email cannot be changed here.',
-                          helperMaxLines: 3,
-                          filled: true,
-                          fillColor: AppPalette.softCream,
-                          suffixIcon: Icon(Icons.lock_outline, size: 18),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      TextFormField(
-                        key: const Key('profile-phone-number'),
-                        controller: _phone,
-                        enabled: !_busy,
-                        maxLength: 32,
-                        keyboardType: TextInputType.phone,
-                        autofillHints: const [AutofillHints.telephoneNumber],
-                        decoration: const InputDecoration(
-                          labelText: 'Phone number',
-                          errorMaxLines: 3,
-                        ),
-                        validator: (value) => isValidProfilePhone(value ?? '')
-                            ? null
-                            : 'Enter a valid phone number (7–32 characters).',
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.base),
-                    child: Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        _error!,
-                        style: AppTypography.body.copyWith(
-                          color: AppPalette.danger,
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.base),
+                      child: Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          _error!,
+                          style: AppTypography.body.copyWith(
+                            color: AppPalette.danger,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                if (_success != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.base),
-                    child: Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        _success!,
-                        style: AppTypography.body.copyWith(
-                          color: AppPalette.success,
+                  if (_success != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.base),
+                      child: Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          _success!,
+                          style: AppTypography.body.copyWith(
+                            color: AppPalette.success,
+                          ),
                         ),
                       ),
                     ),
+                  const SizedBox(height: AppSpacing.lg),
+                  FilledButton(
+                    key: const Key('profile-save'),
+                    onPressed: _dirty && !_busy ? _save : null,
+                    child: Text(_saving ? 'Saving changes…' : 'Save changes'),
                   ),
-                const SizedBox(height: AppSpacing.lg),
-                FilledButton(
-                  key: const Key('profile-save'),
-                  onPressed: _dirty && !_busy ? _save : null,
-                  child: Text(_saving ? 'Saving changes…' : 'Save changes'),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

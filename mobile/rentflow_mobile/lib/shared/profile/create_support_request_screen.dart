@@ -4,6 +4,7 @@ import '../../features/support/models/support_ticket.dart';
 import '../../features/support/services/support_ticket_api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
+import 'profile_page.dart';
 
 class CreateSupportRequestScreen extends StatefulWidget {
   const CreateSupportRequestScreen({super.key, required this.service});
@@ -112,129 +113,127 @@ class _CreateSupportRequestScreenState
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_submitting,
-    child: Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: 'Back to support',
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back),
+  Widget build(BuildContext context) => ProfileSurface(
+    child: PopScope(
+      canPop: !_submitting,
+      child: Scaffold(
+        appBar: profilePageAppBar(
+          context,
+          title: 'New request',
+          backLabel: 'Back to support',
+          canGoBack: !_submitting,
         ),
-        title: const Text('SUPPORT', style: AppTypography.eyebrow),
-      ),
-      body: AuthenticatedPage(
-        maxWidth: 580,
-        child: Form(
-          key: _form,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('New request', style: AppTypography.pageTitle),
-              const SizedBox(height: AppSpacing.lg),
-              AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text('Category', style: AppTypography.body),
-                    const SizedBox(height: AppSpacing.sm),
-                    FormField<SupportCategory>(
-                      key: _categoryField,
-                      validator: (value) =>
-                          value == null ? 'Choose a category.' : null,
-                      builder: (field) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          OutlinedButton(
-                            key: const Key('support-category-picker'),
-                            onPressed: _submitting ? null : _pickCategory,
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    field.value?.label ?? 'Choose a category',
-                                    style: AppTypography.body,
+        body: AuthenticatedPage(
+          maxWidth: 580,
+          child: Form(
+            key: _form,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('Category', style: AppTypography.body),
+                      const SizedBox(height: AppSpacing.sm),
+                      FormField<SupportCategory>(
+                        key: _categoryField,
+                        validator: (value) =>
+                            value == null ? 'Choose a category.' : null,
+                        builder: (field) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            OutlinedButton(
+                              key: const Key('support-category-picker'),
+                              onPressed: _submitting ? null : _pickCategory,
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      field.value?.label ?? 'Choose a category',
+                                      style: AppTypography.body,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: AppSpacing.sm),
-                                const Icon(Icons.expand_more, size: 20),
-                              ],
-                            ),
-                          ),
-                          if (field.errorText != null)
-                            Text(
-                              field.errorText!,
-                              style: AppTypography.bodySmall.copyWith(
-                                color: AppPalette.danger,
+                                  const SizedBox(width: AppSpacing.sm),
+                                  const Icon(Icons.expand_more, size: 20),
+                                ],
                               ),
                             ),
-                        ],
+                            if (field.errorText != null)
+                              Text(
+                                field.errorText!,
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: AppPalette.danger,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.base),
-                    TextFormField(
-                      key: const Key('support-subject'),
-                      controller: _subject,
-                      enabled: !_submitting,
-                      autovalidateMode: AutovalidateMode.onUserInteraction,
-                      textInputAction: TextInputAction.next,
-                      validator: CreateSupportTicketRequest.validateSubject,
-                      decoration: const InputDecoration(
-                        labelText: 'Subject',
-                        helperText: 'Up to 200 characters.',
-                        helperMaxLines: 3,
-                        errorMaxLines: 3,
-                        fillColor: AppPalette.white,
+                      const SizedBox(height: AppSpacing.base),
+                      TextFormField(
+                        key: const Key('support-subject'),
+                        controller: _subject,
+                        enabled: !_submitting,
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
+                        textInputAction: TextInputAction.next,
+                        validator: CreateSupportTicketRequest.validateSubject,
+                        decoration: const InputDecoration(
+                          labelText: 'Subject',
+                          helperText: 'Up to 200 characters.',
+                          helperMaxLines: 3,
+                          errorMaxLines: 3,
+                          fillColor: AppPalette.white,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.base),
-                    TextFormField(
-                      key: const Key('support-message'),
-                      controller: _message,
-                      enabled: !_submitting,
-                      autovalidateMode: AutovalidateMode.onUserInteraction,
-                      keyboardType: TextInputType.multiline,
-                      textInputAction: TextInputAction.newline,
-                      minLines: 4,
-                      maxLines: 8,
-                      validator: CreateSupportTicketRequest.validateMessage,
-                      decoration: const InputDecoration(
-                        labelText: 'Message',
-                        helperText: 'Up to 4,000 characters.',
-                        helperMaxLines: 3,
-                        errorMaxLines: 3,
-                        fillColor: AppPalette.white,
+                      const SizedBox(height: AppSpacing.base),
+                      TextFormField(
+                        key: const Key('support-message'),
+                        controller: _message,
+                        enabled: !_submitting,
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        minLines: 4,
+                        maxLines: 8,
+                        validator: CreateSupportTicketRequest.validateMessage,
+                        decoration: const InputDecoration(
+                          labelText: 'Message',
+                          helperText: 'Up to 4,000 characters.',
+                          helperMaxLines: 3,
+                          errorMaxLines: 3,
+                          fillColor: AppPalette.white,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.base),
-                  child: Semantics(
-                    liveRegion: true,
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.base),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _error!,
+                        key: const Key('support-create-error'),
+                        style: AppTypography.body.copyWith(
+                          color: AppPalette.danger,
+                        ),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: AppSpacing.lg),
+                Semantics(
+                  liveRegion: _submitting,
+                  child: FilledButton(
+                    key: const Key('support-submit'),
+                    onPressed: _valid && !_submitting ? _submit : null,
                     child: Text(
-                      _error!,
-                      key: const Key('support-create-error'),
-                      style: AppTypography.body.copyWith(
-                        color: AppPalette.danger,
-                      ),
+                      _submitting ? 'Submitting request…' : 'Submit request',
                     ),
                   ),
                 ),
-              const SizedBox(height: AppSpacing.lg),
-              Semantics(
-                liveRegion: _submitting,
-                child: FilledButton(
-                  key: const Key('support-submit'),
-                  onPressed: _valid && !_submitting ? _submit : null,
-                  child: Text(
-                    _submitting ? 'Submitting request…' : 'Submit request',
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

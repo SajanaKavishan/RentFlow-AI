@@ -4,6 +4,7 @@ import '../../features/notifications/models/notification_preferences.dart';
 import '../../features/notifications/services/notification_preferences_api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
+import 'profile_page.dart';
 
 class NotificationPreferencesScreen extends StatefulWidget {
   const NotificationPreferencesScreen({super.key, required this.service});
@@ -110,128 +111,125 @@ class _NotificationPreferencesScreenState
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_saving,
-    child: Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: 'Back to Profile',
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back),
+  Widget build(BuildContext context) => ProfileSurface(
+    child: PopScope(
+      canPop: !_saving,
+      child: Scaffold(
+        appBar: profilePageAppBar(
+          context,
+          title: 'Notifications',
+          canGoBack: !_saving,
         ),
-        title: const Text('PROFILE', style: AppTypography.eyebrow),
-      ),
-      body: AuthenticatedPage(
-        maxWidth: 580,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('Notifications', style: AppTypography.pageTitle),
-            const SizedBox(height: AppSpacing.sm),
-            const Text(
-              'Choose what updates you want to receive.',
-              style: AppTypography.body,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            if (_loading)
-              Semantics(
-                liveRegion: true,
-                child: const LoadingState(
-                  title: 'Loading notification preferences…',
-                  compact: true,
-                ),
-              )
-            else if (_loadError != null)
-              Semantics(
-                liveRegion: true,
-                child: SharedState(
-                  title: 'Notification preferences unavailable',
-                  message: _loadError,
-                  icon: Icons.cloud_off_outlined,
-                  actionLabel: 'Retry',
-                  onAction: _load,
-                  compact: true,
-                ),
-              )
-            else ...[
-              AppCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: [
-                    _PreferenceRow(
-                      id: 'preference-viewing',
-                      title: 'Viewing updates',
-                      description:
-                          'Receive updates when viewing requests change.',
-                      value: _draft!.viewingUpdatesEnabled,
-                      onChanged: _saving
-                          ? null
-                          : (value) => _edit(
-                              _draft!.copyWith(viewingUpdatesEnabled: value),
-                            ),
-                    ),
-                    const Divider(
-                      height: 1,
-                      indent: AppSpacing.base,
-                      endIndent: AppSpacing.base,
-                    ),
-                    _PreferenceRow(
-                      id: 'preference-applications',
-                      title: 'Rental application updates',
-                      description:
-                          'Receive updates when rental applications change.',
-                      value: _draft!.rentalApplicationUpdatesEnabled,
-                      onChanged: _saving
-                          ? null
-                          : (value) => _edit(
-                              _draft!.copyWith(
-                                rentalApplicationUpdatesEnabled: value,
-                              ),
-                            ),
-                    ),
-                    const Divider(
-                      height: 1,
-                      indent: AppSpacing.base,
-                      endIndent: AppSpacing.base,
-                    ),
-                    _PreferenceRow(
-                      id: 'preference-security',
-                      title: 'Account security updates',
-                      description:
-                          'Required for important account and security activity. This setting cannot be turned off.',
-                      value: _draft!.accountSecurityUpdatesEnabled,
-                      requiredSetting: true,
-                    ),
-                  ],
-                ),
+        body: AuthenticatedPage(
+          maxWidth: 580,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Choose what updates you want to receive.',
+                style: AppTypography.body,
               ),
-              if (_saveError != null || _success != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.base),
-                  child: Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      _saveError ?? _success!,
-                      key: const Key('preferences-feedback'),
-                      style: AppTypography.body.copyWith(
-                        color: _saveError != null
-                            ? AppPalette.danger
-                            : AppPalette.success,
+              const SizedBox(height: AppSpacing.lg),
+              if (_loading)
+                Semantics(
+                  liveRegion: true,
+                  child: const LoadingState(
+                    title: 'Loading notification preferences…',
+                    compact: true,
+                  ),
+                )
+              else if (_loadError != null)
+                Semantics(
+                  liveRegion: true,
+                  child: SharedState(
+                    title: 'Notification preferences unavailable',
+                    message: _loadError,
+                    icon: Icons.cloud_off_outlined,
+                    actionLabel: 'Retry',
+                    onAction: _load,
+                    compact: true,
+                  ),
+                )
+              else ...[
+                AppCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      _PreferenceRow(
+                        id: 'preference-viewing',
+                        title: 'Viewing updates',
+                        description:
+                            'Receive updates when viewing requests change.',
+                        value: _draft!.viewingUpdatesEnabled,
+                        onChanged: _saving
+                            ? null
+                            : (value) => _edit(
+                                _draft!.copyWith(viewingUpdatesEnabled: value),
+                              ),
+                      ),
+                      const Divider(
+                        height: 1,
+                        indent: AppSpacing.base,
+                        endIndent: AppSpacing.base,
+                      ),
+                      _PreferenceRow(
+                        id: 'preference-applications',
+                        title: 'Rental application updates',
+                        description:
+                            'Receive updates when rental applications change.',
+                        value: _draft!.rentalApplicationUpdatesEnabled,
+                        onChanged: _saving
+                            ? null
+                            : (value) => _edit(
+                                _draft!.copyWith(
+                                  rentalApplicationUpdatesEnabled: value,
+                                ),
+                              ),
+                      ),
+                      const Divider(
+                        height: 1,
+                        indent: AppSpacing.base,
+                        endIndent: AppSpacing.base,
+                      ),
+                      _PreferenceRow(
+                        id: 'preference-security',
+                        title: 'Account security updates',
+                        description:
+                            'Required for important account and security activity. This setting cannot be turned off.',
+                        value: _draft!.accountSecurityUpdatesEnabled,
+                        requiredSetting: true,
+                      ),
+                    ],
+                  ),
+                ),
+                if (_saveError != null || _success != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.base),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _saveError ?? _success!,
+                        key: const Key('preferences-feedback'),
+                        style: AppTypography.body.copyWith(
+                          color: _saveError != null
+                              ? AppPalette.danger
+                              : AppPalette.success,
+                        ),
                       ),
                     ),
                   ),
+                const SizedBox(height: AppSpacing.lg),
+                Semantics(
+                  liveRegion: _saving,
+                  child: FilledButton(
+                    key: const Key('preferences-save'),
+                    onPressed: _dirty && !_saving ? _save : null,
+                    child: Text(_saving ? 'Saving changes…' : 'Save changes'),
+                  ),
                 ),
-              const SizedBox(height: AppSpacing.lg),
-              Semantics(
-                liveRegion: _saving,
-                child: FilledButton(
-                  key: const Key('preferences-save'),
-                  onPressed: _dirty && !_saving ? _save : null,
-                  child: Text(_saving ? 'Saving changes…' : 'Save changes'),
-                ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     ),

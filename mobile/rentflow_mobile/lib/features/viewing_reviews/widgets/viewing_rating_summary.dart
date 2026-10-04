@@ -75,9 +75,11 @@ class ViewingReviewSummaryContent extends StatelessWidget {
     super.key,
     required this.data,
     required this.title,
+    this.metadataColor = AppPalette.secondaryText,
   });
   final Map<String, dynamic> data;
   final String title;
+  final Color metadataColor;
   @override
   Widget build(BuildContext context) {
     final count = data['reviewCount'] as int;
@@ -114,10 +116,7 @@ class ViewingReviewSummaryContent extends StatelessWidget {
               ),
               Text(
                 '$count verified ${count == 1 ? 'viewing' : 'viewings'}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppPalette.secondaryText,
-                ),
+                style: TextStyle(fontSize: 13, color: metadataColor),
               ),
               for (final value
                   in (data['reviews'] as List)
@@ -152,10 +151,7 @@ class ViewingReviewSummaryContent extends StatelessWidget {
                         const SizedBox(height: 6),
                         Text(
                           'Verified viewing · ${_month(context, value['reviewMonth'] as String)}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppPalette.secondaryText,
-                          ),
+                          style: TextStyle(fontSize: 12, color: metadataColor),
                         ),
                       ],
                     ),

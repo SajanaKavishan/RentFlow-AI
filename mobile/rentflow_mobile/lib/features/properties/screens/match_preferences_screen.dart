@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
+import '../../../shared/profile/profile_page.dart';
 import '../widgets/amenity_icon.dart';
 import '../models/property_matching.dart';
 import '../models/property_preferences.dart';
@@ -221,125 +222,123 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_busy,
-    child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Match Preferences'),
-        backgroundColor: AppPalette.warmCream,
-        surfaceTintColor: Colors.transparent,
-        titleTextStyle: const TextStyle(
-          color: AppPalette.darkOlive,
-          fontSize: AppTypography.sectionTitleSize,
-          fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) => ProfileSurface(
+    child: PopScope(
+      canPop: !_busy,
+      child: Scaffold(
+        appBar: profilePageAppBar(
+          context,
+          title: 'Match Preferences',
+          backLabel: 'Back',
+          canGoBack: !_busy,
         ),
-      ),
-      bottomNavigationBar: _loading || _loadError != null ? null : _actions(),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _loadError != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_loadError!, textAlign: TextAlign.center),
-                    const SizedBox(height: 12),
-                    FilledButton(
-                      onPressed: _load,
-                      child: const Text('Retry preferences'),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : SafeArea(
-              child: Form(
-                key: _form,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        bottomNavigationBar: _loading || _loadError != null ? null : _actions(),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _loadError != null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      _intro(),
-                      const SizedBox(height: 18),
-                      _section(
-                        Icons.location_on_outlined,
-                        'Location & budget',
-                        'Start with where you want to live.',
-                        [
-                          TextFormField(
-                            key: const Key('preference-city'),
-                            controller: _city,
-                            enabled: !_busy,
-                            maxLength: 100,
-                            textCapitalization: TextCapitalization.words,
-                            textInputAction: TextInputAction.next,
-                            style: AppTypography.body,
-                            decoration: _inputDecoration('Preferred city')
-                                .copyWith(
-                                  hintText: 'e.g. Kurunegala',
-                                  counterText: '',
-                                  prefixIcon: const Icon(
-                                    Icons.location_on_outlined,
-                                    size: 19,
-                                  ),
-                                ),
-                          ),
-                          const SizedBox(height: 16),
-                          _numberField(
-                            _rent,
-                            'Maximum monthly rent',
-                            'preference-rent',
-                            rooms: false,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      _section(
-                        Icons.bed_outlined,
-                        'Room to feel at home',
-                        'Choose a minimum, or keep your options open.',
-                        [
-                          _roomSelector(
-                            _beds,
-                            'Minimum bedrooms',
-                            'preference-beds',
-                          ),
-                          const SizedBox(height: 20),
-                          _roomSelector(
-                            _baths,
-                            'Minimum bathrooms',
-                            'preference-baths',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      _section(
-                        Icons.auto_awesome_outlined,
-                        'Preferred amenities',
-                        'Pick the little things that matter to you.',
-                        [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            children: [
-                              for (final entry
-                                  in propertyAmenityCatalog.entries)
-                                _amenityTile(entry.key, entry.value),
-                              // Keep custom amenities from the shared saved record selectable.
-                              for (final custom in _customAmenities)
-                                _amenityTile(custom, custom),
-                            ],
-                          ),
-                        ],
+                      Text(_loadError!, textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        onPressed: _load,
+                        child: const Text('Retry preferences'),
                       ),
                     ],
                   ),
                 ),
+              )
+            : SafeArea(
+                child: Form(
+                  key: _form,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _intro(),
+                        const SizedBox(height: 18),
+                        _section(
+                          Icons.location_on_outlined,
+                          'Location & budget',
+                          'Start with where you want to live.',
+                          [
+                            TextFormField(
+                              key: const Key('preference-city'),
+                              controller: _city,
+                              enabled: !_busy,
+                              maxLength: 100,
+                              textCapitalization: TextCapitalization.words,
+                              textInputAction: TextInputAction.next,
+                              style: AppTypography.body,
+                              decoration: _inputDecoration('Preferred city')
+                                  .copyWith(
+                                    hintText: 'e.g. Kurunegala',
+                                    counterText: '',
+                                    prefixIcon: const Icon(
+                                      Icons.location_on_outlined,
+                                      size: 19,
+                                    ),
+                                  ),
+                            ),
+                            const SizedBox(height: 16),
+                            _numberField(
+                              _rent,
+                              'Maximum monthly rent',
+                              'preference-rent',
+                              rooms: false,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _section(
+                          Icons.bed_outlined,
+                          'Room to feel at home',
+                          'Choose a minimum, or keep your options open.',
+                          [
+                            _roomSelector(
+                              _beds,
+                              'Minimum bedrooms',
+                              'preference-beds',
+                            ),
+                            const SizedBox(height: 20),
+                            _roomSelector(
+                              _baths,
+                              'Minimum bathrooms',
+                              'preference-baths',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _section(
+                          Icons.auto_awesome_outlined,
+                          'Preferred amenities',
+                          'Pick the little things that matter to you.',
+                          [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                for (final entry
+                                    in propertyAmenityCatalog.entries)
+                                  _amenityTile(entry.key, entry.value),
+                                // Keep custom amenities from the shared saved record selectable.
+                                for (final custom in _customAmenities)
+                                  _amenityTile(custom, custom),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
+      ),
     ),
   );
 
@@ -367,7 +366,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
                   fontSize: AppTypography.captionSize,
                   letterSpacing: 1.2,
                   fontWeight: FontWeight.w700,
-                  color: AppPalette.sage,
+                  color: AppPalette.white,
                 ),
               ),
             ),
@@ -384,7 +383,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
           style: TextStyle(
             fontSize: AppTypography.labelSize,
             height: 1.5,
-            color: AppPalette.sage,
+            color: AppPalette.white,
           ),
         ),
       ],
@@ -425,7 +424,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: AppTypography.bodyLargeSize,
+                      fontSize: AppTypography.sectionTitleSize,
                       fontWeight: FontWeight.w700,
                       color: AppPalette.darkOlive,
                     ),
@@ -434,9 +433,9 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
                   Text(
                     subtitle,
                     style: const TextStyle(
-                      fontSize: AppTypography.captionSize,
+                      fontSize: AppTypography.bodySmallSize,
                       height: 1.4,
-                      color: AppPalette.secondaryText,
+                      color: AppPalette.neutral,
                     ),
                   ),
                 ],
@@ -453,8 +452,8 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
   InputDecoration _inputDecoration(String label) => InputDecoration(
     labelText: label,
     labelStyle: const TextStyle(
-      fontSize: AppTypography.labelSize,
-      color: AppPalette.secondaryText,
+      fontSize: AppTypography.bodySmallSize,
+      color: AppPalette.neutral,
     ),
     filled: true,
     fillColor: AppPalette.warmCream,
@@ -486,9 +485,17 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
           for (final value in <int?>[null, 1, 2, 3, 4])
             ChoiceChip(
               key: Key('$key-choice-${value ?? 'any'}'),
-              label: Text(
-                value == null ? 'Any' : '$value+',
-                style: AppTypography.caption,
+              label: Text(value == null ? 'Any' : '$value+'),
+              // The app chip theme specifies typography without a color, so
+              // supply explicit state foregrounds instead of losing M3 defaults.
+              labelStyle: AppTypography.label.copyWith(
+                color: WidgetStateColor.resolveWith(
+                  (states) => states.contains(WidgetState.disabled)
+                      ? AppPalette.neutral
+                      : states.contains(WidgetState.selected)
+                      ? AppPalette.darkOlive
+                      : AppPalette.primaryText,
+                ),
               ),
               selected: value == null
                   ? controller.text.trim().isEmpty
@@ -499,6 +506,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
               showCheckmark: false,
               selectedColor: AppPalette.sage,
               backgroundColor: AppPalette.white,
+              disabledColor: AppPalette.softCream,
               side: BorderSide(
                 color:
                     (value == null
@@ -546,13 +554,14 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
               alignment: Alignment.centerLeft,
               child: TextButton(
                 onPressed: _busy ? null : _reset,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppPalette.darkOlive,
+                  disabledForegroundColor: AppPalette.neutral,
+                  textStyle: AppTypography.label,
+                ),
                 child: const Text(
                   'Reset saved preferences',
                   textAlign: TextAlign.left,
-                  style: TextStyle(
-                    fontSize: AppTypography.captionSize,
-                    color: AppPalette.secondaryText,
-                  ),
                 ),
               ),
             ),
@@ -619,7 +628,7 @@ class _MatchPreferencesScreenState extends State<MatchPreferencesScreen> {
     enabled: !_busy,
     keyboardType: TextInputType.numberWithOptions(decimal: !rooms),
     textInputAction: TextInputAction.next,
-    style: AppTypography.body,
+    style: AppTypography.body.copyWith(color: AppPalette.primaryText),
     decoration: _inputDecoration(label).copyWith(
       prefixText: rooms ? null : 'LKR ',
       hintText: rooms ? 'Any' : 'No maximum',

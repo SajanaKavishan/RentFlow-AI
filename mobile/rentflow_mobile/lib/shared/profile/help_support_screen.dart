@@ -5,6 +5,7 @@ import '../../features/support/services/support_ticket_api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
 import 'create_support_request_screen.dart';
+import 'profile_page.dart';
 
 class HelpSupportScreen extends StatefulWidget {
   const HelpSupportScreen({super.key, required this.service});
@@ -61,86 +62,84 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      leading: IconButton(
-        tooltip: 'Back to Profile',
-        onPressed: () => Navigator.of(context).pop(),
-        icon: const Icon(Icons.arrow_back),
-      ),
-      title: const Text('PROFILE', style: AppTypography.eyebrow),
-    ),
-    body: AuthenticatedPage(
-      maxWidth: 580,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text('Help & support', style: AppTypography.pageTitle),
-          const SizedBox(height: AppSpacing.lg),
-          const Text('Need help?', style: AppTypography.sectionTitle),
-          const SizedBox(height: AppSpacing.sm),
-          const Text(
-            'Send us a support request and track its status.',
-            style: AppTypography.body,
-          ),
-          const SizedBox(height: AppSpacing.base),
-          FilledButton.icon(
-            key: const Key('support-new-request'),
-            onPressed: _loading ? null : _create,
-            icon: const Icon(Icons.add, size: 20),
-            label: const Text('New support request'),
-          ),
-          if (_success != null)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.base),
-              child: Semantics(
-                liveRegion: true,
-                child: Text(
-                  _success!,
-                  style: AppTypography.body.copyWith(color: AppPalette.success),
+  Widget build(BuildContext context) => ProfileSurface(
+    child: Scaffold(
+      appBar: profilePageAppBar(context, title: 'Help & support'),
+      body: AuthenticatedPage(
+        maxWidth: 580,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Need help?', style: AppTypography.sectionTitle),
+            const SizedBox(height: AppSpacing.sm),
+            const Text(
+              'Send us a support request and track its status.',
+              style: AppTypography.body,
+            ),
+            const SizedBox(height: AppSpacing.base),
+            FilledButton.icon(
+              key: const Key('support-new-request'),
+              onPressed: _loading ? null : _create,
+              icon: const Icon(Icons.add, size: 20),
+              label: const Text('New support request'),
+            ),
+            if (_success != null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.base),
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _success!,
+                    style: AppTypography.body.copyWith(
+                      color: AppPalette.success,
+                    ),
+                  ),
                 ),
               ),
+            const SizedBox(height: AppSpacing.lg),
+            const Text(
+              'My support requests',
+              style: AppTypography.sectionTitle,
             ),
-          const SizedBox(height: AppSpacing.lg),
-          const Text('My support requests', style: AppTypography.sectionTitle),
-          const SizedBox(height: AppSpacing.base),
-          if (_loading)
-            Semantics(
-              liveRegion: true,
-              child: const LoadingState(
-                title: 'Loading support requests…',
-                compact: true,
+            const SizedBox(height: AppSpacing.base),
+            if (_loading)
+              Semantics(
+                liveRegion: true,
+                child: const LoadingState(
+                  title: 'Loading support requests…',
+                  compact: true,
+                ),
               ),
-            ),
-          if (_error != null)
-            Semantics(
-              liveRegion: true,
-              child: SharedState(
-                title: 'Support requests unavailable',
-                message: _error,
-                icon: Icons.cloud_off_outlined,
-                actionLabel: 'Retry',
-                onAction: _load,
-                compact: true,
+            if (_error != null)
+              Semantics(
+                liveRegion: true,
+                child: SharedState(
+                  title: 'Support requests unavailable',
+                  message: _error,
+                  icon: Icons.cloud_off_outlined,
+                  actionLabel: 'Retry',
+                  onAction: _load,
+                  compact: true,
+                ),
               ),
-            ),
-          if (!_loading && _error == null && _tickets!.isEmpty)
-            const AppCard(
-              child: SharedState(
-                title: 'No support requests yet.',
-                message:
-                    'Need help? Create a request and our team can review it.',
-                compact: true,
+            if (!_loading && _error == null && _tickets!.isEmpty)
+              const AppCard(
+                child: SharedState(
+                  title: 'No support requests yet.',
+                  message:
+                      'Need help? Create a request and our team can review it.',
+                  compact: true,
+                ),
               ),
-            ),
-          for (final ticket in _tickets ?? <SupportTicket>[]) ...[
-            SupportTicketCard(
-              key: ValueKey('support-ticket-${ticket.id}'),
-              ticket: ticket,
-            ),
-            const SizedBox(height: AppSpacing.md),
+            for (final ticket in _tickets ?? <SupportTicket>[]) ...[
+              SupportTicketCard(
+                key: ValueKey('support-ticket-${ticket.id}'),
+                ticket: ticket,
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
           ],
-        ],
+        ),
       ),
     ),
   );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_theme.dart';
+import '../../../shared/profile/profile_page.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../properties/services/property_api_service.dart';
 import '../../rental_applications/models/rental_application.dart';
@@ -83,116 +84,122 @@ class _TenantDocumentsScreenState extends State<TenantDocumentsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Documents')),
-    body: RefreshIndicator(
-      onRefresh: _refresh,
-      child: AuthenticatedPage(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const PageHeader(
-              title: 'Your documents',
-              subtitle:
-                  'View and manage documents for your rental applications.',
-            ),
-            const SizedBox(height: 24),
-            FutureBuilder<List<_DocumentGroup>>(
-              future: _groups,
-              builder: (context, result) {
-                if (_groups == null) {
-                  return const AppCard(
-                    child: Text(
-                      'Documents are currently unavailable. Please try again when your account is connected.',
-                    ),
-                  );
-                }
-                if (result.connectionState != ConnectionState.done) {
-                  return const AppCard(
-                    child: Column(
-                      children: [
-                        Text('Loading your documents'),
-                        SizedBox(height: 12),
-                        LinearProgressIndicator(),
-                      ],
-                    ),
-                  );
-                }
-                if (result.hasError) {
-                  return AppCard(
-                    child: Column(
-                      children: [
-                        const Text('Could not load your documents.'),
-                        TextButton(
-                          onPressed: _refresh,
-                          child: const Text('Try again'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                if (result.data!.isEmpty) {
-                  return const AppCard(
-                    child: Text(
-                      'No application documents yet. Documents will appear here once you create a rental application.',
-                    ),
-                  );
-                }
-                return Column(
-                  children: [
-                    for (final group in result.data!)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: AppCard(
-                          onTap: () => _openDocuments(group),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: AppPalette.softCream,
-                                  borderRadius: BorderRadius.circular(12),
+  Widget build(BuildContext context) => ProfileSurface(
+    child: Scaffold(
+      appBar: profilePageAppBar(
+        context,
+        title: 'Your documents',
+        backLabel: 'Back',
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: AuthenticatedPage(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'View and manage documents for your rental applications.',
+                style: AppTypography.body,
+              ),
+              const SizedBox(height: AppSpacing.base),
+              FutureBuilder<List<_DocumentGroup>>(
+                future: _groups,
+                builder: (context, result) {
+                  if (_groups == null) {
+                    return const AppCard(
+                      child: Text(
+                        'Documents are currently unavailable. Please try again when your account is connected.',
+                      ),
+                    );
+                  }
+                  if (result.connectionState != ConnectionState.done) {
+                    return const AppCard(
+                      child: Column(
+                        children: [
+                          Text('Loading your documents'),
+                          SizedBox(height: 12),
+                          LinearProgressIndicator(),
+                        ],
+                      ),
+                    );
+                  }
+                  if (result.hasError) {
+                    return AppCard(
+                      child: Column(
+                        children: [
+                          const Text('Could not load your documents.'),
+                          TextButton(
+                            onPressed: _refresh,
+                            child: const Text('Try again'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  if (result.data!.isEmpty) {
+                    return const AppCard(
+                      child: Text(
+                        'No application documents yet. Documents will appear here once you create a rental application.',
+                      ),
+                    );
+                  }
+                  return Column(
+                    children: [
+                      for (final group in result.data!)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: AppCard(
+                            onTap: () => _openDocuments(group),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: AppPalette.softCream,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.folder_outlined,
+                                    color: AppPalette.olive,
+                                  ),
                                 ),
-                                child: const Icon(
-                                  Icons.folder_outlined,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        group.title,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleMedium,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'View documents',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodyMedium,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
                                   color: AppPalette.olive,
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      group.title,
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleMedium,
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      'View documents',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodyMedium,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(
-                                Icons.chevron_right_rounded,
-                                color: AppPalette.olive,
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ],
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     ),
