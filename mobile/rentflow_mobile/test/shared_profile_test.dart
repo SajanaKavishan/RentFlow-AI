@@ -83,7 +83,15 @@ void main() {
         find.text('Notifications'),
         hasPreferences ? findsOneWidget : findsNothing,
       );
-      expect(find.text('Support'), findsNothing);
+      expect(
+        find.text('Support'),
+        role == UserRole.admin ? findsNothing : findsOneWidget,
+      );
+      expect(
+        find.text('Help & support'),
+        role == UserRole.admin ? findsNothing : findsOneWidget,
+      );
+      expect(find.text('Feedback'), findsNothing);
       expect(
         find.text('Application documents'),
         role == UserRole.tenant ? findsOneWidget : findsNothing,
@@ -174,12 +182,7 @@ void main() {
     'duplicate and deferred options are omitted without dead actions',
     (tester) async {
       await pumpProfile(tester);
-      for (final label in [
-        'Email & phone',
-        'Language',
-        'Help & support',
-        'Feedback',
-      ]) {
+      for (final label in ['Email & phone', 'Language', 'Feedback']) {
         expect(find.text(label), findsNothing);
       }
       expect(find.text('Not available yet'), findsNothing);

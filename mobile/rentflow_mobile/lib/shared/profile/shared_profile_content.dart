@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../features/auth/controllers/auth_controller.dart';
 import '../../features/auth/models/current_user.dart';
 import '../../features/notifications/services/notification_preferences_api_service.dart';
+import '../../features/support/services/support_ticket_api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
 import 'public_contact_editor.dart';
@@ -10,6 +11,7 @@ import 'personal_information_screen.dart';
 import 'profile_avatar.dart';
 import 'password_security_screen.dart';
 import 'notification_preferences_screen.dart';
+import 'help_support_screen.dart';
 
 class SharedProfileContent extends StatelessWidget {
   const SharedProfileContent({
@@ -125,6 +127,28 @@ class SharedProfileContent extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (_) => NotificationPreferencesScreen(
                         service: NotificationPreferencesApiService(
+                          AuthScope.of(context).authService.apiClient,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (currentUser.role != UserRole.admin) ...[
+            const SizedBox(height: AppSpacing.lg),
+            _ProfileSection(
+              title: 'Support',
+              children: [
+                _ProfileTile(
+                  icon: Icons.help_outline,
+                  title: 'Help & support',
+                  subtitle: 'Send a request and track its status',
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => HelpSupportScreen(
+                        service: SupportTicketApiService(
                           AuthScope.of(context).authService.apiClient,
                         ),
                       ),

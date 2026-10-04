@@ -591,7 +591,8 @@ void main() {
     expect(find.text('Account'), findsOneWidget);
     expect(find.text('Preferences'), findsOneWidget);
     expect(find.text('Notifications'), findsOneWidget);
-    expect(find.text('Support'), findsNothing);
+    expect(find.text('Support'), findsOneWidget);
+    expect(find.text('Help & support'), findsOneWidget);
   });
 
   testWidgets(
