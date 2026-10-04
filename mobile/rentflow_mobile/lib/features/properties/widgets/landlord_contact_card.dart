@@ -119,19 +119,21 @@ class _LandlordContactCardState extends State<LandlordContactCard>
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                IconButton.filledTonal(
-                  key: const Key('landlord-call'),
-                  tooltip: 'Call landlord',
-                  style: IconButton.styleFrom(
-                    minimumSize: const Size(44, 44),
-                    backgroundColor: AppPalette.softCream,
-                    foregroundColor: AppPalette.olive,
-                  ),
-                  onPressed: _call,
-                  icon: const Icon(
-                    Icons.phone_outlined,
-                    size: 22,
-                    semanticLabel: 'Call landlord',
+                Tooltip(
+                  message: 'Call landlord',
+                  child: TextButton.icon(
+                    key: const Key('landlord-call'),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(44, 44),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      foregroundColor: AppPalette.olive,
+                      textStyle: AppTypography.body.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    onPressed: _call,
+                    icon: const Icon(Icons.phone_outlined, size: 18),
+                    label: const Text('Call', semanticsLabel: 'Call landlord'),
                   ),
                 ),
               ],

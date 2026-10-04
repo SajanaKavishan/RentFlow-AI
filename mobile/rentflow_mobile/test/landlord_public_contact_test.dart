@@ -97,13 +97,14 @@ void main() {
       await open(tester);
       final callIcon = find.byKey(const Key('landlord-call'));
       await scrollToVisible(tester, callIcon, 250);
+      expect(find.text('Call'), findsOneWidget);
       final node = tester.getSemantics(find.bySemanticsLabel('Call landlord'));
       expect(node.label, 'Call landlord');
       expect(node.flagsCollection.isButton, isTrue);
       expect(node.flagsCollection.isEnabled, Tristate.isTrue);
       expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
       semantics.dispose();
-      await tapVisible(tester, callIcon);
+      await tapVisible(tester, find.text('Call'));
       expect(launched?.method, 'launch');
       expect((launched?.arguments as Map)['url'], 'tel:+94771234567');
       expect((launched?.arguments as Map)['useWebView'], isFalse);
@@ -118,6 +119,7 @@ void main() {
         expect(find.text(phone), findsOneWidget);
         expect(find.byTooltip('Call landlord'), findsOneWidget);
         expect(find.byIcon(Icons.phone_outlined), findsOneWidget);
+        expect(find.text('Call'), findsOneWidget);
         expect(find.text('Call landlord'), findsNothing);
         expect(
           find
@@ -163,6 +165,7 @@ void main() {
         }
         expect(find.text('Contact landlord'), findsNothing);
         expect(find.byTooltip('Call landlord'), findsNothing);
+        expect(find.text('Call'), findsNothing);
         expect(find.text(phone), findsNothing);
         expect(tester.takeException(), isNull);
       });
@@ -301,6 +304,7 @@ void main() {
     await tapVisible(tester, find.text(phone));
     expect(find.byTooltip('Call landlord'), findsOneWidget);
     expect(find.byIcon(Icons.phone_outlined), findsOneWidget);
+    expect(find.text('Call'), findsOneWidget);
     expect(find.text('Call landlord'), findsNothing);
     expect(
       find
@@ -362,6 +366,7 @@ void main() {
               180,
             );
             expect(find.text(longPhone), findsOneWidget);
+            expect(find.text('Call'), findsOneWidget);
             expect(find.text('Call landlord'), findsNothing);
             final numberRect = tester.getRect(find.text(longPhone));
             final iconRect = tester.getRect(
