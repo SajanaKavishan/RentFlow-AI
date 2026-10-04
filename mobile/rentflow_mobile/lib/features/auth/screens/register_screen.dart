@@ -147,6 +147,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: 6),
             DropdownButtonFormField<UserRole>(
               key: const Key('register-role'),
+              isExpanded: true,
               initialValue: _role,
               decoration: const InputDecoration(),
               items: RegisterScreen.publicRoles

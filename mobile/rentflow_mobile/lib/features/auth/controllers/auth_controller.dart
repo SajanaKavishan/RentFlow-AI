@@ -95,6 +95,9 @@ class AuthController extends ChangeNotifier {
     await _accept(result);
   }
 
+  Future<void> requestPasswordReset({required String email}) =>
+      authService.requestPasswordReset(email: email);
+
   Future<void> register({
     required String fullName,
     required String email,

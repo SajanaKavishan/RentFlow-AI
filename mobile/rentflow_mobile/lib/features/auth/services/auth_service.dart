@@ -6,6 +6,7 @@ import 'package:http_parser/http_parser.dart';
 
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/validation/recovery_email.dart';
 import '../models/current_user.dart';
 import '../models/profile_image_file.dart';
 import '../models/password_change_result.dart';
@@ -19,6 +20,54 @@ class AuthResult {
 class AuthService {
   const AuthService(this.apiClient);
   final ApiClient apiClient;
+
+  // Keep this identical to the backend's generic response. Never surface the
+  // optional development reset link, tokens, or account-specific response text.
+  static const passwordResetConfirmation =
+      'If an account matches that email, password reset instructions will be sent.';
+
+  Future<void> requestPasswordReset({required String email}) async {
+    final validationError = validateRecoveryEmail(email);
+    if (validationError != null) throw AuthException(validationError);
+    try {
+      final response = await apiClient.post(
+        apiClient.buildUri('${ApiConstants.authPath}/forgot-password'),
+        body: jsonEncode({'email': email.trim()}),
+        authenticated: false,
+      );
+      if (response.statusCode == 429) {
+        throw const AuthException(
+          'Too many password reset requests. Wait a minute and try again.',
+          statusCode: 429,
+        );
+      }
+      if (response.statusCode == 400) {
+        throw const AuthException(
+          'Check your email address and try again.',
+          statusCode: 400,
+        );
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw AuthException(
+          'Password reset instructions could not be requested. Please try again.',
+          statusCode: response.statusCode,
+        );
+      }
+      final message = _object(response.body)['message'];
+      if (message is! String || message.trim().isEmpty) {
+        throw const FormatException();
+      }
+    } on http.ClientException {
+      throw const AuthException(
+        'Unable to connect. Please try again.',
+        isConnectionFailure: true,
+      );
+    } on FormatException {
+      throw const AuthException(
+        'Password reset instructions could not be confirmed. Please try again.',
+      );
+    }
+  }
 
   Future<PasswordChangeResult> changePassword({
     required String currentPassword,

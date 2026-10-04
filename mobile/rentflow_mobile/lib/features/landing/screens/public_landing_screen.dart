@@ -67,12 +67,13 @@ class _PublicLandingScreenState extends State<PublicLandingScreen>
   }
 
   Future<void> _explore() async {
-    final heroExtent = math.max(MediaQuery.sizeOf(context).height, 680);
-    await _scrollController.animateTo(
-      heroExtent
-          .clamp(0, _scrollController.position.maxScrollExtent)
-          .toDouble(),
-      duration: const Duration(milliseconds: 720),
+    final target = _platformKey.currentContext;
+    if (target == null) return;
+    await Scrollable.ensureVisible(
+      target,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 720),
       curve: Curves.easeInOutCubic,
     );
   }
@@ -97,9 +98,12 @@ class _PublicLandingScreenState extends State<PublicLandingScreen>
           slivers: [
             SliverToBoxAdapter(child: _hero(context)),
             SliverToBoxAdapter(
-              child: _RevealOnScroll(
-                controller: _scrollController,
-                child: KeyedSubtree(key: _platformKey, child: _platform()),
+              child: KeyedSubtree(
+                key: _platformKey,
+                child: _RevealOnScroll(
+                  controller: _scrollController,
+                  child: _platform(),
+                ),
               ),
             ),
             SliverToBoxAdapter(
@@ -150,200 +154,211 @@ class _PublicLandingScreenState extends State<PublicLandingScreen>
             curve: Curves.easeOutCubic,
           );
 
-    return SizedBox(
+    return ConstrainedBox(
       key: const Key('public-hero'),
-      height: math.max(viewportHeight, 680),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ScaleTransition(
-            scale: Tween(begin: 1.045, end: 1.0).animate(animation),
-            child: Image.asset(
-              'assets/auth/residence.png',
-              fit: BoxFit.cover,
-              alignment: const Alignment(.25, 0),
-              excludeFromSemantics: true,
-            ),
-          ),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xEE1A2210), Color(0xA63A4726)],
+      constraints: BoxConstraints(minHeight: math.max(viewportHeight, 680)),
+      child: IntrinsicHeight(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: ScaleTransition(
+                scale: Tween(begin: 1.045, end: 1.0).animate(animation),
+                child: Image.asset(
+                  'assets/auth/residence.png',
+                  fit: BoxFit.cover,
+                  alignment: const Alignment(.25, 0),
+                  excludeFromSemantics: true,
+                ),
               ),
             ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  FadeTransition(
-                    opacity: animation,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Semantics(
-                                label: 'RentFlow AI',
-                                child: const RentFlowBrand(
-                                  markSize: 44,
-                                  textSize: 17,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        OutlinedButton(
-                          key: const Key('public-sign-in'),
-                          onPressed: () => _open(const LoginScreen()),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Color(0x66FFFFFF)),
-                            minimumSize: const Size(76, 40),
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            shape: const StadiumBorder(),
-                          ),
-                          child: const Text(
-                            'Sign In',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ],
-                    ),
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xEE1A2210), Color(0xA63A4726)],
                   ),
-                  Expanded(
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 430),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _HeroEntrance(
-                              animation: _entranceController,
-                              interval: const Interval(.12, .68),
-                              child: const Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'A BETTER WAY TO RENT',
-                                    style: TextStyle(
-                                      color: _LandingColors.sage,
-                                      fontSize: AppTypography.captionSize,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 1.8,
-                                    ),
-                                  ),
-                                  SizedBox(height: 20),
-                                  Text(
-                                    'Find your perfect home, smarter.',
-                                    key: Key('public-hero-title'),
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: AppTypography.displaySize,
-                                      height: 1.15,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: -0.4,
-                                    ),
-                                  ),
-                                  SizedBox(height: 22),
-                                  Text(
-                                    'AI-powered rental search and management for a simpler rental journey.',
-                                    style: TextStyle(
-                                      color: Color(0xD9FFFFFF),
-                                      fontSize: AppTypography.cardTitleSize,
-                                      height: 1.55,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 34),
-                            _HeroEntrance(
-                              animation: _entranceController,
-                              interval: const Interval(.35, 1),
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 310,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      FilledButton.icon(
-                                        key: const Key('public-get-started'),
-                                        onPressed: () =>
-                                            _open(const RegisterScreen()),
-                                        iconAlignment: IconAlignment.end,
-                                        icon: const Icon(
-                                          Icons.arrow_forward_rounded,
-                                          size: 19,
-                                        ),
-                                        label: const Text('Get Started'),
-                                        style: FilledButton.styleFrom(
-                                          minimumSize: const Size.fromHeight(
-                                            52,
-                                          ),
-                                          foregroundColor:
-                                              _LandingColors.olive900,
-                                          backgroundColor: _LandingColors.sage,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              14,
-                                            ),
-                                          ),
-                                          textStyle: AppTypography.button,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 20),
-                                      OutlinedButton.icon(
-                                        key: const Key('public-explore'),
-                                        onPressed: _explore,
-                                        iconAlignment: IconAlignment.end,
-                                        label: const Text(
-                                          'Explore the platform',
-                                        ),
-                                        style: OutlinedButton.styleFrom(
-                                          minimumSize: const Size.fromHeight(
-                                            48,
-                                          ),
-                                          foregroundColor: Colors.white,
-                                          side: const BorderSide(
-                                            color: Color(0x73FFFFFF),
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              14,
-                                            ),
-                                          ),
-                                          textStyle: AppTypography.button,
-                                        ),
-                                      ),
-                                    ],
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FadeTransition(
+                      opacity: animation,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Semantics(
+                                  label: 'RentFlow AI',
+                                  child: const RentFlowBrand(
+                                    markSize: 44,
+                                    textSize: 17,
                                   ),
                                 ),
                               ),
                             ),
-                          ],
+                          ),
+                          const SizedBox(width: 14),
+                          OutlinedButton(
+                            key: const Key('public-sign-in'),
+                            onPressed: () => _open(const LoginScreen()),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Color(0x66FFFFFF)),
+                              minimumSize: const Size(76, 40),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
+                              shape: const StadiumBorder(),
+                            ),
+                            child: const Text(
+                              'Sign In',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 430),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _HeroEntrance(
+                                animation: _entranceController,
+                                interval: const Interval(.12, .68),
+                                child: const Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'A BETTER WAY TO RENT',
+                                      style: TextStyle(
+                                        color: _LandingColors.sage,
+                                        fontSize: AppTypography.captionSize,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.8,
+                                      ),
+                                    ),
+                                    SizedBox(height: 20),
+                                    Text(
+                                      'Find your perfect home, smarter.',
+                                      key: Key('public-hero-title'),
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: AppTypography.displaySize,
+                                        height: 1.15,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: -0.4,
+                                      ),
+                                    ),
+                                    SizedBox(height: 22),
+                                    Text(
+                                      'AI-powered rental search and management for a simpler rental journey.',
+                                      style: TextStyle(
+                                        color: Color(0xD9FFFFFF),
+                                        fontSize: AppTypography.cardTitleSize,
+                                        height: 1.55,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 34),
+                              _HeroEntrance(
+                                animation: _entranceController,
+                                interval: const Interval(.35, 1),
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 310,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        FilledButton.icon(
+                                          key: const Key('public-get-started'),
+                                          onPressed: () =>
+                                              _open(const RegisterScreen()),
+                                          iconAlignment: IconAlignment.end,
+                                          icon: const Icon(
+                                            Icons.arrow_forward_rounded,
+                                            size: 19,
+                                          ),
+                                          label: const Text('Get Started'),
+                                          style: FilledButton.styleFrom(
+                                            minimumSize: const Size.fromHeight(
+                                              52,
+                                            ),
+                                            foregroundColor:
+                                                _LandingColors.olive900,
+                                            backgroundColor:
+                                                _LandingColors.sage,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                            ),
+                                            textStyle: AppTypography.button,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 20),
+                                        OutlinedButton.icon(
+                                          key: const Key('public-explore'),
+                                          // Describe the in-page action to assistive technology.
+                                          onPressed: _explore,
+                                          iconAlignment: IconAlignment.end,
+                                          label: Semantics(
+                                            hint: 'Scroll to platform features',
+                                            child: const Text(
+                                              'Explore the platform',
+                                            ),
+                                          ),
+                                          style: OutlinedButton.styleFrom(
+                                            minimumSize: const Size.fromHeight(
+                                              48,
+                                            ),
+                                            foregroundColor: Colors.white,
+                                            side: const BorderSide(
+                                              color: Color(0x73FFFFFF),
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                            ),
+                                            textStyle: AppTypography.button,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
