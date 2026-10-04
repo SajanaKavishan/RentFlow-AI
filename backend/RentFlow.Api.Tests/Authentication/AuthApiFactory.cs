@@ -38,6 +38,8 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 
     public IPropertyMatchingAgentClient? PropertyMatchingAgentClient { get; init; }
 
+    public IMaintenanceCoordinationAgentClient? MaintenanceCoordinationAgentClient { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(_environmentName);
@@ -115,6 +117,12 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
             {
                 services.RemoveAll<IPropertyMatchingAgentClient>();
                 services.AddSingleton(PropertyMatchingAgentClient);
+            }
+
+            if (MaintenanceCoordinationAgentClient is not null)
+            {
+                services.RemoveAll<IMaintenanceCoordinationAgentClient>();
+                services.AddSingleton(MaintenanceCoordinationAgentClient);
             }
         });
     }
