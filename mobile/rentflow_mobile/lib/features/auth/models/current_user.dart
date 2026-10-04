@@ -20,6 +20,7 @@ class CurrentUser {
     required this.email,
     required this.phoneNumber,
     required this.role,
+    this.hasProfileImage = false,
     this.publicContactPhone,
     this.publicContactEnabled = false,
   });
@@ -29,6 +30,7 @@ class CurrentUser {
   final String email;
   final String phoneNumber;
   final UserRole role;
+  final bool hasProfileImage;
   final String? publicContactPhone;
   final bool publicContactEnabled;
 
@@ -49,6 +51,7 @@ class CurrentUser {
       email: email,
       phoneNumber: phoneNumber,
       role: UserRole.parse(json['role']),
+      hasProfileImage: json['hasProfileImage'] == true,
       publicContactPhone:
           json['role'] == UserRole.landlord.value &&
               json['publicContactPhone'] is String

@@ -321,7 +321,12 @@ class _SharedAppShellState extends State<SharedAppShell>
             fit: BoxFit.contain,
             semanticLabel: 'RentFlow AI',
           )
-        : Text(selected.label),
+        : Text(
+            selected.label,
+            style: selected.id == RoleDestinationId.profile
+                ? AppTypography.pageTitle
+                : null,
+          ),
     actions: switch (selected.id) {
       RoleDestinationId.home => [
         IconButton(

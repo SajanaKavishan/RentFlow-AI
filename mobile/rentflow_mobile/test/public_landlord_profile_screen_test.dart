@@ -92,23 +92,28 @@ void main() {
       expect(find.byTooltip('Back'), findsOneWidget);
       expect(find.byIcon(Icons.star), findsNothing);
       expect(find.text('Member since 2022'), findsOneWidget);
-      expect(find.text('Other properties'), findsNWidgets(2));
+      expect(find.text('Other properties'), findsOneWidget);
       expect(find.text('1 available property'), findsOneWidget);
       expect(
-        tester
-                .getTopLeft(
-                  find.descendant(
-                    of: find.byType(ListView),
-                    matching: find.text('Other properties'),
-                  ),
-                )
-                .dy -
-            tester
-                .getBottomLeft(
-                  find.byKey(const Key('landlord-listings-identity')),
-                )
-                .dy,
-        16,
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Other properties'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ListView),
+          matching: find.byKey(const Key('landlord-listings-identity')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ListView),
+          matching: find.byType(PropertyCard),
+        ),
+        findsOneWidget,
       );
       final avatar = tester.widget<PublicLandlordAvatar>(
         find.byType(PublicLandlordAvatar),
@@ -242,7 +247,7 @@ void main() {
     (tester) async {
       backend.properties = [fixture.propertyJson()];
       await openProfile(tester, backend);
-      expect(find.text('Other properties'), findsNWidgets(2));
+      expect(find.text('Other properties'), findsOneWidget);
       expect(find.text('0 available properties'), findsOneWidget);
       expect(
         find.text('No other properties are currently available.'),

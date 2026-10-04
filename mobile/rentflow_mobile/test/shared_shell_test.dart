@@ -588,9 +588,9 @@ void main() {
     await tester.tap(navigationDestination('Profile'));
     await tester.pumpAndSettle();
     expect(find.text('user@example.com'), findsOneWidget);
-    for (final section in ['Account', 'Preferences', 'Support']) {
-      expect(find.text(section), findsOneWidget);
-    }
+    expect(find.text('Account'), findsOneWidget);
+    expect(find.text('Preferences'), findsNothing);
+    expect(find.text('Support'), findsNothing);
   });
 
   testWidgets(

@@ -9,6 +9,9 @@ import 'package:rentflow_mobile/features/application_documents/screens/applicati
 import 'package:rentflow_mobile/features/auth/models/current_user.dart';
 import 'package:rentflow_mobile/shared/profile/shared_profile_content.dart';
 import 'package:rentflow_mobile/shared/theme/app_theme.dart';
+import 'package:rentflow_mobile/shared/profile/personal_information_screen.dart';
+
+import 'helpers/profile_backend.dart';
 
 import 'shared_shell_test.dart' as shell;
 import 'widget_test.dart' as fixtures;
@@ -67,16 +70,20 @@ void main() {
       ]) {
         expect(find.text(label), findsNothing);
       }
-      for (final label in ['Account', 'Preferences', 'Support']) {
-        expect(find.text(label), findsOneWidget);
-      }
+      expect(find.text('Account'), findsOneWidget);
+      expect(find.text('Preferences'), findsNothing);
+      expect(find.text('Support'), findsNothing);
       expect(
-        find.text('My documents'),
+        find.text('Application documents'),
         role == UserRole.tenant ? findsOneWidget : findsNothing,
       );
       expect(find.text('Sign out'), findsOneWidget);
       expect(
         find.text('Reviews'),
+        role == UserRole.landlord ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text('Public contact'),
         role == UserRole.landlord ? findsOneWidget : findsNothing,
       );
       expect(find.text('RentFlow AI v2.4.1 · © 2026'), findsOneWidget);
@@ -111,32 +118,37 @@ void main() {
     expect(opened, isTrue);
   });
 
-  testWidgets('account details use current user data and remain read-only', (
+  testWidgets('personal information opens a dedicated account screen', (
     tester,
   ) async {
-    await pumpProfile(tester);
+    final backend = ProfileBackend();
+    addTearDown(backend.dispose);
+    await backend.pump(
+      tester,
+      (user) => Scaffold(body: SharedProfileContent(user: user)),
+    );
     await tester.tap(find.text('Personal information'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(SelectableText, 'Amara Silva'), findsOneWidget);
+    expect(find.byType(PersonalInformationScreen), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
     expect(
-      find.text('These details are read-only. Editing is unavailable.'),
-      findsOneWidget,
-    );
-    expect(find.byType(TextField), findsNothing);
-    await tester.tap(find.text('Close'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Email & phone'));
-    await tester.pumpAndSettle();
-    expect(
-      find.widgetWithText(SelectableText, 'amara.silva@example.com'),
-      findsOneWidget,
+      tester
+          .widget<TextFormField>(find.byKey(const Key('profile-full-name')))
+          .controller!
+          .text,
+      'Amara Silva',
     );
     expect(
-      find.widgetWithText(SelectableText, '+94 77 123 4567'),
-      findsOneWidget,
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byKey(const Key('profile-email')),
+              matching: find.byType(TextField),
+            ),
+          )
+          .readOnly,
+      isTrue,
     );
-    expect(find.byType(TextField), findsNothing);
-    expect(find.text('Save'), findsNothing);
   });
 
   testWidgets('missing identity values do not become fictional account data', (
@@ -145,53 +157,29 @@ void main() {
     await pumpProfile(tester, user: profileUser(UserRole.tenant, empty: true));
     expect(find.text('?'), findsOneWidget);
     expect(find.text('Not provided'), findsNWidgets(2));
-    await tester.tap(find.text('Email & phone'));
-    await tester.pumpAndSettle();
-    expect(
-      find.widgetWithText(SelectableText, 'Not provided'),
-      findsNWidgets(2),
-    );
   });
 
   testWidgets(
-    'unsupported options are visibly unavailable and non-interactive',
+    'duplicate and deferred options are omitted without dead actions',
     (tester) async {
       await pumpProfile(tester);
       for (final label in [
         'Password & security',
-        'My documents',
+        'Email & phone',
         'Notifications',
         'Language',
         'Help & support',
         'Feedback',
       ]) {
-        final tile = find.ancestor(
-          of: find.text(label),
-          matching: find.byType(InkWell),
-        );
-        expect(tester.widget<InkWell>(tile).onTap, isNull);
-        expect(
-          find.descendant(of: tile, matching: find.byIcon(Icons.chevron_right)),
-          findsNothing,
-        );
-        expect(
-          find.descendant(
-            of: tile,
-            matching: find.text(
-              label == 'Feedback'
-                  ? 'Message delivery unavailable'
-                  : 'Not available yet',
-            ),
-          ),
-          findsOneWidget,
-        );
+        expect(find.text(label), findsNothing);
       }
+      expect(find.text('Not available yet'), findsNothing);
       expect(find.byType(Switch), findsNothing);
     },
   );
 
   testWidgets(
-    'tenant My documents reaches existing application documents flow',
+    'tenant Application documents reaches existing application documents flow',
     (tester) async {
       const applicationId = '66666666-6666-4666-8666-666666666666';
       final paths = <String>[];
@@ -242,8 +230,8 @@ void main() {
       await shell.pumpShell(tester, UserRole.tenant, apiClient: api);
       await tester.tap(shell.navigationDestination('Profile'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('My documents'));
-      await tester.tap(find.text('My documents'));
+      await tester.ensureVisible(find.text('Application documents'));
+      await tester.tap(find.text('Application documents'));
       await tester.pumpAndSettle();
       expect(
         find.text('Open an application to view or manage its documents.'),
@@ -299,13 +287,6 @@ void main() {
         expect(tester.getBottomRight(signOut).dy, lessThanOrEqualTo(616));
         expect(tester.getTopLeft(signOut).dx, greaterThanOrEqualTo(12));
         expect(tester.getSize(signOut).width, lessThanOrEqualTo(580));
-        expect(tester.takeException(), isNull);
-        await tester.ensureVisible(find.text('Email & phone'));
-        await tester.tap(find.text('Email & phone'));
-        await tester.pumpAndSettle();
-        await tester.ensureVisible(find.text('Close'));
-        await tester.tap(find.text('Close'));
-        await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
       }

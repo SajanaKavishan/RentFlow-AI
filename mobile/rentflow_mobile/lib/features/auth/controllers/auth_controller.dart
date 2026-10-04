@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import '../../../core/auth/token_storage.dart';
 import '../models/current_user.dart';
+import '../models/profile_image_file.dart';
 import '../services/auth_service.dart';
 
 class AuthController extends ChangeNotifier {
@@ -12,12 +14,34 @@ class AuthController extends ChangeNotifier {
   final TokenStorage tokenStorage;
   CurrentUser? _currentUser;
   bool _isLoading = true;
+  int _profileImageRevision = 0;
+  Future<Uint8List?>? _profileImageRequest;
 
   CurrentUser? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
   bool get isLoading => _isLoading;
+  int get profileImageRevision => _profileImageRevision;
+
+  void _invalidateProfileImage() {
+    _profileImageRevision++;
+    _profileImageRequest = null;
+  }
+
+  // Share one authenticated fetch between mounted avatars. Failures stay local
+  // to the photo; logout/replacement cannot reuse an earlier request's bytes.
+  Future<Uint8List?> loadProfileImage() {
+    if (_currentUser?.hasProfileImage != true) return Future.value(null);
+    final revision = _profileImageRevision;
+    return _profileImageRequest ??= authService
+        .getProfileImage()
+        .then<Uint8List?>(
+          (bytes) => revision == _profileImageRevision ? bytes : null,
+          onError: (Object error) => null,
+        );
+  }
 
   Future<void> restoreSession() async {
+    _invalidateProfileImage();
     _isLoading = true;
     notifyListeners();
     try {
@@ -82,6 +106,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> _accept(AuthResult result) async {
+    _invalidateProfileImage();
     await tokenStorage
         .saveToken(result.accessToken)
         .timeout(authService.apiClient.requestTimeout);
@@ -95,9 +120,45 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> handleUnauthorized() async {
+    _invalidateProfileImage();
     _currentUser = null;
     notifyListeners();
     await _deleteStoredToken();
+  }
+
+  Future<CurrentUser> updateProfile({
+    required String fullName,
+    required String phoneNumber,
+  }) async {
+    final userId = _currentUser?.id;
+    final revision = _profileImageRevision;
+    if (userId == null) {
+      throw const AuthException('Sign in to update your profile.');
+    }
+    final updated = await authService.updateProfile(
+      fullName: fullName,
+      phoneNumber: phoneNumber,
+    );
+    if (_currentUser?.id == userId && revision == _profileImageRevision) {
+      _currentUser = updated;
+      notifyListeners();
+    }
+    return updated;
+  }
+
+  Future<CurrentUser> uploadProfileImage(ProfileImageFile image) async {
+    final userId = _currentUser?.id;
+    final revision = _profileImageRevision;
+    if (userId == null) {
+      throw const AuthException('Sign in to update your profile.');
+    }
+    final updated = await authService.uploadProfileImage(image);
+    if (_currentUser?.id == userId && revision == _profileImageRevision) {
+      _currentUser = updated;
+      _invalidateProfileImage();
+      notifyListeners();
+    }
+    return updated;
   }
 
   Future<CurrentUser> updatePublicContact(
@@ -112,6 +173,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    _invalidateProfileImage();
     _currentUser = null;
     notifyListeners();
     await _deleteStoredToken();
@@ -126,8 +188,11 @@ class AuthScope extends InheritedNotifier<AuthController> {
   }) : super(notifier: controller);
 
   static AuthController of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<AuthScope>();
-    assert(scope != null, 'AuthScope was not found.');
-    return scope!.notifier!;
+    final controller = maybeOf(context);
+    assert(controller != null, 'AuthScope was not found.');
+    return controller!;
   }
+
+  static AuthController? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AuthScope>()?.notifier;
 }
