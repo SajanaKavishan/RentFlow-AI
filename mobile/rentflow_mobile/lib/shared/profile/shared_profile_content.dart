@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../features/auth/controllers/auth_controller.dart';
 import '../../features/auth/models/current_user.dart';
+import '../../features/application_documents/screens/tenant_documents_screen.dart';
 import '../../features/notifications/services/notification_preferences_api_service.dart';
+import '../../features/properties/screens/match_preferences_screen.dart';
+import '../../features/properties/services/property_api_service.dart';
+import '../../features/rental_applications/services/rental_application_api_service.dart';
 import '../../features/support/services/support_ticket_api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
@@ -17,13 +21,15 @@ class SharedProfileContent extends StatelessWidget {
   const SharedProfileContent({
     super.key,
     required this.user,
-    this.onOpenApplications,
+    this.onOpenDocuments,
     this.onOpenReviews,
+    this.propertyApiService,
   });
 
   final CurrentUser user;
-  final VoidCallback? onOpenApplications;
+  final VoidCallback? onOpenDocuments;
   final VoidCallback? onOpenReviews;
+  final PropertyApiService? propertyApiService;
 
   @override
   Widget build(BuildContext context) {
@@ -34,11 +40,11 @@ class SharedProfileContent extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             child: Column(
               children: [
                 ProfileAvatar(user: currentUser),
-                const SizedBox(height: AppSpacing.base),
+                const SizedBox(height: AppSpacing.md),
                 Text(
                   _availableValue(currentUser.fullName),
                   textAlign: TextAlign.center,
@@ -53,7 +59,7 @@ class SharedProfileContent extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.base),
           _ProfileSection(
             title: 'Account',
             children: [
@@ -78,7 +84,7 @@ class SharedProfileContent extends StatelessWidget {
                   ),
                 ),
               ),
-              if (user.role == UserRole.landlord)
+              if (currentUser.role == UserRole.landlord)
                 _ProfileTile(
                   icon: Icons.phone_outlined,
                   title: 'Public contact',
@@ -97,14 +103,32 @@ class SharedProfileContent extends StatelessWidget {
                     );
                   },
                 ),
-              if (user.role == UserRole.tenant)
+              if (currentUser.role == UserRole.tenant)
                 _ProfileTile(
                   icon: Icons.folder_outlined,
                   title: 'Application documents',
-                  subtitle: 'View documents in your applications',
-                  onTap: onOpenApplications,
+                  subtitle:
+                      'View documents attached to your rental applications',
+                  onTap:
+                      onOpenDocuments ??
+                      () {
+                        final client = AuthScope.of(
+                          context,
+                        ).authService.apiClient;
+                        Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) => TenantDocumentsScreen(
+                              rentalApplicationApiService:
+                                  RentalApplicationApiService(client),
+                              propertyApiService:
+                                  propertyApiService ??
+                                  PropertyApiService(client),
+                            ),
+                          ),
+                        );
+                      },
                 ),
-              if (user.role == UserRole.landlord)
+              if (currentUser.role == UserRole.landlord)
                 _ProfileTile(
                   icon: Icons.star_outline,
                   title: 'Reviews',
@@ -133,6 +157,23 @@ class SharedProfileContent extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (currentUser.role == UserRole.tenant)
+                  _ProfileTile(
+                    icon: Icons.tune,
+                    title: 'Match preferences',
+                    subtitle: 'Update preferences used for property matching',
+                    onTap: () => Navigator.of(context).push<PreferenceChange>(
+                      MaterialPageRoute(
+                        builder: (_) => MatchPreferencesScreen(
+                          service:
+                              propertyApiService ??
+                              PropertyApiService(
+                                AuthScope.of(context).authService.apiClient,
+                              ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ],
@@ -197,9 +238,17 @@ class _ProfileSection extends StatelessWidget {
     children: [
       Padding(
         padding: const EdgeInsets.only(left: AppSpacing.xs),
-        child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+        child: Semantics(
+          header: true,
+          child: Text(
+            title,
+            style: AppTypography.label.copyWith(
+              color: AppPalette.secondaryText,
+            ),
+          ),
+        ),
       ),
-      const SizedBox(height: AppSpacing.md),
+      const SizedBox(height: AppSpacing.sm),
       AppCard(
         padding: EdgeInsets.zero,
         child: Column(
@@ -209,7 +258,7 @@ class _ProfileSection extends StatelessWidget {
               if (index < children.length - 1)
                 const Divider(
                   height: 1,
-                  indent: 56,
+                  indent: 54,
                   endIndent: AppSpacing.base,
                 ),
             ],
@@ -235,12 +284,18 @@ class _ProfileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
+    label: '$title\n$subtitle',
     button: true,
     enabled: onTap != null,
+    onTap: onTap,
+    excludeSemantics: true,
     child: InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.base),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.base,
+          vertical: AppSpacing.md,
+        ),
         child: Row(
           children: [
             Icon(icon, size: 22, color: AppPalette.olive),
@@ -249,9 +304,14 @@ class _ProfileTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: Theme.of(context).textTheme.titleMedium),
+                  Text(title, style: AppTypography.cardTitle),
                   const SizedBox(height: AppSpacing.xs),
-                  Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+                  Text(
+                    subtitle,
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppPalette.secondaryText,
+                    ),
+                  ),
                 ],
               ),
             ),

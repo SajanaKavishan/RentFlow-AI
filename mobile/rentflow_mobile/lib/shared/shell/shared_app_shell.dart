@@ -121,14 +121,6 @@ class _SharedAppShellState extends State<SharedAppShell>
     );
   }
 
-  void _openApplicationDocuments() {
-    AppSnackbars.show(
-      context,
-      message: 'Open an application to view or manage its documents.',
-    );
-    _selectDestination(RoleDestinationId.applications);
-  }
-
   void _openViewings() {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -356,6 +348,7 @@ class _SharedAppShellState extends State<SharedAppShell>
 
       DestinationExperience.profile => SharedProfileContent(
         user: widget.user,
+        propertyApiService: widget.propertyApiService,
         onOpenReviews: widget.user.role == UserRole.landlord
             ? () => Navigator.of(context).push<void>(
                 MaterialPageRoute(
@@ -369,8 +362,8 @@ class _SharedAppShellState extends State<SharedAppShell>
                 ),
               )
             : null,
-        onOpenApplications: widget.user.role == UserRole.tenant
-            ? _openApplicationDocuments
+        onOpenDocuments: widget.user.role == UserRole.tenant
+            ? _openDocuments
             : null,
       ),
 
