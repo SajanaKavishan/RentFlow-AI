@@ -43,4 +43,8 @@ public interface IViewingService
         Guid viewingId,
         Guid tenantId,
         CancellationToken cancellationToken = default);
+
+    Task<ViewingResponseDto> CompleteAsync(
+        Guid viewingId,
+        CancellationToken cancellationToken = default);
 }

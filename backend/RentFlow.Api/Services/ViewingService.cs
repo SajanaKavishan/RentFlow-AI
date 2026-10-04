@@ -247,6 +247,56 @@ public class ViewingService(
         return await MapToResponseAsync(viewing, cancellationToken);
     }
 
+    public async Task<ViewingResponseDto> CompleteAsync(
+        Guid viewingId,
+        CancellationToken cancellationToken = default)
+    {
+        var propertyId = await GetViewingPropertyIdAsync(viewingId, cancellationToken);
+        await using var transaction = await ViewingPropertyLock.AcquireAsync(dbContext, propertyId, cancellationToken);
+        var viewing = await GetTrackedViewingAsync(viewingId, cancellationToken);
+        var landlordId = await dbContext.Properties.AsNoTracking()
+            .Where(p => p.Id == viewing.PropertyId)
+            .Select(p => (Guid?)p.LandlordId).SingleOrDefaultAsync(cancellationToken);
+        // Recheck JWT actor and current ownership inside the existing property lock.
+        // Admin retains the same status-action policy as approve/reject.
+        if (!CanManageCompletion(landlordId))
+            throw ViewingServiceException.NotFound("The viewing request was not found.");
+
+        var now = Now;
+        var completionError = GetCompletionError(viewing, now);
+        if (completionError is not null)
+            throw ViewingServiceException.Conflict(completionError);
+
+        viewing.Status = ViewingStatus.Completed;
+        viewing.UpdatedAt = now;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        return await MapToResponseAsync(viewing, cancellationToken);
+    }
+
+    private bool CanManageCompletion(Guid? landlordId) =>
+        landlordId is not null
+        && currentUser is { IsAuthenticated: true, UserId: { } actorId }
+        && actorId != Guid.Empty
+        && (currentUser.Role == UserRole.Admin
+            || (currentUser.Role == UserRole.Landlord && actorId == landlordId));
+
+    private static DateTimeOffset? CompletionEligibleAt(ViewingRequest viewing) =>
+        viewing.Status == ViewingStatus.Approved && viewing.DurationMinutes > 0
+            ? viewing.RequestedDateTime.AddMinutes(viewing.DurationMinutes)
+            : null;
+
+    private static string? GetCompletionError(ViewingRequest viewing, DateTimeOffset now)
+    {
+        if (viewing.Status != ViewingStatus.Approved)
+            return "Only approved viewings may be changed to Completed.";
+        if (CompletionEligibleAt(viewing) is not { } end)
+            return "The viewing duration must be resolved before completion.";
+        if (now < end)
+            return "This viewing can only be marked completed after the scheduled viewing has ended.";
+        return null;
+    }
+
     private async Task<ViewingRequest> GetTrackedViewingAsync(
         Guid viewingId,
         CancellationToken cancellationToken)
@@ -308,20 +358,22 @@ public class ViewingService(
         {
             DisplayName = TenantDisplayName(tenant?.FullName),
             PhoneNumber = PhoneNumberValidation.UsablePhoneNumber(tenant?.PhoneNumber)
-        });
+        }, property?.LandlordId);
     }
 
     private async Task<IReadOnlyList<ViewingResponseDto>> MapListAsync(List<ViewingRequest> viewings, CancellationToken ct)
     {
         var ids = viewings.Select(v => v.PropertyId).Distinct().ToArray();
-        var zones = await dbContext.Properties.AsNoTracking().Where(p => ids.Contains(p.Id))
-            .ToDictionaryAsync(p => p.Id, p => p.ViewingTimeZoneId, ct);
+        var properties = await dbContext.Properties.AsNoTracking().Where(p => ids.Contains(p.Id))
+            .Select(p => new { p.Id, p.ViewingTimeZoneId, p.LandlordId })
+            .ToDictionaryAsync(p => p.Id, ct);
         var tenantIds = viewings.Select(v => v.TenantId).Distinct().ToArray();
         // Batch only the names needed by these viewings; no user directory or phone lookup.
         var names = await dbContext.Users.AsNoTracking().Where(u => tenantIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
-        return viewings.Select(v => MapToResponse(v, zones.GetValueOrDefault(v.PropertyId),
-            new ViewingTenantSummaryDto { DisplayName = TenantDisplayName(names.GetValueOrDefault(v.TenantId)) }))
+        return viewings.Select(v => MapToResponse(v, properties.GetValueOrDefault(v.PropertyId)?.ViewingTimeZoneId,
+            new ViewingTenantSummaryDto { DisplayName = TenantDisplayName(names.GetValueOrDefault(v.TenantId)) },
+            properties.GetValueOrDefault(v.PropertyId)?.LandlordId))
             .ToList();
     }
 
@@ -329,7 +381,7 @@ public class ViewingService(
         string.IsNullOrWhiteSpace(name) ? "Tenant" : name.Trim();
 
     private ViewingResponseDto MapToResponse(
-        ViewingRequest viewing, string? zoneId, ViewingTenantSummaryDto tenant)
+        ViewingRequest viewing, string? zoneId, ViewingTenantSummaryDto tenant, Guid? landlordId)
     {
         var local = zoneId is null ? (DateTimeOffset?)null : TimeZoneInfo.ConvertTime(viewing.RequestedDateTime,
             ViewingAvailabilityService.ResolveZone(zoneId));
@@ -347,6 +399,8 @@ public class ViewingService(
             Status = viewing.Status,
             CanCancel = GetCancellationError(viewing, Now) is null,
             CancellationDeadline = CancellationDeadline(viewing),
+            CanMarkCompleted = CanManageCompletion(landlordId) && GetCompletionError(viewing, Now) is null,
+            CompletionEligibleAt = CompletionEligibleAt(viewing),
             TenantMessage = viewing.TenantMessage,
             LandlordResponse = viewing.LandlordResponse,
             CreatedAt = viewing.CreatedAt,

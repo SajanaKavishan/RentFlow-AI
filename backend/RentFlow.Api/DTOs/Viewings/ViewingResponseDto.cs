@@ -29,6 +29,12 @@ public class ViewingResponseDto
     /// <summary>Inclusive cancellation deadline for Approved viewings only.</summary>
     public DateTimeOffset? CancellationDeadline { get; set; }
 
+    /// <summary>Server completion eligibility for the authenticated property owner or Admin.</summary>
+    public bool CanMarkCompleted { get; set; }
+
+    /// <summary>Inclusive scheduled end for Approved viewings with a valid duration.</summary>
+    public DateTimeOffset? CompletionEligibleAt { get; set; }
+
     public string? TenantMessage { get; set; }
 
     public string? LandlordResponse { get; set; }

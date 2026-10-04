@@ -131,6 +131,26 @@ public class ViewingsController(
             result => Ok(result));
     }
 
+    [HttpPatch("{id:guid}/complete")]
+    [Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
+    [ProducesResponseType<ViewingResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<ViewingResponseDto>> Complete(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteAsync(
+            async () =>
+            {
+                await EnsureLandlordCanAccessViewingAsync(id, cancellationToken);
+                return await viewingService.CompleteAsync(id, cancellationToken);
+            },
+            result => Ok(result));
+    }
+
     private async Task<ViewingResponseDto> GetAuthorizedViewingAsync(
         Guid id,
         CancellationToken cancellationToken)

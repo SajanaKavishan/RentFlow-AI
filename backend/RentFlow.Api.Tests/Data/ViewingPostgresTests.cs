@@ -6,6 +6,7 @@ using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.Viewings;
 using RentFlow.Api.Models;
 using RentFlow.Api.Services;
+using RentFlow.Api.Tests.Services;
 using Xunit;
 
 namespace RentFlow.Api.Tests.Data;
@@ -117,6 +118,75 @@ public sealed class ViewingPostgresTests
         var conflict = await Assert.ThrowsAsync<ViewingServiceException>(() => createService.CreateAsync(Guid.NewGuid(),
             new() { PropertyId = property.Id, RequestedDateTime = blocked[0].RequestedDateTime, TenantMessage = "Visit" }));
         Assert.Equal(ViewingServiceError.Conflict, conflict.Error);
+    }
+
+    [PostgreSqlFact]
+    public async Task CompetingCompletions_WaitForPropertyLock_ReloadStateAndRejectRepeat()
+    {
+        await using var database = new Database();
+        await database.CreateAsync();
+        await using var setup = new ApplicationDbContext(database.Options);
+        var (property, slot) = await SeedAsync(setup);
+        var tenant = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            FullName = "Test tenant", Email = $"{Guid.NewGuid():N}@example.test",
+            NormalizedEmail = Guid.NewGuid().ToString("N"), PhoneNumber = "0000000000",
+            PasswordHash = "test-only", Role = UserRole.Tenant
+        };
+        var viewing = new ViewingRequest
+        {
+            PropertyId = property.Id, TenantId = tenant.Id, RequestedDateTime = slot.RequestedDateTime,
+            DurationMinutes = 30, Status = ViewingStatus.Approved
+        };
+        setup.AddRange(tenant, viewing);
+        await setup.SaveChangesAsync();
+        var clock = new ViewingCancellationTests.Clock(viewing.RequestedDateTime.AddMinutes(30).AddTicks(-1));
+        var actor = new ViewingCompletionTests.Actor(property.LandlordId, UserRole.Landlord);
+        var service = new ViewingService(setup, clock, actor);
+        Assert.Equal(ViewingServiceError.Conflict,
+            (await Assert.ThrowsAsync<ViewingServiceException>(() => service.CompleteAsync(viewing.Id))).Error);
+        clock.Now = clock.Now.AddTicks(1);
+        await using var blocker = new ApplicationDbContext(database.Options);
+        await using var held = await blocker.Database.BeginTransactionAsync();
+        await blocker.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Properties\" WHERE \"Id\" = {property.Id} FOR UPDATE");
+        await using var db1 = new ApplicationDbContext(database.Options);
+        await using var db2 = new ApplicationDbContext(database.Options);
+        // Both contexts start with tracked Approved state, before waiting for the lock.
+        await db1.ViewingRequests.SingleAsync();
+        await db2.ViewingRequests.SingleAsync();
+        async Task<bool> Complete(ApplicationDbContext context)
+        {
+            try
+            {
+                var result = await new ViewingService(context, clock, actor).CompleteAsync(viewing.Id);
+                Assert.Equal(ViewingStatus.Completed, result.Status);
+                Assert.Equal(clock.Now, result.UpdatedAt);
+                return true;
+            }
+            catch (ViewingServiceException error)
+            {
+                Assert.Equal(ViewingServiceError.Conflict, error.Error);
+                return false;
+            }
+        }
+        var first = Complete(db1);
+        var second = Complete(db2);
+        await Task.Delay(200);
+        Assert.False(first.IsCompleted);
+        Assert.False(second.IsCompleted);
+        await held.CommitAsync();
+        var results = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.Single(results, success => success);
+        setup.ChangeTracker.Clear();
+        var stored = await setup.ViewingRequests.SingleAsync();
+        Assert.Equal(ViewingStatus.Completed, stored.Status);
+        Assert.Equal(clock.Now, stored.UpdatedAt);
+        Assert.Equal(viewing.RequestedDateTime, stored.RequestedDateTime);
+        Assert.Equal(30, stored.DurationMinutes);
+        Assert.Equal(tenant.Id, stored.TenantId);
+        Assert.Equal(property.Id, stored.PropertyId);
+        Assert.Empty(await setup.Notifications.ToListAsync());
     }
 
     [PostgreSqlFact]
