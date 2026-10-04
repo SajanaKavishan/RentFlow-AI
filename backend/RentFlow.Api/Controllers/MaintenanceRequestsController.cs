@@ -112,13 +112,13 @@ public class MaintenanceRequestsController(
     }
 
     [HttpPost("{id:guid}/coordination-workflows")]
-    [ProducesResponseType<MaintenanceCoordinationWorkflow>(StatusCodes.Status201Created)]
+    [ProducesResponseType<MaintenanceCoordinationWorkflowResponseDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<MaintenanceCoordinationWorkflow>> StartCoordinationWorkflow(
+    public async Task<ActionResult<MaintenanceCoordinationWorkflowResponseDto>> StartCoordinationWorkflow(
         Guid id,
         CancellationToken cancellationToken)
     {
@@ -131,17 +131,21 @@ public class MaintenanceRequestsController(
             async () =>
             {
                 await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
-                return await maintenanceCoordinationOrchestrator.StartAnalysisAsync(id, cancellationToken);
+                var workflow = await maintenanceCoordinationOrchestrator.StartAnalysisAsync(id, cancellationToken);
+                return MaintenanceCoordinationWorkflowResponseDto.FromWorkflow(workflow);
             },
-            result => CreatedAtAction(nameof(GetCoordinationWorkflow), new { id, workflowId = result.Id }, result));
+            result => CreatedAtAction(
+                nameof(GetCoordinationWorkflow),
+                new { id, workflowId = result.Id },
+                result));
     }
 
     [HttpGet("{id:guid}/coordination-workflows/{workflowId:guid}")]
-    [ProducesResponseType<MaintenanceCoordinationWorkflow>(StatusCodes.Status200OK)]
+    [ProducesResponseType<MaintenanceCoordinationWorkflowResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<MaintenanceCoordinationWorkflow>> GetCoordinationWorkflow(
+    public async Task<ActionResult<MaintenanceCoordinationWorkflowResponseDto>> GetCoordinationWorkflow(
         Guid id,
         Guid workflowId,
         CancellationToken cancellationToken)
@@ -163,7 +167,7 @@ public class MaintenanceRequestsController(
                     throw MaintenanceRequestServiceException.NotFound($"Maintenance coordination workflow '{workflowId}' was not found.");
                 }
 
-                return workflow;
+                return MaintenanceCoordinationWorkflowResponseDto.FromWorkflow(workflow);
             },
             result => Ok(result));
     }
