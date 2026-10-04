@@ -78,6 +78,51 @@ public sealed class PricingAnalysisOrchestratorTests
     }
 
     [Fact]
+    public async Task StartAsync_GoldenComparableSetReachesAgentWithPersistedRoomFacts()
+    {
+        await using var context = CreateContext();
+        var subject = CreateProperty();
+        subject.Bathrooms = 2;
+        subject.MonthlyRent = 90000m;
+        subject.IsAvailable = true;
+        subject.Area = 1000m;
+        subject.AreaUnit = "sqft";
+        var comparableData = new (int Bathrooms, decimal Area, decimal Rent)[]
+        {
+            (2, 950m, 120000m), (2, 1050m, 135000m),
+            (2, 1100m, 155000m), (1, 850m, 100000m)
+        };
+        var comparables = comparableData.Select((item, index) => new Property
+        {
+            LandlordId = index % 2 == 0 ? Guid.NewGuid() : subject.LandlordId,
+            Title = "Colombo comparable",
+            Address = "Colombo",
+            City = "Colombo",
+            Bedrooms = 2,
+            Bathrooms = item.Bathrooms,
+            Area = item.Area,
+            AreaUnit = "sqft",
+            MonthlyRent = item.Rent,
+            IsAvailable = true
+        }).ToArray();
+        context.Properties.AddRange([subject, .. comparables]);
+        await context.SaveChangesAsync();
+        var agent = new FakePricingAgentClient();
+
+        var result = await CreateOrchestrator(
+            context,
+            [],
+            agent,
+            comparablesTool: new PricingComparableRentalsTool(context)).StartAsync(subject.Id);
+
+        Assert.Equal(1, agent.CallCount);
+        Assert.Equal(4, agent.LastRequest!.Comparables.Count);
+        Assert.Equal(subject.Bathrooms, agent.LastRequest.PropertyFacts.Bathrooms);
+        Assert.Equal(subject.Bedrooms, agent.LastRequest.PropertyFacts.Bedrooms);
+        Assert.Equal(PricingEvidenceSufficiency.LIMITED, result.EvidenceSufficiency);
+    }
+
+    [Fact]
     public async Task StartAsync_InsufficientEvidenceSkipsAgentAndCompletesDeterministically()
     {
         await using var context = CreateContext();
