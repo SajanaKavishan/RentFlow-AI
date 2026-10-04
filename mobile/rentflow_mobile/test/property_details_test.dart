@@ -406,7 +406,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Book Viewing'), findsNothing);
     expect(find.text('Apply Now'), findsNothing);
-    expect(find.textContaining('currently unavailable'), findsNWidgets(2));
+    expect(find.textContaining('currently unavailable'), findsOneWidget);
     expect(find.text('Listing preferences'), findsNothing);
     await tester.scrollUntilVisible(
       find.text('Landlord details unavailable'),

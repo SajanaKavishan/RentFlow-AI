@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -145,18 +146,41 @@ void main() {
     );
     expect(backend.calls('/api/rental-applications', 'POST'), 0);
   });
-  testWidgets('locked eligibility helper fits a small phone at large text', (
-    tester,
-  ) async {
-    final backend = DiscoveryBackend()..completedPropertyIds.clear();
-    await pump(tester, backend, details(backend));
-    tester.view.physicalSize = const Size(320, 720);
-    tester.platformDispatcher.textScaleFactorTestValue = 2;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    await tester.pumpAndSettle();
-    expect(tester.widget<FilledButton>(apply).onPressed, isNull);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'locked eligibility buttons align without helper text on a small phone at 2x text',
+    (tester) async {
+      final backend = DiscoveryBackend()..completedPropertyIds.clear();
+      final semantics = tester.ensureSemantics();
+      await pump(tester, backend, details(backend));
+      tester.view.physicalSize = const Size(320, 720);
+      tester.view.padding = const FakeViewPadding(bottom: 24);
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(apply).onPressed, isNull);
+      expect(find.text('Apply after viewing'), findsOneWidget);
+      expect(
+        find.text('Complete a viewing before applying for this property.'),
+        findsNothing,
+      );
+      final node = tester.getSemantics(apply);
+      expect(node.flagsCollection.isEnabled, Tristate.isFalse);
+      final bookRect = tester.getRect(
+        find.byKey(const Key('details-book-viewing')),
+      );
+      final applyRect = tester.getRect(apply);
+      expect(applyRect.top, bookRect.top);
+      expect(applyRect.bottom, bookRect.bottom);
+      expect(applyRect.left, greaterThan(bookRect.right));
+      expect(
+        tester.getSize(find.byKey(const Key('details-cta-bar'))).height,
+        applyRect.height + 35, // 10px top, 24px safe area, 1px border.
+      );
+      expect(applyRect.bottom, lessThanOrEqualTo(720 - 24));
+      semantics.dispose();
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   test(
     'eligibility contract fails closed for malformed and contradictory data',
@@ -219,7 +243,7 @@ void main() {
       expect(find.text('Apply after viewing'), findsOneWidget);
       expect(
         find.text('Complete a viewing before applying for this property.'),
-        findsOneWidget,
+        findsNothing,
       );
       expect(backend.calls(eligibilityPath), 1);
     });

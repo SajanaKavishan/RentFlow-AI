@@ -9,11 +9,11 @@ import '../controllers/property_discovery_controller.dart';
 import '../models/property_image.dart';
 import '../services/property_api_service.dart';
 import '../widgets/property_card.dart';
-import '../widgets/public_landlord_avatar.dart';
+import '../widgets/public_landlord_identity.dart';
 import '../widgets/landlord_contact_card.dart';
 import 'property_details_screen.dart';
 import '../../viewing_reviews/services/viewing_review_api_service.dart';
-import '../../viewing_reviews/widgets/public_viewing_reviews.dart';
+import '../../viewing_reviews/widgets/viewing_rating_summary.dart';
 
 class PublicLandlordProfileScreen extends StatefulWidget {
   const PublicLandlordProfileScreen({
@@ -36,6 +36,7 @@ class _PublicLandlordProfileScreenState
   bool _profileError = false;
   bool _listingsError = false;
   int _loadVersion = 0;
+  late Future<Map<String, dynamic>> _landlordReviews;
   late final PropertyDiscoveryController _favorites;
 
   @override
@@ -48,6 +49,10 @@ class _PublicLandlordProfileScreenState
 
   Future<void> _load() async {
     final version = ++_loadVersion;
+    _landlordReviews = ViewingReviewApiService(
+      widget.propertyApiService.apiClient,
+    ).publicSummary(widget.propertyId, landlord: true);
+    _landlordReviews.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     setState(() {
       _summary = null;
       _properties = null;
@@ -135,65 +140,61 @@ class _PublicLandlordProfileScreenState
   Widget _identityCard() => AppCard(
     key: const Key('landlord-listings-identity'),
     color: AppPalette.white,
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final avatar = PublicLandlordAvatar(
-          propertyId: widget.propertyId,
-          summary: _summary!,
-          service: widget.propertyApiService,
-          size: 64,
-        );
-        final identity = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_summary!.displayName, style: AppTypography.identityName),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Member since ${_summary!.memberSinceYear}',
-              style: AppTypography.bodySmall.copyWith(
-                color: AppPalette.secondaryText,
-              ),
-            ),
-          ],
-        );
-        if (constraints.maxWidth < 240 ||
-            MediaQuery.textScalerOf(context).scale(AppTypography.bodySize) >
-                21) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              avatar,
-              const SizedBox(height: AppSpacing.sm),
-              identity,
-            ],
-          );
-        }
-        return Row(
-          children: [
-            avatar,
-            const SizedBox(width: AppSpacing.md),
-            Expanded(child: identity),
-          ],
-        );
-      },
+    padding: const EdgeInsets.all(AppSpacing.md),
+    child: PublicLandlordIdentity(
+      propertyId: widget.propertyId,
+      summary: _summary!,
+      service: widget.propertyApiService,
+      reviews: _landlordReviews,
+      ratingKey: const Key('landlord-identity-rating'),
     ),
   );
+
+  double _headerHeight(BuildContext context) {
+    final title = TextPainter(
+      text: const TextSpan(
+        text: 'Other properties',
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
+          height: 1.2,
+        ),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout(maxWidth: math.max(1, MediaQuery.sizeOf(context).width - 88));
+    final height = title.height;
+    title.dispose();
+    return math.max(
+      kToolbarHeight,
+      height + MediaQuery.textScalerOf(context).scale(11) * 1.3 + 20,
+    );
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: AppPalette.background,
     appBar: AppBar(
-      toolbarHeight: math.max(
-        kToolbarHeight,
-        MediaQuery.textScalerOf(context).scale(AppTypography.pageTitleSize) *
-                1.15 +
-            16,
-      ),
-      title: Text(
-        _summary?.displayName ?? 'Landlord properties',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppTypography.pageTitle,
+      toolbarHeight: _headerHeight(context),
+      leading: BackButton(onPressed: () => Navigator.of(context).maybePop()),
+      title: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'LANDLORD',
+            style: AppTypography.eyebrow.copyWith(color: AppPalette.olive),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          const Text(
+            'Other properties',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              height: 1.2,
+            ),
+          ),
+        ],
       ),
     ),
     body: SafeArea(
@@ -223,19 +224,27 @@ class _PublicLandlordProfileScreenState
                     service: widget.propertyApiService,
                     refreshVersion: _loadVersion,
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-                  PublicViewingReviews(
-                    key: ValueKey('landlord-reviews-$_loadVersion'),
-                    propertyId: widget.propertyId,
-                    api: ViewingReviewApiService(
-                      widget.propertyApiService.apiClient,
-                    ),
-                    landlord: true,
+                  const SizedBox(height: AppSpacing.base),
+                  FutureBuilder<Map<String, dynamic>>(
+                    future: _landlordReviews,
+                    builder: (context, snapshot) {
+                      final data = snapshot.data;
+                      if (snapshot.connectionState != ConnectionState.done ||
+                          snapshot.hasError ||
+                          data == null ||
+                          (data['reviewCount'] as int) == 0) {
+                        return const SizedBox.shrink();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                        child: ViewingReviewSummaryContent(
+                          data: data,
+                          title: 'Landlord experience',
+                        ),
+                      );
+                    },
                   ),
-                  const Text(
-                    'Other properties',
-                    style: AppTypography.sectionTitle,
-                  ),
+
                   if (_properties != null && !_listingsError) ...[
                     const SizedBox(height: AppSpacing.xs),
                     Text(

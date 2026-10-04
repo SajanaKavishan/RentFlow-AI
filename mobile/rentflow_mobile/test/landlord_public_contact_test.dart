@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -86,6 +87,7 @@ void main() {
     testWidgets('$screen Call landlord still opens the native dialer', (
       tester,
     ) async {
+      final semantics = tester.ensureSemantics();
       MethodCall? launched;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
@@ -93,9 +95,18 @@ void main() {
             return true;
           });
       await open(tester);
-      await tapVisible(tester, find.text('Call landlord'));
+      final callIcon = find.byKey(const Key('landlord-call'));
+      await scrollToVisible(tester, callIcon, 250);
+      final node = tester.getSemantics(find.bySemanticsLabel('Call landlord'));
+      expect(node.label, 'Call landlord');
+      expect(node.flagsCollection.isButton, isTrue);
+      expect(node.flagsCollection.isEnabled, Tristate.isTrue);
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+      await tapVisible(tester, callIcon);
       expect(launched?.method, 'launch');
       expect((launched?.arguments as Map)['url'], 'tel:+94771234567');
+      expect((launched?.arguments as Map)['useWebView'], isFalse);
       expect(find.text(phone), findsOneWidget);
     });
 
@@ -105,7 +116,20 @@ void main() {
         await open(tester);
         await scrollToVisible(tester, find.text('Contact landlord'), 250);
         expect(find.text(phone), findsOneWidget);
-        expect(find.text('Call landlord'), findsOneWidget);
+        expect(find.byTooltip('Call landlord'), findsOneWidget);
+        expect(find.byIcon(Icons.phone_outlined), findsOneWidget);
+        expect(find.text('Call landlord'), findsNothing);
+        expect(
+          find
+              .byType(FilledButton)
+              .evaluate()
+              .where(
+                (e) =>
+                    e.findAncestorWidgetOfExactType<LandlordContactCard>() !=
+                    null,
+              ),
+          isEmpty,
+        );
         expect(find.text('private@example.com'), findsNothing);
         expect(find.text('+94770000000'), findsNothing);
         expect(
@@ -130,8 +154,15 @@ void main() {
           }),
         };
         await open(tester);
+        if (screen == 'details') {
+          await scrollToVisible(
+            tester,
+            find.byKey(const Key('details-landlord')),
+            250,
+          );
+        }
         expect(find.text('Contact landlord'), findsNothing);
-        expect(find.text('Call landlord'), findsNothing);
+        expect(find.byTooltip('Call landlord'), findsNothing);
         expect(find.text(phone), findsNothing);
         expect(tester.takeException(), isNull);
       });
@@ -168,7 +199,7 @@ void main() {
             return true;
           });
       await openCard(tester);
-      await tester.tap(find.text('Call landlord'));
+      await tester.tap(find.byTooltip('Call landlord'));
       await tester.pumpAndSettle();
       expect(launched?.method, 'launch');
       expect((launched?.arguments as Map)['url'], 'tel:+94771234567');
@@ -189,7 +220,7 @@ void main() {
               return false;
             });
         await openCard(tester);
-        await tester.tap(find.text('Call landlord'));
+        await tester.tap(find.byTooltip('Call landlord'));
         await tester.pumpAndSettle();
         expect(
           find.text('Calling is not available on this device.'),
@@ -216,7 +247,7 @@ void main() {
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
       expect(find.text('Contact landlord'), findsNothing);
-      expect(find.text('Call landlord'), findsNothing);
+      expect(find.byTooltip('Call landlord'), findsNothing);
     },
   );
 
@@ -268,7 +299,88 @@ void main() {
     addTearDown(tester.view.reset);
     await openCard(tester, scale: 2);
     await tapVisible(tester, find.text(phone));
-    expect(find.text('Call landlord'), findsOneWidget);
+    expect(find.byTooltip('Call landlord'), findsOneWidget);
+    expect(find.byIcon(Icons.phone_outlined), findsOneWidget);
+    expect(find.text('Call landlord'), findsNothing);
+    expect(
+      find
+          .byType(FilledButton)
+          .evaluate()
+          .where(
+            (e) =>
+                e.findAncestorWidgetOfExactType<LandlordContactCard>() != null,
+          ),
+      isEmpty,
+    );
     expect(tester.takeException(), isNull);
   });
+
+  for (final screen in ['details', 'profile']) {
+    for (final scenario in [
+      (pixels: const Size(320, 780), dpr: 1.0),
+      (pixels: const Size(720, 1560), dpr: 2.0),
+      (pixels: const Size(1080, 2340), dpr: 3.0),
+    ]) {
+      for (final scale in [1.0, 2.0]) {
+        testWidgets(
+          '$screen long public identity/contact fit ${scenario.pixels} at ${scale}x',
+          (tester) async {
+            const longName =
+                'Pansilu Ruwantha Wijesinghe Arachchilage Gunawardena';
+            const longPhone = '+123 (456) 789-012-345';
+            tester.view.devicePixelRatio = scenario.dpr;
+            tester.view.physicalSize = scenario.pixels;
+            tester.platformDispatcher.textScaleFactorTestValue = scale;
+            addTearDown(tester.view.reset);
+            addTearDown(
+              tester.platformDispatcher.clearTextScaleFactorTestValue,
+            );
+            contact = DiscoveryBackend.json({
+              'displayName': longName,
+              'phoneNumber': longPhone,
+            });
+            final previous = backend.intercept;
+            backend.intercept = (request) async {
+              if (request.url.path.endsWith('/landlord-summary')) {
+                return DiscoveryBackend.json({
+                  ...profile.summary,
+                  'displayName': longName,
+                });
+              }
+              return previous?.call(request);
+            };
+            if (screen == 'details') {
+              await details.openDetails(tester, backend);
+            } else {
+              await profile.openProfile(tester, backend, textScale: scale);
+            }
+            await scrollToVisible(tester, find.text(longName), 180);
+            expect(find.text(longName), findsOneWidget);
+            await scrollToVisible(
+              tester,
+              find.byKey(const Key('landlord-call')),
+              180,
+            );
+            expect(find.text(longPhone), findsOneWidget);
+            expect(find.text('Call landlord'), findsNothing);
+            final numberRect = tester.getRect(find.text(longPhone));
+            final iconRect = tester.getRect(
+              find.byKey(const Key('landlord-call')),
+            );
+            expect(numberRect.right, lessThan(iconRect.left));
+            expect(iconRect.width, greaterThanOrEqualTo(44));
+            expect(iconRect.height, greaterThanOrEqualTo(44));
+            expect(
+              iconRect.right,
+              lessThanOrEqualTo(scenario.pixels.width / scenario.dpr),
+            );
+            if (scale == 2) {
+              expect(numberRect.height, greaterThan(40));
+            }
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+  }
 }

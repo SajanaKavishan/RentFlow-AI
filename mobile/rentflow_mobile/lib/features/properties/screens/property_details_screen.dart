@@ -4,7 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/theme/app_theme.dart';
 import '../widgets/amenity_icon.dart';
-import '../widgets/public_landlord_avatar.dart';
+import '../widgets/public_landlord_identity.dart';
 import 'public_landlord_profile_screen.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../rental_applications/widgets/application_eligibility_action.dart';
@@ -957,67 +957,33 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                     }
                   },
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      children: [
-                        PublicLandlordAvatar(
-                          propertyId: _property.id,
-                          summary: summary,
-                          service: widget.propertyApiService,
-                        ),
-                        const SizedBox(width: 11),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                summary.displayName,
-                                style: const TextStyle(
-                                  fontSize: AppTypography.cardTitleSize,
-                                  height: 1.35,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppPalette.primaryText,
-                                ),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: PublicLandlordIdentity(
+                      propertyId: _property.id,
+                      summary: summary,
+                      service: widget.propertyApiService,
+                      reviews: _landlordReviews,
+                      ratingKey: const Key('details-landlord-rating'),
+                      action: const Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'View other properties',
+                              style: TextStyle(
+                                color: AppPalette.olive,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
                               ),
-                              if (summary.memberSinceYear != null) ...[
-                                const SizedBox(height: 3),
-                                Text(
-                                  'Member since ${summary.memberSinceYear}',
-                                  style: const TextStyle(
-                                    fontSize: AppTypography.bodySmallSize,
-                                    color: AppPalette.secondaryText,
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 8),
-                              ViewingRatingSummary(
-                                key: const Key('details-landlord-rating'),
-                                summary: _landlordReviews,
-                              ),
-                              const Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      'View other properties',
-                                      style: TextStyle(
-                                        color: AppPalette.olive,
-                                        fontSize: AppTypography.bodySmallSize,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 5),
-                                  Icon(
-                                    Icons.arrow_forward,
-                                    size: 14,
-                                    color: AppPalette.olive,
-                                  ),
-                                ],
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
+                          SizedBox(width: 5),
+                          Icon(
+                            Icons.arrow_forward,
+                            size: 16,
+                            color: AppPalette.olive,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1086,6 +1052,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                 ),
                 ApplicationEligibilityAction(
                   allowNew: false,
+                  showIneligibleReason: false,
                   key: ValueKey(
                     'application-eligibility-$_contactRefreshVersion',
                   ),
@@ -1132,6 +1099,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: ApplicationEligibilityAction(
+                      showIneligibleReason: false,
                       key: ValueKey(
                         'application-eligibility-$_contactRefreshVersion',
                       ),

@@ -80,14 +80,40 @@ void main() {
     (tester) async {
       final semantics = tester.ensureSemantics();
       await openProfile(tester, backend);
-      expect(find.text('Maya Perera'), findsNWidgets(2));
+      expect(find.text('Maya Perera'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Maya Perera'),
+        ),
+        findsNothing,
+      );
+      expect(find.text('LANDLORD'), findsOneWidget);
+      expect(find.byTooltip('Back'), findsOneWidget);
+      expect(find.byIcon(Icons.star), findsNothing);
       expect(find.text('Member since 2022'), findsOneWidget);
-      expect(find.text('Other properties'), findsOneWidget);
+      expect(find.text('Other properties'), findsNWidgets(2));
       expect(find.text('1 available property'), findsOneWidget);
+      expect(
+        tester
+                .getTopLeft(
+                  find.descendant(
+                    of: find.byType(ListView),
+                    matching: find.text('Other properties'),
+                  ),
+                )
+                .dy -
+            tester
+                .getBottomLeft(
+                  find.byKey(const Key('landlord-listings-identity')),
+                )
+                .dy,
+        16,
+      );
       final avatar = tester.widget<PublicLandlordAvatar>(
         find.byType(PublicLandlordAvatar),
       );
-      expect(avatar.size, inInclusiveRange(64, 72));
+      expect(avatar.size, inInclusiveRange(56, 64));
       expect(
         tester
             .getSize(find.byKey(const Key('landlord-listings-identity')))
@@ -202,7 +228,7 @@ void main() {
   testWidgets('empty listings retain the public identity', (tester) async {
     backend.properties = [];
     await openProfile(tester, backend);
-    expect(find.text('Maya Perera'), findsNWidgets(2));
+    expect(find.text('Maya Perera'), findsOneWidget);
     expect(
       find.text('No other properties are currently available.'),
       findsOneWidget,
@@ -216,7 +242,7 @@ void main() {
     (tester) async {
       backend.properties = [fixture.propertyJson()];
       await openProfile(tester, backend);
-      expect(find.text('Other properties'), findsOneWidget);
+      expect(find.text('Other properties'), findsNWidgets(2));
       expect(find.text('0 available properties'), findsOneWidget);
       expect(
         find.text('No other properties are currently available.'),
@@ -284,31 +310,40 @@ void main() {
         };
         await openProfile(tester, backend, textScale: 2);
         final appBar = tester.widget<AppBar>(find.byType(AppBar));
-        final title = appBar.title! as Text;
-        expect(title.data, longName);
-        expect(title.maxLines, 1);
-        expect(title.overflow, TextOverflow.ellipsis);
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text(longName),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text('Other properties'),
+          ),
+          findsOneWidget,
+        );
+        expect(appBar.leading, isA<BackButton>());
         expect(
           MediaQuery.textScalerOf(
             tester.element(find.byType(PublicLandlordProfileScreen)),
           ).scale(14),
           28,
         );
-        expect(find.text(longName), findsNWidgets(2));
+        expect(find.text(longName), findsOneWidget);
         expect(find.text('Member since 2022'), findsOneWidget);
         expect(find.text('PR'), findsOneWidget);
         if (contactEnabled) {
-          await scrollToVisible(tester, find.text('Call landlord'), 200);
+          await scrollToVisible(tester, find.byTooltip('Call landlord'), 200);
           expect(find.text('+94771234567'), findsOneWidget);
           expect(
-            tester
-                .getSize(find.widgetWithText(FilledButton, 'Call landlord'))
-                .height,
-            greaterThanOrEqualTo(48),
+            tester.getSize(find.byKey(const Key('landlord-call'))).height,
+            greaterThanOrEqualTo(44),
           );
         } else {
           expect(find.text('Contact landlord'), findsNothing);
-          expect(find.text('Call landlord'), findsNothing);
+          expect(find.byTooltip('Call landlord'), findsNothing);
         }
         await scrollToVisible(tester, find.text('Garden Apartment'), 200);
         expect(find.text('Garden Apartment'), findsOneWidget);
@@ -337,7 +372,7 @@ void main() {
     failed = false;
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
-    expect(find.text('Maya Perera'), findsNWidgets(2));
+    expect(find.text('Maya Perera'), findsOneWidget);
     expect(backend.calls(summaryPath), 2);
   });
 
@@ -346,7 +381,7 @@ void main() {
     (tester) async {
       backend.properties = [fixture.propertyJson(available: false)];
       await openProfile(tester, backend);
-      expect(find.text('Maya Perera'), findsNWidgets(2));
+      expect(find.text('Maya Perera'), findsOneWidget);
       expect(find.text('Properties unavailable'), findsOneWidget);
       expect(find.byType(PropertyCard), findsNothing);
       backend.properties = [];
@@ -378,13 +413,13 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Loading landlord properties'), findsOneWidget);
-    expect(find.text('Landlord properties'), findsOneWidget);
+    expect(find.text('Other properties'), findsOneWidget);
     expect(find.textContaining('available propert'), findsNothing);
     expect(backend.calls(listingsPath), 0);
     profile.complete(DiscoveryBackend.json(summary));
     await tester.pump();
     await tester.pump();
-    expect(find.text('Maya Perera'), findsNWidgets(2));
+    expect(find.text('Maya Perera'), findsOneWidget);
     expect(find.text('Loading properties'), findsOneWidget);
     expect(find.textContaining('available propert'), findsNothing);
     listings.complete(DiscoveryBackend.json([]));
@@ -409,7 +444,7 @@ void main() {
         return null;
       };
       await openProfile(tester, backend);
-      expect(find.text('Maya Perera'), findsNWidgets(2));
+      expect(find.text('Maya Perera'), findsOneWidget);
       expect(find.byType(PropertyPhotoFallback), findsOneWidget);
       await tapVisible(
         tester,
@@ -427,7 +462,7 @@ void main() {
       tester.view.physicalSize = Size(width, 780);
       addTearDown(tester.view.reset);
       await openProfile(tester, backend, textScale: 2);
-      expect(find.text('Maya Perera'), findsNWidgets(2));
+      expect(find.text('Maya Perera'), findsOneWidget);
       await scrollToVisible(tester, find.text('Garden Apartment'), 200);
       expect(tester.takeException(), isNull);
     });

@@ -14,12 +14,14 @@ class ApplicationEligibilityAction extends StatefulWidget {
     this.propertyTitle,
     this.completedViewing = false,
     this.allowNew = true,
+    this.showIneligibleReason = true,
   });
   final String propertyId;
   final String? propertyTitle;
   final RentalApplicationApiService apiService;
   final bool completedViewing;
   final bool allowNew;
+  final bool showIneligibleReason;
   @override
   State<ApplicationEligibilityAction> createState() =>
       _ApplicationEligibilityActionState();
@@ -138,7 +140,12 @@ class _ApplicationEligibilityActionState
         textAlign: TextAlign.center,
       ),
     );
-    if (!widget.completedViewing && (available || _loading)) return button;
+    if (!widget.completedViewing &&
+        (available ||
+            _loading ||
+            (!widget.showIneligibleReason && _error == null))) {
+      return button;
+    }
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

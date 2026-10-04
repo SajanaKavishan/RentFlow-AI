@@ -146,6 +146,22 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
+          if (landlord) {
+            final identityRating = find.byKey(
+              const Key('landlord-identity-rating'),
+            );
+            expect(
+              find.descendant(of: identityRating, matching: find.text('4.8')),
+              hasReviews ? findsOneWidget : findsNothing,
+            );
+            expect(
+              find.descendant(
+                of: identityRating,
+                matching: find.text('18 verified viewings'),
+              ),
+              hasReviews ? findsOneWidget : findsNothing,
+            );
+          }
           if (hasReviews) {
             if (!landlord) {
               final compact = find.byKey(const Key('details-property-rating'));

@@ -101,21 +101,40 @@ class _LandlordContactCardState extends State<LandlordContactCard>
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.base),
       child: AppCard(
+        color: AppPalette.white,
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Contact landlord', style: AppTypography.sectionTitle),
+            Text('Contact landlord', style: AppTypography.cardTitle),
             const SizedBox(height: AppSpacing.sm),
-            SelectableText(contact.phoneNumber, style: AppTypography.body),
-            const SizedBox(height: AppSpacing.sm),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-                textStyle: AppTypography.button,
-              ),
-              onPressed: _call,
-              icon: const Icon(Icons.phone_outlined),
-              label: const Text('Call landlord'),
+            Row(
+              children: [
+                Expanded(
+                  child: SelectableText(
+                    contact.phoneNumber,
+                    style: AppTypography.body.copyWith(
+                      color: AppPalette.primaryText,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                IconButton.filledTonal(
+                  key: const Key('landlord-call'),
+                  tooltip: 'Call landlord',
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(44, 44),
+                    backgroundColor: AppPalette.softCream,
+                    foregroundColor: AppPalette.olive,
+                  ),
+                  onPressed: _call,
+                  icon: const Icon(
+                    Icons.phone_outlined,
+                    size: 22,
+                    semanticLabel: 'Call landlord',
+                  ),
+                ),
+              ],
             ),
           ],
         ),

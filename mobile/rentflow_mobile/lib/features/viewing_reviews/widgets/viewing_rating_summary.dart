@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import '../../../shared/theme/app_theme.dart';
 
 class ViewingRatingSummary extends StatelessWidget {
-  const ViewingRatingSummary({super.key, required this.summary, this.onTap});
+  const ViewingRatingSummary({
+    super.key,
+    required this.summary,
+    this.onTap,
+    this.compact = false,
+  });
   final Future<Map<String, dynamic>> summary;
   final VoidCallback? onTap;
+  final bool compact;
   @override
   Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
     future: summary,
@@ -40,8 +46,8 @@ class ViewingRatingSummary extends StatelessWidget {
                     const Icon(Icons.star, size: 16, color: AppPalette.olive),
                     Text(
                       average,
-                      style: const TextStyle(
-                        fontSize: 15,
+                      style: TextStyle(
+                        fontSize: compact ? 13 : 15,
                         fontWeight: FontWeight.w600,
                         color: AppPalette.darkOlive,
                       ),
