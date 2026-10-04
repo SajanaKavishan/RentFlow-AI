@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/auth/models/current_user.dart';
 import '../../features/maintenance/screens/assigned_work_screen.dart';
+import '../../features/maintenance/screens/landlord_maintenance_screen.dart';
 import '../../features/maintenance/screens/my_maintenance_requests_screen.dart';
 import '../../features/maintenance/services/maintenance_api_service.dart';
 import '../../features/lease_agreements/screens/my_leases_screen.dart';
@@ -404,6 +405,12 @@ class _SharedAppShellState extends State<SharedAppShell>
       maintenanceApiService: widget.maintenanceApiService,
     ),
 
+    RoleDestinationId.landlordMaintenance => LandlordMaintenanceScreen(
+      landlordId: widget.user.id,
+      propertyApiService: widget.propertyApiService,
+      maintenanceApiService: widget.maintenanceApiService,
+    ),
+
     RoleDestinationId.assignedWork => AssignedWorkScreen(
       maintenanceApiService: widget.maintenanceApiService,
       technicianId: widget.user.id,
@@ -569,13 +576,13 @@ class _QuickLinkCard extends StatelessWidget {
 }
 
 IconData _selectedIcon(RoleDestinationId id) => switch (id) {
-      RoleDestinationId.home => Icons.home,
-      RoleDestinationId.properties => Icons.home_work,
-      RoleDestinationId.viewings ||
-      RoleDestinationId.viewingRequests =>
-        Icons.calendar_month,
-      RoleDestinationId.applications => Icons.description,
-      RoleDestinationId.maintenance => Icons.build,
-      RoleDestinationId.assignedWork => Icons.handyman,
-      RoleDestinationId.profile => Icons.person,
-    };
+  RoleDestinationId.home => Icons.home,
+  RoleDestinationId.properties => Icons.home_work,
+  RoleDestinationId.viewings ||
+  RoleDestinationId.viewingRequests => Icons.calendar_month,
+  RoleDestinationId.applications => Icons.description,
+  RoleDestinationId.maintenance => Icons.build,
+  RoleDestinationId.landlordMaintenance => Icons.build,
+  RoleDestinationId.assignedWork => Icons.handyman,
+  RoleDestinationId.profile => Icons.person,
+};

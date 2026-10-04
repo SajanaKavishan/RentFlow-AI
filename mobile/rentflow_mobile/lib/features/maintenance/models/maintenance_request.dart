@@ -136,14 +136,23 @@ class MaintenanceRequest {
   final DateTime createdAt;
   final DateTime? updatedAt;
 
-  factory MaintenanceRequest.fromJson(Map<String, dynamic> json) {
+  factory MaintenanceRequest.fromJson(Map<String, dynamic> json) =>
+      _fromJson(json, hasDescription: true);
+
+  factory MaintenanceRequest.fromSummaryJson(Map<String, dynamic> json) =>
+      _fromJson(json, hasDescription: false);
+
+  static MaintenanceRequest _fromJson(
+    Map<String, dynamic> json, {
+    required bool hasDescription,
+  }) {
     return MaintenanceRequest(
       id: _requiredString(json, 'id'),
       propertyId: _requiredString(json, 'propertyId'),
       tenantId: _requiredString(json, 'tenantId'),
       technicianId: _nullableString(json, 'technicianId'),
       title: _requiredString(json, 'title'),
-      description: _requiredString(json, 'description'),
+      description: hasDescription ? _requiredString(json, 'description') : '',
       category: MaintenanceCategory.fromJson(json['category']),
       priority: MaintenancePriority.fromJson(json['priority']),
       status: MaintenanceRequestStatus.fromJson(json['status']),
