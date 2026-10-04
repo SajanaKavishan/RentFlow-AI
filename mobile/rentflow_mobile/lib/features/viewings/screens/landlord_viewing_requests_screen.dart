@@ -231,9 +231,12 @@ class _ViewingRequestCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              ViewingStatusChip(status: viewing.status),
             ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ViewingStatusChip(status: viewing.status),
           ),
           const SizedBox(height: AppSpacing.base),
           _QueueReference(

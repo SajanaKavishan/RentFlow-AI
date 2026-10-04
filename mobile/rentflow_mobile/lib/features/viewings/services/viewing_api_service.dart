@@ -84,6 +84,15 @@ class ViewingApiService {
     return _parseViewing(response.body);
   }
 
+  Future<Viewing> completeViewing({required String id}) async {
+    final uri = apiClient.buildUri('${ApiConstants.viewingsPath}/$id/complete');
+    final response = await _send(() => apiClient.patch(uri));
+    return _parseStatusTransition(
+      response.body,
+      expectedStatus: ViewingStatus.completed,
+    );
+  }
+
   Future<Viewing> approveViewing({
     required String id,
     String? landlordResponse,

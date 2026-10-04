@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,10 +14,12 @@ class LandlordViewingRequestDetailsScreen extends StatefulWidget {
     super.key,
     required this.viewing,
     required this.viewingApiService,
+    this.nowProvider,
   });
 
   final Viewing viewing;
   final ViewingApiService viewingApiService;
+  final DateTime Function()? nowProvider;
 
   @override
   State<LandlordViewingRequestDetailsScreen> createState() =>
@@ -32,8 +36,24 @@ class _LandlordViewingRequestDetailsScreenState
   String? _actionError;
   bool _contactLoaded = false;
   bool _isRefreshing = false;
+  bool _isCompleting = false;
+  bool _confirmingCompletion = false;
+  bool _completionLoaded = false;
+  bool _inForeground = true;
+  bool _refreshPending = false;
+  Timer? _completionTimer;
+  DateTime? _completionRefreshedAt;
 
-  bool get _isBusy => _isApproving || _isRejecting || _isRefreshing;
+  bool get _isBusy =>
+      _isApproving ||
+      _isRejecting ||
+      _isRefreshing ||
+      _isCompleting ||
+      _confirmingCompletion;
+  bool get _canComplete =>
+      _completionLoaded &&
+      _viewing.status == ViewingStatus.approved &&
+      _viewing.canMarkCompleted;
   bool get _canRespond => _viewing.status == ViewingStatus.pending;
   bool get _canCall =>
       _contactLoaded &&
@@ -53,36 +73,89 @@ class _LandlordViewingRequestDetailsScreenState
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_viewing.status != ViewingStatus.approved) return;
     if (state == AppLifecycleState.resumed) {
-      _refresh();
+      _inForeground = true;
+      if ((ModalRoute.of(context)?.isCurrent ?? false) ||
+          _confirmingCompletion) {
+        _refresh();
+      }
     } else {
-      setState(() => _contactLoaded = false);
+      _inForeground = false;
+      _completionTimer?.cancel();
+      setState(() {
+        _contactLoaded = false;
+        _completionLoaded = false;
+      });
+    }
+  }
+
+  void _checkIdentity(Viewing updated) {
+    if (updated.id != _viewing.id ||
+        updated.propertyId != _viewing.propertyId ||
+        updated.tenantId != _viewing.tenantId) {
+      throw const ViewingApiException(
+        'The viewing service returned an invalid response.',
+      );
+    }
+  }
+
+  void _setViewing(Viewing updated) {
+    _viewing = updated;
+    _contactLoaded = _inForeground;
+    _completionLoaded = _inForeground;
+    _scheduleCompletionRefresh();
+  }
+
+  void _scheduleCompletionRefresh() {
+    _completionTimer?.cancel();
+    final eligibleAt = _viewing.completionEligibleAt;
+    if (!_inForeground ||
+        _viewing.status != ViewingStatus.approved ||
+        _viewing.canMarkCompleted ||
+        eligibleAt == null ||
+        eligibleAt == _completionRefreshedAt) {
+      return;
+    }
+    // Device time schedules a GET only. A repeated false response for the same
+    // end does not restart a polling loop, even if the device clock is ahead.
+    final delay =
+        eligibleAt.difference(widget.nowProvider?.call() ?? DateTime.now()) +
+        const Duration(seconds: 1);
+    _completionTimer = Timer(
+      delay > Duration.zero ? delay : const Duration(seconds: 1),
+      () {
+        _completionRefreshedAt = eligibleAt;
+        if (mounted && _inForeground) _refresh();
+      },
+    );
+  }
+
+  void _refreshWhenIdle() {
+    if (_refreshPending && mounted && _inForeground && !_isBusy) {
+      _refreshPending = false;
+      unawaited(_refresh());
     }
   }
 
   Future<void> _refresh() async {
-    if (_isBusy) return;
+    if (_isBusy) {
+      _refreshPending = true;
+      return;
+    }
     setState(() {
       _isRefreshing = true;
       _contactLoaded = false;
+      _completionLoaded = false;
       _actionError = null;
     });
     try {
       final updated = await widget.viewingApiService.getViewingById(
         _viewing.id,
       );
-      if (updated.id != _viewing.id ||
-          updated.propertyId != _viewing.propertyId ||
-          updated.tenantId != _viewing.tenantId) {
-        throw const ViewingApiException(
-          'The viewing service returned an invalid response.',
-        );
-      }
+      _checkIdentity(updated);
       if (!mounted) return;
       setState(() {
-        _viewing = updated;
-        _contactLoaded = true;
+        _setViewing(updated);
       });
     } catch (_) {
       if (mounted) {
@@ -90,6 +163,7 @@ class _LandlordViewingRequestDetailsScreenState
       }
     } finally {
       if (mounted) setState(() => _isRefreshing = false);
+      _refreshWhenIdle();
     }
   }
 
@@ -113,6 +187,7 @@ class _LandlordViewingRequestDetailsScreenState
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _completionTimer?.cancel();
     _responseController.dispose();
     super.dispose();
   }
@@ -120,6 +195,87 @@ class _LandlordViewingRequestDetailsScreenState
   Future<void> _approve() => _respond(approve: true);
 
   Future<void> _reject() => _respond(approve: false);
+
+  Future<void> _complete() async {
+    if (!_canComplete || _isBusy) return;
+    setState(() => _confirmingCompletion = true);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Mark viewing completed?'),
+        content: const Text(
+          'Confirm that the tenant attended this viewing and the viewing has finished.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirm completed'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _confirmingCompletion = false);
+    if (confirmed != true || !_canComplete) {
+      _refreshWhenIdle();
+      return;
+    }
+    setState(() {
+      _isCompleting = true;
+      _actionError = null;
+    });
+    try {
+      final updated = await widget.viewingApiService.completeViewing(
+        id: _viewing.id,
+      );
+      _checkIdentity(updated);
+      if (!mounted) return;
+      setState(() => _setViewing(updated));
+      AppSnackbars.show(
+        context,
+        message: 'Viewing marked as completed.',
+        tone: SnackTone.success,
+      );
+    } on ViewingApiException catch (error) {
+      if (!mounted) return;
+      if (error.statusCode == 409) {
+        // A different device may have completed it, or server eligibility changed.
+        setState(() {
+          _completionLoaded = false;
+          _contactLoaded = false;
+        });
+        try {
+          final updated = await widget.viewingApiService.getViewingById(
+            _viewing.id,
+          );
+          _checkIdentity(updated);
+          if (!mounted) return;
+          setState(() => _setViewing(updated));
+          if (updated.status == ViewingStatus.approved &&
+              updated.canMarkCompleted) {
+            _showError('Could not update the viewing. Please try again.');
+          }
+        } catch (_) {
+          if (mounted) {
+            _showError('Could not update the viewing. Please try again.');
+          }
+        }
+      } else {
+        _showError('Could not update the viewing. Please try again.');
+      }
+    } catch (_) {
+      if (mounted) {
+        _showError('Could not update the viewing. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _isCompleting = false);
+      _refreshWhenIdle();
+    }
+  }
 
   Future<void> _respond({required bool approve}) async {
     if (!_canRespond || _isBusy) return;
@@ -147,10 +303,10 @@ class _LandlordViewingRequestDetailsScreenState
               id: _viewing.id,
               landlordResponse: response,
             );
+      _checkIdentity(updated);
       if (!mounted) return;
       setState(() {
-        _viewing = updated;
-        _contactLoaded = true;
+        _setViewing(updated);
         _responseController.text = updated.landlordResponse ?? response;
       });
       AppSnackbars.show(
@@ -173,6 +329,7 @@ class _LandlordViewingRequestDetailsScreenState
           _isRejecting = false;
         });
       }
+      _refreshWhenIdle();
     }
   }
 
@@ -195,6 +352,9 @@ class _LandlordViewingRequestDetailsScreenState
       backgroundColor: AppPalette.background,
       appBar: AppBar(
         title: const Text('Viewing Request'),
+        titleTextStyle: AppTypography.pageTitle.copyWith(
+          color: AppPalette.darkOlive,
+        ),
         actions: [
           IconButton(
             tooltip: 'Refresh viewing request',
@@ -213,35 +373,63 @@ class _LandlordViewingRequestDetailsScreenState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             AppCard(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(
-                    Icons.calendar_month_outlined,
-                    color: AppPalette.olive,
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ViewingStatusChip(status: _viewing.status),
                   ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Requested $date',
-                          style: Theme.of(context).textTheme.titleLarge,
+                  const SizedBox(height: AppSpacing.md),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.calendar_month_outlined,
+                        color: AppPalette.olive,
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Requested $date',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              time,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          time,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  ViewingStatusChip(status: _viewing.status),
                 ],
               ),
             ),
+            if (_viewing.status == ViewingStatus.completed) ...[
+              const SizedBox(height: AppSpacing.md),
+              AppCard(
+                key: const ValueKey('viewing-completed-state'),
+                color: AppPalette.progress,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Viewing completed',
+                      style: AppTypography.sectionTitle.copyWith(
+                        color: AppPalette.darkOlive,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    const Text('This viewing has been marked as completed.'),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: AppSpacing.lg),
             const SectionHeader(title: 'Request details'),
             const SizedBox(height: AppSpacing.md),
@@ -326,6 +514,54 @@ class _LandlordViewingRequestDetailsScreenState
               const SizedBox(height: AppSpacing.md),
               _ActionError(message: error),
             ],
+            if (_canRespond || _viewing.status == ViewingStatus.approved) ...[
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'Landlord actions',
+                style: AppTypography.cardTitle.copyWith(
+                  color: AppPalette.darkOlive,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            if (_viewing.status == ViewingStatus.approved)
+              if (_canComplete)
+                FilledButton.icon(
+                  key: const ValueKey('complete-viewing-request'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppPalette.olive,
+                  ),
+                  onPressed: _isBusy ? null : _complete,
+                  icon: _isCompleting
+                      ? const _ButtonProgress()
+                      : const Icon(Icons.task_alt_outlined),
+                  label: Text(
+                    _isCompleting ? 'Completing...' : 'Mark viewing completed',
+                  ),
+                )
+              else
+                AppCard(
+                  key: const ValueKey('viewing-completion-info'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Viewing completion',
+                        style: AppTypography.cardTitle.copyWith(
+                          color: AppPalette.darkOlive,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      const Text(
+                        'You can mark this viewing as completed after the scheduled viewing ends.',
+                      ),
+                      if (_completionTimeLabel(context) case final label?) ...[
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(label, style: AppTypography.bodySmall),
+                      ],
+                    ],
+                  ),
+                ),
             if (_canRespond) ...[
               const SizedBox(height: AppSpacing.lg),
               FilledButton.icon(
@@ -356,6 +592,16 @@ class _LandlordViewingRequestDetailsScreenState
   }
 
   bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
+
+  String? _completionTimeLabel(BuildContext context) {
+    final instant = _viewing.completionEligibleAt;
+    if (instant == null || _viewing.timeZoneId != 'Asia/Colombo') return null;
+    // Display follows the property's existing Colombo convention, independent
+    // of the device zone. This formatted time never controls action permission.
+    final local = instant.toUtc().add(const Duration(hours: 5, minutes: 30));
+    final labels = MaterialLocalizations.of(context);
+    return 'Available after ${labels.formatMediumDate(local)}, ${labels.formatTimeOfDay(TimeOfDay.fromDateTime(local))} (Asia/Colombo)';
+  }
 }
 
 class _ReferenceRow extends StatelessWidget {

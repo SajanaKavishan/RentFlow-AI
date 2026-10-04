@@ -81,6 +81,8 @@ class Viewing {
     this.tenant = const ViewingTenantSummary(),
     this.canCancel = false,
     this.cancellationDeadline,
+    this.canMarkCompleted = false,
+    this.completionEligibleAt,
   });
 
   final String id;
@@ -101,6 +103,10 @@ class Viewing {
   final bool canCancel;
   final DateTime? cancellationDeadline;
 
+  /// Server completion permission; device time never grants this action.
+  final bool canMarkCompleted;
+  final DateTime? completionEligibleAt;
+
   factory Viewing.fromJson(Map<String, dynamic> json) {
     return Viewing(
       id: _requiredString(json, 'id'),
@@ -111,6 +117,8 @@ class Viewing {
       status: ViewingStatus.fromJson(json['status']),
       canCancel: _canCancel(json),
       cancellationDeadline: _nullableDateTime(json, 'cancellationDeadline'),
+      canMarkCompleted: _optionalBool(json, 'canMarkCompleted'),
+      completionEligibleAt: _nullableDateTime(json, 'completionEligibleAt'),
       tenantMessage: _nullableString(json, 'tenantMessage'),
       landlordResponse: _nullableString(json, 'landlordResponse'),
       createdAt: _requiredDateTime(json, 'createdAt'),
@@ -122,10 +130,14 @@ class Viewing {
   }
 
   static bool _canCancel(Map<String, dynamic> json) {
-    final value = json['canCancel'];
+    return _optionalBool(json, 'canCancel');
+  }
+
+  static bool _optionalBool(Map<String, dynamic> json, String key) {
+    final value = json[key];
     if (value == null) return false;
     if (value is bool) return value;
-    throw const FormatException('Invalid "canCancel".');
+    throw FormatException('Invalid "$key".');
   }
 
   static String _requiredString(Map<String, dynamic> json, String key) {
