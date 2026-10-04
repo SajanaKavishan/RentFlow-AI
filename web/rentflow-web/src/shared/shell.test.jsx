@@ -48,7 +48,7 @@ describe('shared React shell', () => {
 
   it.each([
     ['Tenant', ['Dashboard', 'Properties', 'My Viewings', 'My Applications', 'Lease & Payments', 'Maintenance']],
-    ['Landlord', ['Dashboard', 'Manage Properties', 'Viewing Requests', 'Rental Applications', 'AI Review', 'Pricing / Lease', 'Payments', 'Maintenance']],
+    ['Landlord', ['Dashboard', 'Manage Properties', 'Viewing Requests', 'Rental Applications', 'AI Review', 'Reviews', 'Pricing / Lease', 'Payments', 'Maintenance']],
     ['MaintenanceTechnician', ['Dashboard', 'Assigned Work']],
     ['Admin', ['Dashboard', 'Users', 'Support Requests', 'AI / System Overview']],
   ])('renders the exact navigation map for %s', async (role, expectedLabels) => {
@@ -73,6 +73,23 @@ describe('shared React shell', () => {
     cleanup()
     renderApp('Landlord', '/modules/lease-payments')
     expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
+  })
+
+  it('opens landlord Reviews from navigation and blocks all other roles', async () => {
+    fetch.mockResolvedValue(new Response(JSON.stringify({ landlord: { averageRating: null, reviewCount: 0, reviews: [] }, properties: [] }), { status: 200 }))
+    renderApp('Landlord', '/modules/reviews')
+    expect(await screen.findByRole('heading', { name: 'Reviews' })).toBeInTheDocument()
+    expect(await screen.findByText('No viewing feedback yet')).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Reviews' })).toHaveAttribute('aria-current', 'page')
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/landlord/viewing-reviews/summary'), expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer test-token' }) }))
+    for (const role of ['Tenant', 'Admin', 'MaintenanceTechnician']) {
+      cleanup()
+      fetch.mockClear()
+      renderApp(role, '/modules/reviews')
+      expect(await screen.findByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
+      expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).queryByRole('link', { name: 'Reviews' })).not.toBeInTheDocument()
+      expect(fetch.mock.calls.some(([url]) => String(url).includes('/api/landlord/viewing-reviews/summary'))).toBe(false)
+    }
   })
 
   it('renders the existing tenant maintenance page for the maintenance module', async () => {

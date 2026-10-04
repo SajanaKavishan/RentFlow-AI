@@ -64,6 +64,12 @@ public sealed class ViewingReviewTests
         var row = await db.ViewingReviews.SingleAsync(); Assert.Equal(property.Id, row.PropertyId); Assert.Equal(oldLandlord, row.LandlordId); Assert.Equal(tenant, row.TenantId);
         Assert.Equal(5, (await service.GetPublicAsync(property.Id, false)).AverageRating);
         Assert.Equal(0, (await service.GetPublicAsync(property.Id, true)).ReviewCount); // New owner inherits no landlord feedback.
+        var oldOwnerSummary = await service.GetLandlordSummaryAsync(oldLandlord);
+        Assert.Equal(2, oldOwnerSummary.Landlord.AverageRating); Assert.Empty(oldOwnerSummary.Properties);
+        var newOwnerSummary = await service.GetLandlordSummaryAsync(newLandlord.Id);
+        Assert.Equal(0, newOwnerSummary.Landlord.ReviewCount);
+        Assert.Equal(property.Id, Assert.Single(newOwnerSummary.Properties).PropertyId);
+        Assert.Equal(5, newOwnerSummary.Properties[0].AverageRating);
         var anchor = new Property { LandlordId = oldLandlord, Landlord = await db.Users.SingleAsync(u => u.Id == oldLandlord) };
         db.Add(anchor); await db.SaveChangesAsync(); Assert.Equal(2, (await service.GetPublicAsync(anchor.Id, true)).AverageRating);
         Assert.True((await new RentalApplicationService(db).GetEligibilityAsync(tenant, property.Id)).CanApply);
@@ -94,5 +100,14 @@ public sealed class ViewingReviewTests
         var landlord = await service.GetPublicAsync(otherProperty.Id, true); Assert.Equal(8, landlord.ReviewCount); Assert.Equal(4, landlord.AverageRating);
         Assert.Equal("Comment 7", landlord.Reviews[0].Comment); Assert.Equal("2030-01", landlord.Reviews[0].ReviewMonth);
         Assert.Equal(new[] { "Rating", "Comment", "ReviewMonth" }, typeof(PublicViewingReviewDto).GetProperties().Select(p => p.Name));
+        var owner = await service.GetLandlordSummaryAsync(property.LandlordId);
+        Assert.Equal(8, owner.Landlord.ReviewCount); Assert.Equal(4, owner.Landlord.AverageRating);
+        Assert.Equal(2, owner.Properties.Count);
+        var feedback = owner.Properties.Single(p => p.PropertyId == property.Id);
+        Assert.Equal(7, feedback.ReviewCount); Assert.Equal(2.7, feedback.AverageRating);
+        Assert.Equal(summary.Reviews, feedback.RecentReviews);
+        Assert.Equal(1, owner.Properties.Single(p => p.PropertyId == otherProperty.Id).ReviewCount);
+        var stranger = await service.GetLandlordSummaryAsync(Guid.NewGuid());
+        Assert.Empty(stranger.Properties); Assert.Equal(0, stranger.Landlord.ReviewCount); Assert.Null(stranger.Landlord.AverageRating);
     }
 }

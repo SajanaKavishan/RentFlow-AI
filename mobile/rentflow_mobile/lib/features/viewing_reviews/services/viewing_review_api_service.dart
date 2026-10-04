@@ -111,6 +111,33 @@ class ViewingReviewApiService {
       throw const ViewingReviewApiException('Viewing reviews unavailable.');
     }
     final value = jsonDecode(response.body) as Map<String, dynamic>;
+    return _validateSummary(value);
+  }
+
+  Future<Map<String, dynamic>> landlordSummary() async {
+    final response = await client.get(
+      client.buildUri('/api/landlord/viewing-reviews/summary'),
+    );
+    if (response.statusCode != 200) {
+      throw const ViewingReviewApiException('Could not load viewing feedback.');
+    }
+    final value = jsonDecode(response.body) as Map<String, dynamic>;
+    _validateSummary(value['landlord'] as Map<String, dynamic>);
+    if (value['properties'] is! List) {
+      throw const FormatException('Invalid properties');
+    }
+    for (final property in value['properties'] as List) {
+      if (property is! Map<String, dynamic> ||
+          property['propertyId'] is! String ||
+          property['title'] is! String) {
+        throw const FormatException('Invalid property feedback');
+      }
+      _validateSummary({...property, 'reviews': property['recentReviews']});
+    }
+    return value;
+  }
+
+  Map<String, dynamic> _validateSummary(Map<String, dynamic> value) {
     final count = value['reviewCount'], average = value['averageRating'];
     if (count is! int ||
         count < 0 ||

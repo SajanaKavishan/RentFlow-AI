@@ -72,7 +72,7 @@ describe('Public landlord profile', () => {
     apiRequest.mockResolvedValue({ averageRating: 4.8, reviewCount: 18, reviews: [{ rating: 5, comment: 'The viewing was explained clearly.', reviewMonth: '2026-09', tenantId: 'secret-tenant', email: 'private@example.test', viewingId: 'secret-viewing' }] })
     const { container } = renderProfile()
     expect(await screen.findByRole('region', { name: 'Landlord experience' })).toBeInTheDocument()
-    expect(screen.getByText(/4.8 ★/)).toBeInTheDocument()
+    expect(screen.getByLabelText('4.8 out of 5')).toBeInTheDocument()
     expect(screen.getByText(/18 verified viewings/)).toBeInTheDocument()
     expect(screen.getByText('The viewing was explained clearly.')).toBeInTheDocument()
     expect(screen.getByText(/Verified viewing · Sep 2026/)).toBeInTheDocument()

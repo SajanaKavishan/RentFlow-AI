@@ -20,6 +20,7 @@ import NotificationResourcePage from './features/notifications/NotificationResou
 import PropertiesPage from './features/properties/pages/PropertiesPage.jsx'
 import PropertyDetailsPage from './features/properties/pages/PropertyDetailsPage.jsx'
 import PublicLandlordProfilePage from './features/properties/pages/PublicLandlordProfilePage.jsx'
+import LandlordReviewsPage from './features/properties/pages/LandlordReviewsPage.jsx'
 import PropertyMatchingRedirect from './features/properties/pages/PropertyMatchingRedirect.jsx'
 import ManagePropertiesPage from './features/properties/pages/ManagePropertiesPage.jsx'
 import PropertyFormPage from './features/properties/pages/PropertyFormPage.jsx'
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="/modules/pricing-lease/leases" element={<LeaseAgreementsPage />} />
           <Route path="/modules/pricing-lease/schedules" element={<RentSchedulesPage />} />
           <Route path="/modules/payments" element={<PaymentsPage />} />
+          <Route path="/modules/reviews" element={<LandlordReviewsPage />} />
           <Route path="/notifications/viewing-request/:id" element={<NotificationResourcePage resourceType="ViewingRequest" />} />
         </Route>
 

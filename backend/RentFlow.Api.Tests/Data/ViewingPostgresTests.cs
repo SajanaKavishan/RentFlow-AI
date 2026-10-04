@@ -45,6 +45,16 @@ public sealed class ViewingPostgresTests
         Assert.Equal(previousOwner, edited.LandlordId); Assert.Equal(clock.Now, edited.UpdatedAt);
         Assert.Equal(4, (await new ViewingReviewService(setup, clock).GetPublicAsync(property.Id, false)).AverageRating);
         Assert.Equal(0, (await new ViewingReviewService(setup, clock).GetPublicAsync(property.Id, true)).ReviewCount);
+        var summaryService = new ViewingReviewService(setup, clock);
+        var historical = await summaryService.GetLandlordSummaryAsync(previousOwner);
+        Assert.Equal(5, historical.Landlord.AverageRating); Assert.Empty(historical.Properties);
+        var current = await summaryService.GetLandlordSummaryAsync(property.LandlordId);
+        Assert.Equal(0, current.Landlord.ReviewCount); Assert.Equal(4, Assert.Single(current.Properties).AverageRating);
+        Assert.Empty(current.Properties[0].RecentReviews);
+        await new ViewingReviewService(db1, clock).SaveAsync(tenant.Id, viewing.Id, new() { PropertyRating = 3, LandlordRating = 4, Comment = "Public property feedback" });
+        current = await summaryService.GetLandlordSummaryAsync(property.LandlordId);
+        Assert.Equal(3, current.Properties[0].AverageRating);
+        Assert.Equal("Public property feedback", Assert.Single(current.Properties[0].RecentReviews).Comment);
     }
 
     [PostgreSqlFact]

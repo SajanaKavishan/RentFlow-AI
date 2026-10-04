@@ -75,6 +75,10 @@ void main() {
         role == UserRole.tenant ? findsOneWidget : findsNothing,
       );
       expect(find.text('Sign out'), findsOneWidget);
+      expect(
+        find.text('Reviews'),
+        role == UserRole.landlord ? findsOneWidget : findsNothing,
+      );
       expect(find.text('RentFlow AI v2.4.1 · © 2026'), findsOneWidget);
 
       final signOut = tester.widget<OutlinedButton>(
@@ -86,6 +90,26 @@ void main() {
       );
     });
   }
+
+  testWidgets('landlord profile Reviews opens its read-only destination', (
+    tester,
+  ) async {
+    var opened = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.build(),
+        home: Scaffold(
+          body: SharedProfileContent(
+            user: profileUser(UserRole.landlord),
+            onOpenReviews: () => opened = true,
+          ),
+        ),
+      ),
+    );
+    await tester.ensureVisible(find.text('Reviews'));
+    await tester.tap(find.text('Reviews'));
+    expect(opened, isTrue);
+  });
 
   testWidgets('account details use current user data and remain read-only', (
     tester,

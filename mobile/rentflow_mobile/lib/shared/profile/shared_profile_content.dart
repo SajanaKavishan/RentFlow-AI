@@ -11,10 +11,12 @@ class SharedProfileContent extends StatelessWidget {
     super.key,
     required this.user,
     this.onOpenApplications,
+    this.onOpenReviews,
   });
 
   final CurrentUser user;
   final VoidCallback? onOpenApplications;
+  final VoidCallback? onOpenReviews;
 
   void _showDetails(
     BuildContext context, {
@@ -150,6 +152,13 @@ class SharedProfileContent extends StatelessWidget {
                     ? 'Not available yet'
                     : 'View documents in your applications',
                 onTap: onOpenApplications,
+              ),
+            if (user.role == UserRole.landlord)
+              _ProfileTile(
+                icon: Icons.star_outline,
+                title: 'Reviews',
+                subtitle: 'Read verified viewing feedback',
+                onTap: onOpenReviews,
               ),
           ],
         ),

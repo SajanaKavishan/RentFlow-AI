@@ -18,6 +18,44 @@ namespace RentFlow.Api.Tests.Authentication;
 public sealed class ViewingReviewEndpointsTests
 {
     [Theory]
+    [InlineData(UserRole.Tenant)] [InlineData(UserRole.Admin)] [InlineData(UserRole.MaintenanceTechnician)]
+    public async Task LandlordSummary_RejectsOtherRolesAndAnonymous(UserRole role)
+    {
+        using var factory = new AuthApiFactory(); using var client = Client(factory, Guid.NewGuid(), role);
+        using var anonymous = factory.CreateHttpsClient();
+        const string path = "/api/landlord/viewing-reviews/summary";
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
+    }
+    [Fact]
+    public async Task LandlordSummary_JwtScopeGroupingAndSafeReadOnlyContract()
+    {
+        using var factory = new AuthApiFactory(); var landlord = Guid.NewGuid(); var tenant = Guid.NewGuid();
+        using var owner = Client(factory, landlord, UserRole.Landlord);
+        using var stranger = Client(factory, Guid.NewGuid(), UserRole.Landlord);
+        factory.EnsureActiveUser(tenant, UserRole.Tenant);
+        var property = new Property { LandlordId = landlord, Title = "Owned home" };
+        var viewing = new ViewingRequest { TenantId = tenant, PropertyId = property.Id, Status = ViewingStatus.Completed };
+        using (var scope = factory.Services.CreateScope()) {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.AddRange(property, viewing); await db.SaveChangesAsync();
+            await new RentFlow.Api.Services.ViewingReviewService(db, TimeProvider.System).SaveAsync(tenant, viewing.Id, new() { PropertyRating = 2, LandlordRating = 5, Comment = "Safe feedback" });
+        }
+        const string path = "/api/landlord/viewing-reviews/summary";
+        var response = await owner.GetAsync(path); Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync()); var root = document.RootElement;
+        Assert.Equal(new[] { "landlord", "properties" }, root.EnumerateObject().Select(p => p.Name));
+        Assert.Equal(5, root.GetProperty("landlord").GetProperty("averageRating").GetDouble());
+        var feedback = root.GetProperty("properties")[0];
+        Assert.Equal(new[] { "propertyId", "title", "averageRating", "reviewCount", "recentReviews" }, feedback.EnumerateObject().Select(p => p.Name));
+        Assert.Equal(property.Id, feedback.GetProperty("propertyId").GetGuid()); Assert.Equal(2, feedback.GetProperty("averageRating").GetDouble());
+        Assert.Equal(new[] { "rating", "comment", "reviewMonth" }, feedback.GetProperty("recentReviews")[0].EnumerateObject().Select(p => p.Name));
+        var other = (await stranger.GetFromJsonAsync<LandlordViewingReviewSummaryDto>($"{path}?landlordId={landlord}"))!;
+        Assert.Empty(other.Properties); Assert.Equal(0, other.Landlord.ReviewCount);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await owner.DeleteAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await owner.PutAsJsonAsync(path, new { averageRating = 1 })).StatusCode);
+    }
+    [Theory]
     [InlineData(UserRole.Landlord)] [InlineData(UserRole.Admin)] [InlineData(UserRole.MaintenanceTechnician)]
     public async Task OnlyTenantCanReadOwnOrWrite(UserRole role)
     {

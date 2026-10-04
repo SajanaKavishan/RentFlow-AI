@@ -89,6 +89,13 @@ export const NAV_ITEMS = Object.freeze([
     available: true,
     note: 'Application validation and document review',
   },
+  {
+    id: 'reviews',
+    label: 'Reviews',
+    path: '/modules/reviews',
+    roles: [L],
+    available: true,
+  },
 
   // =========================================================
   // LEASE / PAYMENT / MAINTENANCE

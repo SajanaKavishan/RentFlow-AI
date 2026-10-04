@@ -8,6 +8,66 @@ import 'helpers/discovery_backend.dart';
 import 'property_details_test.dart' as fixture;
 
 void main() {
+  testWidgets(
+    'property-only aggregate is singular and does not become landlord feedback',
+    (tester) async {
+      final backend = DiscoveryBackend();
+      addTearDown(backend.close);
+      backend.intercept = (request) async {
+        if (request.url.path.endsWith('/landlord-summary')) {
+          return DiscoveryBackend.json({
+            'displayName': 'Real landlord',
+            'memberSinceYear': 2022,
+            'hasProfileImage': false,
+          });
+        }
+        if (request.url.path.endsWith('/landlord-viewing-reviews')) {
+          return DiscoveryBackend.json({
+            'averageRating': null,
+            'reviewCount': 0,
+            'reviews': [],
+          });
+        }
+        if (request.url.path.endsWith('/viewing-reviews')) {
+          return DiscoveryBackend.json({
+            'averageRating': 3,
+            'reviewCount': 1,
+            'reviews': [],
+          });
+        }
+        return null;
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(),
+          home: PropertyDetailsScreen(
+            property: Property.fromJson(fixture.propertyJson()),
+            propertyApiService: backend.service,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final compact = find.byKey(const Key('details-property-rating'));
+      await tester.ensureVisible(compact);
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: compact, matching: find.text('1 verified viewing')),
+        findsOneWidget,
+      );
+      final listed = find.byKey(const Key('details-landlord-rating'));
+      await tester.ensureVisible(listed);
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: listed, matching: find.text('3.0')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: listed, matching: find.text('0 verified viewings')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final landlord in [false, true]) {
     for (final hasReviews in [false, true]) {
       testWidgets(
@@ -35,9 +95,14 @@ void main() {
             }
             if (request.url.path.endsWith('/viewing-reviews') ||
                 request.url.path.endsWith('/landlord-viewing-reviews')) {
+              final landlordRating = request.url.path.endsWith(
+                '/landlord-viewing-reviews',
+              );
               return DiscoveryBackend.json({
-                'averageRating': hasReviews ? (landlord ? 4.8 : 4.6) : null,
-                'reviewCount': hasReviews ? (landlord ? 18 : 12) : 0,
+                'averageRating': hasReviews
+                    ? (landlordRating ? 4.8 : 4.6)
+                    : null,
+                'reviewCount': hasReviews ? (landlordRating ? 18 : 12) : 0,
                 'reviews': hasReviews
                     ? [
                         {
@@ -48,6 +113,11 @@ void main() {
                           'email': 'private@example.test',
                           'fullName': 'Secret reviewer',
                           'viewingId': 'secret-viewing',
+                        },
+                        {
+                          'rating': 3,
+                          'comment': '  ',
+                          'reviewMonth': '2026-08',
                         },
                       ]
                     : [],
@@ -77,6 +147,25 @@ void main() {
           );
           await tester.pumpAndSettle();
           if (hasReviews) {
+            if (!landlord) {
+              final compact = find.byKey(const Key('details-property-rating'));
+              await tester.ensureVisible(compact);
+              await tester.pumpAndSettle();
+              expect(
+                find.descendant(of: compact, matching: find.text('4.6')),
+                findsOneWidget,
+              );
+              expect(
+                find.bySemanticsLabel('4.6 out of 5 from 12 verified viewings'),
+                findsOneWidget,
+              );
+              await tester.tap(compact);
+              await tester.pumpAndSettle();
+              expect(
+                tester.getTopLeft(find.text('Viewing experience')).dy,
+                lessThan(800),
+              );
+            }
             final heading = find.text(
               landlord ? 'Landlord experience' : 'Viewing experience',
             );
@@ -88,16 +177,36 @@ void main() {
             await tester.pumpAndSettle();
             expect(heading, findsOneWidget);
             expect(find.text(comment), findsOneWidget);
-            expect(
-              find.textContaining(landlord ? '4.8 ★ · 18' : '4.6 ★ · 12'),
-              findsOneWidget,
-            );
+            expect(find.text(landlord ? '4.8 ★' : '4.6 ★'), findsOneWidget);
             expect(find.textContaining('Verified viewing ·'), findsOneWidget);
             expect(find.textContaining('Secret reviewer'), findsNothing);
             expect(find.textContaining('private@example'), findsNothing);
             expect(find.textContaining('secret-viewing'), findsNothing);
             expect(find.textContaining('secret-tenant'), findsNothing);
             expect(tester.takeException(), isNull);
+            if (!landlord) {
+              final listed = find.byKey(const Key('details-landlord-rating'));
+              await tester.ensureVisible(listed);
+              await tester.pumpAndSettle();
+              expect(
+                find.descendant(of: listed, matching: find.text('4.8')),
+                findsOneWidget,
+              );
+              expect(
+                find.descendant(
+                  of: listed,
+                  matching: find.text('18 verified viewings'),
+                ),
+                findsOneWidget,
+              );
+              expect(
+                backend.calls(
+                  '/api/properties/${fixture.id}/landlord-viewing-reviews',
+                ),
+                1,
+              );
+              expect(tester.takeException(), isNull);
+            }
           } else {
             expect(find.textContaining('0.0'), findsNothing);
             expect(

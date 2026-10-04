@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -128,21 +128,48 @@ afterEach(() => {
 
 describe('tenant property details', () => {
   it('shows real viewing aggregates and anonymous verified comments without private fields', async () => {
-    apiRequest.mockResolvedValue({ averageRating: 4.6, reviewCount: 12, reviews: [{ rating: 5, comment: 'Rooms matched the listing.', reviewMonth: '2026-09', tenantId: 'secret-tenant', fullName: 'Secret Name', email: 'private@example.test', viewingId: 'secret-viewing' }] })
+    apiRequest.mockImplementation((path) => Promise.resolve(path.endsWith('/landlord-viewing-reviews')
+      ? { averageRating: 4.8, reviewCount: 18, reviews: [] }
+      : { averageRating: 4.6, reviewCount: 12, reviews: [{ rating: 5, comment: 'Rooms matched the listing.', reviewMonth: '2026-09', tenantId: 'secret-tenant', fullName: 'Secret Name', email: 'private@example.test', viewingId: 'secret-viewing' }, { rating: 1, comment: '  ', reviewMonth: '2026-08' }] }))
     const { container } = renderPage()
     expect(await screen.findByRole('region', { name: 'Viewing experience' })).toBeInTheDocument()
-    expect(screen.getByText(/4.6 ★/)).toBeInTheDocument()
-    expect(screen.getByText(/12 verified viewings/)).toBeInTheDocument()
+    const reviews = await screen.findByRole('region', { name: 'Viewing experience' })
+    expect(within(reviews).getByLabelText('4.6 out of 5')).toBeInTheDocument()
+    expect(within(reviews).getByText(/12 verified viewings/)).toBeInTheDocument()
+    expect(within(reviews).getAllByRole('article')).toHaveLength(1)
+    const compact = screen.getByRole('button', { name: '4.6 out of 5 from 12 verified viewings' })
+    expect(within(screen.getByRole('complementary', { name: 'Rental summary' })).getByRole('button', { name: '4.6 out of 5 from 12 verified viewings' })).toBe(compact)
+    const scroll = vi.fn()
+    reviews.scrollIntoView = scroll
+    await userEvent.click(compact)
+    expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+    expect(reviews).toHaveFocus()
+    const listedBy = screen.getByRole('region', { name: 'Listed by' })
+    expect(within(listedBy).getByLabelText('4.8 out of 5 from 18 verified viewings')).toBeInTheDocument()
+    expect(within(listedBy).queryByText('4.6')).not.toBeInTheDocument()
     expect(screen.getByText('Rooms matched the listing.')).toBeInTheDocument()
     expect(screen.getByText(/Verified viewing · Sep 2026/)).toBeInTheDocument()
     expect(container.textContent).not.toMatch(/secret-tenant|Secret Name|private@example|secret-viewing/)
     expect(apiRequest).toHaveBeenCalledWith('/api/properties/property-1/viewing-reviews', expect.objectContaining({ authenticated: false }))
+    expect(apiRequest.mock.calls.filter(([path]) => path.endsWith('/viewing-reviews'))).toHaveLength(1)
+    expect(apiRequest.mock.calls.filter(([path]) => path.endsWith('/landlord-viewing-reviews'))).toHaveLength(1)
   })
   it('omits rating when no reviews exist', async () => {
     renderPage()
     await screen.findByText('Lake View Apartment')
     expect(screen.queryByRole('region', { name: 'Viewing experience' })).not.toBeInTheDocument()
     expect(screen.queryByText(/0.0 ★/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /out of 5 from/ })).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Listed by' })).queryByLabelText(/out of 5 from/)).not.toBeInTheDocument()
+  })
+  it('keeps a property rating when the landlord has none and uses singular viewing wording', async () => {
+    apiRequest.mockImplementation((path) => Promise.resolve(path.endsWith('/landlord-viewing-reviews')
+      ? { averageRating: null, reviewCount: 0, reviews: [] }
+      : { averageRating: 3, reviewCount: 1, reviews: [] }))
+    renderPage()
+    expect(await screen.findByRole('button', { name: '3.0 out of 5 from 1 verified viewing' })).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Viewing experience' })).getByText('1 verified viewing')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Listed by' })).queryByLabelText(/out of 5 from/)).not.toBeInTheDocument()
   })
   it('opens the property-scoped landlord profile through an accessible link', async () => {
     renderPage()

@@ -24,6 +24,8 @@ import '../../features/rent_schedules/services/rent_schedule_api_service.dart';
 import '../../features/viewings/screens/landlord_viewing_requests_screen.dart';
 import '../../features/viewings/screens/my_viewings_screen.dart';
 import '../../features/viewings/services/viewing_api_service.dart';
+import '../../features/viewing_reviews/screens/landlord_reviews_screen.dart';
+import '../../features/viewing_reviews/services/viewing_review_api_service.dart';
 import '../home/landlord_home.dart';
 import '../home/tenant_home.dart';
 import '../navigation/role_navigation.dart';
@@ -349,6 +351,19 @@ class _SharedAppShellState extends State<SharedAppShell>
 
       DestinationExperience.profile => SharedProfileContent(
         user: widget.user,
+        onOpenReviews: widget.user.role == UserRole.landlord
+            ? () => Navigator.of(context).push<void>(
+                MaterialPageRoute(
+                  builder: (_) => LandlordReviewsScreen(
+                    apiService: widget.propertyApiService == null
+                        ? null
+                        : ViewingReviewApiService(
+                            widget.propertyApiService!.apiClient,
+                          ),
+                  ),
+                ),
+              )
+            : null,
         onOpenApplications: widget.user.role == UserRole.tenant
             ? _openApplicationDocuments
             : null,

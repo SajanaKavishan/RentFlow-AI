@@ -17,3 +17,8 @@ public sealed record ViewingReviewDto(Guid Id, Guid ViewingId, int PropertyRatin
 public sealed record PublicViewingReviewDto(int Rating, string Comment, string ReviewMonth);
 public sealed record ViewingReviewSummaryDto(double? AverageRating, int ReviewCount,
     IReadOnlyList<PublicViewingReviewDto> Reviews);
+
+public sealed record LandlordPropertyReviewSummaryDto(Guid PropertyId, string Title, double? AverageRating,
+    int ReviewCount, IReadOnlyList<PublicViewingReviewDto> RecentReviews);
+public sealed record LandlordViewingReviewSummaryDto(ViewingReviewSummaryDto Landlord,
+    IReadOnlyList<LandlordPropertyReviewSummaryDto> Properties);

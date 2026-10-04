@@ -27,6 +27,7 @@ function navigationPath(pathname) {
 function iconForItem(label) {
   if (label === 'Dashboard') return 'home'
   if (label === 'Profile') return 'user'
+  if (label === 'Reviews') return 'star'
   if (/Viewing|Viewings/.test(label)) return 'calendar'
   if (/Maintenance/.test(label)) return 'tools'
   if (/Application|AI|System|Lease|Payment/.test(label)) return 'document'

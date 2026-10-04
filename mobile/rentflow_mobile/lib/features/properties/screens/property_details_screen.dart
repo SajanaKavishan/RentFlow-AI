@@ -20,6 +20,7 @@ import '../widgets/property_details_gallery.dart';
 import '../widgets/landlord_contact_card.dart';
 import '../../viewing_reviews/services/viewing_review_api_service.dart';
 import '../../viewing_reviews/widgets/public_viewing_reviews.dart';
+import '../../viewing_reviews/widgets/viewing_rating_summary.dart';
 
 class PropertyDetailsScreen extends StatefulWidget {
   const PropertyDetailsScreen({
@@ -48,6 +49,8 @@ class PropertyDetailsScreen extends StatefulWidget {
 class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
   late Property _property;
   late Future<PublicLandlordSummary?> _landlord;
+  late Future<Map<String, dynamic>> _propertyReviews, _landlordReviews;
+  final _reviewSection = GlobalKey();
   late final PropertyDiscoveryController _favorites;
   bool _isVerifying = true;
   bool _verificationFailed = false;
@@ -89,6 +92,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
   }
 
   Future<void> _refreshProperty() async {
+    _refreshReviews();
     setState(() => _contactRefreshVersion++);
     if (!_isVerifying || _verificationFailed) {
       setState(() {
@@ -113,6 +117,28 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
           _verificationFailed = true;
         });
       }
+    }
+  }
+
+  void _refreshReviews() {
+    final api = ViewingReviewApiService(widget.propertyApiService.apiClient);
+    _propertyReviews = api.publicSummary(_property.id);
+    _landlordReviews = api.publicSummary(_property.id, landlord: true);
+    // Optional sections may not mount (for example, when identity is unavailable).
+    // Attach error listeners immediately; mounted builders still receive failures.
+    for (final request in [_propertyReviews, _landlordReviews]) {
+      request.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    }
+  }
+
+  void _showReviews() {
+    final target = _reviewSection.currentContext;
+    if (target != null) {
+      Scrollable.ensureVisible(
+        target,
+        alignment: 0,
+        duration: const Duration(milliseconds: 300),
+      );
     }
   }
 
@@ -246,6 +272,11 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                   ),
                   const SizedBox(height: 14),
                   _rentSummary(),
+                  ViewingRatingSummary(
+                    key: const Key('details-property-rating'),
+                    summary: _propertyReviews,
+                    onTap: _showReviews,
+                  ),
                   const SizedBox(height: 12),
                   _facts(),
                   const SizedBox(height: 14),
@@ -253,7 +284,8 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                   _amenities(),
                   _about(),
                   PublicViewingReviews(
-                    key: ValueKey('property-reviews-$_contactRefreshVersion'),
+                    key: _reviewSection,
+                    summary: _propertyReviews,
                     propertyId: _property.id,
                     api: ViewingReviewApiService(
                       widget.propertyApiService.apiClient,
@@ -917,7 +949,12 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                         ),
                       ),
                     );
-                    if (mounted) setState(() => _contactRefreshVersion++);
+                    if (mounted) {
+                      setState(() {
+                        _contactRefreshVersion++;
+                        _refreshReviews();
+                      });
+                    }
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -953,6 +990,10 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                                 ),
                               ],
                               const SizedBox(height: 8),
+                              ViewingRatingSummary(
+                                key: const Key('details-landlord-rating'),
+                                summary: _landlordReviews,
+                              ),
                               const Row(
                                 children: [
                                   Flexible(

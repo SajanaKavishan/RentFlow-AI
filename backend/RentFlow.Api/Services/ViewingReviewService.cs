@@ -62,6 +62,31 @@ public sealed class ViewingReviewService(ApplicationDbContext db, TimeProvider c
             .Select(p => new { p.Id, p.LandlordId }).SingleOrDefaultAsync(ct)
             ?? throw ViewingServiceException.NotFound("The property was not found.");
         var query = db.ViewingReviews.AsNoTracking().Where(r => landlord ? r.LandlordId == property.LandlordId : r.PropertyId == property.Id);
+        return await SummarizeAsync(query, landlord, ct);
+    }
+
+    public async Task<LandlordViewingReviewSummaryDto> GetLandlordSummaryAsync(Guid landlordId, CancellationToken ct = default)
+    {
+        var landlord = await SummarizeAsync(db.ViewingReviews.AsNoTracking().Where(r => r.LandlordId == landlordId), true, ct);
+        // One projection for all owned properties, with at most five written comments each.
+        // No per-property API calls or unbounded review materialization.
+        var properties = await db.Properties.AsNoTracking().Where(p => p.LandlordId == landlordId)
+            .OrderBy(p => p.Title).ThenBy(p => p.Id)
+            .Select(p => new {
+                p.Id, p.Title,
+                Count = db.ViewingReviews.Count(r => r.PropertyId == p.Id),
+                Average = db.ViewingReviews.Where(r => r.PropertyId == p.Id).Average(r => (double?)r.PropertyRating),
+                Recent = db.ViewingReviews.Where(r => r.PropertyId == p.Id && r.Comment != null && r.Comment != "")
+                    .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id).Take(5)
+                    .Select(r => new { r.PropertyRating, r.Comment, r.CreatedAt }).ToList()
+            }).ToListAsync(ct);
+        return new(landlord, properties.Select(p => new LandlordPropertyReviewSummaryDto(p.Id, p.Title,
+            p.Average is null ? null : Math.Round(p.Average.Value, 1, MidpointRounding.AwayFromZero), p.Count,
+            p.Recent.Select(r => new PublicViewingReviewDto(r.PropertyRating, r.Comment!, r.CreatedAt.ToString("yyyy-MM", CultureInfo.InvariantCulture))).ToList())).ToList());
+    }
+
+    private static async Task<ViewingReviewSummaryDto> SummarizeAsync(IQueryable<ViewingReview> query, bool landlord, CancellationToken ct)
+    {
         var count = await query.CountAsync(ct);
         var average = count == 0 ? (double?)null : await query.AverageAsync(r => (double)(landlord ? r.LandlordRating : r.PropertyRating), ct);
         var recent = await query.Where(r => r.Comment != null && r.Comment != "")

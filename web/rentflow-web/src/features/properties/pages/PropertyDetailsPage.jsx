@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { USER_ROLES } from '../../auth/authModel.js'
 import { useAuth } from '../../auth/useAuth.js'
@@ -7,7 +7,8 @@ import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import PropertyLocationMap from '../components/PropertyLocationMap.jsx'
 import PublicLandlordAvatar from '../components/PublicLandlordAvatar.jsx'
 import LandlordContact from '../components/LandlordContact.jsx'
-import ViewingReviews from '../components/ViewingReviews.jsx'
+import { CompactViewingRating, ViewingReviewSummary } from '../components/ViewingReviews.jsx'
+import { useViewingReviews } from '../useViewingReviews.js'
 import { formatPropertyArea } from '../propertyArea.js'
 import {
   UTILITY_CATALOG,
@@ -90,6 +91,13 @@ export default function PropertyDetailsPage() {
   const isOwner = user?.role === USER_ROLES.LANDLORD
     && String(user.id).toLowerCase() === String(property?.landlordId).toLowerCase()
   const isTenant = user?.role === USER_ROLES.TENANT
+  const propertyReviews = useViewingReviews(propertyId, false, 0, Boolean(property))
+  const landlordReviews = useViewingReviews(propertyId, true, 0, isTenant && Boolean(property))
+  const reviewSection = useRef(null)
+  const showReviews = () => {
+    reviewSection.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    reviewSection.current?.focus({ preventScroll: true })
+  }
   const eligibility = useApplicationEligibility(propertyId, isTenant && Boolean(property))
   const canOpenApplication = !eligibility.loading && (eligibility.data?.canApply === true || Boolean(eligibility.data?.existingApplicationId))
   const matchScore = matchResult.propertyId === propertyId ? matchResult.score : null
@@ -444,6 +452,7 @@ export default function PropertyDetailsPage() {
               <strong>Rs. {Number(property.monthlyRent).toLocaleString()}</strong>
               <span>/month</span>
             </div>
+            {isTenant && <CompactViewingRating summary={propertyReviews} onClick={showReviews} />}
 
             <dl className="property-details-summary__details">
               {property.advertisedSecurityDeposit != null && (
@@ -521,7 +530,7 @@ export default function PropertyDetailsPage() {
             <p>{property.description || 'No property description has been provided.'}</p>
           </section>
 
-          <ViewingReviews key={property.id} propertyId={property.id} />
+          <ViewingReviewSummary summary={propertyReviews} sectionRef={reviewSection} />
           <section className="property-details-section">
             <h2>Amenities</h2>
             {amenityDetails.length > 0 ? (
@@ -559,6 +568,7 @@ export default function PropertyDetailsPage() {
                     <div>
                       <strong>{landlordState.summary.displayName}</strong>
                       <p>Member since {landlordState.summary.memberSinceYear}</p>
+                      <CompactViewingRating summary={landlordReviews} />
                       <Link className="property-listed-by__link" to={`/properties/${encodeURIComponent(property.id)}/landlord`}>
                         View landlord profile <span aria-hidden="true">→</span>
                       </Link>

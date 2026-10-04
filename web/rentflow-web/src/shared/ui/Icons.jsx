@@ -1,4 +1,5 @@
 const paths = {
+  star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" />,
   home: <><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M9 21v-7h6v7" /></>,
   building: <><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M8 8h2m4 0h2M8 12h2m4 0h2M9 21v-5h6v5" /></>,
   calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4m10-4v4M3 10h18" /></>,
