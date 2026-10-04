@@ -115,6 +115,9 @@ class _MyAppState extends State<MyApp> {
     if (_authController.isLoading) return const SessionRestorationScreen();
     final user = _authController.currentUser;
     if (user == null) {
+      if (_authController.signInNotice != null) {
+        return LoginScreen(notice: _authController.signInNotice);
+      }
       return widget.showPublicLanding
           ? const PublicLandingScreen()
           : const LoginScreen();

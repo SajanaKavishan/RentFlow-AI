@@ -7,6 +7,7 @@ import '../widgets/shared_widgets.dart';
 import 'public_contact_editor.dart';
 import 'personal_information_screen.dart';
 import 'profile_avatar.dart';
+import 'password_security_screen.dart';
 
 class SharedProfileContent extends StatelessWidget {
   const SharedProfileContent({
@@ -60,6 +61,16 @@ class SharedProfileContent extends StatelessWidget {
                   MaterialPageRoute(
                     builder: (_) =>
                         PersonalInformationScreen(user: currentUser),
+                  ),
+                ),
+              ),
+              _ProfileTile(
+                icon: Icons.lock_outline,
+                title: 'Password & security',
+                subtitle: 'Change your account password',
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => const PasswordSecurityScreen(),
                   ),
                 ),
               ),

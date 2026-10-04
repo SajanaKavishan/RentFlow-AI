@@ -24,6 +24,26 @@ class ApiClient {
   final TokenStorage tokenStorage;
   UnauthorizedHandler? _unauthorizedHandler;
   bool _handlingUnauthorized = false;
+  bool _authenticationSuspended = false;
+  Completer<void>? _tokenReplacement;
+
+  // Prevent stale storage reads while a rotated session is being installed or
+  // after local persistence fails. The token itself remains solely in storage.
+  void beginTokenReplacement() => _tokenReplacement = Completer<void>();
+  void _finishTokenReplacement() {
+    _tokenReplacement?.complete();
+    _tokenReplacement = null;
+  }
+
+  void suspendAuthentication() {
+    _authenticationSuspended = true;
+    _finishTokenReplacement();
+  }
+
+  void resumeAuthentication() {
+    _authenticationSuspended = false;
+    _finishTokenReplacement();
+  }
 
   void setUnauthorizedHandler(UnauthorizedHandler handler) {
     _unauthorizedHandler = handler;
@@ -45,11 +65,15 @@ class ApiClient {
     required bool authenticated,
     bool json = false,
   }) async {
-    final token = authenticated ? await tokenStorage.readToken() : null;
+    if (authenticated) await _tokenReplacement?.future;
+    final token = authenticated && !_authenticationSuspended
+        ? await tokenStorage.readToken()
+        : null;
     return {
       'Accept': 'application/json',
       if (json) 'Content-Type': 'application/json',
-      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      if (token != null && token.isNotEmpty && !_authenticationSuspended)
+        'Authorization': 'Bearer $token',
     };
   }
 
@@ -71,68 +95,54 @@ class ApiClient {
     if (kDebugMode) {
       debugPrint('[ApiClient] GET $uri status=${response.statusCode}');
     }
-    return _check(response, authenticated);
+    return _check(response, authenticated, headers['Authorization']);
   }
 
   Future<http.Response> post(
     Uri uri, {
     Object? body,
     bool authenticated = true,
-  }) async => _check(
-    await _withTimeout(
-      () async => httpClient.post(
-        uri,
-        headers: await _headers(authenticated: authenticated, json: true),
-        body: body,
-      ),
-      uri,
-    ),
-    authenticated,
-  );
+  }) => _jsonRequest('POST', uri, body: body, authenticated: authenticated);
 
   Future<http.Response> put(
     Uri uri, {
     Object? body,
     bool authenticated = true,
-  }) async => _check(
-    await _withTimeout(
-      () async => httpClient.put(
-        uri,
-        headers: await _headers(authenticated: authenticated, json: true),
-        body: body,
-      ),
-      uri,
-    ),
-    authenticated,
-  );
+  }) => _jsonRequest('PUT', uri, body: body, authenticated: authenticated);
 
   Future<http.Response> patch(
     Uri uri, {
     Object? body,
     bool authenticated = true,
-  }) async => _check(
-    await _withTimeout(
-      () async => httpClient.patch(
-        uri,
-        headers: await _headers(authenticated: authenticated, json: true),
-        body: body,
-      ),
-      uri,
-    ),
-    authenticated,
-  );
+  }) => _jsonRequest('PATCH', uri, body: body, authenticated: authenticated);
 
-  Future<http.Response> delete(Uri uri, {bool authenticated = true}) async =>
-      _check(
-        await _withTimeout(
-          () async => httpClient.delete(
-            uri,
-            headers: await _headers(authenticated: authenticated, json: true),
-          ),
-          uri,
-        ),
-        authenticated,
-      );
+  Future<http.Response> delete(Uri uri, {bool authenticated = true}) =>
+      _jsonRequest('DELETE', uri, authenticated: authenticated);
+
+  Future<http.Response> _jsonRequest(
+    String method,
+    Uri uri, {
+    Object? body,
+    required bool authenticated,
+  }) async {
+    final headers = await _withTimeout(
+      () => _headers(authenticated: authenticated, json: true),
+      uri,
+    );
+    final response = await _withTimeout(() {
+      switch (method) {
+        case 'POST':
+          return httpClient.post(uri, headers: headers, body: body);
+        case 'PUT':
+          return httpClient.put(uri, headers: headers, body: body);
+        case 'PATCH':
+          return httpClient.patch(uri, headers: headers, body: body);
+        default:
+          return httpClient.delete(uri, headers: headers);
+      }
+    }, uri);
+    return _check(response, authenticated, headers['Authorization']);
+  }
 
   Future<http.StreamedResponse> send(
     http.BaseRequest request, {
@@ -149,7 +159,7 @@ class ApiClient {
       request.url,
     );
     if (response.statusCode == 401 && authenticated) {
-      await _handleUnauthorized();
+      await _handleUnauthorized(request.headers['Authorization']);
     }
     return response;
   }
@@ -157,10 +167,11 @@ class ApiClient {
   Future<http.Response> _check(
     FutureOr<http.Response> responseValue,
     bool authenticated,
+    String? authorization,
   ) async {
     final response = await responseValue;
     if (response.statusCode == 401 && authenticated) {
-      await _handleUnauthorized();
+      await _handleUnauthorized(authorization);
     }
     return response;
   }
@@ -173,10 +184,32 @@ class ApiClient {
     }
   }
 
-  Future<void> _handleUnauthorized() async {
+  Future<void> _handleUnauthorized(String? authorization) async {
+    // An old request can return 401 after TokenVersion changes. Its rejection
+    // must not delete the replacement token or sign out the initiating session.
+    if (_tokenReplacement != null) {
+      try {
+        await _tokenReplacement!.future.timeout(requestTimeout);
+      } on TimeoutException {
+        return;
+      }
+    }
+    if (_authenticationSuspended) return;
+    try {
+      final currentToken = await tokenStorage.readToken().timeout(
+        requestTimeout,
+      );
+      final currentAuthorization = currentToken == null || currentToken.isEmpty
+          ? null
+          : 'Bearer $currentToken';
+      if (_tokenReplacement != null) return _handleUnauthorized(authorization);
+      if (authorization != currentAuthorization) return;
+    } catch (_) {
+      // Storage failure must not leave an already rejected session signed in.
+    }
     try {
       await tokenStorage.deleteToken().timeout(requestTimeout);
-    } on TimeoutException {
+    } catch (_) {
       // Still run the session handler so the app can leave authenticated UI.
     }
     if (_handlingUnauthorized || _unauthorizedHandler == null) return;

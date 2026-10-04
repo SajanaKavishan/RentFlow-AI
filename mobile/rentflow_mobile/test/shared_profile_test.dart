@@ -10,6 +10,7 @@ import 'package:rentflow_mobile/features/auth/models/current_user.dart';
 import 'package:rentflow_mobile/shared/profile/shared_profile_content.dart';
 import 'package:rentflow_mobile/shared/theme/app_theme.dart';
 import 'package:rentflow_mobile/shared/profile/personal_information_screen.dart';
+import 'package:rentflow_mobile/shared/profile/password_security_screen.dart';
 
 import 'helpers/profile_backend.dart';
 
@@ -71,6 +72,7 @@ void main() {
         expect(find.text(label), findsNothing);
       }
       expect(find.text('Account'), findsOneWidget);
+      expect(find.text('Password & security'), findsOneWidget);
       expect(find.text('Preferences'), findsNothing);
       expect(find.text('Support'), findsNothing);
       expect(
@@ -164,7 +166,6 @@ void main() {
     (tester) async {
       await pumpProfile(tester);
       for (final label in [
-        'Password & security',
         'Email & phone',
         'Notifications',
         'Language',
@@ -177,6 +178,31 @@ void main() {
       expect(find.byType(Switch), findsNothing);
     },
   );
+
+  for (final role in UserRole.values) {
+    testWidgets('Password & security opens a working screen for $role', (
+      tester,
+    ) async {
+      final backend = ProfileBackend(role: role);
+      addTearDown(backend.dispose);
+      await backend.pump(
+        tester,
+        (user) => Scaffold(body: SharedProfileContent(user: user)),
+      );
+      await tester.ensureVisible(find.text('Password & security'));
+      await tester.tap(find.text('Password & security'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PasswordSecurityScreen), findsOneWidget);
+      expect(find.byKey(const Key('password-current')), findsOneWidget);
+      expect(find.byKey(const Key('password-submit')), findsOneWidget);
+      expect(find.text('Not available yet'), findsNothing);
+      expect(find.textContaining('Forgot'), findsNothing);
+      expect(find.textContaining('Reset password'), findsNothing);
+      await tester.tap(find.byTooltip('Back to Profile'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SharedProfileContent), findsOneWidget);
+    });
+  }
 
   testWidgets(
     'tenant Application documents reaches existing application documents flow',

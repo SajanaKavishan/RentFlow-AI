@@ -7,7 +7,8 @@ import '../widgets/auth_shell.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.notice});
+  final String? notice;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -78,6 +79,17 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            if (widget.notice != null) ...[
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  widget.notice!,
+                  key: const Key('login-session-notice'),
+                  style: AppTypography.body,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             const AuthFieldLabel('Email'),
             const SizedBox(height: 6),
             TextFormField(

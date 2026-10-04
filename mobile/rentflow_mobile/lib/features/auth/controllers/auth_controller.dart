@@ -16,11 +16,16 @@ class AuthController extends ChangeNotifier {
   bool _isLoading = true;
   int _profileImageRevision = 0;
   Future<Uint8List?>? _profileImageRequest;
+  bool _changingPassword = false;
+  int _sessionRevision = 0;
+  String? _signInNotice;
 
   CurrentUser? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
   bool get isLoading => _isLoading;
   int get profileImageRevision => _profileImageRevision;
+  bool get isChangingPassword => _changingPassword;
+  String? get signInNotice => _signInNotice;
 
   void _invalidateProfileImage() {
     _profileImageRevision++;
@@ -41,6 +46,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> restoreSession() async {
+    _sessionRevision++;
     _invalidateProfileImage();
     _isLoading = true;
     notifyListeners();
@@ -52,6 +58,7 @@ class AuthController extends ChangeNotifier {
         _currentUser = null;
         return;
       }
+      authService.apiClient.resumeAuthentication();
       _currentUser = await authService.getCurrentUser();
     } catch (error) {
       if (_shouldClearRestoredToken(error)) {
@@ -106,12 +113,15 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> _accept(AuthResult result) async {
+    _sessionRevision++;
     _invalidateProfileImage();
     await tokenStorage
         .saveToken(result.accessToken)
         .timeout(authService.apiClient.requestTimeout);
     try {
+      authService.apiClient.resumeAuthentication();
       _currentUser = await authService.getCurrentUser();
+      _signInNotice = null;
       notifyListeners();
     } catch (_) {
       await logout();
@@ -120,6 +130,8 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> handleUnauthorized() async {
+    _sessionRevision++;
+    authService.apiClient.suspendAuthentication();
     _invalidateProfileImage();
     _currentUser = null;
     notifyListeners();
@@ -173,10 +185,94 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    _sessionRevision++;
+    authService.apiClient.suspendAuthentication();
     _invalidateProfileImage();
     _currentUser = null;
     notifyListeners();
     await _deleteStoredToken();
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirmation,
+  }) async {
+    if (!isAuthenticated) throw const AuthException('Please sign in again.');
+    if (_changingPassword) {
+      throw const AuthException('Password change is already in progress.');
+    }
+    final revision = _sessionRevision;
+    _changingPassword = true;
+    notifyListeners();
+    try {
+      final previousToken = await tokenStorage.readToken().timeout(
+        authService.apiClient.requestTimeout,
+      );
+      final result = await authService.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+        newPasswordConfirmation: newPasswordConfirmation,
+      );
+      if (revision != _sessionRevision) {
+        throw const AuthException(
+          'Your session changed. Please sign in again.',
+        );
+      }
+      if (result.accessToken == previousToken) {
+        throw const PasswordChangeSessionException(
+          'Your password may have changed. Please sign in again.',
+        );
+      }
+      authService.apiClient.beginTokenReplacement();
+      final persistence = Future<void>.sync(
+        () => tokenStorage.saveToken(result.accessToken),
+      );
+      try {
+        await persistence.timeout(authService.apiClient.requestTimeout);
+        final installed = await tokenStorage.readToken().timeout(
+          authService.apiClient.requestTimeout,
+        );
+        if (installed != result.accessToken) throw const FormatException();
+      } catch (_) {
+        // A timed-out platform write cannot be cancelled. If it completes after
+        // logout, remove that late token rather than restoring it on restart.
+        unawaited(
+          persistence
+              .then<void>((_) async {
+                if (!isAuthenticated &&
+                    await tokenStorage.readToken().timeout(
+                          authService.apiClient.requestTimeout,
+                        ) ==
+                        result.accessToken) {
+                  await _deleteStoredToken();
+                }
+              }, onError: (Object _) {})
+              .catchError((Object _) {}),
+        );
+        throw const PasswordChangeSessionException(
+          'Your password was changed. Please sign in again.',
+        );
+      }
+      if (revision != _sessionRevision) {
+        if (!isAuthenticated) await _deleteStoredToken();
+        throw const AuthException(
+          'Your session changed. Please sign in again.',
+        );
+      }
+      // ApiClient reads this same store on every call; there is no second token
+      // cache to update. Resume only after durable replacement has completed.
+      authService.apiClient.resumeAuthentication();
+    } on PasswordChangeSessionException catch (error) {
+      if (revision == _sessionRevision) {
+        _signInNotice = error.message;
+        await logout();
+      }
+      rethrow;
+    } finally {
+      _changingPassword = false;
+      notifyListeners();
+    }
   }
 }
 

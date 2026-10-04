@@ -8,6 +8,7 @@ import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../models/current_user.dart';
 import '../models/profile_image_file.dart';
+import '../models/password_change_result.dart';
 
 class AuthResult {
   const AuthResult({required this.accessToken, required this.user});
@@ -18,6 +19,62 @@ class AuthResult {
 class AuthService {
   const AuthService(this.apiClient);
   final ApiClient apiClient;
+
+  Future<PasswordChangeResult> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirmation,
+  }) async {
+    try {
+      final response = await apiClient.put(
+        apiClient.buildUri('${ApiConstants.authPath}/change-password'),
+        body: jsonEncode({
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+          'newPasswordConfirmation': newPasswordConfirmation,
+        }),
+      );
+      _throwForError(
+        response,
+        fallback: 'Unable to change your password. Please try again.',
+        sensitiveValues: [
+          currentPassword,
+          newPassword,
+          newPasswordConfirmation,
+        ],
+      );
+      try {
+        final json = _object(response.body);
+        final token = json['accessToken'];
+        final message = json['message'];
+        final expiry = json['expiresAt'];
+        final expiresAt = expiry is String ? DateTime.tryParse(expiry) : null;
+        if (token is! String ||
+            token.trim() != token ||
+            !RegExp(r'^[A-Za-z0-9\-._~+/]+=*$').hasMatch(token) ||
+            message is! String ||
+            message.trim().isEmpty ||
+            expiresAt == null) {
+          throw const FormatException();
+        }
+        return PasswordChangeResult(
+          message: message,
+          accessToken: token,
+          expiresAt: expiresAt,
+        );
+      } on FormatException {
+        // A 2xx may already have invalidated the old JWT. Never keep using it.
+        throw const PasswordChangeSessionException(
+          'Your password may have changed. Please sign in again.',
+        );
+      }
+    } on http.ClientException {
+      throw const AuthException(
+        'Unable to connect. Please try again.',
+        isConnectionFailure: true,
+      );
+    }
+  }
 
   Future<AuthResult> login({required String email, required String password}) =>
       _authenticate('${ApiConstants.authPath}/login', {
@@ -215,7 +272,11 @@ class AuthService {
     return decoded;
   }
 
-  void _throwForError(http.Response response, {required String fallback}) {
+  void _throwForError(
+    http.Response response, {
+    required String fallback,
+    List<String>? sensitiveValues,
+  }) {
     if (response.statusCode >= 200 && response.statusCode < 300) return;
     String? safeMessage;
     try {
@@ -239,6 +300,21 @@ class AuthService {
     } on FormatException {
       // Never expose non-JSON response bodies or raw server traces.
     }
+    if (sensitiveValues != null && safeMessage != null) {
+      final leaksSecret =
+          sensitiveValues.any(
+            (value) => value.isNotEmpty && safeMessage!.contains(value),
+          ) ||
+          RegExp(
+            r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+',
+          ).hasMatch(safeMessage) ||
+          safeMessage.toLowerCase().contains('bearer ');
+      if (leaksSecret ||
+          safeMessage.length > 512 ||
+          response.statusCode >= 500) {
+        safeMessage = null;
+      }
+    }
     throw AuthException(
       safeMessage ?? fallback,
       statusCode: response.statusCode,
@@ -257,4 +333,8 @@ class AuthException implements Exception {
   final bool isConnectionFailure;
   @override
   String toString() => message;
+}
+
+class PasswordChangeSessionException extends AuthException {
+  const PasswordChangeSessionException(super.message);
 }
