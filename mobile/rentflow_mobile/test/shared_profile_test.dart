@@ -73,7 +73,16 @@ void main() {
       }
       expect(find.text('Account'), findsOneWidget);
       expect(find.text('Password & security'), findsOneWidget);
-      expect(find.text('Preferences'), findsNothing);
+      final hasPreferences =
+          role == UserRole.tenant || role == UserRole.landlord;
+      expect(
+        find.text('Preferences'),
+        hasPreferences ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text('Notifications'),
+        hasPreferences ? findsOneWidget : findsNothing,
+      );
       expect(find.text('Support'), findsNothing);
       expect(
         find.text('Application documents'),
@@ -167,7 +176,6 @@ void main() {
       await pumpProfile(tester);
       for (final label in [
         'Email & phone',
-        'Notifications',
         'Language',
         'Help & support',
         'Feedback',

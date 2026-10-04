@@ -589,7 +589,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('user@example.com'), findsOneWidget);
     expect(find.text('Account'), findsOneWidget);
-    expect(find.text('Preferences'), findsNothing);
+    expect(find.text('Preferences'), findsOneWidget);
+    expect(find.text('Notifications'), findsOneWidget);
     expect(find.text('Support'), findsNothing);
   });
 

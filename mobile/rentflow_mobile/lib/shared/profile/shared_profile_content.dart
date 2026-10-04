@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../features/auth/controllers/auth_controller.dart';
 import '../../features/auth/models/current_user.dart';
+import '../../features/notifications/services/notification_preferences_api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
 import 'public_contact_editor.dart';
 import 'personal_information_screen.dart';
 import 'profile_avatar.dart';
 import 'password_security_screen.dart';
+import 'notification_preferences_screen.dart';
 
 class SharedProfileContent extends StatelessWidget {
   const SharedProfileContent({
@@ -109,6 +111,29 @@ class SharedProfileContent extends StatelessWidget {
                 ),
             ],
           ),
+          if (currentUser.role == UserRole.tenant ||
+              currentUser.role == UserRole.landlord) ...[
+            const SizedBox(height: AppSpacing.lg),
+            _ProfileSection(
+              title: 'Preferences',
+              children: [
+                _ProfileTile(
+                  icon: Icons.notifications_none,
+                  title: 'Notifications',
+                  subtitle: 'Choose the updates you receive',
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => NotificationPreferencesScreen(
+                        service: NotificationPreferencesApiService(
+                          AuthScope.of(context).authService.apiClient,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           OutlinedButton.icon(
             key: const Key('profile-sign-out'),
