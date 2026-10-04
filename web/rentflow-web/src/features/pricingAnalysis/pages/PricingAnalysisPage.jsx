@@ -5,9 +5,9 @@ import { AppCard, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge 
 import { getPricingHistory, getPricingWorkflow, startPricingAnalysis } from '../services/pricingAnalysisApiService.js'
 import '../pricingAnalysis.css'
 import PricingLeaseNavigation from '../../rentalOffers/PricingLeaseNavigation.jsx'
+import { friendlyStepLabel, friendlyStepSummary, workflowStepStatus } from '../workflowPresentation.js'
 
 const workflowStatuses = ['Pending', 'Running', 'Completed', 'Failed']
-const stepStatuses = ['Pending', 'Running', 'Completed', 'Failed', 'Skipped']
 
 function errorMessage(error, fallback) {
   if (!(error instanceof ApiError)) return fallback
@@ -29,20 +29,39 @@ function amount(value) {
   return value == null || !Number.isFinite(Number(value)) ? '—' : new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)
 }
 
-function WorkflowDetails({ workflow, onRefresh, refreshing }) {
+function WorkflowDetails({ workflow, property, onRefresh, refreshing }) {
   const result = workflow.result
   const status = workflowStatuses[workflow.status] ?? 'Unknown'
   const insufficient = workflow.status === 2 && result && result.recommendedMinRent == null && result.recommendedMaxRent == null
   const evidence = result?.evidenceSufficiency ?? workflow.evidenceSufficiency
   const confidence = result?.confidence ?? workflow.confidence
 
+  const noRecommendation = Boolean(insufficient)
+  const countFromStep = workflow.steps?.map((step) => step.outputSummary?.match(/Eligible comparable evidence collected:\s*(\d+)/i)?.[1]).find((value) => value != null)
+  const comparableCount = result?.comparablePropertiesFound ?? result?.comparablePropertyCount ?? result?.comparablesCount ?? countFromStep
+  const confidenceLabel = confidence ? `${String(confidence).charAt(0)}${String(confidence).slice(1).toLowerCase()}` : null
+
   return <AppCard className="pricing-details">
     <div className="pricing-card-heading">
-      <div><h2>Analysis details</h2><p>Created {date(workflow.createdAt)}</p></div>
-      <StatusBadge tone={workflow.status === 2 ? 'success' : workflow.status === 3 ? 'danger' : 'progress'}>{status}</StatusBadge>
+      <div><h2>Rental Price Analysis</h2><p>Last analyzed {date(workflow.completedAt ?? workflow.createdAt)}</p></div>
+      <StatusBadge tone={workflow.status === 3 ? 'danger' : noRecommendation ? 'neutral' : workflow.status === 2 ? 'success' : 'progress'}>{workflow.status === 2 && noRecommendation ? 'Recommendation unavailable' : status}</StatusBadge>
     </div>
     {workflow.status <= 1 && <p role="status">Analysis is {status.toLowerCase()}. <button className="shared-button shared-button--outline" type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? 'Refreshing…' : 'Refresh status'}</button></p>}
     {workflow.status === 3 && <p className="shared-notice shared-notice--error" role="alert">{workflow.errorMessage || 'The analysis could not be completed. Please try again.'}</p>}
+    {noRecommendation && <p className="shared-notice" role="status">Not enough comparable rental properties were found to produce a reliable pricing recommendation.</p>}
+    {result && (result.recommendedMinRent != null || result.recommendedMaxRent != null) && <p className="pricing-recommendation">Recommended rent range: <strong>{amount(result.recommendedMinRent)} – {amount(result.recommendedMaxRent)}</strong></p>}
+    {property && <section className="pricing-property-summary"><h3>Property</h3><p>{[property.city, property.bedrooms != null && `${property.bedrooms} bedrooms`, property.bathrooms != null && `${property.bathrooms} bathrooms`].filter(Boolean).join(' · ') || property.title}</p></section>}
+    <div className="pricing-metrics">
+      {comparableCount != null && <div><span>Comparable properties found</span><strong>{comparableCount}</strong></div>}
+      {confidenceLabel && <div><span>Confidence</span><strong>{confidenceLabel}</strong></div>}
+    </div>
+    <details className="pricing-audit-details">
+      <summary>View Analysis Details</summary>
+      <div className="pricing-audit-details__content">
+    <div className="pricing-card-heading">
+      <div><h3>Execution summary</h3><p>Created {date(workflow.createdAt)}</p></div>
+      <StatusBadge tone={workflow.status === 2 ? 'success' : workflow.status === 3 ? 'danger' : 'progress'}>{status}</StatusBadge>
+    </div>
     {insufficient && <p className="shared-notice" role="status">Analysis completed with insufficient evidence for a numeric recommendation.</p>}
     {(result || evidence || confidence) && <>
       <div className="pricing-metrics">
@@ -59,7 +78,9 @@ function WorkflowDetails({ workflow, onRefresh, refreshing }) {
       {result.citedEvidenceRefs?.length > 0 && <section><h3>Evidence references</h3><ul>{result.citedEvidenceRefs.map((ref) => <li key={ref}>{ref}</li>)}</ul></section>}
     </>}
     <dl className="pricing-dates"><div><dt>Started</dt><dd>{date(workflow.startedAt)}</dd></div><div><dt>Completed</dt><dd>{date(workflow.completedAt)}</dd></div></dl>
-    {workflow.steps?.length > 0 && <section><h3>Workflow steps</h3><ol className="pricing-steps">{workflow.steps.map((step) => <li key={step.order}><div className="pricing-card-heading"><strong>{step.name}</strong><StatusBadge tone={step.status === 2 ? 'success' : step.status === 3 ? 'danger' : step.status === 4 ? 'neutral' : 'progress'}>{stepStatuses[step.status] ?? 'Unknown'}</StatusBadge></div>{step.outputSummary && <p>{step.outputSummary}</p>}{step.validationSummary && <p>Validation: {step.validationSummary}</p>}{step.status === 3 && step.errorMessage && <p>{step.errorMessage}</p>}</li>)}</ol></section>}
+    {workflow.steps?.length > 0 && <section><h3>Workflow steps</h3><ol className="pricing-steps">{[...workflow.steps].sort((a, b) => a.order - b.order).map((step) => <li key={step.order}><div className="pricing-card-heading"><strong><span className="pricing-step-number">{step.order}.</span> {friendlyStepLabel(step.name)}</strong><StatusBadge tone={step.status === 2 ? 'success' : step.status === 3 ? 'danger' : step.status === 4 ? 'neutral' : 'progress'}>{workflowStepStatus(step.status)}</StatusBadge></div>{friendlyStepSummary(step) && <p>{friendlyStepSummary(step)}</p>}{step.validationSummary && <p>Validation: {step.validationSummary}</p>}{step.status === 3 && step.errorMessage && <p>{step.errorMessage}</p>}</li>)}</ol></section>}
+      </div>
+    </details>
   </AppCard>
 }
 
@@ -139,7 +160,7 @@ export default function PricingAnalysisPage() {
       </AppCard>
       {!propertyId ? <EmptyState title="Select a property" message="Choose one of your properties to view its analyses or start a new one." /> : <div className="pricing-grid">
         <section aria-label="Pricing analysis history"><AppCard><h2>Previous analyses</h2>{history.status === 'loading' && <p role="status">Loading analysis history…</p>}{history.status === 'error' && <div role="alert"><p>{history.error}</p><button className="shared-button shared-button--outline" type="button" onClick={() => setHistoryReload((value) => value + 1)}>Try again</button></div>}{history.status === 'ready' && (history.items.length === 0 ? <p>No previous analyses for this property.</p> : <ul className="pricing-history">{history.items.map((workflow) => <li key={workflow.workflowId}><div><strong>{date(workflow.createdAt)}</strong><span>{workflowStatuses[workflow.status] ?? 'Unknown'} · {workflow.evidenceSufficiency ?? 'Evidence pending'}</span></div><button className="shared-button shared-button--outline" type="button" disabled={submitting || detail.status === 'loading'} onClick={() => openWorkflow(workflow.workflowId)}>View details</button></li>)}</ul>)}</AppCard></section>
-        <section aria-label="Selected pricing analysis">{detail.status === 'loading' && <AppCard><p role="status">Loading analysis details…</p></AppCard>}{detail.status === 'error' && <AppCard><p className="shared-notice shared-notice--error" role="alert">{detail.error}</p></AppCard>}{detail.status === 'ready' && <WorkflowDetails workflow={detail.workflow} onRefresh={() => openWorkflow(detail.workflow.workflowId)} refreshing={false} />}{detail.status === 'idle' && <AppCard><h2>Analysis details</h2><p>Start a new analysis or open one from the history.</p></AppCard>}</section>
+        <section aria-label="Selected pricing analysis">{detail.status === 'loading' && <AppCard><p role="status">Loading analysis details…</p></AppCard>}{detail.status === 'error' && <AppCard><p className="shared-notice shared-notice--error" role="alert">{detail.error}</p></AppCard>}{detail.status === 'ready' && <WorkflowDetails workflow={detail.workflow} property={propertiesState.items.find((item) => item.id === propertyId)} onRefresh={() => openWorkflow(detail.workflow.workflowId)} refreshing={false} />}{detail.status === 'idle' && <AppCard><h2>Analysis details</h2><p>Start a new analysis or open one from the history.</p></AppCard>}</section>
       </div>}
     </>}
   </main>

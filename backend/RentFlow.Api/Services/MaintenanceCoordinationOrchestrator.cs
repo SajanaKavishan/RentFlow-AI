@@ -93,7 +93,27 @@ public sealed class MaintenanceCoordinationOrchestrator(
             return await FinalizeFailureAsync(workflow, cancellationToken);
         }
 
-        var agentRequest = CreateAgentRequest(request, estimate);
+        if (!validationResult.IsValid || !ruleResult.Passed)
+        {
+            return await FinalizeDeterministicValidationFailureAsync(
+                workflow,
+                validationResult,
+                ruleResult,
+                cancellationToken);
+        }
+
+        var attachments = await dbContext.MaintenanceAttachments
+            .AsNoTracking()
+            .Where(item => item.MaintenanceRequestId == maintenanceRequestId)
+            .Select(item => new MaintenanceCoordinationAttachment
+            {
+                AttachmentId = item.Id,
+                FileName = item.FileName,
+                ContentType = item.ContentType
+            })
+            .ToListAsync(cancellationToken);
+
+        var agentRequest = CreateAgentRequest(request, estimate, attachments);
         var agentResponse = await ExecuteStepAsync(
             workflow,
             workflow.Steps.Single(step => step.StepOrder == 3),
@@ -113,6 +133,43 @@ public sealed class MaintenanceCoordinationOrchestrator(
         workflow.RequiresHumanApproval = true;
         workflow.ApprovalStatus = MaintenanceCoordinationApprovalStatus.Pending;
         workflow.ExecutionSummary = $"Completed deterministic validation and agent advisory review. Awaiting human approval. Steps executed: {string.Join(", ", workflow.Steps.OrderBy(step => step.StepOrder).Select(step => step.StepName))}.";
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return workflow;
+    }
+
+    private async Task<MaintenanceCoordinationWorkflow> FinalizeDeterministicValidationFailureAsync(
+        MaintenanceCoordinationWorkflow workflow,
+        MaintenanceDataValidationResult validationResult,
+        MaintenanceCoordinationRuleValidationResult ruleResult,
+        CancellationToken cancellationToken)
+    {
+        var failureReasons = new List<string>();
+        if (!validationResult.IsValid)
+        {
+            var detail = validationResult.MissingFields.Count > 0
+                ? $" Missing required fields: {string.Join(", ", validationResult.MissingFields)}."
+                : " Required maintenance data checks did not pass.";
+            failureReasons.Add($"Maintenance data validation failed.{detail}");
+        }
+
+        if (!ruleResult.Passed)
+        {
+            var detail = ruleResult.FailedRules.Count > 0
+                ? string.Join(", ", ruleResult.FailedRules)
+                : "One or more maintenance coordination rules did not pass.";
+            failureReasons.Add($"Maintenance coordination rules failed: {detail}.");
+        }
+
+        var failureReason = string.Join(" ", failureReasons);
+        workflow.Status = MaintenanceCoordinationWorkflowStatus.Failed;
+        workflow.CurrentStep = 2;
+        workflow.ErrorMessage = failureReason;
+        workflow.RequiresHumanApproval = false;
+        workflow.ApprovalStatus = MaintenanceCoordinationApprovalStatus.NotRequired;
+        workflow.UpdatedAt = timeProvider.GetUtcNow();
+        workflow.ExecutionSummary =
+            $"Workflow stopped before AI agent execution because deterministic checks failed. {failureReason} Deterministic validation results were persisted.";
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return workflow;
@@ -301,7 +358,8 @@ public sealed class MaintenanceCoordinationOrchestrator(
 
     private static MaintenanceCoordinationAgentRequest CreateAgentRequest(
         MaintenanceRequest request,
-        RepairEstimate? estimate)
+        RepairEstimate? estimate,
+        IReadOnlyCollection<MaintenanceCoordinationAttachment> attachments)
     {
         return new MaintenanceCoordinationAgentRequest
         {
@@ -328,10 +386,10 @@ public sealed class MaintenanceCoordinationOrchestrator(
             RepairEstimate = estimate is null ? null : new MaintenanceCoordinationEstimate
             {
                 Amount = estimate.TotalCost,
-                Currency = "USD",
+                Currency = "LKR",
                 Notes = estimate.Notes
             },
-            Attachments = []
+            Attachments = attachments
         };
     }
 

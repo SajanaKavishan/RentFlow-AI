@@ -351,7 +351,7 @@ function TenantMaintenancePage() {
   }
 
   return (
-    <main className="maintenance-page" aria-busy={pageState === 'loading'}>
+    <main className="maintenance-page maintenance-page--tenant" aria-busy={pageState === 'loading'}>
       <header className="maintenance-page__header">
         <div>
           <p className="maintenance-page__eyebrow">Tenant workspace</p>

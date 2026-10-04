@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.Maintenance;
@@ -52,8 +53,18 @@ public class MaintenanceCoordinationServiceTests
         Assert.Equal(originalTechnician, request.TechnicianId);
         Assert.Equal(request.Id, agent.Request!.MaintenanceRequestId);
         Assert.Equal(250m, agent.Request.RepairEstimate!.Amount);
-        Assert.Single(agent.Request.Attachments);
-        Assert.DoesNotContain("storageKey", System.Text.Json.JsonSerializer.Serialize(agent.Request), StringComparison.OrdinalIgnoreCase);
+        var attachment = Assert.Single(agent.Request.Attachments);
+        Assert.Equal("leak.jpg", attachment.FileName);
+        Assert.Equal("image/jpeg", attachment.ContentType);
+        Assert.DoesNotContain("storageKey", JsonSerializer.Serialize(agent.Request), StringComparison.OrdinalIgnoreCase);
+
+        var payload = JsonSerializer.SerializeToElement(agent.Request, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal(
+            ["maintenanceRequestId", "title", "description", "category", "priority", "currentStatus", "assignedTechnicianId", "repairEstimate", "attachments"],
+            payload.EnumerateObject().Select(property => property.Name).ToArray());
+        Assert.Equal(
+            ["attachmentId", "fileName", "contentType"],
+            payload.GetProperty("attachments")[0].EnumerateObject().Select(property => property.Name).ToArray());
         Assert.DoesNotContain(context.ChangeTracker.Entries(), entry =>
             entry.State is EntityState.Modified or EntityState.Added or EntityState.Deleted);
     }

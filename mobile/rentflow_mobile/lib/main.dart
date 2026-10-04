@@ -6,9 +6,13 @@ import 'features/auth/controllers/auth_controller.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/services/auth_service.dart';
 import 'features/landing/screens/public_landing_screen.dart';
+import 'features/lease_agreements/services/lease_agreement_api_service.dart';
 import 'features/maintenance/services/maintenance_api_service.dart';
 import 'features/notifications/services/notification_api_service.dart';
+import 'features/payments/services/payment_api_service.dart';
 import 'features/rental_applications/services/rental_application_api_service.dart';
+import 'features/rental_offers/services/rental_offer_api_service.dart';
+import 'features/rent_schedules/services/rent_schedule_api_service.dart';
 import 'features/viewings/services/viewing_api_service.dart';
 import 'shared/shell/shared_app_shell.dart';
 import 'shared/theme/app_theme.dart';
@@ -92,6 +96,18 @@ class _MyAppState extends State<MyApp> {
       rentalApplicationApiService: apiClient == null
           ? null
           : RentalApplicationApiService(apiClient),
+      rentalOfferApiService: apiClient == null
+          ? null
+          : RentalOfferApiService(apiClient),
+      leaseAgreementApiService: apiClient == null
+          ? null
+          : LeaseAgreementApiService(apiClient),
+      rentScheduleApiService: apiClient == null
+          ? null
+          : RentScheduleApiService(apiClient),
+      paymentApiService: apiClient == null
+          ? null
+          : PaymentApiService(apiClient),
       notificationApiService: apiClient == null
           ? null
           : NotificationApiService(apiClient),

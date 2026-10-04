@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/auth/token_storage.dart';
@@ -19,18 +21,41 @@ class AuthController extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final token = await tokenStorage.readToken();
+      final token = await tokenStorage.readToken().timeout(
+        authService.apiClient.requestTimeout,
+      );
       if (token == null || token.isEmpty) {
         _currentUser = null;
         return;
       }
       _currentUser = await authService.getCurrentUser();
-    } catch (_) {
-      await tokenStorage.deleteToken();
+    } catch (error) {
+      if (_shouldClearRestoredToken(error)) {
+        await _deleteStoredToken();
+      }
       _currentUser = null;
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  bool _shouldClearRestoredToken(Object error) {
+    if (error is TimeoutException) return false;
+    if (error is! AuthException) return true;
+    if (error.isConnectionFailure) return false;
+    final statusCode = error.statusCode;
+    return statusCode == null ||
+        (statusCode < 500 && statusCode != 408 && statusCode != 429);
+  }
+
+  Future<void> _deleteStoredToken() async {
+    try {
+      await tokenStorage.deleteToken().timeout(
+        authService.apiClient.requestTimeout,
+      );
+    } catch (_) {
+      // Session state can still recover if secure storage is temporarily slow.
     }
   }
 
@@ -57,7 +82,9 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> _accept(AuthResult result) async {
-    await tokenStorage.saveToken(result.accessToken);
+    await tokenStorage
+        .saveToken(result.accessToken)
+        .timeout(authService.apiClient.requestTimeout);
     try {
       _currentUser = await authService.getCurrentUser();
       notifyListeners();
@@ -68,9 +95,9 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> handleUnauthorized() async {
-    await tokenStorage.deleteToken();
     _currentUser = null;
     notifyListeners();
+    await _deleteStoredToken();
   }
 
   Future<CurrentUser> updatePublicContact(
@@ -85,9 +112,9 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await tokenStorage.deleteToken();
     _currentUser = null;
     notifyListeners();
+    await _deleteStoredToken();
   }
 }
 

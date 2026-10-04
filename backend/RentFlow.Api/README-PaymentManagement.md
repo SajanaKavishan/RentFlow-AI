@@ -130,3 +130,20 @@ Request example:
   "paymentMethod": "BankTransfer",
   "transactionReference": "TXN-001"
 }
+```
+
+## Stripe test-mode webhook (local E2E preparation)
+
+The API accepts signed Stripe events at `POST /api/payments/stripe/webhook`.
+For a later local E2E session, run the API on port 5277 and forward events with:
+
+```text
+stripe listen --forward-to http://localhost:5277/api/payments/stripe/webhook
+```
+
+The Stripe CLI prints a session-specific webhook signing secret. Store that value
+locally as the ASP.NET user secret `Stripe:WebhookSecret` for the API project;
+do not add it to source control. The endpoint verifies the signature against
+the exact request body, then retrieves the current PaymentIntent from Stripe
+before reconciling a mapped RentFlow payment. Automated tests use fake signing
+and gateway data and do not need the CLI or a real Stripe secret.

@@ -52,25 +52,60 @@ public sealed class PricingEvidenceToolsTests
     }
 
     [Fact]
-    public async Task Comparables_EnforceOwnerSubjectAndExactNormalizedLocationAndRooms()
+    public async Task Comparables_ExcludeSubjectAndUnrelatedPropertiesButAllowNearbyRoomsAndOtherOwners()
     {
         await using var context = CreateContext();
         var owner = Guid.NewGuid();
         var subject = CreateProperty(owner, city: " Colombo ");
         var matching = CreateProperty(owner, city: "colombo", available: true);
-        var otherOwner = CreateProperty(Guid.NewGuid());
-        var subjectDuplicate = CreateProperty(owner);
+        var otherOwner = CreateProperty(Guid.NewGuid(), available: true);
+        var subjectDuplicate = CreateProperty(owner, available: true);
         var otherCity = CreateProperty(owner, city: "Kandy");
-        var otherBedrooms = CreateProperty(owner, bedrooms: 3);
-        var otherBathrooms = CreateProperty(owner, bathrooms: 2);
-        context.Properties.AddRange(subject, matching, otherOwner, subjectDuplicate, otherCity, otherBedrooms, otherBathrooms);
+        var otherBedrooms = CreateProperty(owner, bedrooms: 3, available: true);
+        var otherBathrooms = CreateProperty(owner, bathrooms: 2, available: true);
+        var unrelatedRooms = CreateProperty(owner, bedrooms: 4, bathrooms: 4);
+        context.Properties.AddRange(subject, matching, otherOwner, subjectDuplicate, otherCity, otherBedrooms, otherBathrooms, unrelatedRooms);
         await context.SaveChangesAsync();
 
         var evidence = await GetEvidence(context, subject);
 
-        Assert.Single(evidence);
-        Assert.Equal("cmp-001", evidence.Single().EvidenceRef);
-        Assert.Equal(matching.City, evidence.Single().City);
+        Assert.Equal(5, evidence.Count);
+        Assert.All(evidence, item => Assert.Equal("Colombo", item.City, ignoreCase: true));
+        Assert.Equal(evidence.Count, evidence.Select(item => item.EvidenceRef).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task GoldenColomboSet_ReturnsSimilarEvidenceBeforeAgentAnalysis()
+    {
+        await using var context = CreateContext();
+        var owner = Guid.NewGuid();
+        var subject = CreateProperty(owner, bedrooms: 2, bathrooms: 2, available: true);
+        subject.MonthlyRent = 90000m;
+        subject.Area = 1000m;
+        subject.AreaUnit = "sqft";
+        var comparableFacts = new (int Beds, int Baths, decimal Area, decimal Rent)[]
+        {
+            (2, 2, 950m, 120000m), (2, 2, 1050m, 135000m),
+            (2, 2, 1100m, 155000m), (2, 1, 850m, 100000m)
+        };
+        var comparables = comparableFacts.Select((item, index) =>
+        {
+            var property = CreateProperty(index % 2 == 0 ? Guid.NewGuid() : owner,
+                bedrooms: item.Beds, bathrooms: item.Baths, available: true);
+            property.Area = item.Area;
+            property.AreaUnit = "sqft";
+            property.MonthlyRent = item.Rent;
+            return property;
+        }).ToArray();
+        context.Properties.AddRange([subject, .. comparables]);
+        await context.SaveChangesAsync();
+
+        var evidence = await GetEvidence(context, subject);
+        var assessment = new PricingEvidenceAssessmentTool().Assess(evidence);
+
+        Assert.Equal(4, evidence.Count);
+        Assert.Equal(PricingEvidenceSufficiency.LIMITED, assessment.EvidenceSufficiency);
+        Assert.Equal(evidence.Count, assessment.UsableEvidenceCount);
     }
 
     [Theory]

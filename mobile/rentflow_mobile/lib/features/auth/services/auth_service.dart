@@ -70,7 +70,10 @@ class AuthService {
       if (kDebugMode) {
         debugPrint('[AuthService] $path network error: $error');
       }
-      throw const AuthException('Unable to connect. Please try again.');
+      throw const AuthException(
+        'Unable to connect. Please try again.',
+        isConnectionFailure: true,
+      );
     } on FormatException {
       throw const AuthException(
         'The authentication service returned an invalid response.',
@@ -89,7 +92,10 @@ class AuthService {
       if (kDebugMode) {
         debugPrint('[AuthService] /api/auth/me network error: $error');
       }
-      throw const AuthException('Unable to connect. Please try again.');
+      throw const AuthException(
+        'Unable to connect. Please try again.',
+        isConnectionFailure: true,
+      );
     } on FormatException {
       throw const AuthException(
         'The authentication service returned an invalid response.',
@@ -156,9 +162,14 @@ class AuthService {
 }
 
 class AuthException implements Exception {
-  const AuthException(this.message, {this.statusCode});
+  const AuthException(
+    this.message, {
+    this.statusCode,
+    this.isConnectionFailure = false,
+  });
   final String message;
   final int? statusCode;
+  final bool isConnectionFailure;
   @override
   String toString() => message;
 }

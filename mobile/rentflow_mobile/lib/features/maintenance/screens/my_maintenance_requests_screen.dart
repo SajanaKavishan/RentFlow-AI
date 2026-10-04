@@ -1,8 +1,14 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../properties/models/property.dart';
+import '../models/maintenance_attachment.dart';
+import '../models/maintenance_status_history.dart';
 import '../models/maintenance_request.dart';
 import '../services/maintenance_api_service.dart';
 import 'create_maintenance_request_screen.dart';
@@ -192,49 +198,14 @@ class _MyMaintenanceRequestsScreenState
   }
 
   Future<void> _showRequestDetails(MaintenanceRequest request) async {
-    final detailFuture = _apiService.getMaintenanceRequestById(request.id);
+    final currentUser = AuthScope.of(context).currentUser;
+    if (currentUser == null) return;
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(request.title),
-        content: FutureBuilder<MaintenanceRequest>(
-          future: detailFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const SizedBox(
-                height: 64,
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            if (snapshot.hasError) {
-              return Text(_safeErrorMessage(snapshot.error));
-            }
-            final detail = snapshot.data!;
-            return SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Status: ${_maintenanceEnumLabel(detail.status)}'),
-                  Text('Category: ${_maintenanceEnumLabel(detail.category)}'),
-                  Text('Priority: ${_maintenanceEnumLabel(detail.priority)}'),
-                  const SizedBox(height: 12),
-                  Text(detail.description),
-                  if (detail.tenantAccessNotes != null) ...[
-                    const SizedBox(height: 12),
-                    Text('Access notes: ${detail.tenantAccessNotes}'),
-                  ],
-                ],
-              ),
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
+      builder: (context) => _MaintenanceRequestDetailsDialog(
+        request: request,
+        tenantId: currentUser.id,
+        maintenanceApiService: _apiService,
       ),
     );
   }
@@ -243,6 +214,7 @@ class _MyMaintenanceRequestsScreenState
     if (error is MaintenanceApiException) {
       return error.message;
     }
+
     return 'Unable to load your maintenance requests. Please try again.';
   }
 
@@ -326,6 +298,386 @@ class _MyMaintenanceRequestsScreenState
     );
   }
 }
+
+class _MaintenanceRequestDetailsDialog extends StatefulWidget {
+  const _MaintenanceRequestDetailsDialog({
+    required this.request,
+    required this.tenantId,
+    required this.maintenanceApiService,
+  });
+
+  final MaintenanceRequest request;
+  final String tenantId;
+  final MaintenanceApiService maintenanceApiService;
+
+  @override
+  State<_MaintenanceRequestDetailsDialog> createState() =>
+      _MaintenanceRequestDetailsDialogState();
+}
+
+class _MaintenanceRequestDetailsDialogState
+    extends State<_MaintenanceRequestDetailsDialog> {
+  late Future<MaintenanceRequest> _detail;
+  late Future<List<MaintenanceStatusHistory>> _history;
+  late Future<List<MaintenanceAttachment>> _attachments;
+  bool _isPicking = false;
+  bool _isUploading = false;
+  final Set<String> _openingIds = {};
+  final Set<String> _deletingIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _detail = widget.maintenanceApiService.getMaintenanceRequestById(
+      widget.request.id,
+    );
+    _history = widget.maintenanceApiService.getMaintenanceRequestHistory(
+      maintenanceRequestId: widget.request.id,
+    );
+    _attachments = _loadAttachments();
+  }
+
+  Future<List<MaintenanceAttachment>> _loadAttachments() {
+    return widget.maintenanceApiService.getMaintenanceRequestAttachments(
+      maintenanceRequestId: widget.request.id,
+      tenantId: widget.tenantId,
+    );
+  }
+
+  Future<void> _refreshAttachments() async {
+    final refreshed = _loadAttachments();
+    setState(() => _attachments = refreshed);
+    try {
+      await refreshed;
+    } catch (_) {
+      // The FutureBuilder renders the safe error state.
+    }
+  }
+
+  Future<void> _uploadAttachment() async {
+    if (_isPicking || _isUploading) return;
+    setState(() => _isPicking = true);
+    _SelectedMaintenanceFile? file;
+    try {
+      final selected = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+      );
+      if (selected != null) {
+        file = _SelectedMaintenanceFile(
+          name: selected.name,
+          bytes: await selected.readAsBytes(),
+        );
+      }
+    } on Exception {
+      if (mounted) _showMessage('Unable to select an attachment.');
+    } finally {
+      if (mounted) setState(() => _isPicking = false);
+    }
+    if (!mounted || file == null) return;
+    if (file.bytes.isEmpty) {
+      _showMessage('The selected attachment could not be read.');
+      return;
+    }
+
+    final contentType = _contentTypeFor(file.name);
+    if (contentType == null) {
+      _showMessage('Only JPEG, PNG, and WEBP attachments are supported.');
+      return;
+    }
+
+    setState(() => _isUploading = true);
+    try {
+      await widget.maintenanceApiService.uploadMaintenanceAttachment(
+        maintenanceRequestId: widget.request.id,
+        tenantId: widget.tenantId,
+        fileName: file.name,
+        contentType: contentType,
+        bytes: file.bytes,
+      );
+      if (!mounted) return;
+      _showMessage('Attachment uploaded.');
+      await _refreshAttachments();
+    } on MaintenanceApiException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } catch (_) {
+      if (mounted) _showMessage('Unable to upload the attachment.');
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  Future<void> _openAttachment(MaintenanceAttachment attachment) async {
+    if (_openingIds.contains(attachment.id)) return;
+    setState(() => _openingIds.add(attachment.id));
+    try {
+      final url = await widget.maintenanceApiService
+          .requestMaintenanceAttachmentDownloadUrl(
+            maintenanceRequestId: widget.request.id,
+            attachmentId: attachment.id,
+            tenantId: widget.tenantId,
+          );
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication) &&
+          mounted) {
+        _showMessage('No app was available to open this attachment.');
+      }
+    } on MaintenanceApiException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } catch (_) {
+      if (mounted) _showMessage('Unable to open the attachment.');
+    } finally {
+      if (mounted) setState(() => _openingIds.remove(attachment.id));
+    }
+  }
+
+  Future<void> _deleteAttachment(MaintenanceAttachment attachment) async {
+    if (_deletingIds.contains(attachment.id)) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this attachment?'),
+        content: Text('${attachment.fileName} will be permanently removed.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _deletingIds.add(attachment.id));
+    try {
+      await widget.maintenanceApiService.deleteMaintenanceAttachment(
+        maintenanceRequestId: widget.request.id,
+        attachmentId: attachment.id,
+        tenantId: widget.tenantId,
+      );
+      if (!mounted) return;
+      _showMessage('Attachment deleted.');
+      await _refreshAttachments();
+    } on MaintenanceApiException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } catch (_) {
+      if (mounted) _showMessage('Unable to delete the attachment.');
+    } finally {
+      if (mounted) setState(() => _deletingIds.remove(attachment.id));
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String? _contentTypeFor(String name) {
+    return switch (name.toLowerCase().split('.').last) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => null,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.request.title),
+      content: FutureBuilder<MaintenanceRequest>(
+        future: _detail,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const SizedBox(
+              height: 64,
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (snapshot.hasError || snapshot.data == null) {
+            return Text(_safeErrorMessage(snapshot.error));
+          }
+          final detail = snapshot.data!;
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Status: ${_maintenanceEnumLabel(detail.status)}'),
+                Text('Category: ${_maintenanceEnumLabel(detail.category)}'),
+                Text('Priority: ${_maintenanceEnumLabel(detail.priority)}'),
+                const SizedBox(height: 12),
+                Text(detail.description),
+                if (detail.tenantAccessNotes != null) ...[
+                  const SizedBox(height: 12),
+                  Text('Access notes: ${detail.tenantAccessNotes}'),
+                ],
+                _sectionTitle(context, 'History'),
+                FutureBuilder<List<MaintenanceStatusHistory>>(
+                  future: _history,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      return Text(
+                        'Unable to load request history. '
+                        '${_safeErrorMessage(snapshot.error)}',
+                      );
+                    }
+                    final history =
+                        snapshot.data ?? const <MaintenanceStatusHistory>[];
+                    if (history.isEmpty) {
+                      return const Text('No status history yet.');
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: history
+                          .map(
+                            (entry) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Text(
+                                '${entry.fromStatus == null ? 'Created' : _maintenanceEnumLabel(entry.fromStatus!)}'
+                                ' → ${_maintenanceEnumLabel(entry.toStatus)}\n'
+                                '${MaterialLocalizations.of(context).formatMediumDate(entry.changedAt.toLocal())}'
+                                '${entry.notes == null ? '' : '\n${entry.notes}'}',
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
+                ),
+                _sectionTitle(context, 'Attachments'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Photos and supporting files',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _isPicking || _isUploading
+                          ? null
+                          : _uploadAttachment,
+                      icon: _isPicking || _isUploading
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.attach_file),
+                      label: const Text('Add'),
+                    ),
+                  ],
+                ),
+                FutureBuilder<List<MaintenanceAttachment>>(
+                  future: _attachments,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      return Text(
+                        'Unable to load attachments. '
+                        '${_safeErrorMessage(snapshot.error)}',
+                      );
+                    }
+                    final attachments =
+                        snapshot.data ?? const <MaintenanceAttachment>[];
+                    if (attachments.isEmpty) {
+                      return const Text('No attachments yet.');
+                    }
+                    return Column(
+                      children: attachments
+                          .map(
+                            (attachment) => ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.insert_drive_file),
+                              title: Text(attachment.fileName),
+                              subtitle: Text(
+                                '${attachment.contentType} · '
+                                '${_formatFileSize(attachment.fileSize)}',
+                              ),
+                              onTap: () => _openAttachment(attachment),
+                              trailing: IconButton(
+                                tooltip: 'Delete attachment',
+                                onPressed: _deletingIds.contains(attachment.id)
+                                    ? null
+                                    : () => _deleteAttachment(attachment),
+                                icon: _deletingIds.contains(attachment.id)
+                                    ? const SizedBox.square(
+                                        dimension: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.delete_outline),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionTitle(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, bottom: 8),
+      child: Text(
+        title,
+        style: Theme.of(
+          context,
+        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+String _safeErrorMessage(Object? error) {
+  if (error is MaintenanceApiException) return error.message;
+  return 'Please try again.';
+}
+
+String _formatFileSize(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+}
+
+class _SelectedMaintenanceFile {
+  const _SelectedMaintenanceFile({required this.name, required this.bytes});
+
+  final String name;
+  final Uint8List bytes;
+}
+
 
 class _MaintenanceRequestCard extends StatelessWidget {
   const _MaintenanceRequestCard({required this.request, required this.onTap});

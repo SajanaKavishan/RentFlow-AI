@@ -4,6 +4,7 @@ import '../../../core/network/api_client.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../models/maintenance_status_history.dart';
 import '../models/maintenance_request.dart';
 import '../models/repair_estimate.dart';
 import '../services/maintenance_api_service.dart';
@@ -32,7 +33,11 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
   MaintenanceRequest? _request;
   List<MaintenanceRequest> _assignedWork = const [];
   List<RepairEstimate> _estimates = const [];
+  Future<List<MaintenanceStatusHistory>> _historyFuture = Future.value(
+    const <MaintenanceStatusHistory>[],
+  );
   bool _areEstimatesLoaded = false;
+  bool _isLoadingRequestDetails = false;
   late Future<MaintenanceRequest?> _requestFuture;
 
   bool _isStartingWork = false;
@@ -63,14 +68,30 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
   MaintenanceRequest? get _activeRequest =>
       _request ?? (_assignedWork.isNotEmpty ? _assignedWork.first : null);
 
+  bool _isAssignedToCurrentTechnician(MaintenanceRequest? request) {
+    final technicianId = widget.technicianId?.trim();
+    final authenticatedId = AuthScope.of(context).currentUser?.id;
+    return request != null &&
+        technicianId != null &&
+        technicianId.isNotEmpty &&
+        technicianId == authenticatedId &&
+        request.technicianId == authenticatedId;
+  }
+
   bool get _hasActionableRequest =>
       _activeRequest != null ||
       (widget.requestId != null && widget.requestId!.trim().isNotEmpty);
 
   bool get _canStartWork =>
-      _activeRequest?.status == MaintenanceRequestStatus.approved;
+      !_isLoadingRequestDetails &&
+      _areEstimatesLoaded &&
+      _isAssignedToCurrentTechnician(_activeRequest) &&
+      _activeRequest?.status == MaintenanceRequestStatus.approved &&
+      _latestEstimate?.status == RepairEstimateStatus.approved;
 
   bool get _canCompleteWork =>
+      !_isLoadingRequestDetails &&
+      _isAssignedToCurrentTechnician(_activeRequest) &&
       _activeRequest?.status == MaintenanceRequestStatus.inProgress;
 
   RepairEstimate? get _latestEstimate {
@@ -85,13 +106,18 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
     final request = _activeRequest;
     final latest = _latestEstimate;
     return _areEstimatesLoaded &&
+        !_isLoadingRequestDetails &&
         request?.status == MaintenanceRequestStatus.estimatePending &&
         (latest == null ||
             latest.status == RepairEstimateStatus.revisionRequested);
   }
 
+  bool get _revisionWasRequested =>
+      _latestEstimate?.status == RepairEstimateStatus.revisionRequested;
+
   bool get _canSubmitEstimateForReview =>
       _areEstimatesLoaded &&
+      !_isLoadingRequestDetails &&
       _activeRequest?.status == MaintenanceRequestStatus.estimateSubmitted &&
       _latestEstimate?.status == RepairEstimateStatus.submitted;
 
@@ -99,6 +125,7 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
     if (_request != null) {
       final loaded = await _apiService.getMaintenanceRequestById(_request!.id);
       if (mounted) setState(() => _request = loaded);
+      _loadHistory(loaded);
       await _loadEstimates(loaded);
       return loaded;
     }
@@ -106,18 +133,26 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
     final id = widget.requestId?.trim();
     if (id == null || id.isEmpty) {
       final technicianId = widget.technicianId?.trim();
-      if (technicianId == null || technicianId.isEmpty) return null;
+      if (technicianId == null || technicianId.isEmpty) {
+        throw const MaintenanceApiException(
+          'Your technician account could not be identified.',
+        );
+      }
       final assignedWork = await _apiService.getAssignedWork(
         technicianId: technicianId,
       );
+      final selectedSummary = assignedWork.isEmpty ? null : assignedWork.first;
       if (mounted) {
         setState(() {
           _assignedWork = assignedWork;
-          _request = assignedWork.isEmpty ? null : assignedWork.first;
+          _request = selectedSummary;
         });
       }
-      final selected = assignedWork.isEmpty ? null : assignedWork.first;
-      if (selected != null) await _loadEstimates(selected);
+      if (selectedSummary == null) return null;
+      final selected = await _loadRequestDetails(selectedSummary);
+      if (mounted) setState(() => _request = selected);
+      _loadHistory(selected);
+      await _loadEstimates(selected);
       return selected;
     }
 
@@ -125,8 +160,21 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
     if (mounted) {
       setState(() => _request = loaded);
     }
+    _loadHistory(loaded);
     await _loadEstimates(loaded);
     return loaded;
+  }
+
+  Future<MaintenanceRequest> _loadRequestDetails(
+    MaintenanceRequest summary,
+  ) async {
+    return _apiService.getMaintenanceRequestById(summary.id);
+  }
+
+  void _loadHistory(MaintenanceRequest request) {
+    _historyFuture = _apiService.getMaintenanceRequestHistory(
+      maintenanceRequestId: request.id,
+    );
   }
 
   Future<void> _loadEstimates(MaintenanceRequest request) async {
@@ -179,41 +227,168 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
           break;
         }
       }
+      final selectedRequest =
+          selected ?? (nextWork.isEmpty ? null : nextWork.first);
       setState(() {
         _assignedWork = nextWork;
-        _request = selected ?? (nextWork.isEmpty ? null : nextWork.first);
+        _request = selectedRequest;
+        _isLoadingRequestDetails = selectedRequest != null;
         _errorMessage = null;
         _estimates = const [];
         _areEstimatesLoaded = false;
+        _historyFuture = Future.value(const <MaintenanceStatusHistory>[]);
       });
-      final current = _request;
-      if (current != null) await _loadEstimates(current);
+      final current = selectedRequest;
+      if (current != null) {
+        try {
+          final detail = await _loadRequestDetails(current);
+          if (!mounted || _request?.id != current.id) return;
+          setState(() {
+            _request = detail;
+            _isLoadingRequestDetails = false;
+          });
+          _loadHistory(detail);
+          await _loadEstimates(detail);
+        } on MaintenanceApiException catch (error) {
+          if (mounted && _request?.id == current.id) {
+            setState(() {
+              _isLoadingRequestDetails = false;
+              _errorMessage = error.message;
+            });
+          }
+        } catch (_) {
+          if (mounted && _request?.id == current.id) {
+            setState(() {
+              _isLoadingRequestDetails = false;
+              _errorMessage = 'Unable to load this maintenance request.';
+            });
+          }
+        }
+      }
     } on MaintenanceApiException catch (error) {
-      if (mounted) setState(() => _errorMessage = error.message);
+      if (mounted) {
+        setState(() {
+          _isLoadingRequestDetails = false;
+          _errorMessage = error.message;
+        });
+      }
     } catch (_) {
       if (mounted) {
-        setState(() => _errorMessage = 'Unable to refresh assigned work.');
+        setState(() {
+          _isLoadingRequestDetails = false;
+          _errorMessage = 'Unable to refresh assigned work.';
+        });
       }
     }
   }
 
-  void _selectRequest(MaintenanceRequest request) {
+  Future<void> _selectRequest(MaintenanceRequest request) async {
     setState(() {
       _request = request;
+      _isLoadingRequestDetails = true;
       _estimates = const [];
       _areEstimatesLoaded = false;
       _estimateErrorMessage = null;
       _errorMessage = null;
+      _historyFuture = Future.value(const <MaintenanceStatusHistory>[]);
     });
-    _loadEstimates(request);
+    _loadHistory(request);
+    try {
+      final detail = await _loadRequestDetails(request);
+      if (!mounted || _request?.id != request.id) return;
+      setState(() {
+        _request = detail;
+        _isLoadingRequestDetails = false;
+      });
+      await _loadEstimates(detail);
+    } on MaintenanceApiException catch (error) {
+      if (mounted && _request?.id == request.id) {
+        setState(() {
+          _isLoadingRequestDetails = false;
+          _errorMessage = error.message;
+        });
+      }
+    } catch (_) {
+      if (mounted && _request?.id == request.id) {
+        setState(() {
+          _isLoadingRequestDetails = false;
+          _errorMessage = 'Unable to load this maintenance request.';
+        });
+      }
+    }
   }
 
   void _retryLoad() {
     setState(() => _requestFuture = _loadRequest());
   }
 
+  Future<bool> _confirmWorkAction({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required Key confirmKey,
+  }) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: confirmKey,
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+
+  Future<bool> _workActionStillAllowed(
+    MaintenanceRequest request, {
+    required bool starting,
+  }) async {
+    final technicianId = AuthScope.of(context).currentUser?.id;
+    if (technicianId == null ||
+        technicianId != widget.technicianId?.trim() ||
+        request.technicianId != technicianId) {
+      return false;
+    }
+
+    final persistedRequest = await _apiService.getMaintenanceRequestById(
+      request.id,
+    );
+    if (persistedRequest.technicianId != technicianId) return false;
+    if (starting) {
+      if (persistedRequest.status != MaintenanceRequestStatus.approved) {
+        return false;
+      }
+      final latestEstimate = await _apiService.getLatestRepairEstimate(
+        maintenanceRequestId: request.id,
+      );
+      return latestEstimate?.status == RepairEstimateStatus.approved;
+    }
+    return persistedRequest.status == MaintenanceRequestStatus.inProgress;
+  }
+
   Future<void> _startWork(MaintenanceRequest request) async {
-    if (_isStartingWork || _isCompletingWork) return;
+    if (_isStartingWork ||
+        _isCompletingWork ||
+        !_canStartWork ||
+        !_isAssignedToCurrentTechnician(request)) {
+      return;
+    }
+    final confirmed = await _confirmWorkAction(
+      title: 'Start work?',
+      message: 'This will mark the approved maintenance work as in progress.',
+      confirmLabel: 'Start work',
+      confirmKey: const ValueKey('confirm-start-maintenance-work'),
+    );
+    if (!confirmed || !mounted || _activeRequest?.id != request.id) return;
 
     setState(() {
       _isStartingWork = true;
@@ -221,6 +396,16 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
     });
 
     try {
+      if (!await _workActionStillAllowed(request, starting: true)) {
+        await _refreshQueue();
+        if (mounted) {
+          const message =
+              'This request is no longer approved for work or assigned to your technician account.';
+          setState(() => _errorMessage = message);
+          AppSnackbars.show(context, message: message, tone: SnackTone.error);
+        }
+        return;
+      }
       final updated = await _apiService.startWork(id: request.id);
       if (!mounted) return;
       setState(() {
@@ -263,7 +448,19 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
   }
 
   Future<void> _completeWork(MaintenanceRequest request) async {
-    if (_isStartingWork || _isCompletingWork) return;
+    if (_isStartingWork ||
+        _isCompletingWork ||
+        !_canCompleteWork ||
+        !_isAssignedToCurrentTechnician(request)) {
+      return;
+    }
+    final confirmed = await _confirmWorkAction(
+      title: 'Complete work?',
+      message: 'Confirm that the maintenance work has been completed.',
+      confirmLabel: 'Complete work',
+      confirmKey: const ValueKey('confirm-complete-maintenance-work'),
+    );
+    if (!confirmed || !mounted || _activeRequest?.id != request.id) return;
 
     setState(() {
       _isCompletingWork = true;
@@ -271,6 +468,16 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
     });
 
     try {
+      if (!await _workActionStillAllowed(request, starting: false)) {
+        await _refreshQueue();
+        if (mounted) {
+          const message =
+              'This request is no longer in progress or assigned to your technician account.';
+          setState(() => _errorMessage = message);
+          AppSnackbars.show(context, message: message, tone: SnackTone.error);
+        }
+        return;
+      }
       final updated = await _apiService.completeWork(id: request.id);
       if (!mounted) return;
       setState(() {
@@ -594,6 +801,91 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                     ],
                   ),
                 ),
+                if (_isLoadingRequestDetails) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  const AppCard(
+                    child: Row(
+                      children: [
+                        SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppPalette.olive,
+                          ),
+                        ),
+                        SizedBox(width: AppSpacing.sm),
+                        Text('Loading request details…'),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.lg),
+                const SectionHeader(title: 'Attachments'),
+                const SizedBox(height: AppSpacing.md),
+                const AppCard(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.attach_file, color: AppPalette.olive),
+                      SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'Attachments are currently available to tenants only.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                const SectionHeader(title: 'Status history'),
+                const SizedBox(height: AppSpacing.md),
+                FutureBuilder<List<MaintenanceStatusHistory>>(
+                  future: _historyFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const AppCard(
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: AppPalette.olive,
+                          ),
+                        ),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      final message = snapshot.error is MaintenanceApiException
+                          ? (snapshot.error as MaintenanceApiException).message
+                          : 'Unable to load status history.';
+                      return _ActionError(message: message);
+                    }
+                    final history =
+                        snapshot.data ?? const <MaintenanceStatusHistory>[];
+                    if (history.isEmpty) {
+                      return const AppCard(
+                        child: Text('No status history yet.'),
+                      );
+                    }
+                    return AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: history
+                            .map(
+                              (entry) => Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: AppSpacing.sm,
+                                ),
+                                child: Text(
+                                  '${entry.fromStatus == null ? 'Created' : _statusLabel(entry.fromStatus!)}'
+                                  ' → ${_statusLabel(entry.toStatus)}\n'
+                                  '${MaterialLocalizations.of(context).formatMediumDate(entry.changedAt.toLocal())}'
+                                  '${entry.notes == null ? '' : '\n${entry.notes}'}',
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    );
+                  },
+                ),
                 const SizedBox(height: AppSpacing.lg),
                 const SectionHeader(title: 'Work details'),
                 const SizedBox(height: AppSpacing.md),
@@ -624,6 +916,37 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                 const SizedBox(height: AppSpacing.md),
                 if (_estimateErrorMessage != null) ...[
                   _ActionError(message: _estimateErrorMessage!),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
+                if (_revisionWasRequested) ...[
+                  AppCard(
+                    color: AppPalette.softCream,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.rate_review_outlined,
+                              color: AppPalette.olive,
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                'Revision requested by landlord',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_latestEstimate?.reviewNotes case final reviewNotes?
+                            when reviewNotes.trim().isNotEmpty) ...[
+                          const SizedBox(height: AppSpacing.sm),
+                          Text('Requested changes: $reviewNotes'),
+                        ],
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                 ],
                 if (!_areEstimatesLoaded)
@@ -662,7 +985,9 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                     label: Text(
                       _isSubmittingEstimate
                           ? 'Submitting estimate...'
-                          : 'Create estimate',
+                          : _revisionWasRequested
+                          ? 'Submit revised estimate'
+                          : 'Submit Estimate',
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
@@ -867,8 +1192,12 @@ class _EstimateFormDialogState extends State<_EstimateFormDialog> {
   }
 
   String? _validateCost(String? value) {
-    final cost = double.tryParse(value?.trim() ?? '');
-    if (cost == null || !cost.isFinite) {
+    final input = value?.trim() ?? '';
+    if (!RegExp(r'^\d+(?:\.\d{1,2})?$').hasMatch(input)) {
+      return 'Enter a valid currency amount with up to two decimal places.';
+    }
+    final cost = double.tryParse(input);
+    if (cost == null || !cost.isFinite || cost > 7.922816251426433e28) {
       return 'Enter a valid cost (use 0 when not applicable).';
     }
     if (cost < 0) return 'Cost cannot be negative.';
@@ -908,7 +1237,7 @@ class _EstimateFormDialogState extends State<_EstimateFormDialog> {
               TextFormField(
                 controller: _notesController,
                 maxLines: 3,
-                maxLength: 1000,
+                maxLength: 4000,
                 decoration: const InputDecoration(
                   labelText: 'Notes (optional)',
                   border: OutlineInputBorder(),
@@ -926,7 +1255,7 @@ class _EstimateFormDialogState extends State<_EstimateFormDialog> {
         FilledButton(
           key: const ValueKey('save-maintenance-estimate'),
           onPressed: _submit,
-          child: const Text('Create and submit estimate'),
+          child: const Text('Submit estimate'),
         ),
       ],
     );
