@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../../shared/follow_up/follow_up_activity.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../shared/theme/app_theme.dart';
@@ -381,7 +382,12 @@ class _MyRentalApplicationsScreenState
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => FollowUpPause(
+    active: _submittingIds.isNotEmpty,
+    child: _buildScaffold(context),
+  );
+
+  Widget _buildScaffold(BuildContext context) => Scaffold(
     backgroundColor: AppPalette.warmCream,
     body: SafeArea(
       child: Column(

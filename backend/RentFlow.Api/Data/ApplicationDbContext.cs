@@ -27,6 +27,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
 
+    public DbSet<ViewingFollowUp> ViewingFollowUps => Set<ViewingFollowUp>();
+
     public DbSet<PropertyViewingAvailability> PropertyViewingAvailabilities => Set<PropertyViewingAvailability>();
 
     public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
@@ -639,6 +641,18 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // =========================================================
         // RENTAL APPLICATIONS
         // =========================================================
+        modelBuilder.Entity<ViewingFollowUp>(entity =>
+        {
+            entity.HasKey(f => f.Id);
+            entity.HasIndex(f => f.ViewingId).IsUnique();
+            entity.HasIndex(f => new { f.TenantId, f.ClaimedAt });
+            entity.HasOne<ViewingRequest>().WithOne().HasForeignKey<ViewingFollowUp>(f => f.ViewingId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(f => f.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(f => f.Decision).HasConversion<string>().HasMaxLength(16);
+            entity.ToTable(t => t.HasCheckConstraint("CK_ViewingFollowUp_Response",
+                "(\"Decision\" IS NULL AND \"RespondedAt\" IS NULL) OR (\"Decision\" IS NOT NULL AND \"Decision\" IN ('ApplyNow','NotNow') AND \"RespondedAt\" IS NOT NULL)"));
+        });
+
         modelBuilder.Entity<RentalApplication>(entity =>
         {
             entity.HasKey(application => application.Id);

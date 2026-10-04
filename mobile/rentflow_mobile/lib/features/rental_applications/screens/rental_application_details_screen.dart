@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/follow_up/follow_up_activity.dart';
 
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
@@ -295,7 +296,10 @@ class _RentalApplicationDetailsScreenState
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) =>
+      FollowUpPause(active: _isSubmitting, child: _buildScaffold(context));
+
+  Widget _buildScaffold(BuildContext context) => Scaffold(
     backgroundColor: AppPalette.warmCream,
     body: SafeArea(
       child: RefreshIndicator(

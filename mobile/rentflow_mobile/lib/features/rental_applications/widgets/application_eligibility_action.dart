@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../models/application_eligibility.dart';
-import '../screens/rental_application_details_screen.dart';
-import '../screens/rental_application_form_screen.dart';
+import '../services/application_destination.dart';
 import '../services/rental_application_api_service.dart';
 
 /// A server-backed action reused by property and Completed viewing details.
@@ -81,48 +80,16 @@ class _ApplicationEligibilityActionState
     if (_opening || _loading) return;
     setState(() => _opening = true);
     try {
-      // Recheck before navigation: another device may have created an application.
-      final eligibility = await widget.apiService.getEligibility(
-        widget.propertyId,
+      final destination = await applicationDestination(
+        propertyId: widget.propertyId,
+        propertyTitle: widget.propertyTitle,
+        apiService: widget.apiService,
+        allowNew: widget.allowNew,
       );
       if (!mounted) return;
-      setState(() => _eligibility = eligibility);
-      if (eligibility.hasExistingApplication) {
-        final application = await widget.apiService.getApplicationById(
-          eligibility.existingApplicationId!,
-        );
-        if (application.propertyId != widget.propertyId) {
-          throw const RentalApplicationApiException(
-            'The application response was invalid.',
-          );
-        }
-        if (!mounted) return;
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute(
-            builder: (_) => eligibility.canContinue
-                ? RentalApplicationFormScreen(
-                    propertyId: widget.propertyId,
-                    propertyTitle: widget.propertyTitle,
-                    application: application,
-                    rentalApplicationApiService: widget.apiService,
-                  )
-                : RentalApplicationDetailsScreen(
-                    application: application,
-                    rentalApplicationApiService: widget.apiService,
-                  ),
-          ),
-        );
-      } else if (eligibility.canApply && widget.allowNew) {
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute(
-            builder: (_) => RentalApplicationFormScreen(
-              propertyId: widget.propertyId,
-              propertyTitle: widget.propertyTitle,
-              rentalApplicationApiService: widget.apiService,
-            ),
-          ),
-        );
-      }
+      await Navigator.of(
+        context,
+      ).push<void>(MaterialPageRoute(builder: (_) => destination));
       if (mounted) await _refresh();
     } catch (error) {
       if (mounted) {

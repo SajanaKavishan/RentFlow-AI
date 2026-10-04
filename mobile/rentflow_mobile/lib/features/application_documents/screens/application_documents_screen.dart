@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import '../../../shared/follow_up/follow_up_activity.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -377,6 +378,10 @@ class _ApplicationDocumentsScreenState
 
   @override
   Widget build(BuildContext context) {
+    return FollowUpPause(child: _buildScaffold(context));
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       backgroundColor: AppPalette.background,
       appBar: AppBar(

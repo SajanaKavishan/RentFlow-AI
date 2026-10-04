@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/follow_up/follow_up_activity.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../shared/theme/app_theme.dart';
@@ -604,171 +605,174 @@ class _RentalApplicationFormScreenState
   };
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: _allowExit || (!_busy && (!_canEdit || (_step == 0 && !_dirty))),
-    onPopInvokedWithResult: (didPop, result) {
-      if (!didPop) _back();
-    },
-    child: Scaffold(
-      backgroundColor: AppPalette.warmCream,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          controller: _scroll,
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 620),
-              child: Form(
-                key: _formKey,
-                onChanged: () => setState(() {}),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TenantApplicationHeader(
-                      eyebrow: 'RENTAL APPLICATION',
-                      title: _titles[_step],
-                      titleStyle: AppTypography.pageTitle.copyWith(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w600,
-                        color: AppPalette.darkOlive,
-                      ),
-                      onBack: _back,
-                    ),
-                    const SizedBox(height: 16),
-                    if (_loading)
-                      const LoadingState(
-                        title: 'Loading application',
-                        compact: true,
-                      ),
-                    if (_loadError != null)
-                      SharedState(
-                        title: 'Could not load application',
-                        message: _loadError!,
-                        actionLabel: 'Try again',
-                        onAction: _load,
-                        compact: true,
-                      ),
-                    if (_ready) ...[
-                      ApplicationWizardProgress(
-                        currentStep: _step,
-                        completed: [
-                          _personalComplete(_application) &&
-                              _personalMatchesSaved,
-                          _financialComplete(_application) &&
-                              _financialMatchesSaved,
-                          _documentsComplete,
-                          _application != null && !_canEdit,
-                        ],
-                        onSelect: _busy || !_canEdit ? null : _goTo,
-                      ),
-                      const SizedBox(height: 20),
-                      if (_application?.status ==
-                          RentalApplicationStatus.changesRequested) ...[
-                        TenantApplicationCard(
-                          actionRequired: true,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text('Changes requested', style: wizardLabel),
-                              const SizedBox(height: 6),
-                              Text(
-                                _application!.landlordResponse
-                                            ?.trim()
-                                            .isNotEmpty ==
-                                        true
-                                    ? _application!.landlordResponse!.trim()
-                                    : 'The landlord requested updates but did not provide a message.',
-                                style: AppTypography.body,
-                              ),
-                            ],
-                          ),
+  Widget build(BuildContext context) => FollowUpPause(
+    child: PopScope(
+      canPop: _allowExit || (!_busy && (!_canEdit || (_step == 0 && !_dirty))),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _back();
+      },
+      child: Scaffold(
+        backgroundColor: AppPalette.warmCream,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            controller: _scroll,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 620),
+                child: Form(
+                  key: _formKey,
+                  onChanged: () => setState(() {}),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TenantApplicationHeader(
+                        eyebrow: 'RENTAL APPLICATION',
+                        title: _titles[_step],
+                        titleStyle: AppTypography.pageTitle.copyWith(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                          color: AppPalette.darkOlive,
                         ),
-                        const SizedBox(height: 16),
-                      ],
-                      if (!_canEdit) ...[
-                        Text(
-                          'This application can no longer be edited.',
-                          style: wizardHelper,
+                        onBack: _back,
+                      ),
+                      const SizedBox(height: 16),
+                      if (_loading)
+                        const LoadingState(
+                          title: 'Loading application',
+                          compact: true,
                         ),
-                        const SizedBox(height: 12),
-                        TenantApplicationStatusChip(
-                          status: _application!.status,
+                      if (_loadError != null)
+                        SharedState(
+                          title: 'Could not load application',
+                          message: _loadError!,
+                          actionLabel: 'Try again',
+                          onAction: _load,
+                          compact: true,
                         ),
-                        const SizedBox(height: 16),
-                      ],
-                      _buildStep(),
-                      if (_error != null) ...[
-                        const SizedBox(height: 12),
-                        Semantics(
-                          liveRegion: true,
-                          child: Text(
-                            _error!,
-                            key: const ValueKey('application-form-error'),
-                            style: wizardHelper.copyWith(
-                              color: AppPalette.danger,
+                      if (_ready) ...[
+                        ApplicationWizardProgress(
+                          currentStep: _step,
+                          completed: [
+                            _personalComplete(_application) &&
+                                _personalMatchesSaved,
+                            _financialComplete(_application) &&
+                                _financialMatchesSaved,
+                            _documentsComplete,
+                            _application != null && !_canEdit,
+                          ],
+                          onSelect: _busy || !_canEdit ? null : _goTo,
+                        ),
+                        const SizedBox(height: 20),
+                        if (_application?.status ==
+                            RentalApplicationStatus.changesRequested) ...[
+                          TenantApplicationCard(
+                            actionRequired: true,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text('Changes requested', style: wizardLabel),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _application!.landlordResponse
+                                              ?.trim()
+                                              .isNotEmpty ==
+                                          true
+                                      ? _application!.landlordResponse!.trim()
+                                      : 'The landlord requested updates but did not provide a message.',
+                                  style: AppTypography.body,
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      if (_saving || _submitting) ...[
-                        const LinearProgressIndicator(
-                          key: ValueKey('application-form-progress'),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      FilledButton(
-                        key: ValueKey(
-                          !_canEdit
-                              ? 'view-application-details'
-                              : _step == 3
-                              ? 'submit-application'
-                              : 'application-next-step',
-                        ),
-                        onPressed: _busy
-                            ? null
-                            : !_canEdit
-                            ? _showDetails
-                            : _step == 3
-                            ? _submit
-                            : _next,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppPalette.darkOlive,
-                          foregroundColor: AppPalette.white,
-                          minimumSize: const Size.fromHeight(48),
-                          padding: const EdgeInsets.all(14),
-                          textStyle: AppTypography.button.copyWith(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
+                          const SizedBox(height: 16),
+                        ],
+                        if (!_canEdit) ...[
+                          Text(
+                            'This application can no longer be edited.',
+                            style: wizardHelper,
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                          const SizedBox(height: 12),
+                          TenantApplicationStatusChip(
+                            status: _application!.status,
                           ),
-                        ),
-                        child: Text(
-                          _submitting
-                              ? 'Submitting…'
-                              : _saving
-                              ? 'Saving…'
+                          const SizedBox(height: 16),
+                        ],
+                        _buildStep(),
+                        if (_error != null) ...[
+                          const SizedBox(height: 12),
+                          Semantics(
+                            liveRegion: true,
+                            child: Text(
+                              _error!,
+                              key: const ValueKey('application-form-error'),
+                              style: wizardHelper.copyWith(
+                                color: AppPalette.danger,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        if (_saving || _submitting) ...[
+                          const LinearProgressIndicator(
+                            key: ValueKey('application-form-progress'),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        FilledButton(
+                          key: ValueKey(
+                            !_canEdit
+                                ? 'view-application-details'
+                                : _step == 3
+                                ? 'submit-application'
+                                : 'application-next-step',
+                          ),
+                          onPressed: _busy
+                              ? null
                               : !_canEdit
-                              ? 'View details'
+                              ? _showDetails
                               : _step == 3
-                              ? _application?.status ==
-                                        RentalApplicationStatus.changesRequested
-                                    ? 'Resubmit application'
-                                    : 'Submit application'
-                              : 'Continue',
+                              ? _submit
+                              : _next,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppPalette.darkOlive,
+                            foregroundColor: AppPalette.white,
+                            minimumSize: const Size.fromHeight(48),
+                            padding: const EdgeInsets.all(14),
+                            textStyle: AppTypography.button.copyWith(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            _submitting
+                                ? 'Submitting…'
+                                : _saving
+                                ? 'Saving…'
+                                : !_canEdit
+                                ? 'View details'
+                                : _step == 3
+                                ? _application?.status ==
+                                          RentalApplicationStatus
+                                              .changesRequested
+                                      ? 'Resubmit application'
+                                      : 'Submit application'
+                                : 'Continue',
+                          ),
                         ),
-                      ),
-                      if (_step < 2 && _application == null) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          'Your draft is saved after Personal and Financial information are complete.',
-                          style: wizardHelper,
-                        ),
+                        if (_step < 2 && _application == null) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            'Your draft is saved after Personal and Financial information are complete.',
+                            style: wizardHelper,
+                          ),
+                        ],
                       ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),

@@ -14,6 +14,9 @@ import 'features/rental_applications/services/rental_application_api_service.dar
 import 'features/rental_offers/services/rental_offer_api_service.dart';
 import 'features/rent_schedules/services/rent_schedule_api_service.dart';
 import 'features/viewings/services/viewing_api_service.dart';
+import 'features/auth/models/current_user.dart';
+import 'features/viewing_follow_ups/services/viewing_follow_up_api_service.dart';
+import 'features/viewing_follow_ups/widgets/tenant_follow_up_host.dart';
 import 'shared/shell/shared_app_shell.dart';
 import 'shared/theme/app_theme.dart';
 import 'shared/widgets/shared_widgets.dart';
@@ -36,6 +39,9 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   late final AuthController _authController;
   ApiClient? _ownedApiClient;
+  var _navigatorKey = GlobalKey<NavigatorState>();
+  var _followUpNavigation = FollowUpNavigationObserver();
+  String? _navigatorSession;
 
   @override
   void initState() {
@@ -67,17 +73,43 @@ class _MyAppState extends State<MyApp> {
     controller: _authController,
     child: AnimatedBuilder(
       animation: _authController,
-      builder: (context, _) => MaterialApp(
-        key: ValueKey(
-          '${_authController.isLoading}-${_authController.currentUser?.id}',
-        ),
-        title: 'RentFlow',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.build(),
-        home: _home(),
-      ),
+      builder: (context, _) => _buildMaterialApp(),
     ),
   );
+
+  Widget _buildMaterialApp() {
+    final session =
+        '${_authController.isLoading}-${_authController.currentUser?.id}';
+    if (_navigatorSession != session) {
+      _navigatorSession = session;
+      _navigatorKey = GlobalKey<NavigatorState>();
+      _followUpNavigation = FollowUpNavigationObserver();
+    }
+    return MaterialApp(
+      key: ValueKey(session),
+      title: 'RentFlow',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.build(),
+      navigatorKey: _navigatorKey,
+      navigatorObservers: [_followUpNavigation],
+      builder: (context, child) {
+        if (_authController.isLoading ||
+            _authController.currentUser?.role != UserRole.tenant) {
+          return child!;
+        }
+        final client = _authController.authService.apiClient;
+        return TenantFollowUpHost(
+          navigatorKey: _navigatorKey,
+          navigation: _followUpNavigation,
+          apiService: ViewingFollowUpApiService(client),
+          applicationApiService: RentalApplicationApiService(client),
+          propertyApiService: PropertyApiService(client),
+          child: child!,
+        );
+      },
+      home: _home(),
+    );
+  }
 
   Widget _home() {
     if (_authController.isLoading) return const SessionRestorationScreen();
@@ -87,36 +119,18 @@ class _MyAppState extends State<MyApp> {
           ? const PublicLandingScreen()
           : const LoginScreen();
     }
-    final apiClient = _ownedApiClient;
+    final apiClient = _authController.authService.apiClient;
     return SharedAppShell(
       user: user,
-      viewingApiService: apiClient == null
-          ? null
-          : ViewingApiService(apiClient),
-      rentalApplicationApiService: apiClient == null
-          ? null
-          : RentalApplicationApiService(apiClient),
-      rentalOfferApiService: apiClient == null
-          ? null
-          : RentalOfferApiService(apiClient),
-      leaseAgreementApiService: apiClient == null
-          ? null
-          : LeaseAgreementApiService(apiClient),
-      rentScheduleApiService: apiClient == null
-          ? null
-          : RentScheduleApiService(apiClient),
-      paymentApiService: apiClient == null
-          ? null
-          : PaymentApiService(apiClient),
-      notificationApiService: apiClient == null
-          ? null
-          : NotificationApiService(apiClient),
-      propertyApiService: apiClient == null
-          ? null
-          : PropertyApiService(apiClient),
-      maintenanceApiService: apiClient == null
-          ? null
-          : MaintenanceApiService(apiClient),
+      viewingApiService: ViewingApiService(apiClient),
+      rentalApplicationApiService: RentalApplicationApiService(apiClient),
+      rentalOfferApiService: RentalOfferApiService(apiClient),
+      leaseAgreementApiService: LeaseAgreementApiService(apiClient),
+      rentScheduleApiService: RentScheduleApiService(apiClient),
+      paymentApiService: PaymentApiService(apiClient),
+      notificationApiService: NotificationApiService(apiClient),
+      propertyApiService: PropertyApiService(apiClient),
+      maintenanceApiService: MaintenanceApiService(apiClient),
     );
   }
 }
