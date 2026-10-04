@@ -108,7 +108,40 @@ public sealed class ViewingAvailabilityService(ApplicationDbContext context, Tim
         var zone = ResolveZone(schedule.TimeZoneId);
         if (date == DateOnly.MaxValue)
             throw ViewingServiceException.Validation("The selected calendar date is outside the supported scheduling range.");
-        if (date < DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(Now, zone).DateTime))
+        var approved = await context.ViewingRequests.AsNoTracking()
+            .Where(v => v.PropertyId == id && v.Status == ViewingStatus.Approved).ToListAsync(ct);
+        return GenerateSlots(date, schedule, zone, approved, Now, includeUnavailable);
+    }
+
+    public async Task<ViewingDatesDto> GetDatesAsync(Guid id, CancellationToken ct = default)
+    {
+        var property = await GetPropertyAsync(id, ct);
+        if (!property.IsAvailable) throw ViewingServiceException.Conflict("This property is not accepting viewing requests.");
+        var schedule = await GetAsync(id, ct);
+        var zone = ResolveZone(schedule.TimeZoneId);
+        var now = Now;
+        // Picker bounds use the property's calendar, never the tenant device's timezone.
+        var firstDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
+        var lastDate = firstDate.AddDays(365);
+        var approved = await context.ViewingRequests.AsNoTracking()
+            .Where(v => v.PropertyId == id && v.Status == ViewingStatus.Approved).ToListAsync(ct);
+        var dates = new List<DateOnly>();
+        for (var date = firstDate; date <= lastDate; date = date.AddDays(1))
+        {
+            ct.ThrowIfCancellationRequested();
+            // Reuse the exact slot rules, including elapsed times, DST and approved overlaps.
+            if (GenerateSlots(date, schedule, zone, approved, now).Slots.Any(s => s.IsAvailable))
+                dates.Add(date);
+        }
+        return new(id, schedule.TimeZoneId, firstDate, lastDate, dates,
+            schedule.Windows.Count == 0 ? "unconfigured" : dates.Count == 0 ? "empty" : "available");
+    }
+
+    private static ViewingSlotsDto GenerateSlots(DateOnly date, ViewingAvailabilityDto schedule,
+        TimeZoneInfo zone, IReadOnlyList<ViewingRequest> approved, DateTimeOffset now,
+        bool includeUnavailable = false)
+    {
+        if (date < DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime))
             return new(date, schedule.TimeZoneId, schedule.SlotDurationMinutes, [], "past");
         var window = schedule.Windows.SingleOrDefault(w => w.DayOfWeek == (int)date.DayOfWeek && w.IsEnabled);
         var slots = new List<ViewingSlotDto>();
@@ -118,9 +151,7 @@ public sealed class ViewingAvailabilityService(ApplicationDbContext context, Tim
 
         var start = date.ToDateTime(window.StartTime!.Value, DateTimeKind.Unspecified);
         var end = date.ToDateTime(window.EndTime!.Value, DateTimeKind.Unspecified);
-        // Filter by interval below, including appointments starting before this date/window.
-        var approved = await context.ViewingRequests.AsNoTracking()
-            .Where(v => v.PropertyId == id && v.Status == ViewingStatus.Approved).ToListAsync(ct);
+        // Include appointments starting before this date/window when checking intervals.
         for (var local = start; local.AddMinutes(schedule.SlotDurationMinutes) <= end;
              local = local.AddMinutes(schedule.SlotDurationMinutes))
         {
@@ -130,7 +161,7 @@ public sealed class ViewingAvailabilityService(ApplicationDbContext context, Tim
                 || zone.IsInvalidTime(localEnd) || zone.IsAmbiguousTime(localEnd)) continue;
             var instant = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(local, zone));
             var finish = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localEnd, zone));
-            if (instant <= Now || finish - instant != TimeSpan.FromMinutes(schedule.SlotDurationMinutes)) continue;
+            if (instant <= now || finish - instant != TimeSpan.FromMinutes(schedule.SlotDurationMinutes)) continue;
             var blocked = approved.Any(v => Overlaps(v, instant, finish));
             if (blocked && !includeUnavailable) continue;
             slots.Add(new(local.ToString("HH:mm", CultureInfo.InvariantCulture),

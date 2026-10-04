@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../models/viewing.dart';
+import '../models/viewing_dates.dart';
 import '../models/viewing_slots.dart';
 
 class ViewingApiService {
@@ -34,6 +35,28 @@ class ViewingApiService {
     final uri = apiClient.buildUri('${ApiConstants.viewingsPath}/$id');
     final response = await _send(() => apiClient.get(uri));
     return _parseViewing(response.body);
+  }
+
+  Future<ViewingDates> getViewingDates({required String propertyId}) async {
+    final uri = apiClient.buildUri('/api/properties/$propertyId/viewing-dates');
+    final response = await _send(() => apiClient.get(uri));
+    try {
+      final parsed = ViewingDates.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+      if (parsed.propertyId != propertyId) {
+        throw const FormatException('Wrong availability property.');
+      }
+      return parsed;
+    } on FormatException {
+      throw const ViewingApiException(
+        'The viewing service returned invalid available dates.',
+      );
+    } on TypeError {
+      throw const ViewingApiException(
+        'The viewing service returned invalid available dates.',
+      );
+    }
   }
 
   Future<ViewingSlots> getViewingSlots({

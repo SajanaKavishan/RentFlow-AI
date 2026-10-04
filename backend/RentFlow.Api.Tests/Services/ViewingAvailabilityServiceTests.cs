@@ -47,6 +47,91 @@ public sealed class ViewingAvailabilityServiceTests
         Assert.Empty((await service.GetSlotsAsync(property.Id, Date.AddDays(1))).Slots);
     }
 
+    [Fact]
+    public async Task Dates_MatchBookableSlotsAcrossMonths_AndOnlyUseSelectedProperty()
+    {
+        await using var db = Context(); var property = Property(); var other = Property();
+        db.AddRange(property, other); await db.SaveChangesAsync();
+        var service = new ViewingAvailabilityService(db, Time);
+        await service.SaveAsync(property.Id, property.LandlordId, Schedule(property.Id));
+        foreach (var (id, date, status) in new[]
+        {
+            (property.Id, Date, ViewingStatus.Approved),
+            (property.Id, Date.AddDays(7), ViewingStatus.Pending),
+            (property.Id, Date.AddDays(14), ViewingStatus.Cancelled),
+            (other.Id, Date.AddDays(21), ViewingStatus.Approved)
+        })
+            db.Add(new ViewingRequest { PropertyId = id, TenantId = Guid.NewGuid(), Status = status,
+                RequestedDateTime = new DateTimeOffset(date.ToDateTime(new TimeOnly(3, 30)), TimeSpan.Zero),
+                DurationMinutes = 480 });
+        await db.SaveChangesAsync();
+        var result = await service.GetDatesAsync(property.Id);
+        Assert.Equal(property.Id, result.PropertyId); Assert.Equal("Asia/Colombo", result.TimeZoneId);
+        Assert.Equal(new DateOnly(2030, 10, 6), result.FirstDate);
+        Assert.Equal(result.FirstDate.AddDays(365), result.LastDate);
+        Assert.Equal("available", result.State);
+        Assert.DoesNotContain(Date, result.AvailableDates);
+        Assert.Contains(Date.AddDays(7), result.AvailableDates);
+        Assert.Contains(Date.AddDays(14), result.AvailableDates);
+        Assert.Contains(Date.AddDays(21), result.AvailableDates);
+        Assert.Equal(result.AvailableDates.Order().Distinct(), result.AvailableDates);
+        Assert.Contains(result.AvailableDates, d => d.Month == 11);
+        Assert.Contains(result.AvailableDates, d => d.Year == 2031);
+        for (var date = result.FirstDate; date <= result.LastDate; date = date.AddDays(1))
+            Assert.Equal((await service.GetSlotsAsync(property.Id, date)).Slots.Any(s => s.IsAvailable),
+                result.AvailableDates.Contains(date));
+        Assert.Empty((await service.GetDatesAsync(other.Id)).AvailableDates);
+    }
+
+    [Fact]
+    public async Task Dates_UseColomboTodayAcrossUtcMidnight_AndExcludeElapsedDays()
+    {
+        await using var db = Context(); var property = Property(); db.Add(property); await db.SaveChangesAsync();
+        // UTC is still Monday; the property's local calendar is already Tuesday.
+        var service = new ViewingAvailabilityService(db, new Clock(new(2030, 10, 7, 18, 45, 0, TimeSpan.Zero)));
+        var input = Schedule(property.Id);
+        input.Windows[0].DayOfWeek = (int)DayOfWeek.Tuesday;
+        input.Windows[0].StartTime = TimeOnly.MinValue; input.Windows[0].EndTime = new(1, 0);
+        await service.SaveAsync(property.Id, property.LandlordId, input);
+        var result = await service.GetDatesAsync(property.Id);
+        Assert.Equal(new DateOnly(2030, 10, 8), result.FirstDate);
+        Assert.DoesNotContain(result.FirstDate, result.AvailableDates);
+        Assert.Equal(result.FirstDate.AddDays(7), result.AvailableDates[0]);
+    }
+
+    [Fact]
+    public async Task Dates_ReuseDstGapRulesInPropertyTimezone()
+    {
+        await using var db = Context(); var property = Property(); db.Add(property); await db.SaveChangesAsync();
+        var service = new ViewingAvailabilityService(db, new Clock(new(2030, 3, 10, 4, 0, 0, TimeSpan.Zero)));
+        var input = Schedule(property.Id); input.TimeZoneId = "America/New_York";
+        input.Windows[0].DayOfWeek = (int)DayOfWeek.Sunday;
+        input.Windows[0].StartTime = new(2, 0); input.Windows[0].EndTime = new(3, 0);
+        await service.SaveAsync(property.Id, property.LandlordId, input);
+        var result = await service.GetDatesAsync(property.Id);
+        Assert.Equal(new DateOnly(2030, 3, 9), result.FirstDate);
+        Assert.DoesNotContain(new DateOnly(2030, 3, 10), result.AvailableDates);
+        Assert.Contains(new DateOnly(2030, 3, 17), result.AvailableDates);
+    }
+
+    [Fact]
+    public async Task Dates_EmptyAndUnconfiguredSchedulesNeverInventAvailability_AndCheckEligibility()
+    {
+        await using var db = Context(); var property = Property(); db.Add(property); await db.SaveChangesAsync();
+        var service = new ViewingAvailabilityService(db, Time);
+        var result = await service.GetDatesAsync(property.Id);
+        Assert.Empty(result.AvailableDates); Assert.Equal("unconfigured", result.State);
+        var input = Schedule(property.Id); input.Windows[0].IsEnabled = false;
+        await service.SaveAsync(property.Id, property.LandlordId, input);
+        result = await service.GetDatesAsync(property.Id);
+        Assert.Empty(result.AvailableDates); Assert.Equal("empty", result.State);
+        property.IsAvailable = false; await db.SaveChangesAsync();
+        Assert.Equal(ViewingServiceError.Conflict, (await Assert.ThrowsAsync<ViewingServiceException>(() =>
+            service.GetDatesAsync(property.Id))).Error);
+        Assert.Equal(ViewingServiceError.NotFound, (await Assert.ThrowsAsync<ViewingServiceException>(() =>
+            service.GetDatesAsync(Guid.NewGuid()))).Error);
+    }
+
     [Theory]
     [InlineData(0)] [InlineData(-1)] [InlineData(15)] [InlineData(120)]
     public async Task Save_RejectsInvalidDuration(int duration)

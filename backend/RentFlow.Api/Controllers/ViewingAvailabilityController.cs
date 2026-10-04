@@ -41,6 +41,11 @@ public sealed class ViewingAvailabilityController(ViewingAvailabilityService ser
             return await service.GetSlotsAsync(propertyId, parsed, ct, includeUnavailable);
         });
 
+    [HttpGet("viewing-dates")]
+    [Authorize(Roles = "Tenant")]
+    public Task<ActionResult<ViewingDatesDto>> Dates(Guid propertyId, CancellationToken ct) =>
+        Execute(() => service.GetDatesAsync(propertyId, ct));
+
     private async Task EnsureOwner(Guid propertyId, CancellationToken ct)
     {
         if (user.Role != UserRole.Admin && (user.UserId is null

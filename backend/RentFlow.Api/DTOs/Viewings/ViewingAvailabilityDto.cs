@@ -21,3 +21,6 @@ public sealed record ViewingSlotDto(string LocalTime, string DisplayTime, DateTi
     bool IsAvailable = true, string? UnavailableReason = null);
 public sealed record ViewingSlotsDto(DateOnly Date, string TimeZoneId, int SlotDurationMinutes,
     IReadOnlyList<ViewingSlotDto> Slots, string State);
+
+public sealed record ViewingDatesDto(Guid PropertyId, string TimeZoneId, DateOnly FirstDate,
+    DateOnly LastDate, IReadOnlyList<DateOnly> AvailableDates, string State);

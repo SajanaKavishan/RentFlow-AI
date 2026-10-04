@@ -6,6 +6,7 @@ import '../../properties/models/property.dart';
 import '../../properties/services/property_api_service.dart';
 import '../../properties/widgets/property_photo.dart';
 import '../models/viewing.dart';
+import '../models/viewing_dates.dart';
 import '../models/viewing_slots.dart';
 import '../services/viewing_api_service.dart';
 import 'my_viewings_screen.dart';
@@ -33,6 +34,10 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
   ApiClient? _ownedApiClient;
   late final ViewingApiService _api;
   DateTime? _date;
+  ViewingDates? _dates;
+  String? _dateError;
+  bool _loadingDates = false;
+  bool _choosingDate = false;
   ViewingSlots? _availability;
   ViewingSlot? _slot;
   String? _slotError;
@@ -84,22 +89,89 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
   }
 
   Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: _date != null && !_date!.isBefore(today) ? _date! : today,
-      firstDate: today,
-      lastDate: today.add(const Duration(days: 365)),
-      helpText: 'Choose a viewing date',
-    );
-    if (selected == null || !mounted) return;
+    if (_choosingDate || _submitting || !_propertyValid) return;
+    var loadSlots = false;
     setState(() {
-      _date = selected;
-      _slot = null;
-      _submissionError = null;
+      _choosingDate = true;
+      _loadingDates = true;
+      _dateError = null;
+      _dates = null;
     });
-    await _loadSlots();
+    try {
+      final dates = await _api.getViewingDates(propertyId: widget.propertyId);
+      if (!mounted) return;
+      setState(() {
+        _dates = dates;
+        _loadingDates = false;
+        // A previously chosen time may no longer belong to an available day.
+        if (_date != null && !dates.isSelectable(_date!)) {
+          _loadVersion++;
+          _date = null;
+          _slot = null;
+          _availability = null;
+          _slotError = null;
+          _loading = false;
+        }
+      });
+      if (dates.availableDates.isEmpty) return;
+      final sortedDates = dates.availableDates.toList()..sort();
+      final selected = await showDatePicker(
+        context: context,
+        initialDate: _date != null && dates.isSelectable(_date!)
+            ? _date!
+            : sortedDates.first,
+        firstDate: dates.firstDate,
+        lastDate: dates.lastDate,
+        // The API already calculated today in the property's timezone.
+        currentDate: dates.firstDate,
+        selectableDayPredicate: dates.isSelectable,
+        helpText: 'Choose a viewing date',
+        builder: (context, child) {
+          final theme = Theme.of(context);
+          final foreground = WidgetStateProperty.resolveWith<Color>((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return AppPalette.secondaryText.withValues(alpha: 0.38);
+            }
+            if (states.contains(WidgetState.selected)) return AppPalette.white;
+            return AppPalette.darkOlive;
+          });
+          return Theme(
+            data: theme.copyWith(
+              datePickerTheme: theme.datePickerTheme.copyWith(
+                backgroundColor: AppPalette.warmCream,
+                dayForegroundColor: foreground,
+                todayForegroundColor: foreground,
+              ),
+            ),
+            child: child!,
+          );
+        },
+      );
+      if (selected == null || !mounted || !dates.isSelectable(selected)) return;
+      setState(() {
+        _date = selected;
+        _slot = null;
+        _submissionError = null;
+      });
+      loadSlots = true;
+    } on ViewingApiException catch (error) {
+      if (mounted) setState(() => _dateError = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _dateError =
+              'Viewing dates could not be loaded. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingDates = false;
+          _choosingDate = false;
+        });
+      }
+    }
+    if (loadSlots) await _loadSlots();
   }
 
   Future<void> _loadSlots() async {
@@ -143,6 +215,7 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
         slot == null ||
         !slot.isAvailable ||
         !_noteValid ||
+        _choosingDate ||
         _loading ||
         !(_availability?.slots.contains(slot) ?? false)) {
       return;
@@ -231,10 +304,53 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.calendar_today_outlined),
                       title: Text(dateLabel),
+                      subtitle: const Text(
+                        'Only available dates can be selected.',
+                      ),
                       trailing: const Icon(Icons.expand_more),
-                      onTap: _submitting || !_propertyValid ? null : _pickDate,
+                      onTap: _submitting || _choosingDate || !_propertyValid
+                          ? null
+                          : _pickDate,
                     ),
                   ),
+                  if (_loadingDates)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: LinearProgressIndicator(
+                        key: ValueKey('viewing-dates-loading'),
+                        semanticsLabel: 'Loading available viewing dates',
+                        color: AppPalette.olive,
+                      ),
+                    ),
+                  if (_dateError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _dateError!,
+                            key: const ValueKey('viewing-dates-error'),
+                          ),
+                          TextButton(
+                            onPressed: _choosingDate || _submitting
+                                ? null
+                                : _pickDate,
+                            child: const Text('Retry available dates'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_dates?.availableDates.isEmpty ?? false)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        _dates!.state == 'unconfigured'
+                            ? 'Viewing times have not been configured for this property yet.'
+                            : 'No viewing dates are currently available for this property.',
+                        key: const ValueKey('viewing-dates-empty'),
+                      ),
+                    ),
                   const SizedBox(height: 20),
                   const SectionHeader(title: 'Available times'),
                   const SizedBox(height: 8),
@@ -285,6 +401,7 @@ class _BookViewingScreenState extends State<BookViewingScreen> {
                             _slot == null ||
                             !_slot!.isAvailable ||
                             !_noteValid ||
+                            _choosingDate ||
                             _loading ||
                             _submitting
                         ? null

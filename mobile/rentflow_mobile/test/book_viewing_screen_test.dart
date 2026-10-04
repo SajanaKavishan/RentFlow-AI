@@ -65,6 +65,25 @@ class _ImageResponse extends Fake implements HttpClientResponse {
 
 const _id = '22222222-2222-4222-8222-222222222222';
 const _instant = '2030-10-07T03:30:00Z';
+final _firstDate = DateTime(2030, 10, 6);
+String _dateString(DateTime date) =>
+    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+http.Response _dates({
+  List<String> availableDates = const [
+    '2030-10-07',
+    '2030-10-08',
+    '2030-10-09',
+  ],
+  String state = 'available',
+  String propertyId = _id,
+}) => _json({
+  'propertyId': propertyId,
+  'timeZoneId': 'Asia/Colombo',
+  'firstDate': '2030-10-06',
+  'lastDate': '2031-10-06',
+  'availableDates': availableDates,
+  'state': state,
+});
 final _property = Property.fromJson({
   'id': _id,
   'landlordId': '11111111-1111-4111-8111-111111111111',
@@ -124,11 +143,15 @@ Future<void> _pump(
   bool valid = true,
   double scale = 1,
   bool loadImages = false,
+  Future<http.Response> Function(http.Request)? datesHandler,
 }) async {
   final client = ApiClient(
     baseUrl: 'http://test',
     tokenStorage: _Tokens(),
     httpClient: MockClient((request) {
+      if (request.url.path.endsWith('/viewing-dates')) {
+        return datesHandler?.call(request) ?? Future.value(_dates());
+      }
       if (!loadImages && request.url.path.endsWith('/images')) {
         return Future.value(_json([]));
       }
@@ -161,19 +184,28 @@ Future<void> _date(
   int offset = 1,
   bool settle = true,
 }) async {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final selected = today.add(Duration(days: offset));
+  final selected = DateTime(
+    _firstDate.year,
+    _firstDate.month,
+    _firstDate.day + offset,
+  );
   await tester.ensureVisible(
     find.byKey(const ValueKey('viewing-date-selector')),
   );
   await tester.tap(find.byKey(const ValueKey('viewing-date-selector')));
   await tester.pump(const Duration(milliseconds: 400));
-  if (selected.month != today.month) {
-    await tester.tap(find.byTooltip('Next month'));
-    await tester.pumpAndSettle();
+  var displayed = tester
+      .widget<CalendarDatePicker>(find.byType(CalendarDatePicker))
+      .initialDate!;
+  final targetMonth = selected.year * 12 + selected.month;
+  while (displayed.year * 12 + displayed.month != targetMonth) {
+    final next = displayed.year * 12 + displayed.month < targetMonth;
+    await tester.tap(find.byTooltip(next ? 'Next month' : 'Previous month'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    displayed = DateTime(displayed.year, displayed.month + (next ? 1 : -1));
   }
-  await tester.tap(find.text('${selected.day}').last);
+  await tester.tap(find.text('${selected.day}').hitTestable().last);
   await tester.tap(find.text('OK'));
   if (settle) {
     await tester.pumpAndSettle();
@@ -196,6 +228,236 @@ Future<void> _submit(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'calendar enables only distinct server dates and mutes other days',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      http.Request? datesRequest;
+      var slotCalls = 0;
+      await _pump(
+        tester,
+        (request) async {
+          slotCalls++;
+          return _slots(request);
+        },
+        datesHandler: (request) async {
+          datesRequest = request;
+          return _dates(
+            availableDates: ['2030-10-09', '2030-10-07', '2030-10-07'],
+          );
+        },
+      );
+      await tester.tap(find.byKey(const ValueKey('viewing-date-selector')));
+      await tester.pumpAndSettle();
+      expect(datesRequest!.url.path, '/api/properties/$_id/viewing-dates');
+      expect(datesRequest!.headers['authorization'], 'Bearer tenant-token');
+      final picker = tester.widget<CalendarDatePicker>(
+        find.byType(CalendarDatePicker),
+      );
+      expect(picker.initialDate, DateTime(2030, 10, 7));
+      expect(picker.firstDate, _firstDate);
+      expect(picker.lastDate, DateTime(2031, 10, 6));
+      expect(picker.currentDate, _firstDate);
+      for (var offset = 0; offset <= 365; offset++) {
+        final date = _firstDate.add(Duration(days: offset));
+        expect(picker.selectableDayPredicate!(date), [1, 3].contains(offset));
+      }
+      final disabled = find.descendant(
+        of: find.byType(CalendarDatePicker),
+        matching: find.text('8'),
+      );
+      expect(
+        tester.widget<Text>(disabled).style!.color,
+        AppPalette.secondaryText.withValues(alpha: 0.38),
+      );
+      expect(
+        tester
+            .widget<Semantics>(
+              find
+                  .ancestor(of: disabled, matching: find.byType(Semantics))
+                  .first,
+            )
+            .properties
+            .enabled,
+        isFalse,
+      );
+      expect(
+        find.ancestor(of: disabled, matching: find.byType(InkResponse)),
+        findsNothing,
+      );
+      await tester.tap(disabled);
+      await tester.pump();
+      expect(slotCalls, 0);
+      await tester.tap(find.text('9').last);
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(slotCalls, 1);
+      expect(find.byKey(const ValueKey('viewing-slot-09:00')), findsOneWidget);
+      semantics.dispose();
+    },
+  );
+
+  testWidgets(
+    'month navigation preserves disabled dates and loads valid date slots',
+    (tester) async {
+      String? slotDate;
+      await _pump(
+        tester,
+        (request) async {
+          slotDate = request.url.queryParameters['date'];
+          return _slots(request);
+        },
+        datesHandler: (_) async =>
+            _dates(availableDates: ['2030-10-07', '2030-11-09', '2031-01-02']),
+      );
+      await tester.tap(find.byKey(const ValueKey('viewing-date-selector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Next month'));
+      await tester.pumpAndSettle();
+      final disabled = find.descendant(
+        of: find.byType(CalendarDatePicker),
+        matching: find.text('8'),
+      );
+      expect(
+        tester
+            .widget<Semantics>(
+              find
+                  .ancestor(of: disabled, matching: find.byType(Semantics))
+                  .first,
+            )
+            .properties
+            .enabled,
+        isFalse,
+      );
+      expect(
+        tester.widget<Text>(disabled).style!.color,
+        AppPalette.secondaryText.withValues(alpha: 0.38),
+      );
+      await tester.tap(find.byTooltip('Previous month'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Next month'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('9').last);
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(slotDate, '2030-11-09');
+      expect(find.byKey(const ValueKey('viewing-slot-09:00')), findsOneWidget);
+      // Reopening starts from the still-available selected day, across a year boundary.
+      await _date(
+        tester,
+        offset: DateTime(2031, 1, 2).difference(_firstDate).inDays,
+      );
+      expect(slotDate, '2031-01-02');
+    },
+  );
+
+  for (final state in ['empty', 'unconfigured']) {
+    testWidgets('$state dates show a truthful empty state without a picker', (
+      tester,
+    ) async {
+      var slotCalls = 0;
+      await _pump(tester, (request) async {
+        slotCalls++;
+        return _slots(request);
+      }, datesHandler: (_) async => _dates(availableDates: [], state: state));
+      await tester.tap(find.byKey(const ValueKey('viewing-date-selector')));
+      await tester.pumpAndSettle();
+      expect(find.byType(DatePickerDialog), findsNothing);
+      expect(find.byKey(const ValueKey('viewing-dates-empty')), findsOneWidget);
+      expect(
+        find.text(
+          state == 'unconfigured'
+              ? 'Viewing times have not been configured for this property yet.'
+              : 'No viewing dates are currently available for this property.',
+        ),
+        findsOneWidget,
+      );
+      expect(slotCalls, 0);
+    });
+  }
+
+  testWidgets(
+    'date loading and errors never open a picker and can be retried',
+    (tester) async {
+      final pending = Completer<http.Response>();
+      var calls = 0;
+      await _pump(
+        tester,
+        (_) async => throw StateError('No slots expected'),
+        datesHandler: (_) =>
+            ++calls == 1 ? pending.future : Future.value(_dates()),
+      );
+      await tester.tap(find.byKey(const ValueKey('viewing-date-selector')));
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('viewing-dates-loading')),
+        findsOneWidget,
+      );
+      expect(find.byType(DatePickerDialog), findsNothing);
+      expect(
+        tester
+            .widget<ListTile>(
+              find.byKey(const ValueKey('viewing-date-selector')),
+            )
+            .onTap,
+        isNull,
+      );
+      pending.complete(_json({'detail': 'Dates temporarily unavailable'}, 500));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('The viewing request failed. Please try again.'),
+        findsOneWidget,
+      );
+      expect(find.text('Dates temporarily unavailable'), findsNothing);
+      expect(find.byType(DatePickerDialog), findsNothing);
+      await tester.ensureVisible(find.text('Retry available dates'));
+      await tester.tap(find.text('Retry available dates'));
+      await tester.pumpAndSettle();
+      expect(calls, 2);
+      expect(find.byType(CalendarDatePicker), findsOneWidget);
+    },
+  );
+
+  testWidgets('dates for a different property never enable a calendar', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      (_) async => throw StateError('No slots expected'),
+      datesHandler: (_) async => _dates(propertyId: 'another-property'),
+    );
+    await tester.tap(find.byKey(const ValueKey('viewing-date-selector')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsNothing);
+    expect(find.byKey(const ValueKey('viewing-dates-error')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewing-dates-empty')), findsNothing);
+  });
+
+  testWidgets(
+    'refresh removes a selected day when server availability disappears',
+    (tester) async {
+      var calls = 0;
+      await _pump(
+        tester,
+        (request) async => _slots(request),
+        datesHandler: (_) async => ++calls == 1
+            ? _dates()
+            : _dates(availableDates: [], state: 'empty'),
+      );
+      await _date(tester);
+      await _select(tester);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('viewing-date-selector')),
+      );
+      await tester.tap(find.byKey(const ValueKey('viewing-date-selector')));
+      await tester.pumpAndSettle();
+      expect(find.byType(DatePickerDialog), findsNothing);
+      expect(find.byKey(const ValueKey('viewing-slot-09:00')), findsNothing);
+      expect(find.text('Select a date'), findsWidgets);
+      expect(find.byKey(const ValueKey('viewing-dates-empty')), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'selected property photo uses actual image metadata and resolved URL',
     (tester) async {
@@ -320,12 +582,9 @@ void main() {
         return _slots(request);
       });
       await _date(tester);
-      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      final tomorrow = _firstDate.add(const Duration(days: 1));
       expect(fetched!.url.path, '/api/properties/$_id/viewing-slots');
-      expect(
-        fetched!.url.queryParameters['date'],
-        '${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}',
-      );
+      expect(fetched!.url.queryParameters['date'], _dateString(tomorrow));
       expect(fetched!.headers['authorization'], 'Bearer tenant-token');
       expect(fetched!.url.queryParameters['includeUnavailable'], 'true');
       await _select(tester);

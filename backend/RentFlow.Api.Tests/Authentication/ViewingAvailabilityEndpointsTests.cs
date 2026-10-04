@@ -119,6 +119,40 @@ public sealed class ViewingAvailabilityEndpointsTests
         Assert.Equal(HttpStatusCode.Conflict, (await tenant.PostAsJsonAsync("/api/viewings", new CreateViewingRequestDto { TenantMessage = "Please arrange a visit.", PropertyId = property.Id, RequestedDateTime = slots.Slots[0].RequestedDateTime.AddMinutes(1) })).StatusCode);
     }
 
+    [Fact]
+    public async Task Dates_ReturnOnlyBookableLocalDates_WithoutExposingPrivateSchedule()
+    {
+        using var factory = new AuthApiFactory(new ViewingAvailabilityServiceTests.Clock(new(2030, 10, 6, 0, 0, 0, TimeSpan.Zero)));
+        var property = await Seed(factory);
+        using var owner = Client(factory, property.LandlordId, UserRole.Landlord);
+        using var tenant = Client(factory, Guid.NewGuid(), UserRole.Tenant);
+        var route = $"/api/properties/{property.Id}";
+        var empty = await tenant.GetFromJsonAsync<ViewingDatesDto>($"{route}/viewing-dates");
+        Assert.Equal("unconfigured", empty!.State); Assert.Empty(empty.AvailableDates);
+        await owner.PutAsJsonAsync($"{route}/viewing-availability", ViewingAvailabilityServiceTests.Schedule(property.Id));
+        var response = await tenant.GetAsync($"{route}/viewing-dates");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var dates = await response.Content.ReadFromJsonAsync<ViewingDatesDto>();
+        Assert.Equal(property.Id, dates!.PropertyId); Assert.Equal("Asia/Colombo", dates.TimeZoneId);
+        Assert.Contains(new DateOnly(2030, 10, 7), dates.AvailableDates);
+        Assert.DoesNotContain(new DateOnly(2030, 10, 8), dates.AvailableDates);
+        Assert.DoesNotContain("windows", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpStatusCode.Forbidden, (await tenant.GetAsync($"{route}/viewing-availability")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"{route}/viewing-dates")).StatusCode);
+        using var admin = Client(factory, Guid.NewGuid(), UserRole.Admin);
+        using var technician = Client(factory, Guid.NewGuid(), UserRole.MaintenanceTechnician);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync($"{route}/viewing-dates")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await technician.GetAsync($"{route}/viewing-dates")).StatusCode);
+        using var anonymous = factory.CreateHttpsClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync($"{route}/viewing-dates")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await tenant.GetAsync($"/api/properties/{Guid.NewGuid()}/viewing-dates")).StatusCode);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await db.Properties.FindAsync(property.Id))!.IsAvailable = false;
+        await db.SaveChangesAsync();
+        Assert.Equal(HttpStatusCode.Conflict, (await tenant.GetAsync($"{route}/viewing-dates")).StatusCode);
+    }
+
     [Theory]
     [InlineData(null)] [InlineData("")] [InlineData("  \t\r\n ")]
     public async Task RequiredNote_BlankInputsReturnControlled400WithoutPersisting(string? note)
