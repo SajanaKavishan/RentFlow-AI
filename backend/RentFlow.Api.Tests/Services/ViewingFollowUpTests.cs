@@ -23,6 +23,8 @@ public sealed class ViewingFollowUpTests
         if (eligible)
         {
             Assert.Equal(viewing.Id, claim!.ViewingId); Assert.Equal(clock.Now, claim.ClaimedAt);
+            Assert.Equal(clock.Now + ViewingFollowUpService.ClaimLeaseDuration, claim.ClaimExpiresAt);
+            Assert.Equal(claim.ClaimExpiresAt, (await db.ViewingFollowUps.SingleAsync()).ClaimExpiresAt);
             Assert.True(claim.Application.CanApply); Assert.Null(await service.ClaimNextAsync(tenant));
             Assert.Null(await Service(db, clock).ClaimNextAsync(tenant));
         }
@@ -59,7 +61,7 @@ public sealed class ViewingFollowUpTests
         await using var db = Context(); var (tenant, viewing) = await Seed(db);
         var clock = new ViewingCancellationTests.Clock(Start.AddHours(4)); var service = Service(db, clock);
         var claim = (await service.ClaimNextAsync(tenant))!;
-        clock.Now = clock.Now.AddMinutes(2);
+        clock.Now = claim.ClaimExpiresAt.AddTicks(1); // An open dialog can submit after the lease expires.
         var result = await service.RespondAsync(tenant, claim.FollowUpId, decision);
         Assert.Equal(clock.Now, result.RespondedAt); Assert.Equal(decision.ToString(), result.Decision);
         clock.Now = clock.Now.AddHours(1);
@@ -88,6 +90,59 @@ public sealed class ViewingFollowUpTests
         db.Properties.Remove(await db.Properties.SingleAsync()); await db.SaveChangesAsync();
         Assert.Null(await Service(db, new ViewingCancellationTests.Clock(Start.AddDays(2))).ClaimNextAsync(tenant));
         Assert.Empty(db.ViewingFollowUps);
+    }
+    [Theory]
+    [InlineData(-1, false)] [InlineData(0, true)] [InlineData(1, true)]
+    public async Task LeaseBoundary_ReusesSameRowAndRenewsServerTimestamps(long ticks, bool recoverable)
+    {
+        await using var db = Context(); var (tenant, _) = await Seed(db);
+        var clock = new ViewingCancellationTests.Clock(Start.AddHours(4)); var service = Service(db, clock);
+        var original = (await service.ClaimNextAsync(tenant))!;
+        clock.Now = original.ClaimExpiresAt.AddTicks(ticks);
+        var renewed = await service.ClaimNextAsync(tenant);
+        var stored = await db.ViewingFollowUps.SingleAsync();
+        if (recoverable)
+        {
+            Assert.NotNull(renewed); Assert.Equal(original.FollowUpId, renewed.FollowUpId);
+            Assert.Equal(original.ViewingId, renewed.ViewingId); Assert.Equal(clock.Now, renewed.ClaimedAt);
+            Assert.Equal(clock.Now + ViewingFollowUpService.ClaimLeaseDuration, renewed.ClaimExpiresAt);
+            Assert.Equal(renewed.ClaimedAt, stored.ClaimedAt); Assert.Equal(renewed.ClaimExpiresAt, stored.ClaimExpiresAt);
+            Assert.Null(await service.ClaimNextAsync(tenant));
+        }
+        else
+        {
+            Assert.Null(renewed); Assert.Equal(original.ClaimedAt, stored.ClaimedAt);
+            Assert.Equal(original.ClaimExpiresAt, stored.ClaimExpiresAt);
+        }
+        Assert.Equal(original.FollowUpId, stored.Id); Assert.Null(stored.Decision); Assert.Null(stored.RespondedAt);
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task OlderUnresolvedClaim_WithExpiredOrLegacyNullLease_PrecedesNewViewing(bool legacy)
+    {
+        await using var db = Context(); var (tenant, newest) = await Seed(db);
+        var oldest = new ViewingRequest { TenantId = tenant, PropertyId = newest.PropertyId, Status = ViewingStatus.Completed,
+            RequestedDateTime = Start.AddDays(-1), DurationMinutes = 45 };
+        var original = new ViewingFollowUp { TenantId = tenant, ViewingId = oldest.Id, ClaimedAt = Start.AddHours(-2),
+            ClaimExpiresAt = legacy ? null : Start.AddHours(-1) };
+        db.AddRange(oldest, original); await db.SaveChangesAsync();
+        var clock = new ViewingCancellationTests.Clock(Start.AddHours(4)); var service = Service(db, clock);
+        var recovered = (await service.ClaimNextAsync(tenant))!;
+        Assert.Equal(original.Id, recovered.FollowUpId); Assert.Equal(oldest.Id, recovered.ViewingId);
+        Assert.Equal(clock.Now, recovered.ClaimedAt); Assert.Equal(clock.Now + ViewingFollowUpService.ClaimLeaseDuration, recovered.ClaimExpiresAt);
+        Assert.Single(db.ViewingFollowUps); Assert.Null(original.Decision); Assert.Null(original.RespondedAt);
+        Assert.Equal(newest.Id, (await service.ClaimNextAsync(tenant))!.ViewingId);
+        Assert.Equal(2, await db.ViewingFollowUps.CountAsync()); Assert.Null(await service.ClaimNextAsync(tenant));
+    }
+    [Theory]
+    [InlineData(ViewingFollowUpDecision.ApplyNow)] [InlineData(ViewingFollowUpDecision.NotNow)]
+    public async Task LegacyRespondedRows_NeverRecover(ViewingFollowUpDecision decision)
+    {
+        await using var db = Context(); var (tenant, viewing) = await Seed(db);
+        db.Add(new ViewingFollowUp { TenantId = tenant, ViewingId = viewing.Id, ClaimedAt = Start,
+            Decision = decision, RespondedAt = Start.AddHours(2) }); await db.SaveChangesAsync();
+        Assert.Null(await Service(db, new ViewingCancellationTests.Clock(Start.AddYears(10))).ClaimNextAsync(tenant));
+        Assert.Single(db.ViewingFollowUps);
     }
     private static ApplicationDbContext Context() => new(new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
     private static ViewingFollowUpService Service(ApplicationDbContext db, TimeProvider clock) => new(db, clock, new RentalApplicationService(db));

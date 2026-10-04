@@ -1,5 +1,7 @@
 # Task 4 — One-time tenant viewing follow-up
 
+Historical Task 4 report: [Task 4.1](viewing-follow-up-lease-implementation-report.md) supersedes the permanent claim semantics and termination limitation below with recoverable server leases.
+
 Implemented on `feature/mobile-ui-redesign`. No branch operation, commit, push, or PR was performed. React was not changed.
 
 1. **Eligibility:** The authenticated tenant's viewing must be Completed, and server `TimeProvider.GetUtcNow()` must be at or after `RequestedDateTime + DurationMinutes + 60 minutes`. The stored duration snapshot is used. Approved/Pending/Rejected/Cancelled viewings do not qualify, regardless of elapsed time. Late landlord completion can qualify immediately. Device time and formatted local strings do not determine eligibility.

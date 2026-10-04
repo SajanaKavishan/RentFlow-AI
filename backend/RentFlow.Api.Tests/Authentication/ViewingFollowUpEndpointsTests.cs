@@ -35,7 +35,8 @@ public sealed class ViewingFollowUpEndpointsTests
     public async Task JwtOwnership_ClaimAndResponseContracts_NoClientIdentityOrClockTrusted()
     {
         var now = new DateTimeOffset(2030, 1, 2, 10, 0, 0, TimeSpan.Zero);
-        using var factory = new AuthApiFactory(new ViewingCancellationTests.Clock(now));
+        var clock = new ViewingCancellationTests.Clock(now);
+        using var factory = new AuthApiFactory(clock);
         var tenant = Guid.NewGuid(); var other = Guid.NewGuid(); factory.EnsureActiveUser(tenant, UserRole.Tenant);
         var property = new Property { Title = "Authentic home", Address = "Real street", City = "Colombo" };
         var viewing = new ViewingRequest { TenantId = tenant, PropertyId = property.Id, RequestedDateTime = now.AddHours(-2), Status = ViewingStatus.Completed };
@@ -48,8 +49,16 @@ public sealed class ViewingFollowUpEndpointsTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var claim = (await response.Content.ReadFromJsonAsync<ViewingFollowUpDto>())!;
         Assert.Equal(viewing.Id, claim.ViewingId); Assert.Equal(property.Id, claim.Property.Id); Assert.Equal(now, claim.ClaimedAt);
+        Assert.Equal(now + RentFlow.Api.Services.ViewingFollowUpService.ClaimLeaseDuration, claim.ClaimExpiresAt);
         Assert.Equal("Authentic home", claim.Property.Title); Assert.True(claim.Application.CanApply);
         Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync("/api/viewing-follow-ups/next/claim", null)).StatusCode);
+        clock.Now = claim.ClaimExpiresAt.AddTicks(-1);
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsJsonAsync("/api/viewing-follow-ups/next/claim", new { serverNow = now.AddYears(1) })).StatusCode);
+        clock.Now = claim.ClaimExpiresAt;
+        Assert.Equal(HttpStatusCode.NoContent, (await stranger.PostAsJsonAsync("/api/viewing-follow-ups/next/claim", new { tenantId = tenant })).StatusCode);
+        var recovered = (await (await owner.PostAsync("/api/viewing-follow-ups/next/claim", null)).Content.ReadFromJsonAsync<ViewingFollowUpDto>())!;
+        Assert.Equal(claim.FollowUpId, recovered.FollowUpId); Assert.Equal(clock.Now, recovered.ClaimedAt);
+        clock.Now = recovered.ClaimExpiresAt.AddMinutes(1);
         var path = $"/api/viewing-follow-ups/{claim.FollowUpId}/respond";
         Assert.Equal(HttpStatusCode.NotFound, (await stranger.PostAsJsonAsync(path, new { decision = "NotNow", tenantId = tenant })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(path, new { decision = "0" })).StatusCode);
@@ -57,7 +66,9 @@ public sealed class ViewingFollowUpEndpointsTests
         Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(path, new { decision = "ApplyNow" })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(path, new { decision = "NotNow" })).StatusCode);
         using var checkScope = factory.Services.CreateScope(); var stored = checkScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        Assert.Empty(stored.RentalApplications); Assert.Equal(now, stored.ViewingFollowUps.Single().RespondedAt);
+        Assert.Empty(stored.RentalApplications); Assert.Equal(clock.Now, stored.ViewingFollowUps.Single().RespondedAt);
+        clock.Now = clock.Now.AddDays(30);
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync("/api/viewing-follow-ups/next/claim", null)).StatusCode);
     }
     private static HttpClient Client(AuthApiFactory factory, Guid id, UserRole role)
     {

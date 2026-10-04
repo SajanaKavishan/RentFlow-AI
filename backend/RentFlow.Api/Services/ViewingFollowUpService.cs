@@ -10,6 +10,8 @@ namespace RentFlow.Api.Services;
 public sealed class ViewingFollowUpService(ApplicationDbContext db, TimeProvider clock,
     IRentalApplicationService applications) : IViewingFollowUpService
 {
+    public static readonly TimeSpan ClaimLeaseDuration = TimeSpan.FromMinutes(10);
+
     // Serialize both claim and response for this authenticated tenant across API instances.
     private async Task<IDbContextTransaction?> LockTenantAsync(Guid tenantId, CancellationToken ct)
     {
@@ -32,19 +34,33 @@ public sealed class ViewingFollowUpService(ApplicationDbContext db, TimeProvider
                                join property in db.Properties.AsNoTracking() on viewing.PropertyId equals property.Id
                                where viewing.TenantId == tenantId && viewing.Status == ViewingStatus.Completed
                                    && viewing.RequestedDateTime.AddMinutes(viewing.DurationMinutes + 60) <= now
-                                   && !db.ViewingFollowUps.Any(f => f.ViewingId == viewing.Id)
+                                   && !db.ViewingFollowUps.Any(f => f.ViewingId == viewing.Id
+                                       && (f.TenantId != tenantId || f.RespondedAt != null
+                                           || (f.ClaimExpiresAt != null && f.ClaimExpiresAt > now)))
                                orderby viewing.RequestedDateTime.AddMinutes(viewing.DurationMinutes + 60), viewing.Id
                                select new { Viewing = viewing, Property = property }).FirstOrDefaultAsync(cancellationToken);
         if (candidate is null) return null;
 
         var application = await applications.GetEligibilityAsync(tenantId, candidate.Property.Id, cancellationToken);
-        var followUp = new ViewingFollowUp { ViewingId = candidate.Viewing.Id, TenantId = tenantId, ClaimedAt = now };
-        db.ViewingFollowUps.Add(followUp);
+        var followUp = await db.ViewingFollowUps.SingleOrDefaultAsync(f => f.ViewingId == candidate.Viewing.Id, cancellationToken);
+        if (followUp is null)
+        {
+            followUp = new ViewingFollowUp { ViewingId = candidate.Viewing.Id, TenantId = tenantId };
+            db.ViewingFollowUps.Add(followUp);
+        }
+        else if (db.Database.IsRelational())
+        {
+            // A context may have tracked this row before another device renewed it.
+            await db.Entry(followUp).ReloadAsync(cancellationToken);
+        }
+        followUp.ClaimedAt = now;
+        followUp.ClaimExpiresAt = now + ClaimLeaseDuration;
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return new ViewingFollowUpDto
         {
             FollowUpId = followUp.Id, ViewingId = followUp.ViewingId, ClaimedAt = now,
+            ClaimExpiresAt = followUp.ClaimExpiresAt.Value,
             ViewingCompletedAt = candidate.Viewing.UpdatedAt,
             Property = new() { Id = candidate.Property.Id, Title = candidate.Property.Title,
                 Address = candidate.Property.Address, City = candidate.Property.City },

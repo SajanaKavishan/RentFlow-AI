@@ -38,10 +38,27 @@ public sealed class ViewingPostgresTests
         await Task.Delay(200); Assert.False(first.IsCompleted); Assert.False(second.IsCompleted);
         await held.CommitAsync();
         var results = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(20));
-        var claim = Assert.Single(results.Where(r => r is not null))!;
+        var claim = Assert.Single(results, r => r is not null)!;
         Assert.Equal(viewing.Id, claim.ViewingId); Assert.Equal(1, await setup.ViewingFollowUps.CountAsync());
+        Assert.Equal(clock.Now + ViewingFollowUpService.ClaimLeaseDuration, claim.ClaimExpiresAt);
         Assert.Null(await Service(setup).ClaimNextAsync(tenant.Id));
-        clock.Now = clock.Now.AddMinutes(1);
+        clock.Now = claim.ClaimExpiresAt.AddTicks(-1);
+        Assert.Null(await Service(setup).ClaimNextAsync(tenant.Id));
+        clock.Now = claim.ClaimExpiresAt;
+        await using (var reclaimLock = await blocker.Database.BeginTransactionAsync())
+        {
+            await blocker.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Users\" WHERE \"Id\" = {tenant.Id} FOR UPDATE");
+            // Reuse contexts to exercise renewal of rows tracked before another device's claim.
+            var renew1 = Service(db1).ClaimNextAsync(tenant.Id); var renew2 = Service(db2).ClaimNextAsync(tenant.Id);
+            await Task.Delay(200); Assert.False(renew1.IsCompleted); Assert.False(renew2.IsCompleted);
+            await reclaimLock.CommitAsync();
+            var renewed = Assert.Single(await Task.WhenAll(renew1, renew2).WaitAsync(TimeSpan.FromSeconds(20)), r => r is not null)!;
+            Assert.Equal(claim.FollowUpId, renewed.FollowUpId); Assert.Equal(clock.Now, renewed.ClaimedAt);
+            Assert.Equal(clock.Now + ViewingFollowUpService.ClaimLeaseDuration, renewed.ClaimExpiresAt);
+            Assert.Equal(1, await setup.ViewingFollowUps.CountAsync());
+            Assert.Null(await Service(setup).ClaimNextAsync(tenant.Id));
+            clock.Now = renewed.ClaimExpiresAt.AddMinutes(1);
+        }
         async Task<bool> Respond(ApplicationDbContext context, ViewingFollowUpDecision decision)
         {
             try { await Service(context).RespondAsync(tenant.Id, claim.FollowUpId, decision); return true; }
@@ -50,12 +67,43 @@ public sealed class ViewingPostgresTests
         Assert.Single(await Task.WhenAll(Respond(db1, ViewingFollowUpDecision.ApplyNow), Respond(db2, ViewingFollowUpDecision.NotNow)), success => success);
         var stored = await setup.ViewingFollowUps.AsNoTracking().SingleAsync();
         Assert.Equal(clock.Now, stored.RespondedAt); Assert.NotNull(stored.Decision);
+        clock.Now = clock.Now.AddDays(1); Assert.Null(await Service(setup).ClaimNextAsync(tenant.Id));
         Assert.Empty(await setup.RentalApplications.ToListAsync());
         setup.Add(new ViewingFollowUp { TenantId = tenant.Id, ViewingId = viewing.Id, ClaimedAt = clock.Now });
         var duplicate = await Assert.ThrowsAsync<DbUpdateException>(() => setup.SaveChangesAsync());
         var postgres = Assert.IsType<PostgresException>(duplicate.InnerException);
         Assert.Equal(PostgresErrorCodes.UniqueViolation, postgres.SqlState);
         Assert.Equal("IX_ViewingFollowUps_ViewingId", postgres.ConstraintName);
+    }
+
+    [PostgreSqlFact]
+    public async Task ViewingFollowUp_LeaseMigrationPreservesHistory_AndRecoversOnlyUnresolvedLegacyClaim()
+    {
+        await using var database = new Database(); await database.CreateAsync();
+        await using var db = new ApplicationDbContext(database.Options);
+        var (property, slot) = await SeedAsync(db, "20261004075004_AddViewingFollowUps");
+        var tenant = new ApplicationUser { Id = Guid.NewGuid(), FullName = "Legacy tenant", Email = $"{Guid.NewGuid():N}@example.test",
+            NormalizedEmail = Guid.NewGuid().ToString("N"), PhoneNumber = "0000000000", PasswordHash = "test-only", Role = UserRole.Tenant };
+        var unresolved = new ViewingRequest { TenantId = tenant.Id, PropertyId = property.Id, Status = ViewingStatus.Completed,
+            RequestedDateTime = slot.RequestedDateTime, DurationMinutes = 45 };
+        var finished = new ViewingRequest { TenantId = tenant.Id, PropertyId = property.Id, Status = ViewingStatus.Completed,
+            RequestedDateTime = slot.RequestedDateTime.AddDays(-1), DurationMinutes = 45 };
+        db.AddRange(tenant, unresolved, finished); await db.SaveChangesAsync();
+        var unresolvedId = Guid.NewGuid(); var finishedId = Guid.NewGuid(); var claimedAt = slot.RequestedDateTime.AddHours(2);
+        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"ViewingFollowUps\" (\"Id\",\"ViewingId\",\"TenantId\",\"ClaimedAt\") VALUES ({unresolvedId},{unresolved.Id},{tenant.Id},{claimedAt})");
+        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"ViewingFollowUps\" (\"Id\",\"ViewingId\",\"TenantId\",\"ClaimedAt\",\"Decision\",\"RespondedAt\") VALUES ({finishedId},{finished.Id},{tenant.Id},{claimedAt},{"NotNow"},{claimedAt})");
+        await db.Database.MigrateAsync();
+        var before = await db.ViewingFollowUps.AsNoTracking().ToListAsync();
+        Assert.Equal(2, before.Count); Assert.All(before, row => Assert.Null(row.ClaimExpiresAt));
+        var clock = new ViewingCancellationTests.Clock(claimedAt.AddMinutes(1));
+        var service = new ViewingFollowUpService(db, clock, new RentalApplicationService(db));
+        var recovered = (await service.ClaimNextAsync(tenant.Id))!;
+        Assert.Equal(unresolvedId, recovered.FollowUpId); Assert.Equal(clock.Now, recovered.ClaimedAt);
+        Assert.Equal(clock.Now + ViewingFollowUpService.ClaimLeaseDuration, recovered.ClaimExpiresAt);
+        Assert.Null(await service.ClaimNextAsync(tenant.Id));
+        var oldFinished = await db.ViewingFollowUps.AsNoTracking().SingleAsync(f => f.Id == finishedId);
+        Assert.Equal(ViewingFollowUpDecision.NotNow, oldFinished.Decision); Assert.Equal(claimedAt, oldFinished.RespondedAt);
+        Assert.Null(oldFinished.ClaimExpiresAt); Assert.Equal(2, await db.ViewingFollowUps.CountAsync());
     }
 
     [PostgreSqlFact]
@@ -147,9 +195,9 @@ public sealed class ViewingPostgresTests
         Assert.Equal(ViewingStatus.Approved, stored.Status); Assert.Empty(migrated.PropertyViewingAvailabilities);
     }
 
-    private static async Task<(Property Property, ViewingSlotDto Slot)> SeedAsync(ApplicationDbContext db)
+    private static async Task<(Property Property, ViewingSlotDto Slot)> SeedAsync(ApplicationDbContext db, string? migrationTarget = null)
     {
-        await db.Database.MigrateAsync();
+        await db.GetService<IMigrator>().MigrateAsync(migrationTarget);
         var landlord = new ApplicationUser { Id = Guid.NewGuid(), FullName = "Viewing test landlord", Email = $"{Guid.NewGuid():N}@example.test",
             NormalizedEmail = Guid.NewGuid().ToString("N"), PhoneNumber = "0000000000", PasswordHash = "test-only", Role = UserRole.Landlord };
         var property = new Property { LandlordId = landlord.Id, Title = "Viewing home", Description = "Test", Address = "Test", City = "Colombo", MonthlyRent = 100000, Bedrooms = 1, Bathrooms = 1 };

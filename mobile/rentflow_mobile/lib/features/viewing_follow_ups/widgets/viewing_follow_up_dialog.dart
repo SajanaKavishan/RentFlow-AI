@@ -26,11 +26,14 @@ class ViewingFollowUpDialog extends StatefulWidget {
 
 class _ViewingFollowUpDialogState extends State<ViewingFollowUpDialog> {
   bool _saving = false;
+  bool _alreadyAnswered = false;
   FollowUpDecision? _savedDecision;
   FollowUpDecision? _pendingDecision;
   String? _error;
   Future<void> _respond(FollowUpDecision decision) async {
-    if (_saving || (_savedDecision != null && _savedDecision != decision)) {
+    if (_saving ||
+        _alreadyAnswered ||
+        (_savedDecision != null && _savedDecision != decision)) {
       return;
     }
     setState(() {
@@ -59,6 +62,13 @@ class _ViewingFollowUpDialogState extends State<ViewingFollowUpDialog> {
         if (mounted) {
           setState(() => _error = '${error.message} Your choice was saved.');
         }
+      }
+    } on FollowUpApiException catch (error) {
+      if (mounted) {
+        setState(() {
+          _alreadyAnswered = error.alreadyAnswered;
+          _error = error.message;
+        });
       }
     } catch (_) {
       if (mounted) {
@@ -147,54 +157,60 @@ class _ViewingFollowUpDialogState extends State<ViewingFollowUpDialog> {
                 ),
               ],
               const SizedBox(height: 18),
-              if (_savedDecision == FollowUpDecision.applyNow && _error != null)
+              if (_alreadyAnswered ||
+                  (_savedDecision == FollowUpDecision.applyNow &&
+                      _error != null))
                 TextButton(
                   onPressed: _saving ? null : () => Navigator.of(context).pop(),
                   child: const Text('Close'),
                 ),
-              Row(
-                children: [
-                  if (_savedDecision == null)
+              if (!_alreadyAnswered)
+                Row(
+                  children: [
+                    if (_savedDecision == null)
+                      Expanded(
+                        child: OutlinedButton(
+                          key: const Key('follow-up-not-now'),
+                          onPressed:
+                              _saving ||
+                                  _pendingDecision == FollowUpDecision.applyNow
+                              ? null
+                              : () => _respond(FollowUpDecision.notNow),
+                          style: OutlinedButton.styleFrom(
+                            textStyle: const TextStyle(fontSize: 15),
+                          ),
+                          child: Text(
+                            _saving &&
+                                    _pendingDecision == FollowUpDecision.notNow
+                                ? 'Saving...'
+                                : 'Not now',
+                          ),
+                        ),
+                      ),
+                    if (_savedDecision == null) const SizedBox(width: 10),
                     Expanded(
-                      child: OutlinedButton(
-                        key: const Key('follow-up-not-now'),
+                      child: FilledButton(
+                        key: const Key('follow-up-apply-now'),
                         onPressed:
                             _saving ||
-                                _pendingDecision == FollowUpDecision.applyNow
+                                _pendingDecision == FollowUpDecision.notNow
                             ? null
-                            : () => _respond(FollowUpDecision.notNow),
-                        style: OutlinedButton.styleFrom(
+                            : () => _respond(FollowUpDecision.applyNow),
+                        style: FilledButton.styleFrom(
                           textStyle: const TextStyle(fontSize: 15),
                         ),
                         child: Text(
-                          _saving && _pendingDecision == FollowUpDecision.notNow
+                          _saving &&
+                                  _pendingDecision == FollowUpDecision.applyNow
                               ? 'Saving...'
-                              : 'Not now',
+                              : _savedDecision == null
+                              ? 'Apply now'
+                              : 'Try again',
                         ),
                       ),
                     ),
-                  if (_savedDecision == null) const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton(
-                      key: const Key('follow-up-apply-now'),
-                      onPressed:
-                          _saving || _pendingDecision == FollowUpDecision.notNow
-                          ? null
-                          : () => _respond(FollowUpDecision.applyNow),
-                      style: FilledButton.styleFrom(
-                        textStyle: const TextStyle(fontSize: 15),
-                      ),
-                      child: Text(
-                        _saving && _pendingDecision == FollowUpDecision.applyNow
-                            ? 'Saving...'
-                            : _savedDecision == null
-                            ? 'Apply now'
-                            : 'Try again',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
             ],
           ),
         ),

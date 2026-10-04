@@ -8,6 +8,7 @@ public sealed class ViewingFollowUpDto
     public Guid FollowUpId { get; set; }
     public Guid ViewingId { get; set; }
     public DateTimeOffset ClaimedAt { get; set; }
+    public DateTimeOffset ClaimExpiresAt { get; set; }
     public DateTimeOffset? ViewingCompletedAt { get; set; }
     public ViewingFollowUpPropertyDto Property { get; set; } = new();
     public RentalApplicationEligibilityDto Application { get; set; } = new();

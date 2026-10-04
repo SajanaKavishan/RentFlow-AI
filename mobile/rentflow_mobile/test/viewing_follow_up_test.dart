@@ -33,6 +33,7 @@ Map<String, dynamic> prompt({
   'followUpId': 'follow-up-1',
   'viewingId': 'viewing-1',
   'claimedAt': '2030-01-02T10:00:00Z',
+  'claimExpiresAt': '2030-01-02T10:10:00Z',
   'property': {
     'id': property.id,
     'title': title,
@@ -51,6 +52,7 @@ class Backend {
   DiscoveryBackend get discovery => fixture.discovery;
   List<Map<String, dynamic>> prompts = [prompt()];
   bool failClaim = false, failResponse = false, canApply = true;
+  bool responseConflict = false;
   int? applicationStatus;
   Completer<void>? claimGate, responseGate;
   String role = 'Tenant';
@@ -69,6 +71,7 @@ class Backend {
       }
       if (request.url.path.endsWith('/respond')) {
         await responseGate?.future;
+        if (responseConflict) return http.Response('{}', 409);
         if (failResponse) return http.Response('{}', 503);
         final decision =
             (jsonDecode(request.body) as Map<String, dynamic>)['decision'];
@@ -143,6 +146,94 @@ Future<GlobalKey<NavigatorState>> pump(
 }
 
 void main() {
+  testWidgets(
+    'killed app has no local recovery state; later resume shows same server claim',
+    (tester) async {
+      final backend = Backend();
+      await pump(tester, backend);
+      expect(find.byType(ViewingFollowUpDialog), findsOneWidget);
+      expect(backend.discovery.calls(claimPath, 'POST'), 1);
+      await tester.pumpWidget(
+        const SizedBox.shrink(),
+      ); // Terminate host without responding.
+      await tester.pumpAndSettle();
+      await pump(
+        tester,
+        backend,
+      ); // Server's active lease returns no prompt on a fresh open.
+      expect(find.byType(ViewingFollowUpDialog), findsNothing);
+      expect(backend.discovery.calls(claimPath, 'POST'), 2);
+      backend.prompts.add({
+        ...prompt(),
+        'claimedAt': '2030-01-02T10:10:00Z',
+        'claimExpiresAt': '2030-01-02T10:20:00Z',
+      });
+      await resume(
+        tester,
+      ); // Server now returns the recovered row, with the same ID.
+      expect(find.byType(ViewingFollowUpDialog), findsOneWidget);
+      expect(
+        tester
+            .widget<ViewingFollowUpDialog>(find.byType(ViewingFollowUpDialog))
+            .followUp
+            .id,
+        'follow-up-1',
+      );
+      expect(backend.discovery.calls(claimPath, 'POST'), 3);
+      await resume(tester);
+      expect(find.byType(ViewingFollowUpDialog), findsOneWidget);
+      expect(backend.discovery.calls(claimPath, 'POST'), 3);
+      await tester.tap(notNow);
+      await tester.pumpAndSettle();
+      expect(find.byType(ViewingFollowUpDialog), findsNothing);
+      expect(backend.discovery.calls(respondPath, 'POST'), 1);
+    },
+  );
+  testWidgets(
+    'open dialog stays past lease duration and submits normal response without polling',
+    (tester) async {
+      final backend = Backend();
+      await pump(tester, backend);
+      await tester.pump(const Duration(minutes: 11));
+      expect(find.byType(ViewingFollowUpDialog), findsOneWidget);
+      expect(backend.discovery.calls(claimPath, 'POST'), 1);
+      await tester.tap(notNow);
+      await tester.pumpAndSettle();
+      expect(find.byType(ViewingFollowUpDialog), findsNothing);
+      expect(backend.discovery.calls(respondPath, 'POST'), 1);
+      final request = backend.discovery.requests.singleWhere(
+        (r) => r.url.path == respondPath,
+      );
+      expect(jsonDecode(request.body), {'decision': 'NotNow'});
+    },
+  );
+  for (final chooseApply in [false, true]) {
+    testWidgets(
+      'another device response conflict can close safely (${chooseApply ? 'Apply now' : 'Not now'})',
+      (tester) async {
+        final backend = Backend()..responseConflict = true;
+        await pump(tester, backend);
+        await tester.tap(chooseApply ? applyNow : notNow);
+        await tester.pumpAndSettle();
+        expect(
+          find.text('This follow-up was already answered on another device.'),
+          findsOneWidget,
+        );
+        expect(find.byType(ViewingFollowUpDialog), findsOneWidget);
+        expect(applyNow, findsNothing);
+        expect(notNow, findsNothing);
+        expect(backend.discovery.calls(eligibilityPath, 'GET'), 0);
+        expect(find.byType(RentalApplicationFormScreen), findsNothing);
+        expect(backend.discovery.calls('/api/rental-applications', 'POST'), 0);
+        await tester.tap(find.text('Close'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ViewingFollowUpDialog), findsNothing);
+        expect(find.text('Tenant workspace'), findsOneWidget);
+        expect(backend.discovery.calls(claimPath, 'POST'), 1);
+        expect(backend.discovery.calls(respondPath, 'POST'), 1);
+      },
+    );
+  }
   testWidgets(
     'login and unresolved restoration never claim until tenant shell is ready',
     (tester) async {

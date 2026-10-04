@@ -29,6 +29,12 @@ class ViewingFollowUpApiService {
       apiClient.buildUri('/api/viewing-follow-ups/$id/respond'),
       body: jsonEncode({'decision': decision.value}),
     );
+    if (response.statusCode == 409) {
+      throw const FollowUpApiException(
+        'This follow-up was already answered on another device.',
+        alreadyAnswered: true,
+      );
+    }
     if (response.statusCode != 200) {
       throw const FollowUpApiException(
         'Could not save your choice. Please try again.',
@@ -51,6 +57,7 @@ class ViewingFollowUpApiService {
 }
 
 class FollowUpApiException implements Exception {
-  const FollowUpApiException(this.message);
+  const FollowUpApiException(this.message, {this.alreadyAnswered = false});
   final String message;
+  final bool alreadyAnswered;
 }
