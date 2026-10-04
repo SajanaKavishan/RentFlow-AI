@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PublicLandlordProfilePage from './PublicLandlordProfilePage.jsx'
+import { apiRequest } from '../../../core/api/apiClient.js'
+vi.mock('../../../core/api/apiClient.js', () => ({ apiRequest: vi.fn() }))
 import { getLandlordContact, getPublicLandlordSummary, getPublicLandlordProperties, getPropertyImages, getPropertyImageUrl } from '../services/propertyApiService.js'
 import { useAuth } from '../../auth/useAuth.js'
 
@@ -56,6 +58,7 @@ describe('protected landlord contact', () => {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  apiRequest.mockResolvedValue({ averageRating: null, reviewCount: 0, reviews: [] })
   useAuth.mockReturnValue({ user: { role: 'Tenant' } })
   getLandlordContact.mockResolvedValue(null)
   getPublicLandlordSummary.mockResolvedValue(summary)
@@ -65,6 +68,24 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('Public landlord profile', () => {
+  it('displays historical landlord feedback through the property-scoped endpoint without reviewer identity', async () => {
+    apiRequest.mockResolvedValue({ averageRating: 4.8, reviewCount: 18, reviews: [{ rating: 5, comment: 'The viewing was explained clearly.', reviewMonth: '2026-09', tenantId: 'secret-tenant', email: 'private@example.test', viewingId: 'secret-viewing' }] })
+    const { container } = renderProfile()
+    expect(await screen.findByRole('region', { name: 'Landlord experience' })).toBeInTheDocument()
+    expect(screen.getByText(/4.8 ★/)).toBeInTheDocument()
+    expect(screen.getByText(/18 verified viewings/)).toBeInTheDocument()
+    expect(screen.getByText('The viewing was explained clearly.')).toBeInTheDocument()
+    expect(screen.getByText(/Verified viewing · Sep 2026/)).toBeInTheDocument()
+    expect(container.textContent).not.toMatch(/secret-tenant|private@example|secret-viewing/)
+    expect(apiRequest).toHaveBeenCalledWith('/api/properties/property-1/landlord-viewing-reviews', expect.objectContaining({ authenticated: false }))
+    expect(await screen.findByRole('link', { name: 'Garden Apartment' })).toBeInTheDocument()
+  })
+  it('omits landlord rating when no verified reviews exist', async () => {
+    renderProfile()
+    await screen.findByRole('heading', { name: 'Lena Landlord' })
+    expect(screen.queryByRole('region', { name: 'Landlord experience' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/0.0 ★/)).not.toBeInTheDocument()
+  })
   it('shows real identity, safe public properties, and normal property navigation', async () => {
     renderProfile()
     expect(await screen.findByRole('heading', { name: 'Lena Landlord' })).toBeInTheDocument()

@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PropertyDetailsPage from './PropertyDetailsPage.jsx'
+import { apiRequest } from '../../../core/api/apiClient.js'
+vi.mock('../../../core/api/apiClient.js', () => ({ apiRequest: vi.fn() }))
 import { useAuth } from '../../auth/useAuth.js'
 import {
   getMyProperties,
@@ -95,6 +97,7 @@ describe('protected landlord contact', () => {
 })
 
 beforeEach(() => {
+  apiRequest.mockResolvedValue({ averageRating: null, reviewCount: 0, reviews: [] })
   getLandlordContact.mockResolvedValue(null)
   useAuth.mockReturnValue({
     user: { id: 'tenant-1', role: 'Tenant', fullName: 'Taylor Tenant' },
@@ -124,6 +127,23 @@ afterEach(() => {
 })
 
 describe('tenant property details', () => {
+  it('shows real viewing aggregates and anonymous verified comments without private fields', async () => {
+    apiRequest.mockResolvedValue({ averageRating: 4.6, reviewCount: 12, reviews: [{ rating: 5, comment: 'Rooms matched the listing.', reviewMonth: '2026-09', tenantId: 'secret-tenant', fullName: 'Secret Name', email: 'private@example.test', viewingId: 'secret-viewing' }] })
+    const { container } = renderPage()
+    expect(await screen.findByRole('region', { name: 'Viewing experience' })).toBeInTheDocument()
+    expect(screen.getByText(/4.6 ★/)).toBeInTheDocument()
+    expect(screen.getByText(/12 verified viewings/)).toBeInTheDocument()
+    expect(screen.getByText('Rooms matched the listing.')).toBeInTheDocument()
+    expect(screen.getByText(/Verified viewing · Sep 2026/)).toBeInTheDocument()
+    expect(container.textContent).not.toMatch(/secret-tenant|Secret Name|private@example|secret-viewing/)
+    expect(apiRequest).toHaveBeenCalledWith('/api/properties/property-1/viewing-reviews', expect.objectContaining({ authenticated: false }))
+  })
+  it('omits rating when no reviews exist', async () => {
+    renderPage()
+    await screen.findByText('Lake View Apartment')
+    expect(screen.queryByRole('region', { name: 'Viewing experience' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/0.0 ★/)).not.toBeInTheDocument()
+  })
   it('opens the property-scoped landlord profile through an accessible link', async () => {
     renderPage()
     const link = await screen.findByRole('link', { name: 'View landlord profile' })

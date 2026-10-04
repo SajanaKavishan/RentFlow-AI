@@ -6,6 +6,8 @@ import '../../rental_applications/services/application_destination.dart';
 import '../../rental_applications/services/rental_application_api_service.dart';
 import '../models/viewing_follow_up.dart';
 import '../services/viewing_follow_up_api_service.dart';
+import '../../viewing_reviews/services/viewing_review_api_service.dart';
+import '../../viewing_reviews/widgets/viewing_review_editor.dart';
 
 /// Back/barrier dismissal is disabled: explicit actions give persisted semantics.
 class ViewingFollowUpDialog extends StatefulWidget {
@@ -26,6 +28,7 @@ class ViewingFollowUpDialog extends StatefulWidget {
 
 class _ViewingFollowUpDialogState extends State<ViewingFollowUpDialog> {
   bool _saving = false;
+  final _reviewEditor = GlobalKey<ViewingReviewEditorState>();
   bool _alreadyAnswered = false;
   FollowUpDecision? _savedDecision;
   FollowUpDecision? _pendingDecision;
@@ -38,11 +41,13 @@ class _ViewingFollowUpDialogState extends State<ViewingFollowUpDialog> {
     }
     setState(() {
       _saving = true;
-      _pendingDecision = decision;
       _error = null;
     });
     try {
       if (_savedDecision == null) {
+        await _reviewEditor.currentState!.saveIfEntered();
+        if (!mounted) return;
+        setState(() => _pendingDecision = decision);
         await widget.apiService.respond(widget.followUp.id, decision);
         _savedDecision = decision;
       }
@@ -63,6 +68,8 @@ class _ViewingFollowUpDialogState extends State<ViewingFollowUpDialog> {
           setState(() => _error = '${error.message} Your choice was saved.');
         }
       }
+    } on ViewingReviewApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
     } on FollowUpApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -134,6 +141,17 @@ class _ViewingFollowUpDialogState extends State<ViewingFollowUpDialog> {
                   fontSize: 13,
                   color: AppPalette.secondaryText,
                 ),
+              ),
+              const SizedBox(height: 16),
+              ViewingReviewEditor(
+                key: _reviewEditor,
+                viewingId: widget.followUp.viewingId,
+                api: ViewingReviewApiService(widget.apiService.apiClient),
+                enabled:
+                    !_saving &&
+                    !_alreadyAnswered &&
+                    _savedDecision == null &&
+                    _pendingDecision == null,
               ),
               const SizedBox(height: 16),
               const Text(

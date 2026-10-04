@@ -28,6 +28,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
 
     public DbSet<ViewingFollowUp> ViewingFollowUps => Set<ViewingFollowUp>();
+    public DbSet<ViewingReview> ViewingReviews => Set<ViewingReview>();
 
     public DbSet<PropertyViewingAvailability> PropertyViewingAvailabilities => Set<PropertyViewingAvailability>();
 
@@ -651,6 +652,20 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(f => f.Decision).HasConversion<string>().HasMaxLength(16);
             entity.ToTable(t => t.HasCheckConstraint("CK_ViewingFollowUp_Response",
                 "(\"Decision\" IS NULL AND \"RespondedAt\" IS NULL) OR (\"Decision\" IS NOT NULL AND \"Decision\" IN ('ApplyNow','NotNow') AND \"RespondedAt\" IS NOT NULL)"));
+        });
+
+        modelBuilder.Entity<ViewingReview>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            entity.HasIndex(r => r.ViewingId).IsUnique();
+            entity.HasIndex(r => new { r.PropertyId, r.CreatedAt });
+            entity.HasIndex(r => new { r.LandlordId, r.CreatedAt });
+            entity.HasOne<ViewingRequest>().WithOne().HasForeignKey<ViewingReview>(r => r.ViewingId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Property>().WithMany().HasForeignKey(r => r.PropertyId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(r => r.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(r => r.LandlordId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(r => r.Comment).HasMaxLength(500);
+            entity.ToTable(t => t.HasCheckConstraint("CK_ViewingReview_Ratings", "\"PropertyRating\" BETWEEN 1 AND 5 AND \"LandlordRating\" BETWEEN 1 AND 5"));
         });
 
         modelBuilder.Entity<RentalApplication>(entity =>

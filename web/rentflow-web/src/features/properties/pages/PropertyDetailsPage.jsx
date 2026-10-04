@@ -7,6 +7,7 @@ import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import PropertyLocationMap from '../components/PropertyLocationMap.jsx'
 import PublicLandlordAvatar from '../components/PublicLandlordAvatar.jsx'
 import LandlordContact from '../components/LandlordContact.jsx'
+import ViewingReviews from '../components/ViewingReviews.jsx'
 import { formatPropertyArea } from '../propertyArea.js'
 import {
   UTILITY_CATALOG,
@@ -520,6 +521,7 @@ export default function PropertyDetailsPage() {
             <p>{property.description || 'No property description has been provided.'}</p>
           </section>
 
+          <ViewingReviews key={property.id} propertyId={property.id} />
           <section className="property-details-section">
             <h2>Amenities</h2>
             {amenityDetails.length > 0 ? (

@@ -12,6 +12,8 @@ import '../widgets/property_card.dart';
 import '../widgets/public_landlord_avatar.dart';
 import '../widgets/landlord_contact_card.dart';
 import 'property_details_screen.dart';
+import '../../viewing_reviews/services/viewing_review_api_service.dart';
+import '../../viewing_reviews/widgets/public_viewing_reviews.dart';
 
 class PublicLandlordProfileScreen extends StatefulWidget {
   const PublicLandlordProfileScreen({
@@ -222,6 +224,14 @@ class _PublicLandlordProfileScreenState
                     refreshVersion: _loadVersion,
                   ),
                   const SizedBox(height: AppSpacing.lg),
+                  PublicViewingReviews(
+                    key: ValueKey('landlord-reviews-$_loadVersion'),
+                    propertyId: widget.propertyId,
+                    api: ViewingReviewApiService(
+                      widget.propertyApiService.apiClient,
+                    ),
+                    landlord: true,
+                  ),
                   const Text(
                     'Other properties',
                     style: AppTypography.sectionTitle,

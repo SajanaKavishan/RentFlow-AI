@@ -1,0 +1,8 @@
+.viewing-reviews { margin: 24px 0; padding: 20px; border: 1px solid #e5e4da; border-radius: 12px; background: #faf8f0; color: #303925; overflow-wrap: anywhere; }
+.viewing-reviews h2 { margin: 0 0 12px; font-size: 18px; }
+.viewing-reviews__average { font-size: 20px; font-weight: 600; }
+.viewing-reviews__average span { font-size: 14px; font-weight: 400; }
+.viewing-reviews article { padding: 12px 0; border-top: 1px solid #e5e4da; }
+.viewing-reviews article p { font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+.viewing-reviews__stars { color: #647448; }
+.viewing-reviews small { font-size: 12px; color: #62665a; }

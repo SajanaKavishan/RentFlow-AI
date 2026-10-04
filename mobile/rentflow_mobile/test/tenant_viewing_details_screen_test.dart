@@ -158,6 +158,69 @@ Future<void> _reveal(WidgetTester tester, Finder target) async {
 }
 
 void main() {
+  testWidgets(
+    'Completed viewing can leave and edit the same review independently of follow-up',
+    (tester) async {
+      Map<String, dynamic>? review;
+      var puts = 0;
+      await _pump(
+        tester,
+        viewing: _viewing(4),
+        respond: (request) {
+          if (!request.url.path.endsWith('/review')) return null;
+          if (request.method == 'PUT') {
+            puts++;
+            review = {
+              'id': 'review-1',
+              'viewingId': _id,
+              ...jsonDecode(request.body) as Map<String, dynamic>,
+            };
+          }
+          return review == null ? http.Response('', 204) : _json(review!);
+        },
+      );
+      await _reveal(tester, find.text('Leave a review'));
+      await tester.tap(find.text('Leave a review'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('property-rating-4')));
+      await tester.tap(find.byKey(const Key('property-rating-4')));
+      await tester.ensureVisible(find.byKey(const Key('landlord-rating-5')));
+      await tester.tap(find.byKey(const Key('landlord-rating-5')));
+      await tester.enterText(find.byType(TextField), 'A helpful viewing');
+      await _reveal(tester, find.text('Save review'));
+      await tester.tap(find.text('Save review'));
+      await tester.pumpAndSettle();
+      expect(puts, 1);
+      expect(review!['id'], 'review-1');
+      expect(find.text('Your viewing review'), findsOneWidget);
+      expect(find.text('Property ★★★★☆ (4/5)'), findsOneWidget);
+      expect(find.text('A helpful viewing'), findsOneWidget);
+      await _reveal(tester, find.text('Edit review'));
+      await tester.tap(find.text('Edit review'));
+      await tester.pumpAndSettle();
+      // The sheet starts with the existing saved-review summary.
+      await tester.ensureVisible(find.text('Edit review').last);
+      await tester.tap(find.text('Edit review').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('property-rating-2')));
+      await tester.tap(find.byKey(const Key('property-rating-2')));
+      await _reveal(tester, find.text('Save review'));
+      await tester.tap(find.text('Save review'));
+      await tester.pumpAndSettle();
+      expect(puts, 2);
+      expect(review!['id'], 'review-1');
+      expect(find.text('Property ★★☆☆☆ (2/5)'), findsOneWidget);
+    },
+  );
+  for (final status in [0, 1, 2, 3]) {
+    testWidgets('non Completed status $status has no review action', (
+      tester,
+    ) async {
+      await _pump(tester, viewing: _viewing(status));
+      expect(find.text('Leave a review'), findsNothing);
+      expect(find.text('Edit review'), findsNothing);
+    });
+  }
   const dialer = MethodChannel('plugins.flutter.io/url_launcher');
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

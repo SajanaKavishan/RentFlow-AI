@@ -15,6 +15,39 @@ namespace RentFlow.Api.Tests.Data;
 public sealed class ViewingPostgresTests
 {
     [PostgreSqlFact]
+    public async Task ViewingReview_ConcurrentPutReusesRow_WithHistoricalSnapshotAndDatabaseChecks()
+    {
+        await using var database = new Database(); await database.CreateAsync();
+        await using var setup = new ApplicationDbContext(database.Options); var (property, slot) = await SeedAsync(setup);
+        var tenant = new ApplicationUser { Id = Guid.NewGuid(), FullName = "Review tenant", Email = $"{Guid.NewGuid():N}@example.test", NormalizedEmail = Guid.NewGuid().ToString("N"), PhoneNumber = "0000000000", PasswordHash = "test-only", Role = UserRole.Tenant };
+        var viewing = new ViewingRequest { TenantId = tenant.Id, PropertyId = property.Id, Status = ViewingStatus.Completed, RequestedDateTime = slot.RequestedDateTime };
+        setup.AddRange(tenant, viewing); await setup.SaveChangesAsync();
+        var clock = new ViewingCancellationTests.Clock(slot.RequestedDateTime);
+        await using var blocker = new ApplicationDbContext(database.Options); await using var held = await blocker.Database.BeginTransactionAsync();
+        await blocker.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"ViewingRequests\" WHERE \"Id\" = {viewing.Id} FOR UPDATE");
+        await using var db1 = new ApplicationDbContext(database.Options); await using var db2 = new ApplicationDbContext(database.Options);
+        var first = new ViewingReviewService(db1, clock).SaveAsync(tenant.Id, viewing.Id, new() { PropertyRating = 1, LandlordRating = 5, Comment = "First" });
+        var second = new ViewingReviewService(db2, clock).SaveAsync(tenant.Id, viewing.Id, new() { PropertyRating = 5, LandlordRating = 1, Comment = "Second" });
+        await Task.Delay(200); Assert.False(first.IsCompleted); Assert.False(second.IsCompleted); await held.CommitAsync();
+        var results = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.Equal(results[0].Id, results[1].Id); var stored = await setup.ViewingReviews.AsNoTracking().SingleAsync();
+        Assert.Equal(property.LandlordId, stored.LandlordId); Assert.Equal(clock.Now, stored.CreatedAt); Assert.Equal(clock.Now, stored.UpdatedAt);
+        Assert.Empty(await setup.ViewingFollowUps.ToListAsync());
+        var duplicate = await Assert.ThrowsAsync<PostgresException>(() => setup.Database.ExecuteSqlRawAsync("INSERT INTO \"ViewingReviews\" SELECT gen_random_uuid(), \"ViewingId\", \"TenantId\", \"PropertyId\", \"LandlordId\", \"PropertyRating\", \"LandlordRating\", \"Comment\", \"CreatedAt\", \"UpdatedAt\" FROM \"ViewingReviews\""));
+        Assert.Equal(PostgresErrorCodes.UniqueViolation, duplicate.SqlState);
+        var range = await Assert.ThrowsAsync<PostgresException>(() => setup.Database.ExecuteSqlRawAsync("UPDATE \"ViewingReviews\" SET \"PropertyRating\" = 0"));
+        Assert.Equal(PostgresErrorCodes.CheckViolation, range.SqlState);
+        var previousOwner = property.LandlordId;
+        var nextOwner = new ApplicationUser { Id = Guid.NewGuid(), FullName = "Next landlord", Email = $"{Guid.NewGuid():N}@example.test", NormalizedEmail = Guid.NewGuid().ToString("N"), PhoneNumber = "0000000000", PasswordHash = "test-only", Role = UserRole.Landlord };
+        setup.Add(nextOwner); property.LandlordId = nextOwner.Id; await setup.SaveChangesAsync(); clock.Now = clock.Now.AddHours(1);
+        await new ViewingReviewService(db1, clock).SaveAsync(tenant.Id, viewing.Id, new() { PropertyRating = 4, LandlordRating = 5 });
+        var edited = await setup.ViewingReviews.AsNoTracking().SingleAsync(); Assert.Equal(stored.Id, edited.Id); Assert.Equal(stored.CreatedAt, edited.CreatedAt);
+        Assert.Equal(previousOwner, edited.LandlordId); Assert.Equal(clock.Now, edited.UpdatedAt);
+        Assert.Equal(4, (await new ViewingReviewService(setup, clock).GetPublicAsync(property.Id, false)).AverageRating);
+        Assert.Equal(0, (await new ViewingReviewService(setup, clock).GetPublicAsync(property.Id, true)).ReviewCount);
+    }
+
+    [PostgreSqlFact]
     public async Task ViewingFollowUp_AtomicClaimAndResponseAcrossConnections_UniqueViewingConstraint()
     {
         await using var database = new Database(); await database.CreateAsync();

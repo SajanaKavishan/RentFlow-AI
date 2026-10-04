@@ -18,6 +18,8 @@ import '../models/property_image.dart';
 import '../services/property_api_service.dart';
 import '../widgets/property_details_gallery.dart';
 import '../widgets/landlord_contact_card.dart';
+import '../../viewing_reviews/services/viewing_review_api_service.dart';
+import '../../viewing_reviews/widgets/public_viewing_reviews.dart';
 
 class PropertyDetailsScreen extends StatefulWidget {
   const PropertyDetailsScreen({
@@ -250,6 +252,13 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                   _availability(),
                   _amenities(),
                   _about(),
+                  PublicViewingReviews(
+                    key: ValueKey('property-reviews-$_contactRefreshVersion'),
+                    propertyId: _property.id,
+                    api: ViewingReviewApiService(
+                      widget.propertyApiService.apiClient,
+                    ),
+                  ),
                   _matchReasons(),
                   const SizedBox(height: 22),
                   _heading('Location'),

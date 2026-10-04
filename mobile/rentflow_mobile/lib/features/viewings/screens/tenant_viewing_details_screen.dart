@@ -17,6 +17,8 @@ import '../services/viewing_api_service.dart';
 import '../widgets/viewing_page_header.dart';
 import '../../rental_applications/widgets/application_eligibility_action.dart';
 import '../../rental_applications/services/rental_application_api_service.dart';
+import '../../viewing_reviews/services/viewing_review_api_service.dart';
+import '../../viewing_reviews/widgets/own_viewing_review_card.dart';
 
 class TenantViewingDetailsScreen extends StatefulWidget {
   const TenantViewingDetailsScreen({
@@ -332,6 +334,13 @@ class _TenantViewingDetailsScreenState extends State<TenantViewingDetailsScreen>
                     _lastUpdated(viewing),
                     const SizedBox(height: 24),
                     if (viewing.status == ViewingStatus.completed) ...[
+                      OwnViewingReviewCard(
+                        key: ValueKey('review-$_applicationRefreshVersion'),
+                        viewingId: viewing.id,
+                        api: ViewingReviewApiService(
+                          widget.viewingApiService.apiClient,
+                        ),
+                      ),
                       ApplicationEligibilityAction(
                         key: ValueKey(
                           'completed-application-$_applicationRefreshVersion',

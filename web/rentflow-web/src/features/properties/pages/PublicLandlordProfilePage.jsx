@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import Icon from '../../../shared/ui/Icons.jsx'
 import PublicLandlordAvatar from '../components/PublicLandlordAvatar.jsx'
 import LandlordContact from '../components/LandlordContact.jsx'
+import ViewingReviews from '../components/ViewingReviews.jsx'
 import { useAuth } from '../../auth/useAuth.js'
 import { USER_ROLES } from '../../auth/authModel.js'
 import PropertyListingCard from '../components/PropertyListingCard.jsx'
@@ -87,6 +88,7 @@ export default function PublicLandlordProfilePage() {
         </div>
       </header>
       <LandlordContact key={`${propertyId}:${retry}`} propertyId={propertyId} isTenant={user?.role === USER_ROLES.TENANT} />
+      <ViewingReviews propertyId={propertyId} landlord refreshVersion={retry} />
       <section aria-labelledby="public-landlord-properties">
         <div className="public-landlord-page__listings-heading">
           <h2 id="public-landlord-properties">Properties by {profile.summary.displayName}</h2>

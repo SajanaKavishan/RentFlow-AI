@@ -53,6 +53,8 @@ class Backend {
   List<Map<String, dynamic>> prompts = [prompt()];
   bool failClaim = false, failResponse = false, canApply = true;
   bool responseConflict = false;
+  bool failReview = false;
+  Map<String, dynamic>? review;
   int? applicationStatus;
   Completer<void>? claimGate, responseGate;
   String role = 'Tenant';
@@ -61,6 +63,19 @@ class Backend {
     discovery.intercept = (request) async {
       if (request.url.path == '/api/auth/me') {
         return DiscoveryBackend.json({...fixture.profile, 'role': role});
+      }
+      if (request.url.path.endsWith('/review')) {
+        if (request.method == 'PUT') {
+          if (failReview) return http.Response('{}', 503);
+          review = {
+            'id': 'review-1',
+            'viewingId': 'viewing-1',
+            ...jsonDecode(request.body) as Map<String, dynamic>,
+          };
+        }
+        return review == null
+            ? http.Response('', 204)
+            : DiscoveryBackend.json(review!);
       }
       if (request.url.path == claimPath) {
         await claimGate?.future;
@@ -109,6 +124,12 @@ Future<void> resume(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> choose(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+}
+
 Future<GlobalKey<NavigatorState>> pump(
   WidgetTester tester,
   Backend backend, {
@@ -147,6 +168,114 @@ Future<GlobalKey<NavigatorState>> pump(
 
 void main() {
   testWidgets(
+    'untouched review skips PUT and comment or partial stars block decision until cleared',
+    (tester) async {
+      final backend = Backend();
+      await pump(tester, backend);
+      await tester.ensureVisible(find.byType(TextField));
+      await tester.enterText(find.byType(TextField), 'Keep my comment');
+      await choose(tester, notNow);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('follow-up-error')), findsOneWidget);
+      expect(backend.discovery.calls(respondPath, 'POST'), 0);
+      expect(backend.review, isNull);
+      await tester.ensureVisible(find.text('Clear review'));
+      await tester.tap(find.text('Clear review'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('property-rating-5')));
+      await tester.tap(find.byKey(const Key('property-rating-5')));
+      await choose(tester, applyNow);
+      await tester.pumpAndSettle();
+      expect(backend.discovery.calls(respondPath, 'POST'), 0);
+      await tester.ensureVisible(find.text('Clear review'));
+      await tester.tap(find.text('Clear review'));
+      await tester.pumpAndSettle();
+      await choose(tester, notNow);
+      await tester.pumpAndSettle();
+      expect(
+        backend.discovery.calls('/api/viewings/viewing-1/review', 'PUT'),
+        0,
+      );
+      expect(backend.discovery.calls(respondPath, 'POST'), 1);
+    },
+  );
+  testWidgets(
+    'review PUT precedes decision; review failure keeps input and retry creates one review',
+    (tester) async {
+      final backend = Backend()..failReview = true;
+      await pump(tester, backend);
+      await tester.ensureVisible(find.byKey(const Key('property-rating-4')));
+      await tester.tap(find.byKey(const Key('property-rating-4')));
+      await tester.ensureVisible(find.byKey(const Key('landlord-rating-5')));
+      await tester.tap(find.byKey(const Key('landlord-rating-5')));
+      await tester.enterText(find.byType(TextField), 'Clear explanation');
+      await choose(tester, notNow);
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Could not save your review. Please try again.'),
+        findsOneWidget,
+      );
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Clear explanation',
+      );
+      expect(backend.discovery.calls(respondPath, 'POST'), 0);
+      backend.failReview = false;
+      backend.failResponse = true;
+      await choose(tester, notNow);
+      await tester.pumpAndSettle();
+      expect(backend.review!['propertyRating'], 4);
+      expect(backend.review!['landlordRating'], 5);
+      expect(find.byType(ViewingFollowUpDialog), findsOneWidget);
+      backend.failResponse = false;
+      await choose(tester, notNow);
+      await tester.pumpAndSettle();
+      expect(find.byType(ViewingFollowUpDialog), findsNothing);
+      expect(backend.review!['id'], 'review-1');
+      expect(
+        backend.discovery.calls('/api/viewings/viewing-1/review', 'PUT'),
+        2,
+      ); // Failed save plus successful save; decision retry skips unchanged review.
+      final requests = backend.discovery.requests;
+      expect(
+        requests.indexWhere((r) => r.method == 'PUT'),
+        lessThan(requests.indexWhere((r) => r.url.path == respondPath)),
+      );
+    },
+  );
+  testWidgets(
+    'existing review is compact and separate; editing keeps one ID with optional comment',
+    (tester) async {
+      final backend = Backend()
+        ..review = {
+          'id': 'review-1',
+          'viewingId': 'viewing-1',
+          'propertyRating': 2,
+          'landlordRating': 3,
+          'comment': null,
+        };
+      await pump(tester, backend);
+      expect(
+        find.text('Your viewing review is already saved.'),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.text('Edit review'));
+      await tester.tap(find.text('Edit review'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('property-rating-5')));
+      await tester.tap(find.byKey(const Key('property-rating-5')));
+      await choose(tester, applyNow);
+      await tester.pumpAndSettle();
+      expect(backend.review!['id'], 'review-1');
+      expect(backend.review!['propertyRating'], 5);
+      expect(
+        backend.discovery.calls('/api/viewings/viewing-1/review', 'PUT'),
+        1,
+      );
+      expect(find.byType(RentalApplicationFormScreen), findsOneWidget);
+    },
+  );
+  testWidgets(
     'killed app has no local recovery state; later resume shows same server claim',
     (tester) async {
       final backend = Backend();
@@ -183,7 +312,7 @@ void main() {
       await resume(tester);
       expect(find.byType(ViewingFollowUpDialog), findsOneWidget);
       expect(backend.discovery.calls(claimPath, 'POST'), 3);
-      await tester.tap(notNow);
+      await choose(tester, notNow);
       await tester.pumpAndSettle();
       expect(find.byType(ViewingFollowUpDialog), findsNothing);
       expect(backend.discovery.calls(respondPath, 'POST'), 1);
@@ -197,7 +326,7 @@ void main() {
       await tester.pump(const Duration(minutes: 11));
       expect(find.byType(ViewingFollowUpDialog), findsOneWidget);
       expect(backend.discovery.calls(claimPath, 'POST'), 1);
-      await tester.tap(notNow);
+      await choose(tester, notNow);
       await tester.pumpAndSettle();
       expect(find.byType(ViewingFollowUpDialog), findsNothing);
       expect(backend.discovery.calls(respondPath, 'POST'), 1);
@@ -213,7 +342,7 @@ void main() {
       (tester) async {
         final backend = Backend()..responseConflict = true;
         await pump(tester, backend);
-        await tester.tap(chooseApply ? applyNow : notNow);
+        await choose(tester, chooseApply ? applyNow : notNow);
         await tester.pumpAndSettle();
         expect(
           find.text('This follow-up was already answered on another device.'),
@@ -225,7 +354,7 @@ void main() {
         expect(backend.discovery.calls(eligibilityPath, 'GET'), 0);
         expect(find.byType(RentalApplicationFormScreen), findsNothing);
         expect(backend.discovery.calls('/api/rental-applications', 'POST'), 0);
-        await tester.tap(find.text('Close'));
+        await choose(tester, find.text('Close'));
         await tester.pumpAndSettle();
         expect(find.byType(ViewingFollowUpDialog), findsNothing);
         expect(find.text('Tenant workspace'), findsOneWidget);
@@ -364,7 +493,7 @@ void main() {
         find.byKey(const ValueKey('property-photo-fallback')),
         findsOneWidget,
       );
-      await tester.tap(notNow);
+      await choose(tester, notNow);
       await tester.pumpAndSettle();
       expect(find.byType(ViewingFollowUpDialog), findsNothing);
       expect(backend.discovery.calls(respondPath, 'POST'), 1);
@@ -407,7 +536,7 @@ void main() {
           'viewingId': 'viewing-2',
         });
       await pump(tester, backend);
-      await tester.tap(notNow);
+      await choose(tester, notNow);
       await tester.pumpAndSettle();
       expect(backend.discovery.calls(claimPath, 'POST'), 1);
       expect(find.byType(Dialog), findsNothing);
@@ -436,7 +565,7 @@ void main() {
     (tester) async {
       final backend = Backend()..failResponse = true;
       await pump(tester, backend);
-      await tester.tap(notNow);
+      await choose(tester, notNow);
       await tester.pumpAndSettle();
       expect(
         find.text('Could not save your choice. Please try again.'),
@@ -445,7 +574,7 @@ void main() {
       expect(find.byType(Dialog), findsOneWidget);
       backend.failResponse = false;
       backend.responseGate = Completer<void>();
-      await tester.tap(notNow);
+      await choose(tester, notNow);
       await tester.pump();
       expect(tester.widget<OutlinedButton>(notNow).onPressed, isNull);
       expect(tester.widget<FilledButton>(applyNow).onPressed, isNull);
@@ -460,12 +589,12 @@ void main() {
   ) async {
     final backend = Backend()..failResponse = true;
     await pump(tester, backend);
-    await tester.tap(applyNow);
+    await choose(tester, applyNow);
     await tester.pumpAndSettle();
     expect(find.byType(RentalApplicationFormScreen), findsNothing);
     expect(backend.discovery.calls(eligibilityPath), 0);
     backend.failResponse = false;
-    await tester.tap(applyNow);
+    await choose(tester, applyNow);
     await tester.pumpAndSettle();
     expect(find.byType(RentalApplicationFormScreen), findsOneWidget);
     final requests = backend.discovery.requests;
@@ -483,7 +612,7 @@ void main() {
         await pump(tester, backend);
         backend.applicationStatus = status;
         if (status != null) backend.fixture.application['status'] = status;
-        await tester.tap(applyNow);
+        await choose(tester, applyNow);
         await tester.pumpAndSettle();
         if (status == null || status == 0 || status == 3) {
           final form = tester.widget<RentalApplicationFormScreen>(
@@ -517,7 +646,7 @@ void main() {
       final backend = Backend();
       await pump(tester, backend);
       backend.canApply = false;
-      await tester.tap(applyNow);
+      await choose(tester, applyNow);
       await tester.pumpAndSettle();
       expect(
         find.text(
@@ -526,7 +655,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.byType(RentalApplicationFormScreen), findsNothing);
-      await tester.tap(find.text('Close'));
+      await choose(tester, find.text('Close'));
       await tester.pumpAndSettle();
       expect(find.byType(Dialog), findsNothing);
       expect(backend.discovery.calls(respondPath, 'POST'), 1);
@@ -624,7 +753,7 @@ void main() {
       await tester.ensureVisible(notNow);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      await tester.tap(notNow);
+      await choose(tester, notNow);
       await tester.pumpAndSettle();
       expect(find.byType(Dialog), findsNothing);
     },
