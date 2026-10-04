@@ -63,11 +63,22 @@ public class PaymentService : IPaymentService
                 "A completed payment already exists for this rent schedule item.");
         }
 
+        if (await _dbContext.Payments.AnyAsync(existingPayment =>
+                existingPayment.RentScheduleItemId == rentScheduleItem.Id
+                && existingPayment.Provider == PaymentProvider.Stripe
+                && existingPayment.Status == PaymentStatus.Pending,
+                cancellationToken))
+        {
+            throw PaymentServiceException.Conflict(
+                "A Stripe payment attempt is pending for this rent schedule item.");
+        }
+
         var payment = new Payment
         {
             RentScheduleItemId = rentScheduleItem.Id,
             TenantId = tenantId,
             Amount = rentScheduleItem.Amount,
+            Provider = PaymentProvider.Manual,
             PaymentMethod = dto.PaymentMethod.Trim(),
             TransactionReference = string.IsNullOrWhiteSpace(dto.TransactionReference)
                 ? null
@@ -147,6 +158,12 @@ public class PaymentService : IPaymentService
                 "Payment was not found.");
         }
 
+        if (payment.Provider != PaymentProvider.Manual)
+        {
+            throw PaymentServiceException.Conflict(
+                "Stripe payments cannot be settled through the manual payment action.");
+        }
+
         if (payment.Status != PaymentStatus.Pending)
         {
             throw PaymentServiceException.Conflict(
@@ -170,6 +187,16 @@ public class PaymentService : IPaymentService
         {
             throw PaymentServiceException.Conflict(
                 "A completed payment already exists for this rent schedule item.");
+        }
+
+        if (await _dbContext.Payments.AnyAsync(existingPayment =>
+                existingPayment.RentScheduleItemId == payment.RentScheduleItemId
+                && existingPayment.Provider == PaymentProvider.Stripe
+                && existingPayment.Status == PaymentStatus.Pending,
+                cancellationToken))
+        {
+            throw PaymentServiceException.Conflict(
+                "A Stripe payment attempt is pending for this rent schedule item.");
         }
 
         var previousPaidAt = payment.PaidAt;
@@ -239,6 +266,12 @@ public class PaymentService : IPaymentService
         {
             throw PaymentServiceException.NotFound(
                 "Payment was not found.");
+        }
+
+        if (payment.Provider != PaymentProvider.Manual)
+        {
+            throw PaymentServiceException.Conflict(
+                "Stripe payments cannot be settled through the manual payment action.");
         }
 
         if (payment.Status != PaymentStatus.Pending)

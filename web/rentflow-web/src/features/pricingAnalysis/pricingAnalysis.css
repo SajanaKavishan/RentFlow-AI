@@ -20,4 +20,14 @@
 .pricing-dates { display: flex; gap: 30px; margin: 24px 0 0; }
 .pricing-dates dd { margin: 4px 0 0; }
 .pricing-steps li { padding: 10px 0; border-top: 1px solid var(--border); }
+.pricing-recommendation { margin: 18px 0; font-size: 1.1rem; }
+.pricing-property-summary { margin-top: 18px; }
+.pricing-property-summary h3 { margin-bottom: 4px; }
+.pricing-property-summary p { margin-top: 0; }
+.pricing-audit-details { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 16px; }
+.pricing-audit-details summary { width: fit-content; color: var(--olive-700, var(--ink)); font-weight: 800; cursor: pointer; }
+.pricing-audit-details summary:focus-visible { outline: 3px solid var(--focus, #78904b); outline-offset: 4px; border-radius: 3px; }
+.pricing-audit-details__content { padding-top: 14px; }
+.pricing-step-number { color: var(--muted); }
+.pricing-details .pricing-metrics:empty { display: none; }
 @media (max-width: 760px) { .pricing-grid { grid-template-columns: 1fr; } .pricing-metrics { grid-template-columns: 1fr; } }

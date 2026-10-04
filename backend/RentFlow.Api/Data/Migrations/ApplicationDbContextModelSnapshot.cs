@@ -678,11 +678,20 @@ namespace RentFlow.Api.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int>("Provider")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<Guid>("RentScheduleItemId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
+
+                    b.Property<string>("StripePaymentIntentId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -700,6 +709,10 @@ namespace RentFlow.Api.Data.Migrations
 
                     b.HasIndex("Status");
 
+                    b.HasIndex("StripePaymentIntentId")
+                        .IsUnique()
+                        .HasFilter("\"StripePaymentIntentId\" IS NOT NULL");
+
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TransactionReference");
@@ -707,6 +720,10 @@ namespace RentFlow.Api.Data.Migrations
                     b.HasIndex(new[] { "RentScheduleItemId" }, "IX_Payments_RentScheduleItemId_Completed")
                         .IsUnique()
                         .HasFilter("\"Status\" = 1");
+
+                    b.HasIndex(new[] { "RentScheduleItemId" }, "IX_Payments_RentScheduleItemId_PendingStripe")
+                        .IsUnique()
+                        .HasFilter("\"Provider\" = 1 AND \"Status\" = 0");
 
                     b.ToTable("Payments");
                 });
@@ -1489,6 +1506,12 @@ namespace RentFlow.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("RentalOffer");
                 });
 
@@ -1566,6 +1589,12 @@ namespace RentFlow.Api.Data.Migrations
                     b.HasOne("RentFlow.Api.Models.RentScheduleItem", "RentScheduleItem")
                         .WithMany()
                         .HasForeignKey("RentScheduleItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -1649,6 +1678,12 @@ namespace RentFlow.Api.Data.Migrations
                     b.HasOne("RentFlow.Api.Models.RentalApplication", "RentalApplication")
                         .WithMany()
                         .HasForeignKey("RentalApplicationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 

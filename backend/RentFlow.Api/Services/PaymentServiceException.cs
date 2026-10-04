@@ -4,7 +4,9 @@ public enum PaymentServiceError
 {
     Validation,
     NotFound,
-    Conflict
+    Conflict,
+    TemporaryFailure,
+    ExternalFailure
 }
 
 public sealed class PaymentServiceException : Exception
@@ -27,4 +29,10 @@ public sealed class PaymentServiceException : Exception
 
     public static PaymentServiceException Conflict(string message) =>
         new(PaymentServiceError.Conflict, message);
+
+    public static PaymentServiceException TemporaryFailure(string message) =>
+        new(PaymentServiceError.TemporaryFailure, message);
+
+    public static PaymentServiceException ExternalFailure(string message) =>
+        new(PaymentServiceError.ExternalFailure, message);
 }

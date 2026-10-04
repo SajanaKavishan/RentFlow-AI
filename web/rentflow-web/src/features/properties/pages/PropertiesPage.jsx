@@ -116,7 +116,10 @@ export default function PropertiesPage() {
   const closePreferences = () => {
     setEditingPreferences(false)
     setSearchParams({}, { replace: true })
-    window.requestAnimationFrame(() => preferenceActionRef.current?.focus())
+    window.requestAnimationFrame(() => {
+      // Restore dialog focus only if the user has not focused another control.
+      if (document.activeElement === document.body) preferenceActionRef.current?.focus()
+    })
   }
   const savePreferences = async (request) => {
     const saved = await saveMatchPreferences(request)
