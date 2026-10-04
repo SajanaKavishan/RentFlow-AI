@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
@@ -8,6 +8,7 @@ import '../../../core/network/api_client.dart';
 import '../../properties/models/property.dart';
 import '../models/maintenance_attachment.dart';
 import '../models/maintenance_status_history.dart';
+import '../models/maintenance_technician_choice.dart';
 import '../models/repair_estimate.dart';
 import '../models/maintenance_request.dart';
 
@@ -18,8 +19,55 @@ class MaintenanceApiService {
 
   Future<List<Property>> getTenantProperties() async {
     final uri = apiClient.buildUri('/api/properties/tenant/mine');
-    final response = await _send(() => apiClient.get(uri));
+    final response = await _send(
+      () => apiClient.get(uri),
+      onResponse: _logTenantPropertyLookupResponse,
+    );
     return _parsePropertyList(response.body);
+  }
+
+  void _logTenantPropertyLookupResponse(http.Response response) {
+    if (!kDebugMode) return;
+    final contentType = response.headers['content-type'] ?? '(missing)';
+    debugPrint(
+      '[MaintenanceApiService] GET /api/properties/tenant/mine '
+      'status=${response.statusCode} content-type=$contentType '
+      'body=${_sanitizeDiagnosticBody(response.body)}',
+    );
+  }
+
+  String _sanitizeDiagnosticBody(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      return jsonEncode(_sanitizeDiagnosticValue(decoded));
+    } on FormatException {
+      return '"[REDACTED non-JSON response]"';
+    }
+  }
+
+  Object? _sanitizeDiagnosticValue(Object? value, {String? fieldName}) {
+    if (value is Map<String, dynamic>) {
+      return value.map(
+        (key, entry) =>
+            MapEntry(key, _sanitizeDiagnosticValue(entry, fieldName: key)),
+      );
+    }
+    if (value is List) {
+      return value
+          .map((entry) => _sanitizeDiagnosticValue(entry, fieldName: fieldName))
+          .toList(growable: false);
+    }
+    if (value is String) {
+      final field = fieldName?.toLowerCase() ?? '';
+      if (RegExp(
+        r'(id|name|email|phone|address|description|title|token|password|secret|authorization|tenant|landlord|property|user|instance)',
+      ).hasMatch(field)) {
+        return '[REDACTED]';
+      }
+      if (field == 'code' || field == 'errorcode') return value;
+      return '[REDACTED]';
+    }
+    return value;
   }
 
   MaintenanceAttachment _parseAttachment(String body) {
@@ -58,7 +106,7 @@ class MaintenanceApiService {
       '/api/maintenance-requests/tenant/$tenantId',
     );
     final response = await _send(() => apiClient.get(uri));
-    return _parseList(response.body);
+    return _parseSummaryList(response.body);
   }
 
   Future<List<MaintenanceRequest>> getAssignedWork({
@@ -68,7 +116,17 @@ class MaintenanceApiService {
       '/api/maintenance-requests/technician/$technicianId',
     );
     final response = await _send(() => apiClient.get(uri));
-    return _parseList(response.body);
+    return _parseSummaryList(response.body);
+  }
+
+  Future<List<MaintenanceRequest>> getMaintenanceRequestsByProperty({
+    required String propertyId,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/property/$propertyId',
+    );
+    final response = await _send(() => apiClient.get(uri));
+    return _parseSummaryList(response.body);
   }
 
   Future<MaintenanceRequest> createMaintenanceRequest({
@@ -106,6 +164,88 @@ class MaintenanceApiService {
     final uri = apiClient.buildUri('/api/maintenance-requests/$id');
     final response = await _send(() => apiClient.get(uri));
     return _parseObject(response.body);
+  }
+
+  Future<MaintenanceRequest> triageMaintenanceRequest({
+    required String id,
+    required MaintenanceCategory category,
+    required MaintenancePriority priority,
+    String? triageNotes,
+  }) async {
+    final uri = apiClient.buildUri('/api/maintenance-requests/$id/triage');
+    final notes = triageNotes?.trim();
+    final response = await _send(
+      () => apiClient.patch(
+        uri,
+        body: jsonEncode({
+          'category': category.value,
+          'priority': priority.value,
+          'triageNotes': notes == null || notes.isEmpty ? null : notes,
+        }),
+      ),
+    );
+    return _parseStatusTransition(
+      response.body,
+      expectedStatus: MaintenanceRequestStatus.triaged,
+    );
+  }
+
+  Future<List<MaintenanceTechnicianChoice>> getMaintenanceTechnicians() async {
+    final uri = apiClient.buildUri('/api/maintenance-requests/technicians');
+    final response = await _send(() => apiClient.get(uri));
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List<dynamic>) throw const FormatException();
+      return decoded
+          .map((item) {
+            if (item is! Map<String, dynamic>) {
+              throw const FormatException();
+            }
+            return MaintenanceTechnicianChoice.fromJson(item);
+          })
+          .toList(growable: false);
+    } on FormatException {
+      throw const MaintenanceApiException(
+        'The maintenance service returned an invalid technician list.',
+      );
+    }
+  }
+
+  Future<MaintenanceRequest> assignMaintenanceTechnician({
+    required String id,
+    required String technicianId,
+    String? assignmentNotes,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$id/assign-technician',
+    );
+    final notes = assignmentNotes?.trim();
+    final response = await _send(
+      () => apiClient.patch(
+        uri,
+        body: jsonEncode({
+          'technicianId': technicianId,
+          'assignmentNotes': notes == null || notes.isEmpty ? null : notes,
+        }),
+      ),
+    );
+    return _parseStatusTransition(
+      response.body,
+      expectedStatus: MaintenanceRequestStatus.assigned,
+    );
+  }
+
+  Future<MaintenanceRequest> requestMaintenanceEstimate({
+    required String id,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$id/estimate-pending',
+    );
+    final response = await _send(() => apiClient.patch(uri));
+    return _parseStatusTransition(
+      response.body,
+      expectedStatus: MaintenanceRequestStatus.estimatePending,
+    );
   }
 
   Future<List<MaintenanceStatusHistory>> getMaintenanceRequestHistory({
@@ -189,7 +329,8 @@ class MaintenanceApiService {
     }
     final response = await http.Response.fromStream(streamedResponse);
     throw MaintenanceApiException(
-      _safeErrorMessage(response) ?? 'The attachment download link was invalid.',
+      _safeErrorMessage(response) ??
+          'The attachment download link was invalid.',
       statusCode: response.statusCode,
     );
   }
@@ -226,6 +367,83 @@ class MaintenanceApiService {
     final response = await _send(() => apiClient.get(uri));
     if (response.statusCode == 204 || response.body.trim().isEmpty) return null;
     return _parseNullableEstimate(response.body);
+  }
+
+  Future<RepairEstimate> approveRepairEstimate({
+    required String maintenanceRequestId,
+    required String estimateId,
+    String? reviewNotes,
+  }) => _reviewRepairEstimate(
+    maintenanceRequestId: maintenanceRequestId,
+    estimateId: estimateId,
+    action: 'approve',
+    reviewNotes: reviewNotes,
+    expectedStatus: RepairEstimateStatus.approved,
+  );
+
+  Future<RepairEstimate> rejectRepairEstimate({
+    required String maintenanceRequestId,
+    required String estimateId,
+    required String reviewNotes,
+  }) => _reviewRepairEstimate(
+    maintenanceRequestId: maintenanceRequestId,
+    estimateId: estimateId,
+    action: 'reject',
+    reviewNotes: reviewNotes,
+    expectedStatus: RepairEstimateStatus.rejected,
+  );
+
+  Future<RepairEstimate> requestRepairEstimateRevision({
+    required String maintenanceRequestId,
+    required String estimateId,
+    required String reviewNotes,
+  }) => _reviewRepairEstimate(
+    maintenanceRequestId: maintenanceRequestId,
+    estimateId: estimateId,
+    action: 'request-revision',
+    reviewNotes: reviewNotes,
+    expectedStatus: RepairEstimateStatus.revisionRequested,
+  );
+
+  Future<RepairEstimate> _reviewRepairEstimate({
+    required String maintenanceRequestId,
+    required String estimateId,
+    required String action,
+    required RepairEstimateStatus expectedStatus,
+    String? reviewNotes,
+  }) async {
+    final notes = reviewNotes?.trim();
+    if ((action == 'reject' || action == 'request-revision') &&
+        (notes == null || notes.isEmpty)) {
+      throw const MaintenanceApiException(
+        'Review notes are required for this estimate decision.',
+      );
+    }
+    if (notes != null && notes.length > 2000) {
+      throw const MaintenanceApiException(
+        'Review notes cannot exceed 2000 characters.',
+      );
+    }
+
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$maintenanceRequestId/estimates/'
+      '$estimateId/$action',
+    );
+    final response = await _send(
+      () => apiClient.patch(
+        uri,
+        body: jsonEncode({
+          'reviewNotes': notes == null || notes.isEmpty ? null : notes,
+        }),
+      ),
+    );
+    final estimate = _parseEstimate(response.body);
+    if (estimate.status != expectedStatus) {
+      throw const MaintenanceApiException(
+        'The maintenance service did not confirm the estimate review.',
+      );
+    }
+    return estimate;
   }
 
   Future<RepairEstimate> createRepairEstimate({
@@ -289,7 +507,10 @@ class MaintenanceApiService {
     );
   }
 
-  Future<http.Response> _send(Future<http.Response> Function() request) async {
+  Future<http.Response> _send(
+    Future<http.Response> Function() request, {
+    void Function(http.Response)? onResponse,
+  }) async {
     late final http.Response response;
     try {
       response = await request();
@@ -298,6 +519,8 @@ class MaintenanceApiService {
         'Unable to connect to the maintenance service.',
       );
     }
+
+    onResponse?.call(response);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw MaintenanceApiException(
@@ -442,7 +665,7 @@ class MaintenanceApiService {
     }
   }
 
-  List<MaintenanceRequest> _parseList(String body) {
+  List<MaintenanceRequest> _parseSummaryList(String body) {
     try {
       final decoded = jsonDecode(body);
       if (decoded is! List<dynamic>) {
@@ -454,7 +677,7 @@ class MaintenanceApiService {
             if (item is! Map<String, dynamic>) {
               throw const FormatException();
             }
-            return MaintenanceRequest.fromJson(item);
+            return MaintenanceRequest.fromSummaryJson(item);
           })
           .toList(growable: false);
     } on FormatException {
