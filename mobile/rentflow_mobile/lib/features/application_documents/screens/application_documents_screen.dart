@@ -21,12 +21,14 @@ class ApplicationDocumentsScreen extends StatefulWidget {
     this.applicationDocumentApiService,
     this.rentalApplicationApiService,
     this.documentPicker,
+    this.initialDocumentType = ApplicationDocumentType.identityDocument,
   });
 
   final String applicationId;
   final ApplicationDocumentApiService? applicationDocumentApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
   final Future<SelectedDocumentFile?> Function()? documentPicker;
+  final ApplicationDocumentType initialDocumentType;
 
   @override
   State<ApplicationDocumentsScreen> createState() =>
@@ -54,6 +56,7 @@ class _ApplicationDocumentsScreenState
   @override
   void initState() {
     super.initState();
+    _selectedType = widget.initialDocumentType;
     if (widget.applicationDocumentApiService case final documentService?) {
       _documentApiService = documentService;
     } else {
@@ -771,7 +774,10 @@ class _RequiredDocumentsCallout extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Icon(
                 missingCount == 0
@@ -781,12 +787,9 @@ class _RequiredDocumentsCallout extends StatelessWidget {
                     ? AppPalette.success
                     : AppPalette.darkOlive,
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  'Required documents',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+              Text(
+                'Required documents',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
               StatusChip(
                 label: missingCount == 0 ? 'Uploaded' : '$missingCount Missing',
@@ -935,10 +938,12 @@ class _RequirementGuideItem extends StatelessWidget {
         border: Border.all(color: AppPalette.border),
         borderRadius: BorderRadius.circular(AppRadii.small),
       ),
-      child: Row(
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Expanded(child: Text(type.label)),
-          const SizedBox(width: AppSpacing.sm),
+          Text(type.label),
           DocumentRequirementBadge(documentType: type, compact: true),
         ],
       ),

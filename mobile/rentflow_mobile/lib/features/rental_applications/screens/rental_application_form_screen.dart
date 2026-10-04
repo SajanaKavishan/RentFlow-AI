@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../../application_documents/models/application_document.dart';
 import '../../application_documents/screens/application_documents_screen.dart';
 import '../../application_documents/services/application_document_api_service.dart';
+import '../../application_documents/widgets/document_requirement_badge.dart';
+import '../../auth/models/current_user.dart';
+import '../../auth/services/auth_service.dart';
+import '../../properties/services/property_api_service.dart';
 import '../models/rental_application.dart';
 import '../services/rental_application_api_service.dart';
-import '../widgets/rental_application_status_chip.dart';
+import '../widgets/application_wizard_widgets.dart';
+import '../widgets/tenant_application_journey.dart';
+import 'rental_application_details_screen.dart';
 
 class RentalApplicationFormScreen extends StatefulWidget {
   const RentalApplicationFormScreen({
@@ -17,13 +23,13 @@ class RentalApplicationFormScreen extends StatefulWidget {
     this.propertyTitle,
     this.application,
     this.rentalApplicationApiService,
+    this.returnToApplicationDetails = false,
   });
-
   final String propertyId;
   final String? propertyTitle;
   final RentalApplication? application;
   final RentalApplicationApiService? rentalApplicationApiService;
-
+  final bool returnToApplicationDetails;
   @override
   State<RentalApplicationFormScreen> createState() =>
       _RentalApplicationFormScreenState();
@@ -31,914 +37,929 @@ class RentalApplicationFormScreen extends StatefulWidget {
 
 class _RentalApplicationFormScreenState
     extends State<RentalApplicationFormScreen> {
-  static const _stepLabels = [
-    'Personal',
-    'Employment/Financial',
-    'Documents',
-    'Review & Submit',
+  static const _titles = [
+    'Personal information',
+    'Financial information',
+    'Documents information',
+    'Review information',
   ];
-
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _incomeController;
-  late final TextEditingController _occupationController;
-  late final TextEditingController _occupantsController;
-  late final TextEditingController _noteController;
-
+  final _scroll = ScrollController();
+  final _income = TextEditingController();
+  final _occupation = TextEditingController();
+  final _occupants = TextEditingController(text: '1');
+  final _note = TextEditingController();
   ApiClient? _ownedApiClient;
-  late final RentalApplicationApiService _apiService;
-  DateTime? _moveInDate;
+  late final RentalApplicationApiService _api;
+  late final ApplicationDocumentApiService _documentApi;
   RentalApplication? _application;
-  String? _formError;
-  int _currentStep = 0;
-  bool _isSaving = false;
-  bool _isSubmitting = false;
+  CurrentUser? _profile;
+  String? _propertyTitle;
+  DateTime? _moveInDate;
+  List<ApplicationDocument> _documents = const [];
+  int _step = 0;
+  bool _loading = true;
+  bool _ready = false;
+  bool _saving = false;
+  bool _submitting = false;
+  bool _documentsLoading = false;
+  bool _openingDocuments = false;
+  bool _allowExit = false;
+  String? _loadError;
+  String? _error;
+  String? _dateError;
+  String? _documentsError;
 
-  bool get _isBusy => _isSaving || _isSubmitting;
-  bool get _hasPropertyReference => widget.propertyId.trim().isNotEmpty;
+  bool get _busy => _loading || _saving || _submitting || _openingDocuments;
   bool get _canEdit =>
-      _application == null ||
-      _application!.status == RentalApplicationStatus.draft ||
-      _application!.status == RentalApplicationStatus.changesRequested;
+      _ready &&
+      (_application == null ||
+          _application!.status == RentalApplicationStatus.draft ||
+          _application!.status == RentalApplicationStatus.changesRequested);
 
   @override
   void initState() {
     super.initState();
     _application = widget.application;
-    _moveInDate = widget.application?.moveInDate;
-    _incomeController = TextEditingController(
-      text: widget.application?.monthlyIncome.toString() ?? '',
-    );
-    _occupationController = TextEditingController(
-      text: widget.application?.occupation ?? '',
-    );
-    _occupantsController = TextEditingController(
-      text: widget.application?.numberOfOccupants.toString() ?? '1',
-    );
-    _noteController = TextEditingController(
-      text: widget.application?.tenantNote ?? '',
-    );
+    _propertyTitle = widget.propertyTitle;
     if (widget.rentalApplicationApiService case final service?) {
-      _apiService = service;
+      _api = service;
     } else {
       _ownedApiClient = ApiClient();
-      _apiService = RentalApplicationApiService(_ownedApiClient!);
+      _api = RentalApplicationApiService(_ownedApiClient!);
     }
+    _documentApi = ApplicationDocumentApiService(_api.apiClient);
+    _load();
   }
 
   @override
   void dispose() {
-    _incomeController.dispose();
-    _occupationController.dispose();
-    _occupantsController.dispose();
-    _noteController.dispose();
+    _scroll.dispose();
+    _income.dispose();
+    _occupation.dispose();
+    _occupants.dispose();
+    _note.dispose();
     _ownedApiClient?.close();
     super.dispose();
   }
 
-  Future<void> _pickMoveInDate() async {
+  void _checkIdentity(RentalApplication application) {
+    final expected = _application ?? widget.application;
+    if (application.propertyId != widget.propertyId ||
+        (expected != null &&
+            (application.id != expected.id ||
+                application.tenantId != expected.tenantId))) {
+      throw const RentalApplicationApiException(
+        'The application service returned an invalid response.',
+      );
+    }
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _ready = false;
+      _loadError = null;
+    });
+    try {
+      if (widget.propertyId.trim().isEmpty) {
+        throw const RentalApplicationApiException(
+          'A real property reference is required to apply.',
+        );
+      }
+      if (widget.application case final seed?) {
+        final application = await _api.getApplicationById(seed.id);
+        _checkIdentity(application);
+        if (!mounted) return;
+        _application = application;
+        _prefill(application);
+      }
+      await Future.wait([_loadProfile(), _loadPropertyTitle()]);
+      if (_application != null) await _refreshDocuments();
+      if (!mounted) return;
+      setState(() {
+        _ready = true;
+        _step = _resumeStep();
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _loadError = _message(
+            error,
+            'Unable to load your application. Please try again.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final profile = await AuthService(_api.apiClient).getCurrentUser();
+      if (mounted &&
+          profile.role == UserRole.tenant &&
+          (_application == null || profile.id == _application!.tenantId)) {
+        _profile = profile;
+      }
+    } catch (_) {
+      // Optional account data never substitutes for saved application fields.
+    }
+  }
+
+  Future<void> _loadPropertyTitle() async {
+    try {
+      final property = await PropertyApiService(
+        _api.apiClient,
+      ).getPropertyById(widget.propertyId);
+      if (mounted && property.id == widget.propertyId) {
+        _propertyTitle = property.title;
+      }
+    } catch (_) {
+      // A previously fetched real title can still provide property context.
+    }
+  }
+
+  void _prefill(RentalApplication application) {
+    _moveInDate = application.moveInDate;
+    _income.text = application.monthlyIncome.toString();
+    _occupation.text = application.occupation;
+    _occupants.text = application.numberOfOccupants.toString();
+    _note.text = application.tenantNote ?? '';
+  }
+
+  String? _incomeError(String? value) {
+    final income = double.tryParse(value?.trim() ?? '');
+    return income == null || !income.isFinite || income <= 0
+        ? 'Enter a monthly income greater than 0.'
+        : null;
+  }
+
+  String? _occupationError(String? value) {
+    final text = value?.trim() ?? '';
+    return text.isEmpty
+        ? 'Enter your occupation.'
+        : text.length > 200
+        ? 'Use 200 characters or fewer.'
+        : null;
+  }
+
+  String? _occupantsError(String? value) {
+    final count = int.tryParse(value?.trim() ?? '');
+    return count == null || count < 1 ? 'Enter at least 1 occupant.' : null;
+  }
+
+  String? _noteError(String? value) => (value ?? '').trim().length > 1000
+      ? 'Use 1000 characters or fewer.'
+      : null;
+  bool _futureDate(DateTime? date) {
+    final now = DateTime.now();
+    return date != null && date.isAfter(DateTime(now.year, now.month, now.day));
+  }
+
+  bool _personalComplete(RentalApplication? application) =>
+      application != null &&
+      _futureDate(application.moveInDate) &&
+      application.numberOfOccupants >= 1 &&
+      _noteError(application.tenantNote) == null;
+  bool _financialComplete(RentalApplication? application) =>
+      application != null &&
+      _incomeError(application.monthlyIncome.toString()) == null &&
+      _occupationError(application.occupation) == null;
+  bool get _documentsComplete =>
+      _application != null &&
+      !_documentsLoading &&
+      _documentsError == null &&
+      ApplicationDocumentType.values
+          .where((type) => type.requirement == DocumentRequirement.required)
+          .every(
+            (type) =>
+                _documents.any((document) => document.documentType == type),
+          );
+  int _resumeStep() {
+    final application = _application;
+    if (application != null &&
+        application.status != RentalApplicationStatus.draft &&
+        application.status != RentalApplicationStatus.changesRequested) {
+      return 3;
+    }
+    if (!_personalComplete(application)) return 0;
+    if (!_financialComplete(application)) return 1;
+    if (!_documentsComplete) return 2;
+    // Only a generic landlord message is available; never infer a section from it.
+    return application!.status == RentalApplicationStatus.changesRequested
+        ? 0
+        : 3;
+  }
+
+  bool get _personalMatchesSaved =>
+      _application != null &&
+      _moveInDate == _application!.moveInDate &&
+      int.tryParse(_occupants.text.trim()) == _application!.numberOfOccupants &&
+      _note.text.trim() == (_application!.tenantNote ?? '').trim();
+  bool get _financialMatchesSaved =>
+      _application != null &&
+      double.tryParse(_income.text.trim()) == _application!.monthlyIncome &&
+      _occupation.text.trim() == _application!.occupation.trim();
+  bool get _dirty =>
+      _ready &&
+      (_application == null
+          ? _moveInDate != null ||
+                _occupants.text != '1' ||
+                _note.text.isNotEmpty ||
+                _income.text.isNotEmpty ||
+                _occupation.text.isNotEmpty
+          : _canEdit && (!_personalMatchesSaved || !_financialMatchesSaved));
+
+  Future<void> _pickDate() async {
     final now = DateTime.now();
     final tomorrow = DateTime(now.year, now.month, now.day + 1);
-    final selected = await showDatePicker(
+    final picked = await showDatePicker(
       context: context,
-      initialDate: _moveInDate != null && _moveInDate!.isAfter(now)
-          ? _moveInDate!
-          : tomorrow,
+      initialDate: _futureDate(_moveInDate) ? _moveInDate! : tomorrow,
       firstDate: tomorrow,
       lastDate: DateTime(now.year + 5, now.month, now.day),
       helpText: 'Choose your move-in date',
     );
-    if (selected != null && mounted) {
+    if (picked != null && mounted) {
       setState(() {
-        _moveInDate = selected;
-        _formError = null;
+        _moveInDate = picked;
+        _dateError = null;
       });
     }
   }
 
-  String? _validateIncome(String? value) {
-    final income = double.tryParse(value?.trim() ?? '');
-    if (income == null || !income.isFinite || income <= 0) {
-      return 'Enter a monthly income greater than 0.';
-    }
-    return null;
+  bool _validatePersonal() {
+    final valid = _futureDate(_moveInDate);
+    setState(() => _dateError = valid ? null : 'Choose a future move-in date.');
+    return valid &&
+        _occupantsError(_occupants.text) == null &&
+        _noteError(_note.text) == null;
   }
 
-  String? _validateOccupation(String? value) {
-    final occupation = value?.trim() ?? '';
-    if (occupation.isEmpty) return 'Enter your occupation.';
-    if (occupation.length > 200) return 'Use 200 characters or fewer.';
-    return null;
-  }
-
-  String? _validateOccupants(String? value) {
-    final occupants = int.tryParse(value?.trim() ?? '');
-    if (occupants == null || occupants < 1) {
-      return 'Enter at least 1 occupant.';
-    }
-    return null;
-  }
-
-  String? _validateNote(String? value) {
-    if ((value ?? '').trim().length > 1000) {
-      return 'Use 1000 characters or fewer.';
-    }
-    return null;
-  }
-
-  bool _validateMoveInDate({bool showMessage = true}) {
-    final date = _moveInDate;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    if (date == null || !date.isAfter(today)) {
-      if (showMessage) _setError('Choose a future move-in date.');
-      return false;
-    }
-    return true;
-  }
-
-  void _nextStep() {
-    if (_currentStep == 0) {
-      final validFields = _formKey.currentState?.validate() ?? false;
-      if (!validFields || !_validateMoveInDate()) return;
-    } else if (_currentStep == 1 &&
-        !(_formKey.currentState?.validate() ?? false)) {
-      return;
-    }
+  void _goTo(int step) {
     FocusScope.of(context).unfocus();
     setState(() {
-      _currentStep = (_currentStep + 1).clamp(0, _stepLabels.length - 1);
-      _formError = null;
+      _step = step;
+      _error = null;
     });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
   }
 
-  void _previousStep() {
-    FocusScope.of(context).unfocus();
+  Future<void> _next() async {
+    if (_busy || !_canEdit) return;
+    final fieldsValid = _formKey.currentState?.validate() ?? false;
+    if (_step == 0) {
+      final personalValid = _validatePersonal();
+      if (!fieldsValid || !personalValid) return;
+      if (_application == null || !_financialComplete(_application)) {
+        // Every create/update requires both sections in the existing contract.
+        // Keep Personal in memory until Financial can save the sections together.
+        _goTo(1);
+        return;
+      }
+      if (await _persist(0) && mounted) _goTo(1);
+    } else if (_step == 1) {
+      if (!fieldsValid) return;
+      if (!_validatePersonal()) {
+        _goTo(0);
+        setState(
+          () => _error = 'Check your personal information before saving.',
+        );
+        return;
+      }
+      if (await _persist(1) && mounted) {
+        _goTo(2);
+        await _refreshDocuments();
+      }
+    } else if (_step == 2) {
+      if (!_documentsComplete) {
+        setState(
+          () => _error = _documentsError != null
+              ? 'Reload your documents before continuing.'
+              : 'Upload the required Identity Document and Income Proof before continuing.',
+        );
+        return;
+      }
+      _goTo(3);
+    }
+  }
+
+  Future<bool> _persist(int step) async {
     setState(() {
-      _currentStep = (_currentStep - 1).clamp(0, _stepLabels.length - 1);
-      _formError = null;
-    });
-  }
-
-  bool _validateAllValues() {
-    if (!_hasPropertyReference) {
-      _setError('A real property reference is required to apply.');
-      return false;
-    }
-    if (!_validateMoveInDate()) {
-      setState(() => _currentStep = 0);
-      return false;
-    }
-    final occupantError = _validateOccupants(_occupantsController.text);
-    final noteError = _validateNote(_noteController.text);
-    if (occupantError != null || noteError != null) {
-      setState(() {
-        _currentStep = 0;
-        _formError = occupantError ?? noteError;
-      });
-      return false;
-    }
-    final incomeError = _validateIncome(_incomeController.text);
-    final occupationError = _validateOccupation(_occupationController.text);
-    if (incomeError != null || occupationError != null) {
-      setState(() {
-        _currentStep = 1;
-        _formError = incomeError ?? occupationError;
-      });
-      return false;
-    }
-    return true;
-  }
-
-  Future<void> _saveApplication() async {
-    if (_isBusy || !_canEdit || !_validateAllValues()) return;
-
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _isSaving = true;
-      _formError = null;
+      _saving = true;
+      _error = null;
     });
     try {
-      final note = _noteController.text.trim();
-      final existing = _application;
+      var existing = _application;
+      if (existing != null) {
+        final fresh = await _api.getApplicationById(existing.id);
+        _checkIdentity(fresh);
+        if (!mounted) return false;
+        setState(() => _application = fresh);
+        existing = fresh;
+        if (!_canEdit) {
+          setState(() => _step = 3);
+          throw const RentalApplicationApiException(
+            'This application can no longer be edited. View its details for the latest status.',
+          );
+        }
+      }
+      final income = step == 0 && existing != null
+          ? existing.monthlyIncome
+          : double.parse(_income.text.trim());
+      final occupation = step == 0 && existing != null
+          ? existing.occupation
+          : _occupation.text.trim();
+      final note = _note.text.trim();
       final saved = existing == null
-          ? await _apiService.createApplication(
+          ? await _api.createApplication(
               propertyId: widget.propertyId,
               moveInDate: _moveInDate!,
-              monthlyIncome: double.parse(_incomeController.text.trim()),
-              occupation: _occupationController.text.trim(),
-              numberOfOccupants: int.parse(_occupantsController.text.trim()),
+              monthlyIncome: income,
+              occupation: occupation,
+              numberOfOccupants: int.parse(_occupants.text.trim()),
               tenantNote: note.isEmpty ? null : note,
             )
-          : await _apiService.updateApplication(
+          : await _api.updateApplication(
               id: existing.id,
               moveInDate: _moveInDate!,
-              monthlyIncome: double.parse(_incomeController.text.trim()),
-              occupation: _occupationController.text.trim(),
-              numberOfOccupants: int.parse(_occupantsController.text.trim()),
+              monthlyIncome: income,
+              occupation: occupation,
+              numberOfOccupants: int.parse(_occupants.text.trim()),
               tenantNote: note.isEmpty ? null : note,
             );
-      if (!mounted) return;
+      _checkIdentity(saved);
+      if (!mounted) return false;
       setState(() => _application = saved);
-      _showMessage(
-        existing == null
-            ? 'Draft application created.'
-            : 'Application changes saved.',
-      );
-    } on RentalApplicationApiException catch (error) {
-      if (mounted) _setError(error.message);
-    } catch (_) {
+      return true;
+    } catch (error) {
       if (mounted) {
-        _setError(
-          'Unable to save your application right now. Please try again.',
+        setState(
+          () => _error = _message(
+            error,
+            'Could not save your application. Your entered values are still here; please try again.',
+          ),
         );
       }
+      return false;
     } finally {
-      if (mounted) setState(() => _isSaving = false);
+      if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _submitApplication() async {
+  Future<void> _refreshDocuments() async {
     final application = _application;
-    final canSubmit =
-        application?.status == RentalApplicationStatus.draft ||
-        application?.status == RentalApplicationStatus.changesRequested;
-    if (_isBusy || !canSubmit) return;
-
-    final isResubmission =
-        application!.status == RentalApplicationStatus.changesRequested;
+    if (application == null || !mounted || _documentsLoading) return;
     setState(() {
-      _isSubmitting = true;
-      _formError = null;
+      _documentsLoading = true;
+      _documentsError = null;
     });
     try {
-      final submitted = await _apiService.submitApplication(id: application.id);
-      if (!mounted) return;
-      setState(() => _application = submitted);
-      _showMessage(
-        isResubmission
-            ? 'Application resubmitted successfully.'
-            : 'Application submitted successfully.',
+      final documents = await _documentApi.getDocumentsForApplication(
+        applicationId: application.id,
       );
-    } on RentalApplicationApiException catch (error) {
-      if (mounted) _setError(error.message);
-    } catch (_) {
+      if (documents.any(
+        (document) => document.applicationId != application.id,
+      )) {
+        throw const ApplicationDocumentApiException(
+          'The document service returned an invalid response.',
+        );
+      }
+      if (mounted) setState(() => _documents = documents);
+    } catch (error) {
       if (mounted) {
-        _setError(
-          'Unable to submit your application right now. Please try again.',
+        setState(
+          () => _documentsError = _message(
+            error,
+            'Unable to load documents. Please try again.',
+          ),
         );
       }
     } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+      if (mounted) setState(() => _documentsLoading = false);
     }
   }
 
-  void _openDocuments() {
+  Future<void> _openDocuments(ApplicationDocumentType type) async {
+    final application = _application;
+    if (application == null || _busy) return;
+    setState(() => _openingDocuments = true);
+    final hadEdits = _dirty;
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ApplicationDocumentsScreen(
+            applicationId: application.id,
+            initialDocumentType: type,
+            rentalApplicationApiService: _api,
+            applicationDocumentApiService: _documentApi,
+          ),
+        ),
+      );
+      if (!mounted) return;
+      final fresh = await _api.getApplicationById(application.id);
+      _checkIdentity(fresh);
+      if (!mounted) return;
+      setState(() {
+        _application = fresh;
+        if (!hadEdits) _prefill(fresh);
+        if (!_canEdit) _step = 3;
+      });
+      await _refreshDocuments();
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _documentsError = _message(
+            error,
+            'Unable to refresh this application. Please try again.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _openingDocuments = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    if (_busy || !_canEdit) return;
+    if (!_validatePersonal()) {
+      _goTo(0);
+      return;
+    }
+    if (_incomeError(_income.text) != null ||
+        _occupationError(_occupation.text) != null) {
+      _goTo(1);
+      return;
+    }
+    if (!_documentsComplete) {
+      _goTo(2);
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      // Include edits made after navigating back from Review.
+      if (!await _persist(1) || !mounted) return;
+      await _refreshDocuments();
+      if (!mounted) return;
+      if (!_documentsComplete) {
+        _goTo(2);
+        setState(
+          () => _error = 'Check your required documents before submitting.',
+        );
+        return;
+      }
+      final submitted = await _api.submitApplication(id: _application!.id);
+      _checkIdentity(submitted);
+      if (!mounted) return;
+      setState(() => _application = submitted);
+      await _showDetails();
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _error = _message(
+            error,
+            'Unable to submit your application. Please try again.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _showDetails() async {
     final application = _application;
     if (application == null) return;
-    Navigator.of(context).push(
+    setState(() => _allowExit = true);
+    if (widget.returnToApplicationDetails && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
+    }
+    await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => ApplicationDocumentsScreen(
-          applicationId: application.id,
-          rentalApplicationApiService: _apiService,
-          applicationDocumentApiService: ApplicationDocumentApiService(
-            _apiService.apiClient,
-          ),
+        builder: (_) => RentalApplicationDetailsScreen(
+          application: application,
+          rentalApplicationApiService: _api,
+          applicationDocumentApiService: _documentApi,
         ),
       ),
     );
+    if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
   }
 
-  void _setError(String message) {
-    setState(() => _formError = message);
-    AppSnackbars.show(context, message: message, tone: SnackTone.error);
-  }
-
-  void _showMessage(String message) {
-    AppSnackbars.show(context, message: message, tone: SnackTone.success);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final application = _application;
-    final readOnly = !_canEdit;
-    return Scaffold(
-      backgroundColor: AppPalette.background,
-      appBar: AppBar(
-        title: const Text('Rental Application'),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1),
-        ),
-      ),
-      body: AuthenticatedPage(
-        maxWidth: 620,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              PageHeader(
-                eyebrow: application == null
-                    ? 'New application'
-                    : 'Application ${application.id}',
-                title:
-                    application?.status ==
-                        RentalApplicationStatus.changesRequested
-                    ? 'Update your application'
-                    : 'Apply for this property',
-                subtitle: readOnly
-                    ? 'This application can no longer be edited.'
-                    : 'Complete each step, review your details, then save or submit.',
-                trailing: application == null
-                    ? null
-                    : RentalApplicationStatusChip(status: application.status),
-              ),
-              if (widget.propertyTitle != null) ...[
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'Selected home: ${widget.propertyTitle}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ],
-              if (application?.status ==
-                  RentalApplicationStatus.changesRequested) ...[
-                const SizedBox(height: AppSpacing.base),
-                AppCard(
-                  color: const Color(0xFFF5DDDC),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Changes requested',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(color: AppPalette.danger),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        _hasText(application?.landlordResponse)
-                            ? application!.landlordResponse!.trim()
-                            : 'The landlord requested updates but did not provide a message.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.lg),
-              _StepIndicator(labels: _stepLabels, currentStep: _currentStep),
-              const SizedBox(height: AppSpacing.lg),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                child: KeyedSubtree(
-                  key: ValueKey(_currentStep),
-                  child: _buildStep(context, readOnly: readOnly),
-                ),
-              ),
-              if (_formError case final error?) ...[
-                const SizedBox(height: AppSpacing.base),
-                _FormError(message: error),
-              ],
-              const SizedBox(height: AppSpacing.lg),
-              if (_isBusy) ...[
-                const LinearProgressIndicator(
-                  key: ValueKey('application-form-progress'),
-                  color: AppPalette.olive,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  _isSubmitting
-                      ? 'Submitting your application...'
-                      : 'Saving your application...',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: AppSpacing.md),
-              ],
-              _NavigationActions(
-                currentStep: _currentStep,
-                lastStep: _stepLabels.length - 1,
-                isBusy: _isBusy,
-                onBack: _previousStep,
-                onNext: _nextStep,
-              ),
-              if (_currentStep == _stepLabels.length - 1 && !readOnly) ...[
-                const SizedBox(height: AppSpacing.md),
-                FilledButton.icon(
-                  key: const ValueKey('save-application'),
-                  onPressed: _isBusy || !_hasPropertyReference
-                      ? null
-                      : _saveApplication,
-                  icon: _isSaving
-                      ? const _ButtonProgressIndicator()
-                      : const Icon(Icons.save_outlined),
-                  label: Text(
-                    application == null ? 'Save draft' : 'Save changes',
-                  ),
-                ),
-                if (application?.status == RentalApplicationStatus.draft ||
-                    application?.status ==
-                        RentalApplicationStatus.changesRequested) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  OutlinedButton.icon(
-                    key: const ValueKey('submit-application'),
-                    onPressed: _isBusy ? null : _submitApplication,
-                    icon: _isSubmitting
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send_outlined),
-                    label: Text(
-                      application?.status ==
-                              RentalApplicationStatus.changesRequested
-                          ? 'Resubmit application'
-                          : 'Submit application',
-                    ),
-                  ),
-                ],
-              ],
-              if (readOnly) ...[
-                const SizedBox(height: AppSpacing.md),
-                const AppCard(
-                  color: AppPalette.sage,
-                  child: Text(
-                    'This application has been submitted and is read only.',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
-            ],
+  Future<void> _back() async {
+    if (_busy) return;
+    if (_step > 0 && _canEdit) {
+      _goTo(_step - 1);
+      return;
+    }
+    if (_dirty) {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Leave without saving?'),
+          content: const Text(
+            'Your saved application will be kept. Changes entered since your last save will be discarded.',
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStep(BuildContext context, {required bool readOnly}) {
-    return switch (_currentStep) {
-      0 => _PersonalStep(
-        propertyId: widget.propertyId,
-        moveInDate: _moveInDate,
-        occupantsController: _occupantsController,
-        noteController: _noteController,
-        enabled: !readOnly && !_isBusy,
-        onPickDate: _pickMoveInDate,
-        validateOccupants: _validateOccupants,
-        validateNote: _validateNote,
-      ),
-      1 => _EmploymentStep(
-        incomeController: _incomeController,
-        occupationController: _occupationController,
-        enabled: !readOnly && !_isBusy,
-        validateIncome: _validateIncome,
-        validateOccupation: _validateOccupation,
-      ),
-      2 => _DocumentsStep(
-        hasDraft: _application != null,
-        onOpenDocuments: _application == null ? null : _openDocuments,
-      ),
-      _ => _ReviewStep(
-        propertyId: widget.propertyId,
-        moveInDate: _moveInDate,
-        occupation: _occupationController.text.trim(),
-        income: _incomeController.text.trim(),
-        occupants: _occupantsController.text.trim(),
-        note: _noteController.text.trim(),
-      ),
-    };
-  }
-
-  bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
-}
-
-class _StepIndicator extends StatelessWidget {
-  const _StepIndicator({required this.labels, required this.currentStep});
-
-  final List<String> labels;
-  final int currentStep;
-
-  @override
-  Widget build(BuildContext context) => AppCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Step ${currentStep + 1} of ${labels.length}',
-          style: Theme.of(
-            context,
-          ).textTheme.labelMedium?.copyWith(color: AppPalette.muted),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          labels[currentStep],
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: AppSpacing.md),
-        Row(
-          children: [
-            for (var index = 0; index < labels.length; index++) ...[
-              Expanded(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: index <= currentStep
-                        ? AppPalette.olive
-                        : AppPalette.outline,
-                    borderRadius: BorderRadius.circular(AppRadii.pill),
-                  ),
-                ),
-              ),
-              if (index < labels.length - 1)
-                const SizedBox(width: AppSpacing.xs),
-            ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep editing'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Leave'),
+            ),
           ],
         ),
-      ],
-    ),
-  );
-}
+      );
+      if (leave != true || !mounted) return;
+    }
+    setState(() => _allowExit = true);
+    Navigator.of(context).pop();
+  }
 
-class _PersonalStep extends StatelessWidget {
-  const _PersonalStep({
-    required this.propertyId,
-    required this.moveInDate,
-    required this.occupantsController,
-    required this.noteController,
-    required this.enabled,
-    required this.onPickDate,
-    required this.validateOccupants,
-    required this.validateNote,
-  });
-
-  final String propertyId;
-  final DateTime? moveInDate;
-  final TextEditingController occupantsController;
-  final TextEditingController noteController;
-  final bool enabled;
-  final VoidCallback onPickDate;
-  final FormFieldValidator<String> validateOccupants;
-  final FormFieldValidator<String> validateNote;
+  String _message(Object error, String fallback) => switch (error) {
+    RentalApplicationApiException(:final message) => message,
+    ApplicationDocumentApiException(:final message) => message,
+    _ => fallback,
+  };
 
   @override
-  Widget build(BuildContext context) {
-    final date = moveInDate == null
-        ? 'Select a date'
-        : MaterialLocalizations.of(context).formatMediumDate(moveInDate!);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionHeader(
-          title: 'Personal',
-          subtitle: 'Your household and move-in details.',
-        ),
-        const SizedBox(height: AppSpacing.md),
-        AppCard(
-          child: Column(
-            children: [
-              _ReferenceRow(
-                label: 'Property reference',
-                value: propertyId.trim().isEmpty ? 'Unavailable' : propertyId,
-              ),
-              const Divider(height: AppSpacing.lg),
-              InkWell(
-                key: const ValueKey('application-move-in-date'),
-                onTap: enabled ? onPickDate : null,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_today_outlined,
-                        color: AppPalette.olive,
+  Widget build(BuildContext context) => PopScope(
+    canPop: _allowExit || (!_busy && (!_canEdit || (_step == 0 && !_dirty))),
+    onPopInvokedWithResult: (didPop, result) {
+      if (!didPop) _back();
+    },
+    child: Scaffold(
+      backgroundColor: AppPalette.warmCream,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          controller: _scroll,
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: Form(
+                key: _formKey,
+                onChanged: () => setState(() {}),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TenantApplicationHeader(
+                      eyebrow: 'RENTAL APPLICATION',
+                      title: _titles[_step],
+                      titleStyle: AppTypography.pageTitle.copyWith(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w600,
+                        color: AppPalette.darkOlive,
                       ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Move-in date'),
-                            const SizedBox(height: AppSpacing.xs),
-                            Text(date),
-                          ],
+                      onBack: _back,
+                    ),
+                    const SizedBox(height: 16),
+                    if (_loading)
+                      const LoadingState(
+                        title: 'Loading application',
+                        compact: true,
+                      ),
+                    if (_loadError != null)
+                      SharedState(
+                        title: 'Could not load application',
+                        message: _loadError!,
+                        actionLabel: 'Try again',
+                        onAction: _load,
+                        compact: true,
+                      ),
+                    if (_ready) ...[
+                      ApplicationWizardProgress(
+                        currentStep: _step,
+                        completed: [
+                          _personalComplete(_application) &&
+                              _personalMatchesSaved,
+                          _financialComplete(_application) &&
+                              _financialMatchesSaved,
+                          _documentsComplete,
+                          _application != null && !_canEdit,
+                        ],
+                        onSelect: _busy || !_canEdit ? null : _goTo,
+                      ),
+                      const SizedBox(height: 20),
+                      if (_application?.status ==
+                          RentalApplicationStatus.changesRequested) ...[
+                        TenantApplicationCard(
+                          actionRequired: true,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text('Changes requested', style: wizardLabel),
+                              const SizedBox(height: 6),
+                              Text(
+                                _application!.landlordResponse
+                                            ?.trim()
+                                            .isNotEmpty ==
+                                        true
+                                    ? _application!.landlordResponse!.trim()
+                                    : 'The landlord requested updates but did not provide a message.',
+                                style: AppTypography.body,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      if (!_canEdit) ...[
+                        Text(
+                          'This application can no longer be edited.',
+                          style: wizardHelper,
+                        ),
+                        const SizedBox(height: 12),
+                        TenantApplicationStatusChip(
+                          status: _application!.status,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      _buildStep(),
+                      if (_error != null) ...[
+                        const SizedBox(height: 12),
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _error!,
+                            key: const ValueKey('application-form-error'),
+                            style: wizardHelper.copyWith(
+                              color: AppPalette.danger,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      if (_saving || _submitting) ...[
+                        const LinearProgressIndicator(
+                          key: ValueKey('application-form-progress'),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      FilledButton(
+                        key: ValueKey(
+                          !_canEdit
+                              ? 'view-application-details'
+                              : _step == 3
+                              ? 'submit-application'
+                              : 'application-next-step',
+                        ),
+                        onPressed: _busy
+                            ? null
+                            : !_canEdit
+                            ? _showDetails
+                            : _step == 3
+                            ? _submit
+                            : _next,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppPalette.darkOlive,
+                          foregroundColor: AppPalette.white,
+                          minimumSize: const Size.fromHeight(48),
+                          padding: const EdgeInsets.all(14),
+                          textStyle: AppTypography.button.copyWith(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          _submitting
+                              ? 'Submitting…'
+                              : _saving
+                              ? 'Saving…'
+                              : !_canEdit
+                              ? 'View details'
+                              : _step == 3
+                              ? _application?.status ==
+                                        RentalApplicationStatus.changesRequested
+                                    ? 'Resubmit application'
+                                    : 'Submit application'
+                              : 'Continue',
                         ),
                       ),
-                      const Icon(Icons.chevron_right),
+                      if (_step < 2 && _application == null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'Your draft is saved after Personal and Financial information are complete.',
+                          style: wizardHelper,
+                        ),
+                      ],
                     ],
-                  ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
-        const SizedBox(height: AppSpacing.base),
-        TextFormField(
+      ),
+    ),
+  );
+  Widget _buildStep() => switch (_step) {
+    0 => _personal(),
+    1 => _financial(),
+    2 => _documentStep(),
+    _ => _review(),
+  };
+  Widget _personal() => TenantApplicationCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_profile != null) ...[
+          ApplicationWizardValue(label: 'Full name', value: _profile!.fullName),
+          ApplicationWizardValue(
+            label: 'Phone number',
+            value: _profile!.phoneNumber,
+          ),
+          Text('Contact details from your account.', style: wizardHelper),
+          const Divider(height: 24),
+        ],
+        Text('Move-in date', style: wizardLabel),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          key: const ValueKey('application-move-in-date'),
+          onPressed: _busy || !_canEdit ? null : _pickDate,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+            alignment: Alignment.centerLeft,
+          ),
+          icon: const Icon(Icons.calendar_today_outlined, size: 18),
+          label: Text(
+            _moveInDate == null
+                ? 'Select a date'
+                : MaterialLocalizations.of(
+                    context,
+                  ).formatMediumDate(_moveInDate!),
+          ),
+        ),
+        if (_dateError != null)
+          Text(
+            _dateError!,
+            style: wizardHelper.copyWith(color: AppPalette.danger),
+          ),
+        const SizedBox(height: 16),
+        ApplicationWizardField(
           key: const ValueKey('application-occupants'),
-          controller: occupantsController,
-          enabled: enabled,
+          label: 'Number of occupants',
+          controller: _occupants,
+          enabled: _canEdit && !_busy,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(
-            labelText: 'Number of occupants',
-            prefixIcon: Icon(Icons.people_outline),
-          ),
-          validator: validateOccupants,
+          validator: _occupantsError,
         ),
-        const SizedBox(height: AppSpacing.base),
-        TextFormField(
+        const SizedBox(height: 16),
+        ApplicationWizardField(
           key: const ValueKey('application-note'),
-          controller: noteController,
-          enabled: enabled,
-          maxLines: 4,
+          label: 'Note to the landlord (optional)',
+          controller: _note,
+          enabled: _canEdit && !_busy,
           maxLength: 1000,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(
-            labelText: 'Note to the landlord (optional)',
-            prefixIcon: Icon(Icons.notes_outlined),
-            alignLabelWithHint: true,
-          ),
-          validator: validateNote,
+          maxLines: 3,
+          validator: _noteError,
         ),
       ],
+    ),
+  );
+  Widget _financial() => TenantApplicationCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ApplicationWizardField(
+          key: const ValueKey('application-occupation'),
+          label: 'Occupation',
+          controller: _occupation,
+          enabled: _canEdit && !_busy,
+          maxLength: 200,
+          validator: _occupationError,
+        ),
+        const SizedBox(height: 16),
+        ApplicationWizardField(
+          key: const ValueKey('application-income'),
+          label: 'Monthly income',
+          controller: _income,
+          enabled: _canEdit && !_busy,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: _incomeError,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Information used in the rental application.',
+          style: wizardHelper,
+        ),
+      ],
+    ),
+  );
+  Widget _documentStep() => TenantApplicationCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Add supporting documents', style: wizardLabel),
+        const SizedBox(height: 12),
+        if (_documentsLoading)
+          const LoadingState(title: 'Loading documents', compact: true)
+        else if (_documentsError != null) ...[
+          Text(_documentsError!, style: wizardHelper),
+          TextButton(
+            onPressed: _busy ? null : _refreshDocuments,
+            child: const Text('Reload documents'),
+          ),
+        ] else ...[
+          for (final type in ApplicationDocumentType.values) ...[
+            ApplicationWizardDocumentRow(
+              type: type,
+              documents: _documents,
+              onOpen: _application == null || _busy
+                  ? null
+                  : () => _openDocuments(type),
+            ),
+            if (type != ApplicationDocumentType.values.last)
+              const SizedBox(height: 10),
+          ],
+        ],
+      ],
+    ),
+  );
+  Widget _review() {
+    final saved = !_canEdit ? _application : null;
+    final date = saved?.moveInDate ?? _moveInDate;
+    final note = saved == null
+        ? _note.text.trim()
+        : (saved.tenantNote ?? '').trim();
+    return TenantApplicationCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            saved == null ? 'Review before submitting' : 'Saved application',
+            style: wizardLabel,
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppPalette.softCream,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  _propertyTitle?.trim().isNotEmpty == true
+                      ? _propertyTitle!
+                      : 'Selected property',
+                  style: AppTypography.body.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Your application details and uploaded documents will be shared with the landlord for review.',
+                  style: wizardHelper,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_profile != null)
+            ApplicationWizardValue(
+              label: 'Applicant',
+              value: _profile!.fullName,
+            ),
+          ApplicationWizardValue(
+            label: 'Move-in date',
+            value: date == null
+                ? 'Not selected'
+                : MaterialLocalizations.of(context).formatMediumDate(date),
+          ),
+          ApplicationWizardValue(
+            label: 'Occupants',
+            value: saved?.numberOfOccupants.toString() ?? _occupants.text,
+          ),
+          ApplicationWizardValue(
+            label: 'Occupation',
+            value: saved?.occupation ?? _occupation.text,
+          ),
+          ApplicationWizardValue(
+            label: 'Monthly income',
+            value: saved?.monthlyIncome.toString() ?? _income.text,
+          ),
+          if (note.isNotEmpty)
+            ApplicationWizardValue(label: 'Your note', value: note),
+          ApplicationWizardValue(
+            label: 'Documents',
+            value: _documentsLoading
+                ? 'Loading documents'
+                : _documentsError != null
+                ? 'Document summary unavailable'
+                : '${_documents.length} uploaded',
+          ),
+        ],
+      ),
     );
   }
-}
-
-class _EmploymentStep extends StatelessWidget {
-  const _EmploymentStep({
-    required this.incomeController,
-    required this.occupationController,
-    required this.enabled,
-    required this.validateIncome,
-    required this.validateOccupation,
-  });
-
-  final TextEditingController incomeController;
-  final TextEditingController occupationController;
-  final bool enabled;
-  final FormFieldValidator<String> validateIncome;
-  final FormFieldValidator<String> validateOccupation;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      const SectionHeader(
-        title: 'Employment/Financial',
-        subtitle: 'Information used in the rental application.',
-      ),
-      const SizedBox(height: AppSpacing.md),
-      TextFormField(
-        key: const ValueKey('application-occupation'),
-        controller: occupationController,
-        enabled: enabled,
-        maxLength: 200,
-        textCapitalization: TextCapitalization.words,
-        decoration: const InputDecoration(
-          labelText: 'Occupation',
-          prefixIcon: Icon(Icons.work_outline),
-        ),
-        validator: validateOccupation,
-      ),
-      const SizedBox(height: AppSpacing.base),
-      TextFormField(
-        key: const ValueKey('application-income'),
-        controller: incomeController,
-        enabled: enabled,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-        decoration: const InputDecoration(
-          labelText: 'Monthly income',
-          prefixIcon: Icon(Icons.payments_outlined),
-        ),
-        validator: validateIncome,
-      ),
-    ],
-  );
-}
-
-class _DocumentsStep extends StatelessWidget {
-  const _DocumentsStep({required this.hasDraft, this.onOpenDocuments});
-
-  final bool hasDraft;
-  final VoidCallback? onOpenDocuments;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      const SectionHeader(
-        title: 'Documents',
-        subtitle: 'Supporting files are managed per application.',
-      ),
-      const SizedBox(height: AppSpacing.md),
-      AppCard(
-        child: Column(
-          children: [
-            const Icon(
-              Icons.folder_outlined,
-              size: 42,
-              color: AppPalette.olive,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              hasDraft
-                  ? 'Your draft is ready for document management.'
-                  : 'Save a draft before adding documents.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'No document is uploaded or validated from this form step.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            if (onOpenDocuments != null) ...[
-              const SizedBox(height: AppSpacing.base),
-              OutlinedButton.icon(
-                onPressed: onOpenDocuments,
-                icon: const Icon(Icons.folder_open_outlined),
-                label: const Text('Manage documents'),
-              ),
-            ],
-          ],
-        ),
-      ),
-    ],
-  );
-}
-
-class _ReviewStep extends StatelessWidget {
-  const _ReviewStep({
-    required this.propertyId,
-    required this.moveInDate,
-    required this.occupation,
-    required this.income,
-    required this.occupants,
-    required this.note,
-  });
-
-  final String propertyId;
-  final DateTime? moveInDate;
-  final String occupation;
-  final String income;
-  final String occupants;
-  final String note;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      const SectionHeader(
-        title: 'Review & Submit',
-        subtitle: 'Confirm the real values that will be sent to RentFlow.',
-      ),
-      const SizedBox(height: AppSpacing.md),
-      AppCard(
-        child: Column(
-          children: [
-            _ReferenceRow(label: 'Property', value: propertyId),
-            const Divider(height: AppSpacing.lg),
-            _ReferenceRow(
-              label: 'Move-in date',
-              value: moveInDate == null
-                  ? 'Not selected'
-                  : MaterialLocalizations.of(
-                      context,
-                    ).formatMediumDate(moveInDate!),
-            ),
-            const Divider(height: AppSpacing.lg),
-            _ReferenceRow(label: 'Occupation', value: occupation),
-            const Divider(height: AppSpacing.lg),
-            _ReferenceRow(label: 'Monthly income', value: income),
-            const Divider(height: AppSpacing.lg),
-            _ReferenceRow(label: 'Occupants', value: occupants),
-            const Divider(height: AppSpacing.lg),
-            _ReferenceRow(
-              label: 'Landlord note',
-              value: note.isEmpty ? 'No note added.' : note,
-            ),
-          ],
-        ),
-      ),
-    ],
-  );
-}
-
-class _ReferenceRow extends StatelessWidget {
-  const _ReferenceRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      SizedBox(
-        width: 104,
-        child: Text(
-          label,
-          style: Theme.of(
-            context,
-          ).textTheme.labelMedium?.copyWith(color: AppPalette.muted),
-        ),
-      ),
-      const SizedBox(width: AppSpacing.sm),
-      Expanded(
-        child: Text(
-          value,
-          textAlign: TextAlign.end,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: AppPalette.text,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-class _NavigationActions extends StatelessWidget {
-  const _NavigationActions({
-    required this.currentStep,
-    required this.lastStep,
-    required this.isBusy,
-    required this.onBack,
-    required this.onNext,
-  });
-
-  final int currentStep;
-  final int lastStep;
-  final bool isBusy;
-  final VoidCallback onBack;
-  final VoidCallback onNext;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      if (currentStep > 0)
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: isBusy ? null : onBack,
-            icon: const Icon(Icons.arrow_back),
-            label: const Text('Back'),
-          ),
-        ),
-      if (currentStep > 0 && currentStep < lastStep)
-        const SizedBox(width: AppSpacing.md),
-      if (currentStep < lastStep)
-        Expanded(
-          child: FilledButton.icon(
-            key: const ValueKey('application-next-step'),
-            onPressed: isBusy ? null : onNext,
-            icon: const Icon(Icons.arrow_forward),
-            label: const Text('Continue'),
-          ),
-        ),
-    ],
-  );
-}
-
-class _FormError extends StatelessWidget {
-  const _FormError({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    key: const ValueKey('application-form-error'),
-    padding: const EdgeInsets.all(AppSpacing.md),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF5DDDC),
-      borderRadius: BorderRadius.circular(AppRadii.medium),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(Icons.error_outline, color: AppPalette.danger),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Text(
-            message,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppPalette.danger,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _ButtonProgressIndicator extends StatelessWidget {
-  const _ButtonProgressIndicator();
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.square(
-    dimension: 18,
-    child: CircularProgressIndicator(strokeWidth: 2, color: AppPalette.white),
-  );
 }

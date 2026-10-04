@@ -59,6 +59,14 @@ Future<void> _pumpApplicationsScreen(
 }
 
 Future<void> _confirmSubmit(WidgetTester tester, String label) async {
+  await tester.tap(
+    find.byKey(
+      const ValueKey(
+        'application-actions-33333333-3333-4333-8333-333333333333',
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
   await tester.ensureVisible(find.text(label));
   await tester.pumpAndSettle();
   await tester.tap(find.text(label));
@@ -85,6 +93,9 @@ void main() {
     (tester) async {
       var listCalls = 0;
       final client = MockClient((request) async {
+        if (request.url.path.startsWith('/api/properties/')) {
+          return http.Response('{}', 404);
+        }
         if (request.method == 'PATCH') {
           _expectSubmitRequest(request);
           return http.Response('', 200);
@@ -96,8 +107,8 @@ void main() {
 
       await _confirmSubmit(tester, 'Submit application');
 
-      expect(find.text('Draft'), findsOneWidget);
-      expect(find.text('Submitted'), findsNothing);
+      expect(find.text('DRAFT'), findsOneWidget);
+      expect(find.text('SUBMITTED'), findsNothing);
       expect(
         find.text(
           'The rental application service returned an invalid response.',
@@ -114,6 +125,9 @@ void main() {
     (tester) async {
       var listCalls = 0;
       final client = MockClient((request) async {
+        if (request.url.path.startsWith('/api/properties/')) {
+          return http.Response('{}', 404);
+        }
         if (request.method == 'PATCH') {
           _expectSubmitRequest(request);
           return http.Response(jsonEncode(_applicationJson(1)), 200);
@@ -128,7 +142,7 @@ void main() {
 
       await _confirmSubmit(tester, 'Submit application');
 
-      expect(find.text('Submitted'), findsOneWidget);
+      expect(find.text('SUBMITTED'), findsOneWidget);
       expect(
         find.text(
           'Application submitted, but your applications could not be refreshed.',
@@ -146,6 +160,9 @@ void main() {
   ) async {
     var listCalls = 0;
     final client = MockClient((request) async {
+      if (request.url.path.startsWith('/api/properties/')) {
+        return http.Response('{}', 404);
+      }
       if (request.method == 'PATCH') {
         _expectSubmitRequest(request);
         return http.Response(
@@ -161,8 +178,8 @@ void main() {
     await _confirmSubmit(tester, 'Submit application');
 
     expect(find.text('The application cannot be submitted.'), findsOneWidget);
-    expect(find.text('Draft'), findsOneWidget);
-    expect(find.text('Submitted'), findsNothing);
+    expect(find.text('DRAFT'), findsOneWidget);
+    expect(find.text('SUBMITTED'), findsNothing);
     expect(listCalls, 1);
     expect(tester.takeException(), isNull);
   });
@@ -172,6 +189,9 @@ void main() {
   ) async {
     var listCalls = 0;
     final client = MockClient((request) async {
+      if (request.url.path.startsWith('/api/properties/')) {
+        return http.Response('{}', 404);
+      }
       if (request.method == 'PATCH') {
         _expectSubmitRequest(request);
         return http.Response(jsonEncode(_applicationJson(1)), 200);
@@ -186,7 +206,7 @@ void main() {
 
     await _confirmSubmit(tester, 'Resubmit application');
 
-    expect(find.text('Submitted'), findsOneWidget);
+    expect(find.text('SUBMITTED'), findsOneWidget);
     expect(find.text('Application resubmitted successfully.'), findsOneWidget);
     expect(find.textContaining('Unable to submit'), findsNothing);
     expect(listCalls, 2);

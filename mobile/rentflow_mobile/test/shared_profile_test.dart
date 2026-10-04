@@ -229,6 +229,12 @@ void main() {
       // the application action underneath it on a short viewport.
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
+      final actions = find.byKey(
+        const ValueKey('application-actions-$applicationId'),
+      );
+      await tester.ensureVisible(actions);
+      await tester.tap(actions);
+      await tester.pumpAndSettle();
       final button = find.byKey(
         const ValueKey('application-documents-$applicationId'),
       );

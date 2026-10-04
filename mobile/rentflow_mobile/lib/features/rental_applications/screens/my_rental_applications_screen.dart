@@ -6,18 +6,24 @@ import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../application_documents/screens/application_documents_screen.dart';
 import '../../application_documents/services/application_document_api_service.dart';
+import '../../properties/models/property.dart';
+import '../../properties/screens/property_list_screen.dart';
+import '../../properties/services/property_api_service.dart';
 import '../models/rental_application.dart';
 import '../services/rental_application_api_service.dart';
-import '../widgets/rental_application_status_chip.dart';
+import '../widgets/tenant_application_journey.dart';
 import 'rental_application_details_screen.dart';
+import 'rental_application_form_screen.dart';
 
 class MyRentalApplicationsScreen extends StatefulWidget {
   const MyRentalApplicationsScreen({
     super.key,
     this.rentalApplicationApiService,
+    this.propertyApiService,
   });
 
   final RentalApplicationApiService? rentalApplicationApiService;
+  final PropertyApiService? propertyApiService;
 
   @override
   State<MyRentalApplicationsScreen> createState() =>
@@ -28,6 +34,8 @@ class _MyRentalApplicationsScreenState
     extends State<MyRentalApplicationsScreen> {
   ApiClient? _ownedApiClient;
   late final RentalApplicationApiService _apiService;
+  late final PropertyApiService _propertyApiService;
+  final Map<String, Property?> _properties = {};
   late Future<List<RentalApplication>> _applications;
   final Set<String> _submittingIds = {};
   final Set<String> _withdrawingIds = {};
@@ -41,7 +49,9 @@ class _MyRentalApplicationsScreenState
       _ownedApiClient = ApiClient();
       _apiService = RentalApplicationApiService(_ownedApiClient!);
     }
-    _applications = _apiService.getMyApplications();
+    _propertyApiService =
+        widget.propertyApiService ?? PropertyApiService(_apiService.apiClient);
+    _applications = _loadApplications();
   }
 
   @override
@@ -51,7 +61,7 @@ class _MyRentalApplicationsScreenState
   }
 
   Future<void> _refresh() async {
-    final request = _apiService.getMyApplications();
+    final request = _loadApplications();
     setState(() {
       _applications = request;
     });
@@ -60,6 +70,37 @@ class _MyRentalApplicationsScreenState
     } catch (_) {
       // FutureBuilder displays the safe error state for this request.
     }
+  }
+
+  Future<List<RentalApplication>> _loadApplications() async {
+    final applications = await _apiService.getMyApplications();
+    await Future.wait(
+      applications.map((a) => a.propertyId).toSet().map((id) async {
+        try {
+          final property = await _propertyApiService.getPropertyById(id);
+          _properties[id] = property.id == id ? property : null;
+        } catch (_) {
+          // Optional property information must not hide an application.
+          _properties[id] = null;
+        }
+      }),
+    );
+    return applications;
+  }
+
+  Future<void> _browseProperties() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Browse properties')),
+          body: PropertyListScreen(
+            propertyApiService: _propertyApiService,
+            rentalApplicationApiService: _apiService,
+          ),
+        ),
+      ),
+    );
+    if (mounted) await _refresh();
   }
 
   bool _canWithdraw(RentalApplication application) {
@@ -97,6 +138,23 @@ class _MyRentalApplicationsScreenState
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => RentalApplicationDetailsScreen(
+          application: application,
+          rentalApplicationApiService: _apiService,
+          property: _properties[application.propertyId],
+          propertyApiService: _propertyApiService,
+        ),
+      ),
+    );
+    if (mounted) await _refresh();
+  }
+
+  Future<void> _continueApplication(RentalApplication application) async {
+    if (!_canSubmit(application)) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => RentalApplicationFormScreen(
+          propertyId: application.propertyId,
+          propertyTitle: _properties[application.propertyId]?.title,
           application: application,
           rentalApplicationApiService: _apiService,
         ),
@@ -187,7 +245,7 @@ class _MyRentalApplicationsScreenState
     );
 
     try {
-      final refreshedApplications = await _apiService.getMyApplications();
+      final refreshedApplications = await _loadApplications();
       if (!mounted) return;
       setState(() {
         _applications = Future.value(refreshedApplications);
@@ -310,115 +368,89 @@ class _MyRentalApplicationsScreenState
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppPalette.background,
-      appBar: AppBar(
-        title: const Text('My Applications'),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1),
-        ),
-      ),
-      body: SafeArea(
-        child: FutureBuilder<List<RentalApplication>>(
-          future: _applications,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const _LoadingState(
-                title: 'Loading your applications',
-                message: 'Getting the latest application updates.',
-              );
-            }
-
-            if (snapshot.hasError) {
-              return _MessageState(
-                icon: Icons.cloud_off_outlined,
-                title: 'Could not load applications',
-                message: _safeErrorMessage(snapshot.error),
-                actionLabel: 'Try again',
-                onAction: _refresh,
-                isError: true,
-              );
-            }
-
-            final applications = _prioritized(
-              snapshot.data ?? const <RentalApplication>[],
-            );
-            if (applications.isEmpty) {
-              return _MessageState(
-                icon: Icons.description_outlined,
-                title: 'No applications yet',
-                message:
-                    'Applications you create for a property will appear here.',
-                actionLabel: 'Refresh',
-                onAction: _refresh,
-              );
-            }
-
-            return RefreshIndicator(
-              color: AppPalette.primary,
-              onRefresh: _refresh,
-              child: ListView.builder(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(
-                  20,
-                  AppSpacing.lg,
-                  20,
-                  AppSpacing.xl,
-                ),
-                itemCount: applications.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.base),
-                      child: _ApplicationsHeader(count: applications.length),
-                    );
-                  }
-
-                  final application = applications[index - 1];
-                  final isSubmitting = _submittingIds.contains(application.id);
-                  final isWithdrawing = _withdrawingIds.contains(
-                    application.id,
-                  );
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      bottom: index == applications.length ? 0 : AppSpacing.md,
-                    ),
-                    child: _ApplicationCard(
-                      application: application,
-                      canSubmit: _canSubmit(application),
-                      canWithdraw: _canWithdraw(application),
-                      isSubmitting: isSubmitting,
-                      isWithdrawing: isWithdrawing,
-                      onSubmit: () => _confirmSubmission(application),
-                      onWithdraw: () => _confirmWithdrawal(application),
-                      onDocuments: () => _openDocuments(application),
-                      onDetails: () => _openDetails(application),
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: AppPalette.warmCream,
+    body: SafeArea(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: TenantApplicationHeader(
+              eyebrow: 'RENTAL JOURNEY',
+              title: 'My applications',
+              onBack: Navigator.of(context).canPop()
+                  ? () => Navigator.of(context).maybePop()
+                  : null,
+              onNew: _browseProperties,
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<RentalApplication>>(
+              future: _applications,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.all(24),
+                      child: LoadingState(
+                        key: ValueKey('applications-loading'),
+                        title: 'Loading your applications',
+                        message: 'Getting the latest application updates.',
+                        compact: true,
+                      ),
                     ),
                   );
-                },
-              ),
-            );
-          },
-        ),
+                }
+                if (snapshot.hasError) {
+                  return _ApplicationListState(
+                    isError: true,
+                    title: 'Could not load applications',
+                    message: _safeErrorMessage(snapshot.error),
+                    onRetry: _refresh,
+                  );
+                }
+                final applications = _prioritized(snapshot.data ?? const []);
+                if (applications.isEmpty) {
+                  return _ApplicationListState(
+                    title: 'No applications yet',
+                    message:
+                        'Find a home you like, then start an application from its property page.',
+                    onBrowse: _browseProperties,
+                    onRetry: _refresh,
+                  );
+                }
+                return RefreshIndicator(
+                  color: AppPalette.olive,
+                  onRefresh: _refresh,
+                  child: ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                    itemCount: applications.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 20),
+                    itemBuilder: (context, index) {
+                      final application = applications[index];
+                      return _ApplicationCard(
+                        application: application,
+                        propertyTitle:
+                            _properties[application.propertyId]?.title,
+                        canSubmit: _canSubmit(application),
+                        canWithdraw: _canWithdraw(application),
+                        isSubmitting: _submittingIds.contains(application.id),
+                        isWithdrawing: _withdrawingIds.contains(application.id),
+                        onSubmit: () => _confirmSubmission(application),
+                        onWithdraw: () => _confirmWithdrawal(application),
+                        onDocuments: () => _openDocuments(application),
+                        onDetails: () => _openDetails(application),
+                        onContinue: () => _continueApplication(application),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
-    );
-  }
-}
-
-class _ApplicationsHeader extends StatelessWidget {
-  const _ApplicationsHeader({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) => SectionHeader(
-    title: 'Application journey',
-    subtitle: 'Applications needing attention appear first.',
-    trailing: StatusChip(
-      label: '$count ${count == 1 ? 'application' : 'applications'}',
-      tone: StatusTone.neutral,
     ),
   );
 }
@@ -426,6 +458,7 @@ class _ApplicationsHeader extends StatelessWidget {
 class _ApplicationCard extends StatelessWidget {
   const _ApplicationCard({
     required this.application,
+    required this.propertyTitle,
     required this.canSubmit,
     required this.canWithdraw,
     required this.isSubmitting,
@@ -434,9 +467,10 @@ class _ApplicationCard extends StatelessWidget {
     required this.onWithdraw,
     required this.onDocuments,
     required this.onDetails,
+    required this.onContinue,
   });
-
   final RentalApplication application;
+  final String? propertyTitle;
   final bool canSubmit;
   final bool canWithdraw;
   final bool isSubmitting;
@@ -445,602 +479,181 @@ class _ApplicationCard extends StatelessWidget {
   final VoidCallback onWithdraw;
   final VoidCallback onDocuments;
   final VoidCallback onDetails;
+  final VoidCallback onContinue;
 
   @override
   Widget build(BuildContext context) {
-    final date = MaterialLocalizations.of(
-      context,
-    ).formatMediumDate(application.moveInDate);
-    final isBusy = isSubmitting || isWithdrawing;
-    final isResubmission =
+    final busy = isSubmitting || isWithdrawing;
+    final actionRequired =
         application.status == RentalApplicationStatus.changesRequested;
-    return Card(
+    final continueApplication =
+        actionRequired || application.status == RentalApplicationStatus.draft;
+    final response = application.landlordResponse?.trim();
+    final metadata = [
+      'Created ${applicationDate(context, application.createdAt)}',
+      if (application.submittedAt case final timestamp?)
+        'Submitted ${applicationDate(context, timestamp)}',
+    ].join(' \u00b7 ');
+    final summary = actionRequired && response != null && response.isNotEmpty
+        ? response
+        : application.updatedAt != null
+        ? 'Updated ${applicationDate(context, application.updatedAt!)}'
+        : applicationStatusSummary(application.status);
+    return TenantApplicationCard(
       key: ValueKey('application-card-${application.id}'),
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      shape: isResubmission
-          ? RoundedRectangleBorder(
-              side: const BorderSide(color: Color(0xFFB88635), width: 1.5),
-              borderRadius: BorderRadius.circular(AppRadii.card),
-            )
-          : null,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.base),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final identity = Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: isResubmission
-                            ? const Color(0xFFF2E4D2)
-                            : const Color(0xFFECEFDF),
-                        borderRadius: BorderRadius.circular(AppRadii.small),
-                      ),
-                      child: Icon(
-                        isResubmission
-                            ? Icons.priority_high_rounded
-                            : Icons.description_outlined,
-                        color: isResubmission
-                            ? const Color(0xFF755028)
-                            : AppPalette.primary,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isResubmission
-                                ? 'ACTION NEEDED'
-                                : 'RENTAL APPLICATION',
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color: isResubmission
-                                      ? const Color(0xFF755028)
-                                      : AppPalette.muted,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.8,
-                                ),
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            'Move in $date',
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(
-                                  color: AppPalette.text,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-                final status = RentalApplicationStatusChip(
-                  status: application.status,
-                );
-                if (constraints.maxWidth < 380) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      identity,
-                      const SizedBox(height: AppSpacing.sm),
-                      status,
-                    ],
-                  );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: identity),
-                    const SizedBox(width: AppSpacing.sm),
-                    status,
-                  ],
-                );
-              },
-            ),
-            if (isResubmission) ...[
-              const SizedBox(height: AppSpacing.base),
-              _ChangesRequestedCallout(
-                landlordResponse: application.landlordResponse,
-              ),
-            ],
-            const SizedBox(height: AppSpacing.base),
-            _ApplicationInfoRow(
-              icon: Icons.home_work_outlined,
-              label: 'Property reference',
-              value: application.propertyId,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                _SummaryItem(
-                  icon: Icons.badge_outlined,
-                  label: application.occupation,
-                ),
-                _SummaryItem(
-                  icon: Icons.people_outline,
-                  label:
-                      '${application.numberOfOccupants} '
-                      '${application.numberOfOccupants == 1 ? 'occupant' : 'occupants'}',
-                ),
-                _SummaryItem(
-                  icon: Icons.payments_outlined,
-                  label:
-                      'Income ${application.monthlyIncome.toStringAsFixed(2)}',
-                ),
-              ],
-            ),
-            if (_hasText(application.tenantNote)) ...[
-              const SizedBox(height: AppSpacing.base),
-              _DetailBlock(
-                label: 'Your note',
-                value: application.tenantNote!.trim(),
-              ),
-            ],
-            if (!isResubmission) ...[
-              const SizedBox(height: AppSpacing.md),
-              _DetailBlock(
-                label: 'Landlord response',
-                value: _hasText(application.landlordResponse)
-                    ? application.landlordResponse!.trim()
-                    : 'No response yet.',
-                highlighted: _hasText(application.landlordResponse),
-              ),
-            ],
-            const SizedBox(height: AppSpacing.md),
-            _ApplicationTimestamp(
-              label: 'Created',
-              timestamp: application.createdAt,
-            ),
-            if (application.submittedAt case final timestamp?) ...[
-              const SizedBox(height: AppSpacing.xs),
-              _ApplicationTimestamp(label: 'Submitted', timestamp: timestamp),
-            ],
-            if (application.updatedAt case final timestamp?) ...[
-              const SizedBox(height: AppSpacing.xs),
-              _ApplicationTimestamp(label: 'Updated', timestamp: timestamp),
-            ],
-            const SizedBox(height: AppSpacing.base),
-            const Divider(height: 1, color: AppPalette.border),
-            const SizedBox(height: AppSpacing.base),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final detailsButton = OutlinedButton.icon(
-                  onPressed: isBusy ? null : onDetails,
-                  icon: const Icon(Icons.visibility_outlined),
-                  label: const Text('Details'),
-                );
-                final documentsButton = OutlinedButton.icon(
-                  key: ValueKey('application-documents-${application.id}'),
-                  onPressed: isBusy ? null : onDocuments,
-                  icon: const Icon(Icons.folder_open_outlined),
-                  label: const Text('Documents'),
-                );
-                if (constraints.maxWidth < 330) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      detailsButton,
-                      const SizedBox(height: AppSpacing.sm),
-                      documentsButton,
-                    ],
-                  );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: detailsButton),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(child: documentsButton),
-                  ],
-                );
-              },
-            ),
-            if (canSubmit) ...[
-              const SizedBox(height: AppSpacing.sm),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: isBusy ? null : onSubmit,
-                  icon: isSubmitting
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.send_outlined),
-                  label: Text(
-                    isSubmitting
-                        ? (isResubmission ? 'Resubmitting...' : 'Submitting...')
-                        : (isResubmission
-                              ? 'Resubmit application'
-                              : 'Submit application'),
-                  ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppPalette.primary,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size.fromHeight(48),
-                  ),
-                ),
-              ),
-            ],
-            if (canWithdraw) ...[
-              const SizedBox(height: AppSpacing.xs),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton.icon(
-                  onPressed: isBusy ? null : onWithdraw,
-                  icon: isWithdrawing
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.undo_outlined),
-                  label: Text(
-                    isWithdrawing ? 'Withdrawing...' : 'Withdraw application',
-                  ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppPalette.danger,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
-}
-
-class _ChangesRequestedCallout extends StatelessWidget {
-  const _ChangesRequestedCallout({required this.landlordResponse});
-
-  final String? landlordResponse;
-
-  @override
-  Widget build(BuildContext context) {
-    final response = landlordResponse?.trim();
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF4E2),
-        border: Border.all(color: const Color(0xFFE2BF86)),
-        borderRadius: BorderRadius.circular(AppRadii.small),
-      ),
+      actionRequired: actionRequired,
+      onTap: busy ? null : onDetails,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.edit_notifications_outlined,
-                size: 20,
-                color: Color(0xFF755028),
-              ),
-              const SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: Text(
-                  'Changes requested by the landlord',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: const Color(0xFF755028),
-                    fontWeight: FontWeight.w700,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: TenantApplicationStatusChip(
+                    status: application.status,
                   ),
                 ),
+              ),
+              PopupMenuButton<String>(
+                key: ValueKey('application-actions-${application.id}'),
+                tooltip: 'Application actions',
+                enabled: !busy,
+                icon: busy
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(
+                        Icons.more_horiz,
+                        size: 20,
+                        color: AppPalette.olive,
+                      ),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'documents':
+                      onDocuments();
+                    case 'submit':
+                      onSubmit();
+                    case 'withdraw':
+                      onWithdraw();
+                  }
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'documents',
+                    key: ValueKey('application-documents-${application.id}'),
+                    child: const Text('Documents'),
+                  ),
+                  if (canSubmit)
+                    PopupMenuItem(
+                      value: 'submit',
+                      child: Text(
+                        actionRequired
+                            ? 'Resubmit application'
+                            : 'Submit application',
+                      ),
+                    ),
+                  if (canWithdraw)
+                    const PopupMenuItem(
+                      value: 'withdraw',
+                      child: Text('Withdraw application'),
+                    ),
+                ],
               ),
             ],
           ),
-          if (response != null && response.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(response, style: const TextStyle(height: 1.4)),
-          ],
-          const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: 10),
           Text(
-            'Review the request, update available details or documents, then resubmit.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: AppPalette.muted),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ApplicationInfoRow extends StatelessWidget {
-  const _ApplicationInfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: AppPalette.background,
-        borderRadius: BorderRadius.circular(AppRadii.small),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 19, color: AppPalette.primary),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: AppPalette.muted,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppPalette.text,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
+            propertyTitle?.trim().isNotEmpty == true
+                ? propertyTitle!
+                : 'Property details unavailable',
+            style: AppTypography.sectionTitle.copyWith(
+              fontWeight: FontWeight.w500,
+              color: AppPalette.darkOlive,
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ApplicationTimestamp extends StatelessWidget {
-  const _ApplicationTimestamp({required this.label, required this.timestamp});
-
-  final String label;
-
-  final DateTime timestamp;
-
-  @override
-  Widget build(BuildContext context) {
-    final localTimestamp = timestamp.toLocal();
-    final localizations = MaterialLocalizations.of(context);
-    final date = localizations.formatMediumDate(localTimestamp);
-    final time = localizations.formatTimeOfDay(
-      TimeOfDay.fromDateTime(localTimestamp),
-    );
-
-    return Row(
-      children: [
-        const Icon(
-          Icons.schedule_outlined,
-          size: 18,
-          color: AppPalette.primary,
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            '$label $date at $time',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: AppPalette.muted),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SummaryItem extends StatelessWidget {
-  const _SummaryItem({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppPalette.background,
-        borderRadius: BorderRadius.circular(AppRadii.small),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 17, color: AppPalette.primary),
-          const SizedBox(width: 6),
-          Text(label),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailBlock extends StatelessWidget {
-  const _DetailBlock({
-    required this.label,
-    required this.value,
-    this.highlighted = false,
-  });
-
-  final String label;
-  final String value;
-  final bool highlighted;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: highlighted ? const Color(0xFFECEFDF) : const Color(0xFFF5F3ED),
-        borderRadius: BorderRadius.circular(AppRadii.small),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: AppPalette.primary,
-              fontWeight: FontWeight.w700,
+          const SizedBox(height: 6),
+          Text(metadata, style: applicationMetadata),
+          const Divider(height: 28, thickness: 1),
+          ApplicationJourneyActionRow(
+            summary: Text(
+              summary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: applicationMetadata,
             ),
+            label: continueApplication ? 'Continue' : 'View details',
+            actionKey: ValueKey('application-details-${application.id}'),
+            onPressed: busy
+                ? null
+                : continueApplication
+                ? onContinue
+                : onDetails,
           ),
-          const SizedBox(height: 4),
-          Text(value),
         ],
       ),
     );
   }
 }
 
-class _MessageState extends StatelessWidget {
-  const _MessageState({
-    required this.icon,
+class _ApplicationListState extends StatelessWidget {
+  const _ApplicationListState({
     required this.title,
     required this.message,
-    required this.actionLabel,
-    required this.onAction,
+    required this.onRetry,
+    this.onBrowse,
     this.isError = false,
   });
-
-  final IconData icon;
   final String title;
   final String message;
-  final String actionLabel;
-  final Future<void> Function() onAction;
+  final Future<void> Function() onRetry;
+  final VoidCallback? onBrowse;
   final bool isError;
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Card(
-            key: ValueKey(
-              isError ? 'applications-error' : 'applications-empty',
-            ),
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: isError
-                          ? const Color(0xFFF5DDDC)
-                          : const Color(0xFFECEFDF),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      icon,
-                      size: 32,
-                      color: isError ? AppPalette.danger : AppPalette.primary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.base),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: AppPalette.text,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    message,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: AppPalette.muted,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  OutlinedButton.icon(
-                    onPressed: onAction,
-                    icon: const Icon(Icons.refresh_outlined),
-                    label: Text(actionLabel),
-                  ),
-                ],
-              ),
+  Widget build(BuildContext context) => Center(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: Column(
+        key: ValueKey(isError ? 'applications-error' : 'applications-empty'),
+        children: [
+          CircleAvatar(
+            radius: 30,
+            backgroundColor: isError
+                ? const Color(0xFFF5DDDC)
+                : AppPalette.sage,
+            child: Icon(
+              isError ? Icons.cloud_off_outlined : Icons.description_outlined,
+              color: isError ? AppPalette.danger : AppPalette.olive,
+              size: 26,
             ),
           ),
-        ),
+          const SizedBox(height: 20),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: applicationSectionTitle,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: AppTypography.body.copyWith(color: AppPalette.secondaryText),
+          ),
+          const SizedBox(height: 20),
+          if (onBrowse != null)
+            FilledButton(
+              onPressed: onBrowse,
+              child: const Text('Browse properties'),
+            ),
+          if (isError)
+            OutlinedButton(onPressed: onRetry, child: const Text('Try again'))
+          else
+            TextButton(onPressed: onRetry, child: const Text('Refresh')),
+        ],
       ),
-    );
-  }
-}
-
-class _LoadingState extends StatelessWidget {
-  const _LoadingState({required this.title, required this.message});
-
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          key: const ValueKey('applications-loading'),
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox.square(
-              dimension: 34,
-              child: CircularProgressIndicator(
-                color: AppPalette.primary,
-                strokeWidth: 3,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.base),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppPalette.text,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: AppPalette.muted),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }

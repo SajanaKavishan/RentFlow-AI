@@ -50,6 +50,22 @@ Map<String, dynamic> _applicationJson(int status, {String? id}) => {
 RentalApplication _application(int status) =>
     RentalApplication.fromJson(_applicationJson(status));
 
+Map<String, dynamic> _propertyJson() => {
+  'id': '22222222-2222-4222-8222-222222222222',
+  'landlordId': '44444444-4444-4444-8444-444444444444',
+  'title': 'Maple Mews',
+  'description': 'A home from the property API.',
+  'address': '12 Test Street',
+  'city': 'Colombo',
+  'monthlyRent': 100000,
+  'bedrooms': 2,
+  'bathrooms': 1,
+  'isAvailable': true,
+  'createdAt': '2026-09-01T00:00:00Z',
+  'updatedAt': null,
+  'amenities': <String>[],
+};
+
 Future<ApiClient> _pump(
   WidgetTester tester, {
   required Widget Function(RentalApplicationApiService service) builder,
@@ -58,7 +74,13 @@ Future<ApiClient> _pump(
   final client = ApiClient(
     baseUrl: 'http://test',
     tokenStorage: _TokenStorage(),
-    httpClient: MockClient(handler),
+    httpClient: MockClient((request) async {
+      if (request.url.path ==
+          '/api/properties/22222222-2222-4222-8222-222222222222') {
+        return http.Response(jsonEncode(_propertyJson()), 200);
+      }
+      return handler(request);
+    }),
   );
   addTearDown(client.close);
   await tester.pumpWidget(
@@ -97,21 +119,23 @@ void main() {
     );
 
     for (final label in [
-      'Draft',
-      'Submitted',
-      'Under Review',
-      'Changes Requested',
-      'Approved',
-      'Rejected',
-      'Withdrawn',
+      'DRAFT',
+      'SUBMITTED',
+      'UNDER REVIEW',
+      'ACTION REQUIRED',
+      'APPROVED',
+      'REJECTED',
+      'WITHDRAWN',
     ]) {
       expect(find.text(label), findsOneWidget);
     }
-    expect(find.text('ACTION NEEDED'), findsOneWidget);
+    expect(find.text('RENTAL JOURNEY'), findsOneWidget);
+    expect(find.text('My applications'), findsOneWidget);
+    expect(find.text('Maple Mews'), findsNWidgets(7));
     expect(find.text('Please update your income.'), findsOneWidget);
     expect(find.textContaining('Created '), findsNWidgets(7));
     expect(find.textContaining('Submitted '), findsNWidgets(6));
-    expect(find.textContaining('Updated '), findsNWidgets(6));
+    expect(find.textContaining('Updated '), findsNWidgets(5));
     expect(
       tester
           .getTopLeft(
@@ -151,6 +175,10 @@ void main() {
         rentalApplicationApiService: service,
       ),
       handler: (request) async {
+        if (request.url.path ==
+            '/api/rental-applications/33333333-3333-4333-8333-333333333333') {
+          return http.Response(jsonEncode(_applicationJson(3)), 200);
+        }
         if (request.url.path.endsWith('/documents')) {
           return http.Response(
             jsonEncode([
@@ -171,15 +199,16 @@ void main() {
       },
     );
 
-    expect(find.text('Action required'), findsOneWidget);
-    expect(find.text('22222222-2222-4222-8222-222222222222'), findsOneWidget);
-    expect(find.text('Created'), findsOneWidget);
-    expect(find.text('Submitted'), findsOneWidget);
+    expect(find.text('ACTION REQUIRED'), findsOneWidget);
+    expect(find.text('Maple Mews'), findsOneWidget);
+    expect(find.text('22222222-2222-4222-8222-222222222222'), findsNothing);
+    expect(find.text('Application created'), findsOneWidget);
+    expect(find.text('Application submitted'), findsOneWidget);
     expect(find.text('Last updated'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('1 document uploaded'), 500);
     expect(find.text('1 document uploaded'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Edit application'), 500);
-    expect(find.text('Edit application'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Resubmit application'), 500);
+    expect(find.text('Continue application'), findsOneWidget);
     expect(find.text('Resubmit application'), findsOneWidget);
     expect(find.text('Withdraw application'), findsOneWidget);
     expect(find.textContaining('AI validation'), findsNothing);
@@ -193,6 +222,7 @@ void main() {
     tester.view.physicalSize = const Size(390, 900);
     addTearDown(tester.view.reset);
     final requests = <http.Request>[];
+    var status = 3;
 
     await _pump(
       tester,
@@ -207,7 +237,29 @@ void main() {
           return http.Response(jsonEncode(_applicationJson(3)), 200);
         }
         if (request.method == 'PATCH') {
+          status = 1;
           return http.Response(jsonEncode(_applicationJson(1)), 200);
+        }
+        if (request.url.path.endsWith('/documents')) {
+          return http.Response(
+            jsonEncode([
+              for (final type in [0, 1])
+                {
+                  'id': 'document-$type',
+                  'applicationId': '33333333-3333-4333-8333-333333333333',
+                  'documentType': type,
+                  'originalFileName': 'document-$type.pdf',
+                  'contentType': 'application/pdf',
+                  'fileSizeBytes': 128,
+                  'uploadedAt': '2026-09-15T10:00:00Z',
+                },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path ==
+            '/api/rental-applications/33333333-3333-4333-8333-333333333333') {
+          return http.Response(jsonEncode(_applicationJson(status)), 200);
         }
         return http.Response('{}', 404);
       },
@@ -215,7 +267,7 @@ void main() {
 
     expect(find.text('Personal'), findsWidgets);
     expect(find.text('Please update your income.'), findsOneWidget);
-    for (final step in ['Employment/Financial', 'Documents']) {
+    for (final step in ['Financial information', 'Documents information']) {
       await tester.ensureVisible(
         find.byKey(const ValueKey('application-next-step')),
       );
@@ -228,24 +280,22 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('application-next-step')));
     await tester.pumpAndSettle();
-    expect(find.text('Review & Submit'), findsWidgets);
-
-    await tester.ensureVisible(find.byKey(const ValueKey('save-application')));
-    await tester.tap(find.byKey(const ValueKey('save-application')));
-    await tester.pumpAndSettle();
-    expect(requests.single.method, 'PUT');
-    expect(find.text('Application changes saved.'), findsOneWidget);
-
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
+    expect(find.text('Review information'), findsOneWidget);
+    expect(requests.where((request) => request.method == 'PUT'), hasLength(2));
     await tester.ensureVisible(
       find.byKey(const ValueKey('submit-application')),
     );
     await tester.tap(find.byKey(const ValueKey('submit-application')));
     await tester.pumpAndSettle();
-    expect(requests.map((request) => request.method), ['PUT', 'PATCH']);
-    expect(find.text('Submitted'), findsOneWidget);
-    expect(find.text('Application resubmitted successfully.'), findsOneWidget);
+    expect(
+      requests
+          .where((request) => request.method != 'GET')
+          .map((request) => request.method),
+      ['PUT', 'PUT', 'PUT', 'PATCH'],
+    );
+    expect(find.byType(RentalApplicationDetailsScreen), findsOneWidget);
+    expect(find.text('SUBMITTED'), findsOneWidget);
+    expect(find.text('Continue application'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
