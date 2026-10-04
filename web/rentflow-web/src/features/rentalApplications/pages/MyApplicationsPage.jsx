@@ -78,6 +78,7 @@ export default function MyApplicationsPage() {
       <PropertyWorkflowHandoff
         propertyId={propertyId}
         workflow="application"
+        refreshVersion={attempt}
         existingCount={selectedPropertyApplications}
       />
     )}

@@ -15,6 +15,8 @@ import '../../properties/widgets/property_photo.dart';
 import '../models/viewing.dart';
 import '../services/viewing_api_service.dart';
 import '../widgets/viewing_page_header.dart';
+import '../../rental_applications/widgets/application_eligibility_action.dart';
+import '../../rental_applications/services/rental_application_api_service.dart';
 
 class TenantViewingDetailsScreen extends StatefulWidget {
   const TenantViewingDetailsScreen({
@@ -47,6 +49,7 @@ class _TenantViewingDetailsScreenState extends State<TenantViewingDetailsScreen>
   bool _fresh = false;
   bool _calling = false;
   Timer? _cancellationExpiry;
+  int _applicationRefreshVersion = 0;
 
   DateTime get _now => widget.nowProvider?.call() ?? DateTime.now();
   bool get _canCancel => _fresh && (_viewing?.canCancel ?? false);
@@ -140,6 +143,7 @@ class _TenantViewingDetailsScreenState extends State<TenantViewingDetailsScreen>
       if (!mounted) return;
       setState(() {
         _setViewing(viewing);
+        _applicationRefreshVersion++;
         _property = property;
         _landlordContact = contact;
       });
@@ -327,6 +331,20 @@ class _TenantViewingDetailsScreenState extends State<TenantViewingDetailsScreen>
                     _separator,
                     _lastUpdated(viewing),
                     const SizedBox(height: 24),
+                    if (viewing.status == ViewingStatus.completed) ...[
+                      ApplicationEligibilityAction(
+                        key: ValueKey(
+                          'completed-application-$_applicationRefreshVersion',
+                        ),
+                        propertyId: viewing.propertyId,
+                        propertyTitle: _property?.title,
+                        completedViewing: true,
+                        apiService: RentalApplicationApiService(
+                          widget.viewingApiService.apiClient,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
                   ],
                   FilledButton(
                     style: FilledButton.styleFrom(

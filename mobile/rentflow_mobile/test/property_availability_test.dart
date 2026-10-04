@@ -139,7 +139,12 @@ void main() {
         );
       } else {
         expect(find.byKey(const Key('details-book-viewing')), findsNothing);
-        expect(find.byKey(const Key('details-apply-now')), findsNothing);
+        expect(
+          tester
+              .widget<FilledButton>(find.byKey(const Key('details-apply-now')))
+              .onPressed,
+          isNull,
+        );
       }
       expect(tester.takeException(), isNull);
 

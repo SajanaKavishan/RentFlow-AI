@@ -49,10 +49,25 @@ Map<String, dynamic> propertyJson({bool available = true}) => {
 PropertyApiService serviceWith({
   required http.Response Function(http.Request) respond,
   required void Function(ApiClient) register,
+  bool canApply = true,
 }) {
   final client = ApiClient(
     baseUrl: 'https://test.example',
-    httpClient: MockClient((request) async => respond(request)),
+    httpClient: MockClient(
+      (request) async =>
+          request.url.path.endsWith('/rental-application-eligibility')
+          ? http.Response(
+              jsonEncode({
+                'canApply': canApply,
+                'hasCompletedViewing': true,
+                'reason': canApply
+                    ? null
+                    : 'This property is currently unavailable.',
+              }),
+              200,
+            )
+          : respond(request),
+    ),
     tokenStorage: MemoryTokenStorage(),
   );
   register(client);
@@ -366,6 +381,7 @@ void main() {
     late ApiClient client;
     final listing = propertyJson(available: false);
     final service = serviceWith(
+      canApply: false,
       register: (value) => client = value,
       respond: (request) {
         if (request.url.path.endsWith('/images')) {
@@ -390,7 +406,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Book Viewing'), findsNothing);
     expect(find.text('Apply Now'), findsNothing);
-    expect(find.textContaining('currently unavailable'), findsOneWidget);
+    expect(find.textContaining('currently unavailable'), findsNWidgets(2));
     expect(find.text('Listing preferences'), findsNothing);
     await tester.scrollUntilVisible(
       find.text('Landlord details unavailable'),

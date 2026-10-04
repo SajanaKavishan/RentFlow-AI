@@ -25,6 +25,7 @@ class DiscoveryBackend {
   final List<http.Request> requests = [];
   final Map<String, int?> scores = {fixture.id: 94};
   List<Map<String, dynamic>> properties = [fixture.propertyJson()];
+  final Set<String> completedPropertyIds = {fixture.id};
   Future<http.Response?> Function(http.Request)? intercept;
   late final ApiClient client;
   late final PropertyApiService service;
@@ -38,6 +39,32 @@ class DiscoveryBackend {
         final intercepted = await intercept?.call(request);
         if (intercepted != null) return intercepted;
         final path = request.url.path;
+        if (path.endsWith('/rental-application-eligibility')) {
+          final propertyId = path.split('/')[3];
+          final matches = properties.where((p) => p['id'] == propertyId);
+          final completed = completedPropertyIds.contains(propertyId);
+          return json({
+            'canApply':
+                completed &&
+                matches.isNotEmpty &&
+                matches.first['isAvailable'] == true,
+            'hasCompletedViewing': completed,
+            'reason': completed
+                ? null
+                : 'Complete a viewing before applying for this property.',
+          });
+        }
+        if (path == '/api/rental-applications/eligible-properties') {
+          return json(
+            properties
+                .where(
+                  (p) =>
+                      p['isAvailable'] == true &&
+                      completedPropertyIds.contains(p['id']),
+                )
+                .toList(),
+          );
+        }
         if (path == preferencesPath) {
           if (request.method == 'PUT') {
             preferences = {

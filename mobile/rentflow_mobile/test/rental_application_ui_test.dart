@@ -75,6 +75,16 @@ Future<ApiClient> _pump(
     baseUrl: 'http://test',
     tokenStorage: _TokenStorage(),
     httpClient: MockClient((request) async {
+      if (request.url.path.endsWith('/rental-application-eligibility')) {
+        return http.Response(
+          jsonEncode({
+            'canApply': true,
+            'hasCompletedViewing': true,
+            'reason': null,
+          }),
+          200,
+        );
+      }
       if (request.url.path ==
           '/api/properties/22222222-2222-4222-8222-222222222222') {
         return http.Response(jsonEncode(_propertyJson()), 200);

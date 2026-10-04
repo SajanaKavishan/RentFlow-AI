@@ -96,6 +96,8 @@ public sealed class BusinessAuthorizationTests
         using var factory = new AuthApiFactory();
         var property = await SeedPropertyAsync(factory, LandlordA);
         var other = await SeedApplicationAsync(factory, TenantB, RentalApplicationStatus.Draft);
+        await SeedAsync(factory, db => db.ViewingRequests.Add(new ViewingRequest
+        { TenantId = TenantA, PropertyId = property.Id, Status = ViewingStatus.Completed }));
         using var client = AuthorizedClient(factory, TenantA, UserRole.Tenant);
 
         var create = await client.PostAsJsonAsync(
@@ -313,6 +315,8 @@ public sealed class BusinessAuthorizationTests
         using var factory = new AuthApiFactory();
         var propertyId = (await SeedPropertyAsync(factory, LandlordA)).Id;
         using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant, false);
+        await SeedAsync(factory, db => db.ViewingRequests.Add(new ViewingRequest
+        { TenantId = TenantA, PropertyId = propertyId, Status = ViewingStatus.Completed }));
         using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord, false);
 
         var create = await tenant.PostAsJsonAsync("/api/rental-applications", new
@@ -1570,7 +1574,12 @@ public sealed class BusinessAuthorizationTests
             MonthlyIncome = 250000m, Occupation = "Engineer", NumberOfOccupants = 1,
             Status = status, CreatedAt = DateTimeOffset.UtcNow
         };
-        await SeedAsync(factory, context => context.RentalApplications.Add(application));
+        await SeedAsync(factory, context =>
+        {
+            context.RentalApplications.Add(application);
+            context.ViewingRequests.Add(new ViewingRequest
+            { TenantId = tenantId, PropertyId = application.PropertyId, Status = ViewingStatus.Completed });
+        });
         return application;
     }
 

@@ -8,6 +8,7 @@ import 'package:rentflow_mobile/features/properties/screens/property_details_scr
 import 'package:rentflow_mobile/features/properties/screens/property_list_screen.dart';
 import 'package:rentflow_mobile/features/rental_applications/models/rental_application.dart';
 import 'package:rentflow_mobile/features/rental_applications/screens/my_rental_applications_screen.dart';
+import 'package:rentflow_mobile/features/rental_applications/screens/eligible_application_properties_screen.dart';
 import 'package:rentflow_mobile/features/rental_applications/screens/rental_application_details_screen.dart';
 import 'package:rentflow_mobile/features/rental_applications/screens/rental_application_form_screen.dart';
 import 'package:rentflow_mobile/features/rental_applications/services/rental_application_api_service.dart';
@@ -410,17 +411,25 @@ void main() {
 
   for (final action in ['+ New', 'Browse properties']) {
     testWidgets(
-      '$action follows property discovery to the supported new application form',
+      '$action follows its supported route to the new application form',
       (tester) async {
         final backend = _Backend();
         backend.applications = [];
         await _open(tester, backend);
         expect(find.text('No applications yet'), findsOneWidget);
         await _tap(tester, find.text(action));
-        expect(find.byType(PropertyListScreen), findsOneWidget);
-        await _tap(tester, find.text('Maple Mews'));
-        expect(find.byType(PropertyDetailsScreen), findsOneWidget);
-        await _tap(tester, find.byKey(const Key('details-apply-now')));
+        if (action == '+ New') {
+          expect(
+            find.byType(EligibleApplicationPropertiesScreen),
+            findsOneWidget,
+          );
+          await _tap(tester, find.text('Start application'));
+        } else {
+          expect(find.byType(PropertyListScreen), findsOneWidget);
+          await _tap(tester, find.text('Maple Mews'));
+          expect(find.byType(PropertyDetailsScreen), findsOneWidget);
+          await _tap(tester, find.byKey(const Key('details-apply-now')));
+        }
         final form = tester.widget<RentalApplicationFormScreen>(
           find.byType(RentalApplicationFormScreen),
         );

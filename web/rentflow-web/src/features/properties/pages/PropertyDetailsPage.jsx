@@ -27,6 +27,7 @@ import {
   RENTAL_APPLICATION_STATUS,
 } from '../../rentalApplications/services/rentalApplicationApiService.js'
 import '../properties.css'
+import { useApplicationEligibility } from '../../rentalApplications/useApplicationEligibility.js'
 
 const MANAGE_PROPERTIES_PATH = '/modules/manage-properties'
 const ACTIVE_APPLICATION_STATUSES = new Set([
@@ -88,6 +89,8 @@ export default function PropertyDetailsPage() {
   const isOwner = user?.role === USER_ROLES.LANDLORD
     && String(user.id).toLowerCase() === String(property?.landlordId).toLowerCase()
   const isTenant = user?.role === USER_ROLES.TENANT
+  const eligibility = useApplicationEligibility(propertyId, isTenant && Boolean(property))
+  const canOpenApplication = !eligibility.loading && (eligibility.data?.canApply === true || Boolean(eligibility.data?.existingApplicationId))
   const matchScore = matchResult.propertyId === propertyId ? matchResult.score : null
   const matchReasons = matchResult.propertyId === propertyId ? matchResult.reasons : []
   const backPath = user?.role === USER_ROLES.LANDLORD
@@ -492,15 +495,16 @@ export default function PropertyDetailsPage() {
                   {workflowState.viewings > 0 ? 'View viewing requests' : 'Book a Viewing'}
                 </Link>
                 <Link
-                  className={`property-details-summary__secondary${property.isAvailable || workflowState.applications > 0 ? '' : ' is-disabled'}`}
-                  to={`/modules/my-applications?propertyId=${encodeURIComponent(property.id)}`}
-                  aria-disabled={!property.isAvailable && workflowState.applications === 0}
-                  onClick={(event) => { if (!property.isAvailable && workflowState.applications === 0) event.preventDefault() }}
+                  className={`property-details-summary__secondary${canOpenApplication ? '' : ' is-disabled'}`}
+                  to={eligibility.data?.existingApplicationId ? `/notifications/rental-application/${encodeURIComponent(eligibility.data.existingApplicationId)}` : `/modules/my-applications?propertyId=${encodeURIComponent(property.id)}`}
+                  aria-disabled={!canOpenApplication}
+                  onClick={(event) => { if (!canOpenApplication) event.preventDefault() }}
                 >
-                  {workflowState.activeApplication || (!property.isAvailable && workflowState.applications > 0)
+                  {eligibility.data?.existingApplicationId
                     ? 'View application'
-                    : 'Apply for Rental'}
+                    : eligibility.loading ? 'Checking eligibility…' : eligibility.data?.canApply ? 'Apply for Rental' : 'Apply after viewing'}
                 </Link>
+                {!canOpenApplication && !eligibility.loading && <p>{eligibility.error || eligibility.data?.reason || 'Complete a viewing before applying for this property.'}</p>}
                 <p>{property.isAvailable
                   ? 'Your selected property will be carried into each workspace. New bookings and applications are completed in the RentFlow mobile app.'
                   : 'This property is currently unavailable. Existing requests and applications remain accessible.'}</p>

@@ -118,6 +118,8 @@ public sealed class NotificationEventsTests
         using var factory = new AuthApiFactory();
         var propertyA = await SeedPropertyAsync(factory, LandlordA);
         var propertyB = await SeedPropertyAsync(factory, LandlordB);
+        await SeedAsync(factory, db => db.ViewingRequests.Add(new ViewingRequest
+        { TenantId = TenantA, PropertyId = propertyB.Id, Status = ViewingStatus.Completed }));
         using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
 
         var viewingResponse = await tenant.PostAsJsonAsync(
@@ -348,7 +350,12 @@ public sealed class NotificationEventsTests
             Status = status,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        await SeedAsync(factory, context => context.RentalApplications.Add(application));
+        await SeedAsync(factory, context =>
+        {
+            context.RentalApplications.Add(application);
+            context.ViewingRequests.Add(new ViewingRequest
+            { TenantId = tenantId, PropertyId = propertyId, Status = ViewingStatus.Completed });
+        });
         return application;
     }
 

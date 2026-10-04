@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.Viewings;
+using RentFlow.Api.DTOs.RentalApplications;
 using RentFlow.Api.Models;
 using RentFlow.Api.Services;
 using RentFlow.Api.Tests.Services;
@@ -13,6 +14,49 @@ namespace RentFlow.Api.Tests.Data;
 
 public sealed class ViewingPostgresTests
 {
+    [PostgreSqlFact]
+    public async Task RentalApplicationEligibility_QueriesRealHistoryAndSerializesCompetingCreates()
+    {
+        await using var database = new Database(); await database.CreateAsync();
+        await using var setup = new ApplicationDbContext(database.Options);
+        var (property, slot) = await SeedAsync(setup);
+        var tenant = new ApplicationUser { FullName = "Eligible tenant", Email = $"{Guid.NewGuid():N}@example.test",
+            NormalizedEmail = Guid.NewGuid().ToString("N"), PhoneNumber = "0000000000", PasswordHash = "test-only", Role = UserRole.Tenant };
+        setup.Add(tenant);
+        setup.AddRange(new ViewingRequest { TenantId = tenant.Id, PropertyId = property.Id, Status = ViewingStatus.Completed, RequestedDateTime = slot.RequestedDateTime },
+            new ViewingRequest { TenantId = tenant.Id, PropertyId = property.Id, Status = ViewingStatus.Completed, RequestedDateTime = slot.RequestedDateTime.AddDays(-365) });
+        await setup.SaveChangesAsync();
+        var service = new RentalApplicationService(setup);
+        Assert.True((await service.GetEligibilityAsync(tenant.Id, property.Id)).CanApply);
+        Assert.Equal(property.Id, Assert.Single(await service.GetEligiblePropertiesAsync(tenant.Id)).Id);
+        Assert.Empty(await service.GetEligiblePropertiesAsync(Guid.NewGuid()));
+        await using var blocker = new ApplicationDbContext(database.Options);
+        await using var held = await blocker.Database.BeginTransactionAsync();
+        await blocker.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Properties\" WHERE \"Id\" = {property.Id} FOR UPDATE");
+        await using var db1 = new ApplicationDbContext(database.Options);
+        await using var db2 = new ApplicationDbContext(database.Options);
+        async Task<bool> Create(ApplicationDbContext context)
+        {
+            try
+            {
+                await new RentalApplicationService(context).CreateAsync(tenant.Id, new CreateRentalApplicationDto
+                { PropertyId = property.Id, MoveInDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), MonthlyIncome = 100000,
+                    Occupation = "Engineer", NumberOfOccupants = 1 });
+                return true;
+            }
+            catch (RentalApplicationServiceException error)
+            { Assert.Equal(RentalApplicationServiceError.Conflict, error.Error); return false; }
+        }
+        var first = Create(db1); var second = Create(db2);
+        await Task.Delay(200);
+        Assert.False(first.IsCompleted); Assert.False(second.IsCompleted);
+        await held.CommitAsync();
+        Assert.Single(await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(20)), success => success);
+        var draft = await setup.RentalApplications.AsNoTracking().SingleAsync();
+        Assert.Equal(draft.Id, (await service.GetEligibilityAsync(tenant.Id, property.Id)).ExistingApplicationId);
+        Assert.Empty(await service.GetEligiblePropertiesAsync(tenant.Id));
+    }
+
     private sealed class Database : IAsyncDisposable
     {
         private readonly string admin;

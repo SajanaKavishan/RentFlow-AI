@@ -18,6 +18,9 @@ public class RentalApplicationServiceTests
         var tenantId = Guid.NewGuid();
         var request = CreateValidRequest();
 
+        context.Properties.Add(new Property { Id = request.PropertyId, LandlordId = Guid.NewGuid(), Title = "Application test" });
+        context.ViewingRequests.Add(new ViewingRequest { TenantId = tenantId, PropertyId = request.PropertyId, Status = ViewingStatus.Completed });
+        await context.SaveChangesAsync();
         var result = await service.CreateAsync(tenantId, request);
 
         Assert.NotEqual(Guid.Empty, result.Id);
@@ -525,6 +528,8 @@ public class RentalApplicationServiceTests
         }
 
         context.RentalApplications.Add(application);
+        context.ViewingRequests.Add(new ViewingRequest
+        { TenantId = application.TenantId, PropertyId = application.PropertyId, Status = ViewingStatus.Completed });
         return application;
     }
 

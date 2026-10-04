@@ -7,7 +7,7 @@ import '../widgets/amenity_icon.dart';
 import '../widgets/public_landlord_avatar.dart';
 import 'public_landlord_profile_screen.dart';
 import '../../../shared/widgets/shared_widgets.dart';
-import '../../rental_applications/screens/rental_application_form_screen.dart';
+import '../../rental_applications/widgets/application_eligibility_action.dart';
 import '../../rental_applications/services/rental_application_api_service.dart';
 import '../../viewings/screens/book_viewing_screen.dart';
 import '../../viewings/services/viewing_api_service.dart';
@@ -133,19 +133,6 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
           property: _property,
           propertyApiService: widget.propertyApiService,
           viewingApiService: widget.viewingApiService,
-        ),
-      ),
-    );
-    if (mounted) await _refreshProperty();
-  }
-
-  Future<void> _openApplication() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => RentalApplicationFormScreen(
-          propertyId: _property.id,
-          propertyTitle: _property.title,
-          rentalApplicationApiService: widget.rentalApplicationApiService,
         ),
       ),
     );
@@ -1039,10 +1026,28 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
               ],
             )
           : !_property.isAvailable
-          ? const Text(
-              'This property is currently unavailable for viewings or applications.',
-              textAlign: TextAlign.center,
-              style: AppTypography.bodySmall,
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'This property is currently unavailable for viewings or applications.',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.bodySmall,
+                ),
+                ApplicationEligibilityAction(
+                  allowNew: false,
+                  key: ValueKey(
+                    'application-eligibility-$_contactRefreshVersion',
+                  ),
+                  propertyId: _property.id,
+                  propertyTitle: _property.title,
+                  apiService:
+                      widget.rentalApplicationApiService ??
+                      RentalApplicationApiService(
+                        widget.propertyApiService.apiClient,
+                      ),
+                ),
+              ],
             )
           : IntrinsicHeight(
               child: Row(
@@ -1076,28 +1081,17 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: FilledButton(
-                      key: const Key('details-apply-now'),
-                      onPressed: _openApplication,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(44, 52),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 12,
-                        ),
-                        backgroundColor: AppPalette.olive,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                    child: ApplicationEligibilityAction(
+                      key: ValueKey(
+                        'application-eligibility-$_contactRefreshVersion',
                       ),
-                      child: const Text(
-                        'Apply Now',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: AppTypography.bodyLargeSize,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      propertyId: _property.id,
+                      propertyTitle: _property.title,
+                      apiService:
+                          widget.rentalApplicationApiService ??
+                          RentalApplicationApiService(
+                            widget.propertyApiService.apiClient,
+                          ),
                     ),
                   ),
                 ],

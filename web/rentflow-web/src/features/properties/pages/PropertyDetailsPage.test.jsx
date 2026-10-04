@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,7 +12,7 @@ import {
   getSavedPropertyMatches,
 } from '../services/propertyApiService.js'
 import { getMyViewings } from '../../viewings/services/viewingApiService.js'
-import { getMyApplications } from '../../rentalApplications/services/rentalApplicationApiService.js'
+import { getMyApplications, getApplicationEligibility } from '../../rentalApplications/services/rentalApplicationApiService.js'
 
 vi.mock('../../auth/useAuth.js', () => ({ useAuth: vi.fn() }))
 vi.mock('../services/propertyApiService.js', () => ({
@@ -28,6 +28,7 @@ vi.mock('../services/propertyApiService.js', () => ({
 vi.mock('../../viewings/services/viewingApiService.js', () => ({ getMyViewings: vi.fn() }))
 vi.mock('../../rentalApplications/services/rentalApplicationApiService.js', () => ({
   getMyApplications: vi.fn(),
+  getApplicationEligibility: vi.fn(),
   RENTAL_APPLICATION_STATUS: {
     DRAFT: 0,
     SUBMITTED: 1,
@@ -107,6 +108,7 @@ beforeEach(() => {
   })
   getMyViewings.mockResolvedValue([])
   getMyApplications.mockResolvedValue([])
+  getApplicationEligibility.mockResolvedValue({ canApply: true, hasCompletedViewing: true, reason: null })
   getSavedPropertyMatches.mockResolvedValue({
     matches: [{
       propertyId: 'property-1',
@@ -141,7 +143,7 @@ describe('tenant property details', () => {
     expect(screen.getByText('Rs. 120,000')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Book a Viewing' }))
       .toHaveAttribute('href', '/modules/my-viewings?propertyId=property-1')
-    expect(screen.getByRole('link', { name: 'Apply for Rental' }))
+    expect(await screen.findByRole('link', { name: 'Apply for Rental' }))
       .toHaveAttribute('href', '/modules/my-applications?propertyId=property-1')
     await waitFor(() => expect(screen.getByTestId('details-gallery')).toHaveTextContent('97% match'))
     expect(screen.getByRole('heading', { name: 'Why this matches' })).toBeInTheDocument()
@@ -226,24 +228,58 @@ describe('tenant property details', () => {
     getProperty.mockResolvedValue({ ...property, isAvailable: false })
     getMyViewings.mockResolvedValue([{ propertyId: 'property-1' }])
     getMyApplications.mockResolvedValue([{ propertyId: 'property-1', status: 2 }])
+    getApplicationEligibility.mockResolvedValue({ canApply: false, hasCompletedViewing: true, existingApplicationId: 'application-1', existingApplicationStatus: 2 })
     renderPage()
 
     expect(await screen.findByRole('link', { name: 'View viewing requests' }))
       .toHaveAttribute('href', '/modules/my-viewings?propertyId=property-1')
-    expect(screen.getByRole('link', { name: 'View application' }))
-      .toHaveAttribute('href', '/modules/my-applications?propertyId=property-1')
+    expect(await screen.findByRole('link', { name: 'View application' }))
+      .toHaveAttribute('href', '/notifications/rental-application/application-1')
     expect(screen.getByText('This property is currently unavailable. Existing requests and applications remain accessible.'))
       .toBeInTheDocument()
   })
 
   it('truthfully disables unavailable-property CTAs when no existing records are known', async () => {
     getProperty.mockResolvedValue({ ...property, isAvailable: false })
+    getApplicationEligibility.mockResolvedValue({ canApply: false, hasCompletedViewing: true, reason: 'This property is currently unavailable.' })
     renderPage()
 
     expect(await screen.findByRole('link', { name: 'Book a Viewing' }))
       .toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByRole('link', { name: 'Apply for Rental' }))
+    expect(await screen.findByRole('link', { name: 'Apply after viewing' }))
       .toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it.each(['no viewing', 'Approved viewing', 'another property’s Completed viewing'])('locks Apply using server eligibility with %s', async () => {
+    getApplicationEligibility.mockResolvedValue({ canApply: false, hasCompletedViewing: false, reason: 'Complete a viewing before applying for this property.' })
+    getMyViewings.mockResolvedValue([{ propertyId: 'property-2', status: 4 }, { propertyId: 'property-1', status: 1 }])
+    renderPage()
+    const link = await screen.findByRole('link', { name: 'Apply after viewing' })
+    expect(link).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('Complete a viewing before applying for this property.')).toBeInTheDocument()
+    await userEvent.click(link)
+    expect(screen.queryByText('My applications')).not.toBeInTheDocument()
+    expect(getApplicationEligibility).toHaveBeenCalledWith('property-1')
+  })
+
+  it('refreshes Completed eligibility and an application created on another device on focus', async () => {
+    getApplicationEligibility.mockResolvedValue({ canApply: false, hasCompletedViewing: false, reason: 'Complete a viewing before applying for this property.' })
+    renderPage()
+    await screen.findByRole('link', { name: 'Apply after viewing' })
+    getApplicationEligibility.mockResolvedValue({ canApply: true, hasCompletedViewing: true })
+    await act(async () => window.dispatchEvent(new Event('focus')))
+    expect(await screen.findByRole('link', { name: 'Apply for Rental' })).toHaveAttribute('aria-disabled', 'false')
+    getApplicationEligibility.mockResolvedValue({ canApply: false, hasCompletedViewing: true, existingApplicationId: 'draft-1', existingApplicationStatus: 0 })
+    await act(async () => window.dispatchEvent(new Event('focus')))
+    expect(await screen.findByRole('link', { name: 'View application' })).toHaveAttribute('href', '/notifications/rental-application/draft-1')
+  })
+
+  it('fails closed and displays a safe error when eligibility cannot be loaded', async () => {
+    getApplicationEligibility.mockRejectedValue(new Error('private failure'))
+    renderPage()
+    expect(await screen.findByRole('link', { name: 'Apply after viewing' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('Unable to check application eligibility. Please try again.')).toBeInTheDocument()
+    expect(screen.queryByText('private failure')).not.toBeInTheDocument()
   })
 
   it('preserves landlord management tools without tenant CTAs', async () => {

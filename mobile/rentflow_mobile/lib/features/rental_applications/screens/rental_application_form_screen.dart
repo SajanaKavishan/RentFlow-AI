@@ -133,6 +133,22 @@ class _RentalApplicationFormScreenState
         if (!mounted) return;
         _application = application;
         _prefill(application);
+      } else {
+        final eligibility = await _api.getEligibility(widget.propertyId);
+        if (eligibility.hasExistingApplication) {
+          final application = await _api.getApplicationById(
+            eligibility.existingApplicationId!,
+          );
+          _checkIdentity(application);
+          if (!mounted) return;
+          _application = application;
+          _prefill(application);
+        } else if (!eligibility.canApply) {
+          throw RentalApplicationApiException(
+            eligibility.reason ??
+                'Complete a viewing before applying for this property.',
+          );
+        }
       }
       await Future.wait([_loadProfile(), _loadPropertyTitle()]);
       if (_application != null) await _refreshDocuments();

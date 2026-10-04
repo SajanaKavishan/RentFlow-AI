@@ -14,6 +14,7 @@ import '../services/rental_application_api_service.dart';
 import '../widgets/tenant_application_journey.dart';
 import 'rental_application_details_screen.dart';
 import 'rental_application_form_screen.dart';
+import 'eligible_application_properties_screen.dart';
 
 class MyRentalApplicationsScreen extends StatefulWidget {
   const MyRentalApplicationsScreen({
@@ -97,6 +98,18 @@ class _MyRentalApplicationsScreenState
             propertyApiService: _propertyApiService,
             rentalApplicationApiService: _apiService,
           ),
+        ),
+      ),
+    );
+    if (mounted) await _refresh();
+  }
+
+  Future<void> _newApplication() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => EligibleApplicationPropertiesScreen(
+          apiService: _apiService,
+          propertyApiService: _propertyApiService,
         ),
       ),
     );
@@ -381,7 +394,7 @@ class _MyRentalApplicationsScreenState
               onBack: Navigator.of(context).canPop()
                   ? () => Navigator.of(context).maybePop()
                   : null,
-              onNew: _browseProperties,
+              onNew: _newApplication,
             ),
           ),
           Expanded(
