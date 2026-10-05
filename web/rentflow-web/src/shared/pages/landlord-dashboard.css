@@ -130,6 +130,9 @@
 .landlord-portfolio__average dd { color: var(--ink); font-size: 1rem; font-weight: 800; letter-spacing: -.025em; }
 
 .landlord-maintenance { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; }
+.landlord-maintenance__body { grid-column: 1 / -1; }
+.landlord-maintenance__body .landlord-section-state { padding: 0; }
+.landlord-maintenance__heading > a { display: flex; align-items: center; gap: 5px; color: var(--olive-900); font-size: .7rem; font-weight: 700; text-decoration: none; }
 .landlord-maintenance__heading { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .landlord-maintenance h2 { margin: 0; color: var(--ink); font-size: 1rem; letter-spacing: -.025em; }
 .landlord-maintenance .landlord-dashboard__icon { margin-top: 1px; }

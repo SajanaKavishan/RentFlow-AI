@@ -8,6 +8,8 @@ public class PaymentResponseDto
 
     public Guid RentScheduleItemId { get; set; }
 
+    public Guid? PropertyId { get; set; }
+
     public Guid TenantId { get; set; }
 
     public decimal Amount { get; set; }

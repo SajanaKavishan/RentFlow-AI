@@ -543,7 +543,6 @@ export default function LandlordMaintenancePage() {
     <main className="maintenance-page maintenance-page--landlord" aria-busy={isPageLoading}>
       <header className="maintenance-page__header">
         <div>
-          <p className="maintenance-page__eyebrow">Landlord workspace</p>
           <h1>Maintenance &amp; support management</h1>
           <p>
             Review property maintenance issues and keep every maintenance decision under human control.

@@ -8,12 +8,20 @@ import { useOwnedPropertySelection, useOwnedProperties } from '../property/useOw
 import { PageHeader } from '../ui/States.jsx'
 import Icon from '../ui/Icons.jsx'
 import usePropertySummary from './usePropertySummary.js'
+import useLandlordRevenue, { monthlyRevenue } from './useLandlordRevenue.js'
+import { getPropertyMaintenanceRequests } from '../../features/maintenance/services/maintenanceApiService.js'
+import { MAINTENANCE_STATUS } from '../../features/maintenance/services/maintenanceEnums.js'
 import useDashboardValidation, { isReviewable, WORKFLOW_STATUS } from './useDashboardValidation.js'
 import { PendingViewingsContext } from '../layout/PendingViewingsContext.js'
 import { PendingApplicationsContext } from '../layout/PendingApplicationsContext.js'
 import './landlord-dashboard.css'
 
 const LOADING_COPY = 'Loading landlord activity...'
+
+async function loadMaintenanceSummary(propertyId) {
+  const requests = await getPropertyMaintenanceRequests(propertyId)
+  return requests.map((request) => ({ ...request, status: MAINTENANCE_STATUS.byName[request.status] }))
+}
 
 function firstName(fullName) {
   return fullName?.trim().split(/\s+/).filter(Boolean)[0] || 'there'
@@ -68,17 +76,6 @@ function SummaryCard({ title, icon, status, value, secondary, to, actionLabel, r
         </div>
       )}
       {to && status !== 'loading' && <Link className="landlord-summary__link" to={to} aria-label={actionLabel} />}
-    </section>
-  )
-}
-
-function RevenueSummaryCard() {
-  return (
-    <section className="shared-card landlord-summary landlord-summary--trend landlord-summary--integration" aria-label="Revenue This Month">
-      <span className="landlord-dashboard__icon" aria-hidden="true"><Icon name="trend" size={20} /></span>
-      <span className="landlord-dashboard__badge">Integration pending</span>
-      <h2>Revenue This Month</h2>
-      <p>Revenue data will appear when the Payments and Lease module is connected.</p>
     </section>
   )
 }
@@ -343,15 +340,21 @@ function PortfolioOverview({ collection }) {
   )
 }
 
-function MaintenanceCard() {
+function MaintenanceCard({ maintenance, selectedPropertyId }) {
+  const open = maintenance.data.filter((request) => ![9, 10].includes(request.status)).length
+  const awaitingApproval = maintenance.data.filter((request) => request.status === 5).length
   return (
     <section className="shared-card landlord-maintenance" aria-labelledby="landlord-maintenance-title">
       <div className="landlord-maintenance__heading">
         <h2 id="landlord-maintenance-title">Maintenance</h2>
-        <span className="landlord-dashboard__badge">Integration pending</span>
+        <Link to={selectedPropertyId ? `/properties/${encodeURIComponent(selectedPropertyId)}/maintenance` : '/modules/maintenance/landlord'}>View all <Icon name="arrow" size={14} /></Link>
       </div>
-      <span className="landlord-dashboard__icon" aria-hidden="true"><Icon name="tools" size={20} /></span>
-      <p>Maintenance activity will appear here when the Maintenance module is connected.</p>
+      <div className="landlord-maintenance__body">
+        {maintenance.status === 'loading' ? <SectionState title="Loading maintenance..." description="Checking requests for your properties." loading />
+          : maintenance.status === 'error' ? <InlineError retry={maintenance.retry} />
+            : <SectionState icon="tools" title={open ? `${open} open ${pluralized(open, 'request')}` : 'No open maintenance requests'}
+              description={awaitingApproval ? `${awaitingApproval} awaiting your approval` : 'No estimates awaiting your approval.'} />}
+      </div>
     </section>
   )
 }
@@ -375,6 +378,8 @@ function LandlordOverview({ user, propertyId }) {
     : null
   const viewings = usePropertySummary(getViewingsByProperty, summaryPropertyIds)
   const applications = usePropertySummary(getApplicationsByProperty, summaryPropertyIds)
+  const maintenance = usePropertySummary(loadMaintenanceSummary, summaryPropertyIds)
+  const revenue = useLandlordRevenue(summaryPropertyIds)
   const validation = useDashboardValidation(applications)
   const pendingViewings = viewings.data.filter((item) => item.status === VIEWING_STATUS.PENDING).length
   const reviewableApplications = applications.data.filter(isReviewable).length
@@ -433,7 +438,10 @@ function LandlordOverview({ user, propertyId }) {
           actionLabel="View Rental Applications"
           retry={applications.retry}
         />
-        <RevenueSummaryCard />
+        <SummaryCard title="Revenue This Month" icon="trend" status={revenue.status}
+          value={formatCurrency(monthlyRevenue(revenue.data))}
+          secondary={`Completed rent payments · ${selectedProperty ? selectedProperty.title : 'All properties'}`}
+          to="/modules/payments" actionLabel="View Payments" retry={revenue.retry} />
       </div>
 
       <div className="landlord-dashboard__content">
@@ -456,7 +464,7 @@ function LandlordOverview({ user, propertyId }) {
         </div>
         <aside className="landlord-dashboard__aside" aria-label="Portfolio details">
           <PortfolioOverview collection={ownedProperties} />
-          <MaintenanceCard />
+          <MaintenanceCard maintenance={maintenance} selectedPropertyId={selectedPropertyId} />
         </aside>
       </div>
     </main>

@@ -133,6 +133,8 @@ public class PaymentService : IPaymentService
     {
         var payments = await _dbContext.Payments
             .AsNoTracking()
+            .Include(payment => payment.RentScheduleItem)
+            .ThenInclude(item => item.LeaseAgreement)
             .Where(payment => _dbContext.Properties.Any(property =>
                 property.Id == payment.RentScheduleItem.LeaseAgreement.PropertyId
                 && property.LandlordId == landlordId))
@@ -295,6 +297,7 @@ public class PaymentService : IPaymentService
         {
             Id = payment.Id,
             RentScheduleItemId = payment.RentScheduleItemId,
+            PropertyId = payment.RentScheduleItem?.LeaseAgreement?.PropertyId,
             TenantId = payment.TenantId,
             Amount = payment.Amount,
             PaymentMethod = payment.PaymentMethod,
