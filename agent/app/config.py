@@ -19,6 +19,7 @@ class Settings:
     ai_api_key: str | None = field(repr=False)
     ai_timeout_seconds: float
     agent_version: str
+    service_api_key: str | None = field(default=None, repr=False)
     groq_api_key: str | None = field(default=None, repr=False)
     vision_provider: str | None = None
     vision_model: str | None = None
@@ -51,6 +52,7 @@ class Settings:
                 _configuration_value("AGENT_VERSION", file_values) or "0.1.0"
             ).strip()
             or "0.1.0",
+            service_api_key=_optional_configuration_value("AGENT_SERVICE_API_KEY", file_values),
             groq_api_key=_optional_configuration_value("GROQ_API_KEY", file_values),
             vision_provider=_optional_configuration_value("VISION_PROVIDER", file_values),
             vision_model=_optional_configuration_value("VISION_MODEL", file_values),

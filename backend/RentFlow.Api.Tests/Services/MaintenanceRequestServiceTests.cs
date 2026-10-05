@@ -224,6 +224,8 @@ public class MaintenanceRequestServiceTests
         var maintenanceRequest = AddRequest(context, status: MaintenanceRequestStatus.Triaged);
         await context.SaveChangesAsync();
         var technicianId = Guid.NewGuid();
+        context.Users.Add(new ApplicationUser { Id = technicianId, FullName = "Technician", Role = UserRole.MaintenanceTechnician, IsActive = true });
+        await context.SaveChangesAsync();
 
         var result = await new MaintenanceRequestService(context).AssignTechnicianAsync(
             maintenanceRequest.Id,
@@ -320,11 +322,14 @@ public class MaintenanceRequestServiceTests
         var maintenanceRequest = AddRequest(context, status: MaintenanceRequestStatus.Triaged);
         await context.SaveChangesAsync();
 
+        var technicianId = Guid.NewGuid();
+        context.Users.Add(new ApplicationUser { Id = technicianId, FullName = "Technician", Role = UserRole.MaintenanceTechnician, IsActive = true });
+        await context.SaveChangesAsync();
         await new MaintenanceRequestService(context).AssignTechnicianAsync(
             maintenanceRequest.Id,
             new AssignTechnicianDto
             {
-                TechnicianId = Guid.NewGuid(),
+                TechnicianId = technicianId,
                 AssignmentNotes = "Take replacement washers."
             });
 
@@ -747,6 +752,27 @@ public class MaintenanceRequestServiceTests
         await service.SubmitEstimateForReviewAsync(maintenanceRequest.Id, estimateResponse.Id);
         var estimate = await context.RepairEstimates.SingleAsync(item => item.Id == estimateResponse.Id);
         return (service, maintenanceRequest, estimate);
+    }
+
+    [Theory]
+    [InlineData(UserRole.MaintenanceTechnician, false, true)]
+    [InlineData(UserRole.Tenant, true, true)]
+    [InlineData(UserRole.Landlord, true, true)]
+    [InlineData(UserRole.Admin, true, true)]
+    [InlineData(UserRole.MaintenanceTechnician, true, false)]
+    public async Task Assignment_RejectsIneligibleIdentity(UserRole role, bool active, bool exists)
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, status: MaintenanceRequestStatus.Triaged);
+        var technicianId = Guid.NewGuid();
+        if (exists) context.Users.Add(new ApplicationUser { Id = technicianId, FullName = "Candidate", Role = role, IsActive = active });
+        await context.SaveChangesAsync();
+        var error = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            new MaintenanceRequestService(context).AssignTechnicianAsync(request.Id, new AssignTechnicianDto { TechnicianId = technicianId }));
+        Assert.Equal(MaintenanceRequestServiceError.Validation, error.Error);
+        Assert.Null(request.TechnicianId);
+        Assert.Equal(MaintenanceRequestStatus.Triaged, request.Status);
+        Assert.Empty(context.MaintenanceStatusHistories);
     }
 
     private static ApplicationDbContext CreateContext()

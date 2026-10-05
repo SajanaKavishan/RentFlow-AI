@@ -93,7 +93,7 @@ class GeminiModelProvider(ModelProvider):
         input_data: dict[str, Any],
     ) -> Any:
         prompt = json.dumps(
-            {"instructions": instructions, "inputData": input_data},
+            {"inputData": input_data},
             ensure_ascii=True,
             separators=(",", ":"),
         )
@@ -103,6 +103,7 @@ class GeminiModelProvider(ModelProvider):
                 model=self._model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
+                    system_instruction=instructions,
                     response_mime_type="application/json",
                     response_schema=provider_schema,
                     temperature=0,
@@ -134,7 +135,7 @@ class GeminiModelProvider(ModelProvider):
         media: list[ModelMedia],
     ) -> Any:
         prompt = json.dumps(
-            {"instructions": instructions, "inputData": input_data},
+            {"inputData": input_data},
             ensure_ascii=True,
             separators=(",", ":"),
         )
@@ -149,6 +150,7 @@ class GeminiModelProvider(ModelProvider):
                 model=self._model,
                 contents=contents,
                 config=types.GenerateContentConfig(
+                    system_instruction=instructions,
                     response_mime_type="application/json",
                     response_schema=provider_schema,
                     temperature=0,

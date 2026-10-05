@@ -40,11 +40,11 @@ public sealed class PricingAnalysisAgentClient(
         HttpResponseMessage response;
         try
         {
-            response = await httpClient.PostAsJsonAsync(
+            response = await AgentServiceRequest.PostAsync(httpClient,
                 endpoint,
                 request,
                 PricingAnalysisResponseMapper.JsonOptions,
-                timeoutSource.Token);
+                serviceOptions.ServiceApiKey, timeoutSource.Token);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

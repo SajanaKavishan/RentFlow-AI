@@ -22,45 +22,12 @@ public sealed class MaintenanceCoordinationService(
         var estimate = await dbContext.RepairEstimates.AsNoTracking().Where(x => x.MaintenanceRequestId == requestId).OrderByDescending(x => x.VersionNumber).ThenByDescending(x => x.CreatedAt).FirstOrDefaultAsync(cancellationToken);
         var attachments = await dbContext.MaintenanceAttachments.AsNoTracking().Where(x => x.MaintenanceRequestId == requestId).ToListAsync(cancellationToken);
 
-        var response = await agentClient.AnalyzeAsync(new MaintenanceCoordinationAgentRequest
-        {
-            MaintenanceRequestId = request.Id,
-            Title = request.Title,
-            Description = request.Description,
-            Category = request.Category.ToString().ToLowerInvariant(),
-            Priority = ToAgentPriority(request.Priority),
-            CurrentStatus = ToAgentStatus(request.Status),
-            AssignedTechnicianId = request.TechnicianId,
-            RepairEstimate = estimate is null ? null : new MaintenanceCoordinationEstimate
-            {
-                Amount = estimate.TotalCost,
-                Notes = estimate.Notes
-            },
-            Attachments = attachments.Select(x => new MaintenanceCoordinationAttachment
-            {
-                AttachmentId = x.Id,
-                FileName = x.FileName,
-                ContentType = x.ContentType
-            }).ToArray()
-        }, cancellationToken);
-
+        var payload = MaintenanceCoordinationRequestMapper.Map(request, estimate, attachments);
+        var response = await agentClient.AnalyzeAsync(payload, cancellationToken);
+        var current = await dbContext.MaintenanceRequests.AsNoTracking().SingleAsync(x => x.Id == requestId, cancellationToken);
+        if (current.Status.ToString() != payload.CurrentStatus)
+            throw new MaintenanceCoordinationAgentClientException(MaintenanceCoordinationAgentClientError.MalformedResponse, "The request changed during analysis. Run a new analysis.");
+        MaintenanceCoordinationResultValidator.Validate(payload, response);
         return response.Result;
     }
-
-    private static string ToAgentPriority(MaintenancePriority priority) => priority switch
-    {
-        MaintenancePriority.Low => "low",
-        MaintenancePriority.Normal => "medium",
-        MaintenancePriority.High => "high",
-        MaintenancePriority.Emergency => "urgent",
-        _ => "medium"
-    };
-
-    private static string ToAgentStatus(MaintenanceRequestStatus status) => status switch
-    {
-        MaintenanceRequestStatus.InProgress => "in_progress",
-        MaintenanceRequestStatus.Completed => "completed",
-        MaintenanceRequestStatus.Cancelled => "cancelled",
-        _ => status is MaintenanceRequestStatus.Submitted or MaintenanceRequestStatus.Triaged or MaintenanceRequestStatus.Assigned or MaintenanceRequestStatus.EstimatePending or MaintenanceRequestStatus.EstimateSubmitted or MaintenanceRequestStatus.AwaitingLandlordApproval ? "open" : "on_hold"
-    };
 }

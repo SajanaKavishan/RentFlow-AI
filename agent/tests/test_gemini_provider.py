@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import asyncio
 import logging
 from types import SimpleNamespace
@@ -112,6 +114,9 @@ async def test_gemini_adapter_returns_fake_structured_success() -> None:
     assert isinstance(result, Plan)
     assert models.calls[0]["model"] == "gemini-test-model"
     assert models.calls[0]["config"].response_mime_type == "application/json"
+    assert models.calls[0]["config"].system_instruction == "Use the fixed plan."
+    assert "Use the fixed plan." not in models.calls[0]["contents"]
+    assert json.loads(models.calls[0]["contents"]) == {"inputData": {"objective": "test"}}
     provider_schema = models.calls[0]["config"].response_schema
     assert isinstance(provider_schema, type)
     assert issubclass(provider_schema, Plan)
@@ -412,3 +417,5 @@ async def test_gemini_vision_uses_provider_neutral_in_memory_media_parts() -> No
     assert result.detected_language == "English"
     assert len(models.calls[0]["contents"]) == 2
     assert models.calls[0]["contents"][1].inline_data.mime_type == "image/png"
+    assert models.calls[0]["config"].system_instruction == "Perform conservative OCR."
+    assert "Perform conservative OCR." not in models.calls[0]["contents"][0]

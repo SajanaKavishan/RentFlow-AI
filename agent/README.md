@@ -174,3 +174,24 @@ Tests use an in-memory fake provider, actively block external network connection
 and cover digital/scanned PDF routing, image OCR routing, limits, English/Sinhala and
 handwriting confidence, fact allow-lists, provider failures, deterministic comparisons,
 output safety, plan restrictions, and ordered graph execution.
+
+
+## Maintenance coordination: Phase 1 service boundary
+
+The maintenance agent uses exact RentFlow category, priority, and request-status names,
+closed structured recommendations, explicit human review, and state-valid advisory actions.
+Both backend analysis paths use one minimum-data request mapper. Photo metadata is accepted;
+maintenance image content is not retrieved or analyzed in this phase.
+
+Every `/internal/*` endpoint now requires `X-RentFlow-Service-Key`. Configure the same secret
+as Python `AGENT_SERVICE_API_KEY` and ASP.NET `AgentService__ServiceApiKey`. Keep it in private
+environment/secret configuration; the examples intentionally leave it blank. Unconfigured
+internal authentication fails closed. `GET /health` remains accessible.
+
+Deploy/restart both services together for the changed maintenance contract. The maintenance
+graph has one total deadline capped by the backend budget and local configuration. Human
+acceptance/rejection records an advisory review only; normal maintenance actions remain
+independent and available when analysis fails.
+
+See [the Phase 1 implementation report](../docs/maintenance-coordination-phase1-report.md)
+for contracts, exact files, verification, and remaining limitations.

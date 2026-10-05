@@ -260,6 +260,11 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         var maintenanceRequest = await GetTrackedRequestAsync(requestId, cancellationToken);
         EnsureStatus(maintenanceRequest, "assigned", MaintenanceRequestStatus.Triaged);
 
+        if (!await dbContext.Users.AsNoTracking().AnyAsync(user =>
+            user.Id == request.TechnicianId && user.IsActive && user.Role == UserRole.MaintenanceTechnician,
+            cancellationToken))
+            throw MaintenanceRequestServiceException.Validation("Choose an active maintenance technician.");
+
         maintenanceRequest.TechnicianId = request.TechnicianId;
         maintenanceRequest.AssignmentNotes = NormalizeOptionalText(request.AssignmentNotes);
         maintenanceRequest.Status = MaintenanceRequestStatus.Assigned;

@@ -11,10 +11,8 @@ public sealed class MaintenanceCoordinationAgentClient(
     HttpClient httpClient,
     IOptions<AgentServiceOptions> options) : IMaintenanceCoordinationAgentClient
 {
-    private static readonly string[] ExpectedSteps =
-    ["plan", "classify_assess_issue", "assess_urgency", "review_maintenance_information", "produce_coordination_recommendation", "summarize"];
-
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    { PropertyNameCaseInsensitive = false };
 
     public async Task<MaintenanceCoordinationAgentResponse> AnalyzeAsync(
         MaintenanceCoordinationAgentRequest request,
@@ -23,7 +21,9 @@ public sealed class MaintenanceCoordinationAgentClient(
         ArgumentNullException.ThrowIfNull(request);
         var serviceOptions = options.Value;
         if (!Uri.TryCreate(serviceOptions.BaseUrl, UriKind.Absolute, out var baseUri)
-            || serviceOptions.TimeoutSeconds is < 1 or > 300)
+            || serviceOptions.TimeoutSeconds is < 1 or > 300
+            || string.IsNullOrWhiteSpace(serviceOptions.ServiceApiKey)
+            || serviceOptions.ServiceApiKey.Contains('\r') || serviceOptions.ServiceApiKey.Contains('\n'))
         {
             throw new MaintenanceCoordinationAgentClientException(
                 MaintenanceCoordinationAgentClientError.Configuration,
@@ -36,7 +36,8 @@ public sealed class MaintenanceCoordinationAgentClient(
         HttpResponseMessage response;
         try
         {
-            response = await httpClient.PostAsJsonAsync(endpoint, request, JsonOptions, timeoutSource.Token);
+            response = await AgentServiceRequest.PostAsync(httpClient, endpoint, request, JsonOptions,
+                serviceOptions.ServiceApiKey, timeoutSource.Token, Math.Max(0.1, serviceOptions.TimeoutSeconds - 1.0));
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -66,25 +67,8 @@ public sealed class MaintenanceCoordinationAgentClient(
                 throw new MaintenanceCoordinationAgentClientException(MaintenanceCoordinationAgentClientError.Timeout, "The maintenance coordination agent timed out.", exception);
             }
 
-            ValidateResponse(request, result);
+            MaintenanceCoordinationResultValidator.Validate(request, result);
             return result!;
-        }
-    }
-
-    private static void ValidateResponse(MaintenanceCoordinationAgentRequest request, MaintenanceCoordinationAgentResponse? response)
-    {
-        if (response is null || response.MaintenanceRequestId != request.MaintenanceRequestId || response.Result is null
-            || string.IsNullOrWhiteSpace(response.Result.RecommendedCategory)
-            || string.IsNullOrWhiteSpace(response.Result.RecommendedPriority)
-            || string.IsNullOrWhiteSpace(response.Result.NextAction)
-            || string.IsNullOrWhiteSpace(response.Result.Reasoning)
-            || response.Result.Warnings is null
-            || string.IsNullOrWhiteSpace(response.Result.AgentVersion)
-            || response.ExecutionMetadata is null
-            || response.ExecutionMetadata.ExecutedSteps is null
-            || !response.ExecutionMetadata.ExecutedSteps.SequenceEqual(ExpectedSteps))
-        {
-            throw MalformedResponse();
         }
     }
 

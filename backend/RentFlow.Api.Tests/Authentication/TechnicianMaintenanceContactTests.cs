@@ -88,7 +88,16 @@ public sealed class TechnicianMaintenanceContactTests
     {
         using var factory = new AuthApiFactory();
         var seeded = Seed(factory, true, WorkPhone);
-        using var client = Client(factory, role == UserRole.MaintenanceTechnician ? seeded.Technician : Guid.NewGuid(), role);
+        var actor = role == UserRole.MaintenanceTechnician ? seeded.Technician : Guid.NewGuid();
+        if (role == UserRole.Landlord)
+        {
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var request = db.MaintenanceRequests.Single(item => item.Id == seeded.Request);
+            db.Properties.Add(new Property { Id = request.PropertyId, LandlordId = actor, Title = "Owned", Address = "Test", City = "Test" });
+            db.SaveChanges();
+        }
+        using var client = Client(factory, actor, role);
         var detail = await client.GetFromJsonAsync<JsonElement>($"/api/maintenance-requests/{seeded.Request}");
         Assert.Equal(JsonValueKind.Null, detail.GetProperty("assignedTechnicianContactPhone").ValueKind);
     }

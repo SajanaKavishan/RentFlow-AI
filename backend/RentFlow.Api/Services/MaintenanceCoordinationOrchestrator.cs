@@ -1,4 +1,7 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.Options;
+using RentFlow.Api.Configuration;
 using Microsoft.EntityFrameworkCore;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.Maintenance;
@@ -17,7 +20,8 @@ public sealed class MaintenanceCoordinationOrchestrator(
     IMaintenanceCoordinationRuleTool maintenanceCoordinationRuleTool,
     IMaintenanceCoordinationAgentClient maintenanceCoordinationAgentClient,
     TimeProvider timeProvider,
-    ILogger<MaintenanceCoordinationOrchestrator> logger) : IMaintenanceCoordinationOrchestrator
+    ILogger<MaintenanceCoordinationOrchestrator> logger,
+    IOptions<AgentServiceOptions>? agentOptions = null) : IMaintenanceCoordinationOrchestrator
 {
     private const string WorkflowObjective = "Review the maintenance request and recommend a safe advisory action without approving or changing status.";
     private const string SafeStepErrorMessage = "The maintenance coordination step failed unexpectedly.";
@@ -31,6 +35,11 @@ public sealed class MaintenanceCoordinationOrchestrator(
         Guid maintenanceRequestId,
         CancellationToken cancellationToken = default)
     {
+        var callerToken = cancellationToken;
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
+        budget.CancelAfter(TimeSpan.FromSeconds(agentOptions?.Value.TimeoutSeconds ?? 30));
+        cancellationToken = budget.Token;
+
         if (maintenanceRequestId == Guid.Empty)
         {
             throw MaintenanceRequestServiceException.Validation("A maintenance request ID is required.");
@@ -69,73 +78,100 @@ public sealed class MaintenanceCoordinationOrchestrator(
         };
 
         dbContext.MaintenanceCoordinationWorkflows.Add(workflow);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        var validationResult = await ExecuteStepAsync(
-            workflow,
-            workflow.Steps.Single(step => step.StepOrder == 1),
-            async token => await maintenanceRequestDataValidationTool.ValidateAsync(request, token),
-            cancellationToken);
-
-        if (validationResult is null)
+        try
         {
-            return await FinalizeFailureAsync(workflow, cancellationToken);
-        }
+            await dbContext.SaveChangesAsync(cancellationToken);
 
-        var ruleResult = await ExecuteStepAsync(
-            workflow,
-            workflow.Steps.Single(step => step.StepOrder == 2),
-            async token => await maintenanceCoordinationRuleTool.ValidateAsync(request, estimate, token),
-            cancellationToken);
-
-        if (ruleResult is null)
-        {
-            return await FinalizeFailureAsync(workflow, cancellationToken);
-        }
-
-        if (!validationResult.IsValid || !ruleResult.Passed)
-        {
-            return await FinalizeDeterministicValidationFailureAsync(
+            var validationResult = await ExecuteStepAsync(
                 workflow,
-                validationResult,
-                ruleResult,
+                workflow.Steps.Single(step => step.StepOrder == 1),
+                async token => await maintenanceRequestDataValidationTool.ValidateAsync(request, token),
                 cancellationToken);
-        }
 
-        var attachments = await dbContext.MaintenanceAttachments
-            .AsNoTracking()
-            .Where(item => item.MaintenanceRequestId == maintenanceRequestId)
-            .Select(item => new MaintenanceCoordinationAttachment
+            if (validationResult is null)
             {
-                AttachmentId = item.Id,
-                FileName = item.FileName,
-                ContentType = item.ContentType
-            })
-            .ToListAsync(cancellationToken);
+                return await FinalizeFailureAsync(workflow, cancellationToken);
+            }
 
-        var agentRequest = CreateAgentRequest(request, estimate, attachments);
-        var agentResponse = await ExecuteStepAsync(
-            workflow,
-            workflow.Steps.Single(step => step.StepOrder == 3),
-            async token => await maintenanceCoordinationAgentClient.AnalyzeAsync(agentRequest, token),
-            cancellationToken);
+            var ruleResult = await ExecuteStepAsync(
+                workflow,
+                workflow.Steps.Single(step => step.StepOrder == 2),
+                async token => await maintenanceCoordinationRuleTool.ValidateAsync(request, estimate, token),
+                cancellationToken);
 
-        if (agentResponse is null)
-        {
-            return await FinalizeFailureAsync(workflow, cancellationToken);
+            if (ruleResult is null)
+            {
+                return await FinalizeFailureAsync(workflow, cancellationToken);
+            }
+
+            if (!validationResult.IsValid || !ruleResult.Passed)
+            {
+                return await FinalizeDeterministicValidationFailureAsync(
+                    workflow,
+                    validationResult,
+                    ruleResult,
+                    cancellationToken);
+            }
+
+            var attachments = await dbContext.MaintenanceAttachments.AsNoTracking()
+                .Where(item => item.MaintenanceRequestId == maintenanceRequestId).ToListAsync(cancellationToken);
+            var agentRequest = MaintenanceCoordinationRequestMapper.Map(request, estimate, attachments);
+            var agentResponse = await ExecuteStepAsync(
+                workflow,
+                workflow.Steps.Single(step => step.StepOrder == 3),
+                async token =>
+                {
+                    var response = await maintenanceCoordinationAgentClient.AnalyzeAsync(agentRequest, token);
+                    var current = await dbContext.MaintenanceRequests.AsNoTracking().SingleAsync(item => item.Id == request.Id, token);
+                    if (current.Status.ToString() != agentRequest.CurrentStatus)
+                        throw new MaintenanceCoordinationAgentClientException(MaintenanceCoordinationAgentClientError.MalformedResponse, "The request changed during analysis.");
+                    MaintenanceCoordinationResultValidator.Validate(agentRequest, response);
+                    return response;
+                },
+                cancellationToken);
+
+            if (agentResponse is null)
+            {
+                return await FinalizeFailureAsync(workflow, cancellationToken);
+            }
+
+            workflow.AgentVersion = agentResponse.Result.AgentVersion;
+            workflow.FinalResultJson = JsonSerializer.Serialize(agentResponse.Result, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            workflow.Status = MaintenanceCoordinationWorkflowStatus.AwaitingHumanReview;
+            workflow.UpdatedAt = timeProvider.GetUtcNow();
+            workflow.CurrentStep = 3;
+            workflow.RequiresHumanApproval = true;
+            workflow.ApprovalStatus = MaintenanceCoordinationApprovalStatus.Pending;
+            workflow.ExecutionSummary = $"Completed deterministic validation and agent advisory review. Awaiting human approval. Steps executed: {string.Join(", ", workflow.Steps.OrderBy(step => step.StepOrder).Select(step => step.StepName))}.";
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return workflow;
         }
-
-        workflow.AgentVersion = agentResponse.Result.AgentVersion;
-        workflow.FinalResultJson = JsonSerializer.Serialize(agentResponse.Result, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        workflow.Status = MaintenanceCoordinationWorkflowStatus.AwaitingHumanReview;
-        workflow.UpdatedAt = timeProvider.GetUtcNow();
-        workflow.CurrentStep = 3;
-        workflow.RequiresHumanApproval = true;
-        workflow.ApprovalStatus = MaintenanceCoordinationApprovalStatus.Pending;
-        workflow.ExecutionSummary = $"Completed deterministic validation and agent advisory review. Awaiting human approval. Steps executed: {string.Join(", ", workflow.Steps.OrderBy(step => step.StepOrder).Select(step => step.StepName))}.";
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return workflow;
+        catch (OperationCanceledException)
+        {
+            workflow.ErrorMessage = "The maintenance coordination analysis was cancelled or timed out.";
+            foreach (var step in workflow.Steps.Where(step => step.Status == MaintenanceCoordinationStepStatus.Running))
+            {
+                step.Status = MaintenanceCoordinationStepStatus.Failed;
+                step.ErrorMessage = workflow.ErrorMessage;
+                step.CompletedAt = timeProvider.GetUtcNow();
+            }
+            var failed = await FinalizeFailureAsync(workflow, CancellationToken.None);
+            if (callerToken.IsCancellationRequested) throw;
+            return failed;
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning("Maintenance coordination workflow {WorkflowId} aborted ({ErrorType}).", workflow.Id, exception.GetType().Name);
+            workflow.ErrorMessage = SafeStepErrorMessage;
+            foreach (var step in workflow.Steps.Where(step => step.Status == MaintenanceCoordinationStepStatus.Running))
+            {
+                step.Status = MaintenanceCoordinationStepStatus.Failed;
+                step.ErrorMessage = SafeStepErrorMessage;
+                step.CompletedAt = timeProvider.GetUtcNow();
+            }
+            return await FinalizeFailureAsync(workflow, CancellationToken.None);
+        }
     }
 
     private async Task<MaintenanceCoordinationWorkflow> FinalizeDeterministicValidationFailureAsync(
@@ -320,7 +356,7 @@ public sealed class MaintenanceCoordinationOrchestrator(
         catch (Exception exception) when (
             exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            logger.LogError(exception, "Maintenance coordination workflow {WorkflowId} failed at step {StepOrder}.", workflow.Id, step.StepOrder);
+            logger.LogWarning("Maintenance coordination workflow {WorkflowId} failed at step {StepOrder} ({ErrorType}).", workflow.Id, step.StepOrder, exception.GetType().Name);
 
             var failedAt = timeProvider.GetUtcNow();
             step.Status = MaintenanceCoordinationStepStatus.Failed;
@@ -340,9 +376,10 @@ public sealed class MaintenanceCoordinationOrchestrator(
     {
         workflow.Status = MaintenanceCoordinationWorkflowStatus.Failed;
         workflow.ErrorMessage = workflow.ErrorMessage ?? SafeStepErrorMessage;
+        workflow.FinalResultJson = null;
         workflow.UpdatedAt = timeProvider.GetUtcNow();
-        workflow.RequiresHumanApproval = true;
-        workflow.ApprovalStatus = MaintenanceCoordinationApprovalStatus.Pending;
+        workflow.RequiresHumanApproval = false;
+        workflow.ApprovalStatus = MaintenanceCoordinationApprovalStatus.NotRequired;
         await dbContext.SaveChangesAsync(cancellationToken);
         return workflow;
     }
@@ -356,50 +393,13 @@ public sealed class MaintenanceCoordinationOrchestrator(
             InputSummary = inputSummary
         };
 
-    private static MaintenanceCoordinationAgentRequest CreateAgentRequest(
-        MaintenanceRequest request,
-        RepairEstimate? estimate,
-        IReadOnlyCollection<MaintenanceCoordinationAttachment> attachments)
-    {
-        return new MaintenanceCoordinationAgentRequest
-        {
-            MaintenanceRequestId = request.Id,
-            Title = request.Title,
-            Description = request.Description,
-            Category = request.Category.ToString().ToLowerInvariant(),
-            Priority = request.Priority switch
-            {
-                MaintenancePriority.Low => "low",
-                MaintenancePriority.Normal => "medium",
-                MaintenancePriority.High => "high",
-                MaintenancePriority.Emergency => "urgent",
-                _ => "medium"
-            },
-            CurrentStatus = request.Status switch
-            {
-                MaintenanceRequestStatus.InProgress => "in_progress",
-                MaintenanceRequestStatus.Completed => "completed",
-                MaintenanceRequestStatus.Cancelled => "cancelled",
-                _ => "open"
-            },
-            AssignedTechnicianId = request.TechnicianId,
-            RepairEstimate = estimate is null ? null : new MaintenanceCoordinationEstimate
-            {
-                Amount = estimate.TotalCost,
-                Currency = "LKR",
-                Notes = estimate.Notes
-            },
-            Attachments = attachments
-        };
-    }
-
     private static string CreateValidationSummary(object result)
     {
         return result switch
         {
             MaintenanceDataValidationResult validation => $"Valid={validation.IsValid}; completeness={validation.CompletenessScore}; missing={validation.MissingFields.Count}; warnings={validation.Warnings.Count}",
             MaintenanceCoordinationRuleValidationResult rules => $"Passed={rules.Passed}; failed={rules.FailedRules.Count}; warnings={rules.Warnings.Count}",
-            MaintenanceCoordinationAgentResponse agent => $"Agent result valid; priority={agent.Result.RecommendedPriority}; nextAction={agent.Result.NextAction}; warnings={agent.Result.Warnings.Count}",
+            MaintenanceCoordinationAgentResponse agent => $"Agent result valid; priority={agent.Result.SuggestedPriority}; nextAction={agent.Result.NextAction}; warnings={agent.Result.ValidationFlags.Count}",
             _ => "Validation summary recorded."
         };
     }
@@ -413,9 +413,9 @@ public sealed class MaintenanceCoordinationOrchestrator(
 
         try
         {
-            using var document = JsonDocument.Parse(currentPayload);
-            var root = JsonDocument.Parse(JsonSerializer.Serialize(new { decision = document.RootElement.Clone(), decisionDetails = decision }, new JsonSerializerOptions(JsonSerializerDefaults.Web))).RootElement;
-            return JsonSerializer.Serialize(root, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            var root = JsonNode.Parse(currentPayload)?.AsObject() ?? throw new JsonException();
+            root["decisionDetails"] = JsonSerializer.SerializeToNode(decision, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            return root.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web));
         }
         catch (JsonException)
         {

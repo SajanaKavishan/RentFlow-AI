@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from fastapi import APIRouter, Request
+from app.services.exceptions import ModelTimeoutError
 
 from app.graph.workflow import build_application_validation_graph
 from app.graph.maintenance_workflow import build_maintenance_coordination_graph
@@ -99,18 +101,33 @@ async def analyze_maintenance_coordination(
         timeout_seconds=settings.ai_timeout_seconds,
         agent_version=settings.agent_version,
     )
-    result = await graph.ainvoke(
-        {
-            "maintenance_request": payload.model_dump(mode="json", by_alias=True),
-            "plan": None,
-            "issue_assessment": None,
-            "urgency_assessment": None,
-            "information_review": None,
-            "coordination_recommendation": None,
-            "final_summary": None,
-            "execution_steps": [],
-        }
-    )
+    budget = min(settings.ai_timeout_seconds, 30.0)
+    requested_budget = request.headers.get("X-RentFlow-Analysis-Budget-Seconds")
+    if requested_budget is not None:
+        try:
+            supplied_budget = float(requested_budget)
+            if not 0 < supplied_budget <= 300:
+                raise ValueError
+            budget = min(budget, supplied_budget)
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="Invalid analysis budget") from None
+    try:
+        result = await asyncio.wait_for(
+            graph.ainvoke({
+                "maintenance_request": payload.model_dump(mode="json", by_alias=True),
+                "plan": None,
+                "issue_assessment": None,
+                "urgency_assessment": None,
+                "information_review": None,
+                "coordination_recommendation": None,
+                "final_summary": None,
+                "execution_steps": [],
+            }),
+            timeout=budget,
+        )
+    except TimeoutError as exc:
+        raise ModelTimeoutError from exc
     return MaintenanceCoordinationResponse(
         maintenance_request_id=payload.maintenance_request_id,
         result=MaintenanceCoordinationSummary.model_validate(result["final_summary"]),
