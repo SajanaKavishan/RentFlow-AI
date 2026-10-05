@@ -185,14 +185,14 @@ export default function TenantLeasePaymentsPage() {
   const detailFor = (kind) => detail.kind === kind && detail.status !== 'idle'
 
   return <main className="shared-page tenant-lease-page">
-    <PageHeader eyebrow="Your rental journey" title="Lease & Payments"><p>Review offers, lease terms, rent schedules and payment activity in one place.</p></PageHeader>
+    <PageHeader eyebrow="Your rental journey" title="My Lease & Payments"><p>Review offers, lease terms, rent schedules and payment activity in one place.</p></PageHeader>
     <nav className="tenant-lease-tabs" aria-label="Lease and payment sections">
       {tabs.map((name) => <button key={name} type="button" className={tab === name ? 'tenant-lease-tabs__active' : ''} aria-current={tab === name ? 'page' : undefined} onClick={() => switchTab(name)}>{name}</button>)}
     </nav>
     {notice && <p className="shared-notice" role="status">{notice}</p>}
 
     {tab === 'Rental Offers' && <section aria-label="Rental Offers"><AppCard>
-      <div className="tenant-lease-heading"><h2>Rental Offers</h2><button className="shared-button shared-button--outline" type="button" disabled={offers.status === 'loading'} onClick={offers.refresh}>Refresh</button></div>
+      <div className="tenant-lease-heading"><h2>Rental Offers</h2></div>
       <CollectionState collection={offers} loading="Loading rental offers…" emptyMessage="No rental offers yet." />
       {offers.status === 'ready' && offers.items.length > 0 && <ul className="tenant-lease-list">{offers.items.map((offer) => <li key={offer.id}><div><strong>Property {offer.propertyId}</strong><span>{offerStatuses[offer.status] ?? 'Unknown'} · Monthly rent {money(offer.monthlyRent)}</span><small>Expires {dateTime(offer.expiresAt)}</small></div><button type="button" className="shared-button shared-button--outline" onClick={() => openDetail('offer', offer.id, getOffer)}>View details</button></li>)}</ul>}
     </AppCard>
@@ -214,7 +214,7 @@ export default function TenantLeasePaymentsPage() {
     </section>}
 
     {tab === 'My Leases' && <section aria-label="My Leases"><AppCard>
-      <div className="tenant-lease-heading"><h2>My Leases</h2><button className="shared-button shared-button--outline" type="button" disabled={leases.status === 'loading'} onClick={leases.refresh}>Refresh</button></div>
+      <div className="tenant-lease-heading"><h2>My Leases</h2></div>
       <CollectionState collection={leases} loading="Loading leases…" emptyMessage="No leases yet. An accepted offer becomes a lease when the landlord creates one." />
       {leases.status === 'ready' && leases.items.length > 0 && <ul className="tenant-lease-list">{leases.items.map((lease) => <li key={lease.id}><div><strong>Property {lease.propertyId}</strong><span>{leaseStatuses[lease.status] ?? 'Unknown'} · Monthly rent {money(lease.monthlyRent)}</span><small>{lease.startDate} to {lease.endDate}</small></div><button type="button" className="shared-button shared-button--outline" onClick={() => openDetail('lease', lease.id, getLease)}>View details</button></li>)}</ul>}
     </AppCard>
@@ -239,7 +239,7 @@ export default function TenantLeasePaymentsPage() {
     </AppCard>}
 
     {tab === 'Rent Schedule' && <section aria-label="Rent Schedule"><AppCard>
-      <div className="tenant-lease-heading"><h2>Rent Schedule</h2>{leaseId && <button className="shared-button shared-button--outline" type="button" onClick={refreshSchedule}>Refresh</button>}</div>
+      <div className="tenant-lease-heading"><h2>Rent Schedule</h2></div>
       {!leaseId && <p>Select a lease to view its rent schedule.</p>}
       {leaseId && schedule.status === 'loading' && <p role="status">Loading rent schedule…</p>}
       {leaseId && schedule.status === 'error' && <div role="alert"><p>{schedule.error}</p><button className="shared-button shared-button--outline" type="button" onClick={refreshSchedule}>Try again</button></div>}
@@ -257,7 +257,7 @@ export default function TenantLeasePaymentsPage() {
     </section>}
 
     {tab === 'Payments' && <section aria-label="Payments">
-      <AppCard><div className="tenant-lease-heading"><h2>Payments</h2><button type="button" className="shared-button shared-button--outline" disabled={payments.status === 'loading'} onClick={payments.refresh}>Refresh</button></div>
+      <AppCard><div className="tenant-lease-heading"><h2>Payments</h2></div>
         <CollectionState collection={payments} loading="Loading payments…" emptyMessage="No payments yet." />
         {payments.status === 'ready' && payments.items.length > 0 && <ul className="tenant-lease-list">{payments.items.map((payment) => <li key={payment.id}><div><strong>{money(payment.amount)} · {paymentStatuses[payment.status] ?? 'Unknown'}</strong><span>{payment.paymentMethod}</span><small>Created {dateTime(payment.createdAt)}</small></div><button type="button" className="shared-button shared-button--outline" onClick={() => openDetail('payment', payment.id, getPayment)}>View details</button></li>)}</ul>}
       </AppCard>

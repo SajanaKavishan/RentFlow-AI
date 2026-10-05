@@ -248,8 +248,10 @@ public class ViewingServiceTests
     {
         await using var context = CreateContext();
         var tenantId = Guid.NewGuid();
-        AddViewing(context, tenantId: tenantId, propertyId: Guid.NewGuid());
-        AddViewing(context, tenantId: tenantId, propertyId: Guid.NewGuid());
+        var first = AddViewing(context, tenantId: tenantId, propertyId: Guid.NewGuid());
+        var second = AddViewing(context, tenantId: tenantId, propertyId: Guid.NewGuid());
+        context.Properties.Local.Single(property => property.Id == first.PropertyId).Title = "Port city residence";
+        context.Properties.Local.Single(property => property.Id == second.PropertyId).Title = "Lake View Apartment";
         AddViewing(context, tenantId: Guid.NewGuid(), propertyId: Guid.NewGuid());
         await context.SaveChangesAsync();
         var service = new ViewingService(context);
@@ -258,6 +260,8 @@ public class ViewingServiceTests
 
         Assert.Equal(2, results.Count);
         Assert.All(results, result => Assert.Equal(tenantId, result.TenantId));
+        Assert.Equal("Port city residence", results.Single(result => result.Id == first.Id).PropertyTitle);
+        Assert.Equal("Lake View Apartment", results.Single(result => result.Id == second.Id).PropertyTitle);
     }
 
     [Fact]

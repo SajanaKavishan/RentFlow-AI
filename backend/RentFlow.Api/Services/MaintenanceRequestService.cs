@@ -105,7 +105,16 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .OrderByDescending(item => item.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        return requests.Select(MapToSummary).ToList();
+        var propertyIds = requests.Select(request => request.PropertyId).Distinct().ToArray();
+        var titles = await dbContext.Properties.AsNoTracking()
+            .Where(property => propertyIds.Contains(property.Id))
+            .ToDictionaryAsync(property => property.Id, property => property.Title, cancellationToken);
+        return requests.Select(request =>
+        {
+            var summary = MapToSummary(request);
+            summary.PropertyTitle = titles.GetValueOrDefault(request.PropertyId);
+            return summary;
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<MaintenanceRequestSummaryDto>> GetByPropertyAsync(
@@ -815,6 +824,9 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         bool includeContact = false)
     {
         var response = MapToResponse(request);
+        response.PropertyTitle = await dbContext.Properties.AsNoTracking()
+            .Where(property => property.Id == request.PropertyId)
+            .Select(property => property.Title).SingleOrDefaultAsync(cancellationToken);
         if (request.TechnicianId is { } technicianId)
         {
             // Project display identity only; account contact and profile data stay private.

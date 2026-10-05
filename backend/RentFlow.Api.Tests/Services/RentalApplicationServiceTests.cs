@@ -413,12 +413,14 @@ public class RentalApplicationServiceTests
     {
         await using var context = CreateContext();
         var tenantId = Guid.NewGuid();
-        AddApplication(context, tenantId: tenantId, propertyId: Guid.NewGuid());
-        AddApplication(
+        var first = AddApplication(context, tenantId: tenantId, propertyId: Guid.NewGuid());
+        var second = AddApplication(
             context,
             tenantId: tenantId,
             propertyId: Guid.NewGuid(),
             status: RentalApplicationStatus.Rejected);
+        context.Properties.Local.Single(property => property.Id == first.PropertyId).Title = "Port city residence";
+        context.Properties.Local.Single(property => property.Id == second.PropertyId).Title = "Lake View Apartment";
         AddApplication(context, tenantId: Guid.NewGuid(), propertyId: Guid.NewGuid());
         await context.SaveChangesAsync();
         var service = new RentalApplicationService(context);
@@ -427,6 +429,8 @@ public class RentalApplicationServiceTests
 
         Assert.Equal(2, results.Count);
         Assert.All(results, result => Assert.Equal(tenantId, result.TenantId));
+        Assert.Equal("Port city residence", results.Single(result => result.Id == first.Id).PropertyTitle);
+        Assert.Equal("Lake View Apartment", results.Single(result => result.Id == second.Id).PropertyTitle);
     }
 
     [Fact]

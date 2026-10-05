@@ -176,7 +176,7 @@ export default function AppShell() {
     }
   }, [accountOpen, location.pathname])
   const items = navigationForRole(user.role)
-  const current = (isViewingAvailability ? 'Viewing availability' : activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : activePath === '/modules/users' ? 'User Management' : activePath === '/viewing-requests' ? 'Viewings Management' : activePath === '/rental-applications' ? 'Applications Management' : items.find((item) => item.path === activePath)?.label)
+  const current = (isViewingAvailability ? 'Viewing availability' : activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : activePath === '/modules/users' ? 'User Management' : activePath === '/viewing-requests' ? 'Viewings Management' : activePath === '/rental-applications' ? 'Applications Management' : activePath === '/modules/my-applications' ? 'Application management' : items.find((item) => item.path === activePath)?.label)
     || (location.pathname === '/unauthorized' ? 'Access restricted' : 'RentFlow AI')
   const closeMenu = () => { setMenu({ path: location.pathname, open: false }); if (menuOpen) menuRef.current?.focus() }
   const navLink = (item) => {

@@ -57,6 +57,7 @@ describe('tenant Lease & Payments', () => {
   it('lists tenant offers from the authenticated API', async () => {
     renderPage()
     expect(await screen.findByText('Property property-1')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/rental-offers/mine'), expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer tenant-token' }) }))
   })
 
@@ -64,6 +65,7 @@ describe('tenant Lease & Payments', () => {
     data.offers = []
     renderPage()
     expect(await screen.findByText('No rental offers yet.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
   })
 
   it.each([['accept', 'Accept offer', 'Accepted'], ['reject', 'Reject offer', 'Rejected']])('%ss a Pending offer and refreshes the list', async (action, label, status) => {
@@ -80,6 +82,7 @@ describe('tenant Lease & Payments', () => {
   it('lists leases and opens read-only details', async () => {
     renderPage()
     await tab('My Leases')
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
     expect(await screen.findByText('Property property-1')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'View details' }))
     expect(await screen.findByText('Lease details')).toBeInTheDocument()
@@ -98,6 +101,7 @@ describe('tenant Lease & Payments', () => {
     renderPage()
     await selectLease()
     expect(await screen.findByText('Due 2026-11-01')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'View details' }))
     expect(await screen.findByText('Schedule item details')).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/rent-schedules/lease/lease-1'), expect.anything())
@@ -117,6 +121,7 @@ describe('tenant Lease & Payments', () => {
     renderPage()
     await tab('Payments')
     expect(await screen.findByText('Bank transfer')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'View details' }))
     expect(await screen.findByText('Payment details')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Complete payment|Mark as failed/ })).not.toBeInTheDocument()

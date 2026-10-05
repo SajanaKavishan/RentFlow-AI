@@ -290,7 +290,7 @@ public sealed class MaintenanceRequestsAuthorizationTests
         Assert.DoesNotContain(privatePhone, json);
         var allowedFields = new[]
         {
-            "id", "referenceCode", "preferredAccessWindow", "propertyId", "tenantId", "technicianId",
+            "id", "referenceCode", "preferredAccessWindow", "propertyId", "propertyTitle", "tenantId", "technicianId",
             "assignedTechnicianName", "assignedTechnicianContactPhone", "title", "description", "category", "priority", "status",
             "tenantAccessNotes", "triageNotes", "assignmentNotes", "cancellationReason",
             "completedAt", "createdAt", "updatedAt"

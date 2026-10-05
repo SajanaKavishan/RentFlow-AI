@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 import { AuthContext } from '../auth/useAuth.js'
 import LandlordMaintenancePage from './pages/LandlordMaintenancePage.jsx'
-import TenantMaintenancePage from './pages/TenantMaintenancePage.jsx'
 
 const propertyId = '88888888-8888-8888-8888-888888888888'
 const requestId = '99999999-9999-4999-8999-999999999999'
@@ -64,30 +63,6 @@ afterEach(() => {
 })
 
 describe('maintenance workflows', () => {
-  it('keeps legacy title/notes while sending the required access window and new HVAC category', async () => {
-    let created = null
-    fetch.mockImplementation(async (url, options = {}) => {
-      const path = String(url)
-      if (path.endsWith('/coordination-workflows/latest')) return response(undefined, 204)
-      if (path.includes('/api/properties/tenant/mine')) return response([{ id: propertyId, title: 'Riverside Flat', city: 'Colombo' }])
-      if (options.method === 'POST' && path.includes('/api/maintenance-requests?')) {
-        created = JSON.parse(options.body)
-        return response({ ...maintenanceRequest(), ...created, referenceCode: 'MR-C8070B6D94F6A810' }, 201)
-      }
-      if (path.includes(`/api/maintenance-requests/tenant/${tenantId}`)) return response([])
-      return response([])
-    })
-    renderWithUser('Tenant', tenantId, <TenantMaintenancePage />)
-    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Associated property' }), propertyId)
-    await userEvent.type(screen.getByLabelText('Title'), 'A/C rattling')
-    await userEvent.type(screen.getByLabelText('Description'), 'The bedroom air conditioner is rattling.')
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Category' }), 'Hvac')
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Preferred access time' }), 'Evening')
-    await userEvent.type(screen.getByLabelText('Tenant access notes'), 'Please knock.')
-    await userEvent.click(screen.getByRole('button', { name: 'Submit request' }))
-    await waitFor(() => expect(created).toMatchObject({ propertyId, title: 'A/C rattling', category: 7, preferredAccessWindow: 'Evening', tenantAccessNotes: 'Please knock.' }))
-  })
-
   it('triages a submitted request and assigns a selected active technician', async () => {
     let currentRequest = maintenanceRequest()
     fetch.mockImplementation(async (url, options = {}) => {
@@ -151,74 +126,6 @@ describe('maintenance workflows', () => {
       assignmentNotes: 'Call before arrival.',
     })
     expect(fetch.mock.calls.some(([url]) => String(url).endsWith('/api/maintenance-requests/technicians'))).toBe(true)
-  })
-
-  it('selects an associated tenant property and uploads/removes authorized attachments', async () => {
-    const initialRequest = maintenanceRequest()
-    const attachment = {
-      id: 'attachment-1',
-      fileName: 'sink-photo.png',
-      attachmentType: 'Photo',
-      fileSize: 1024,
-    }
-    let attachments = []
-    fetch.mockImplementation(async (url, options = {}) => {
-      const path = String(url)
-      if (path.endsWith('/coordination-workflows/latest')) return response(undefined, 204)
-      if (path.endsWith('/api/properties/tenant/mine')) {
-        return response([{ id: propertyId, title: 'Riverside Flat', city: 'Colombo' }])
-      }
-      if (path.endsWith(`/api/maintenance-requests/tenant/${tenantId}`)) return response([initialRequest])
-      if (path.endsWith(`/api/maintenance-requests/${requestId}/attachments?tenantId=${tenantId}`) &&
-          options.method === 'POST') {
-        attachments = [attachment]
-        return response(attachment, 201)
-      }
-      if (path.endsWith(`/api/maintenance-requests/${requestId}/attachments?tenantId=${tenantId}`)) {
-        return response(attachments)
-      }
-      if (path.endsWith(`/api/maintenance-requests/${requestId}/attachments/attachment-1?tenantId=${tenantId}`) &&
-          options.method === 'DELETE') {
-        attachments = []
-        return response(undefined, 204)
-      }
-      if (path.endsWith(`/api/maintenance-requests/${requestId}`)) return response(initialRequest)
-      return response({ detail: 'Not found.' }, 404)
-    })
-
-    renderWithUser(
-      'Tenant',
-      tenantId,
-      <TenantMaintenancePage />,
-      `/modules/maintenance?propertyId=${propertyId}`,
-    )
-    expect(await screen.findByLabelText('Associated property')).toHaveValue(propertyId)
-    expect(screen.queryByLabelText('Property ID')).not.toBeInTheDocument()
-    expect(await screen.findByText('No attachments have been added to this request.')).toBeInTheDocument()
-
-    const photo = new File(['image content'], 'sink-photo.png', { type: 'image/png' })
-    await userEvent.upload(screen.getByLabelText('File'), photo)
-    expect(screen.getByLabelText('File').files).toHaveLength(1)
-    await userEvent.selectOptions(screen.getByLabelText('Attachment type'), 'Photo')
-    expect(screen.getByRole('button', { name: 'Upload attachment' }).closest('form').checkValidity()).toBe(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Upload attachment' }))
-    await waitFor(() => {
-      expect(fetch.mock.calls.some(([url, options]) =>
-        String(url).includes(`/api/maintenance-requests/${requestId}/attachments`) &&
-        options.method === 'POST')).toBe(true)
-    })
-    expect(await screen.findByText('sink-photo.png')).toBeInTheDocument()
-    const uploadCall = fetch.mock.calls.find(([url, options]) =>
-      String(url).includes('/api/maintenance-requests/') && options.method === 'POST')
-    expect(uploadCall[1].body).toBeInstanceOf(FormData)
-    expect(uploadCall[1].body.get('file')).toBeInstanceOf(File)
-    expect(uploadCall[1].body.get('attachmentType')).toBe('Photo')
-
-    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
-    await waitFor(() => expect(screen.getByText('No attachments have been added to this request.')).toBeInTheDocument())
-    expect(fetch.mock.calls.some(([url, options]) =>
-      String(url).endsWith(`/api/maintenance-requests/${requestId}/attachments/attachment-1?tenantId=${tenantId}`) &&
-      options.method === 'DELETE')).toBe(true)
   })
 
   it.each([

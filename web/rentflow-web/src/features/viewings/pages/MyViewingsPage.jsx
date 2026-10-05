@@ -17,6 +17,7 @@ function validateViewings(viewings, tenantId) {
     || typeof viewing.tenantId !== 'string' || viewing.tenantId.toLowerCase() !== tenantId.toLowerCase()
     || !Number.isInteger(viewing.status) || typeof viewing.requestedDateTime !== 'string'
     || Number.isNaN(Date.parse(viewing.requestedDateTime))
+    || (viewing.propertyTitle != null && typeof viewing.propertyTitle !== 'string')
     || (viewing.landlordResponse != null && typeof viewing.landlordResponse !== 'string')
   )) throw new TypeError('Invalid tenant viewing response')
   return viewings
@@ -51,10 +52,9 @@ export default function MyViewingsPage() {
 
   return <main className="shared-page my-viewings-page">
     <div className="my-viewings-page__heading">
-      <PageHeader eyebrow="Your requests" title="My Viewings">
+      <PageHeader eyebrow="Viewing journey" title="Your requests">
         <p>Review your viewing requests and landlord responses. Use the mobile app to book or cancel a viewing.</p>
       </PageHeader>
-      <button className="shared-button shared-button--outline" type="button" onClick={reload} disabled={state.status === 'loading'}><Icon name="refresh" size={18} />Refresh</button>
     </div>
     {propertyId && (
       <PropertyWorkflowHandoff
@@ -70,7 +70,7 @@ export default function MyViewingsPage() {
       {state.viewings.map((viewing) => <AppCard key={viewing.id} className="my-viewing-card">
         <div className="my-viewing-card__top"><h2>Viewing request</h2><ViewingStatusBadge status={viewing.status} /></div>
         <dl className="my-viewing-card__details">
-          <div><dt>Property reference</dt><dd><code>{viewing.propertyId}</code></dd></div>
+          <div><dt>Property</dt><dd>{viewing.propertyTitle?.trim() || 'Property unavailable'}</dd></div>
           <div><dt>Requested date and time</dt><dd><time dateTime={viewing.requestedDateTime}>{(viewing.timeZoneId
             ? new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short', timeZone: viewing.timeZoneId })
             : dateTimeFormatter).format(new Date(viewing.requestedDateTime))}</time>{viewing.timeZoneId && ` (${viewing.timeZoneId})`}</dd></div>
