@@ -8,10 +8,7 @@ import '../models/landlord_contact.dart';
 import '../services/property_api_service.dart';
 
 Uri? landlordDialerUri(String number) {
-  final phone = usablePhoneNumber(number);
-  return phone == null
-      ? null
-      : Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'[^+0-9]'), ''));
+  return phoneDialerUri(number);
 }
 
 class LandlordContactCard extends StatefulWidget {

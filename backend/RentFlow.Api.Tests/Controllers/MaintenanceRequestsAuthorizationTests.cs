@@ -202,7 +202,7 @@ public sealed class MaintenanceRequestsAuthorizationTests
         var allowedFields = new[]
         {
             "id", "referenceCode", "preferredAccessWindow", "propertyId", "tenantId", "technicianId",
-            "assignedTechnicianName", "title", "description", "category", "priority", "status",
+            "assignedTechnicianName", "assignedTechnicianContactPhone", "title", "description", "category", "priority", "status",
             "tenantAccessNotes", "triageNotes", "assignmentNotes", "cancellationReason",
             "completedAt", "createdAt", "updatedAt"
         };

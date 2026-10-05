@@ -64,7 +64,15 @@ public class MaintenanceRequestsController(
         }
 
         return await ExecuteAsync(
-            () => GetAuthorizedRequestAsync(id, currentUserId, cancellationToken),
+            async () =>
+            {
+                var detail = await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                // Work contact is disclosed through owning-Tenant detail only.
+                if (currentUserService.Role != UserRole.Tenant)
+                    detail.AssignedTechnicianContactPhone = null;
+                Response.Headers.CacheControl = "private, no-store";
+                return detail;
+            },
             result => Ok(result));
     }
 
@@ -330,7 +338,11 @@ public class MaintenanceRequestsController(
             async () =>
             {
                 await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
-                return await maintenanceRequestService.GetHistoryAsync(id, cancellationToken);
+                var history = await maintenanceRequestService.GetHistoryAsync(id, cancellationToken);
+                // Staff triage, assignment and review notes have no Tenant-safe visibility marker.
+                if (currentUserService.Role == UserRole.Tenant)
+                    foreach (var entry in history) entry.Notes = null;
+                return history;
             },
             result => Ok(result));
     }

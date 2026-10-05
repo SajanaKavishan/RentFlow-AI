@@ -20,6 +20,7 @@ public class MaintenanceRequestResponseDto
     public Guid? TechnicianId { get; set; }
 
     public string? AssignedTechnicianName { get; set; }
+    public string? AssignedTechnicianContactPhone { get; set; }
 
     public string Title { get; set; } = string.Empty;
 

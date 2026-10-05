@@ -22,7 +22,9 @@ public sealed class TenantMaintenancePostgresTests
         await using var context = database.Context();
         var migrations = context.Database.GetMigrations().ToArray();
         var migrator = context.GetService<IMigrator>();
-        await migrator.MigrateAsync(migrations[^2]);
+        var task2Index = Array.IndexOf(migrations, "20261005040047_AddTenantMaintenanceRequestExperience");
+        Assert.True(task2Index > 0);
+        await migrator.MigrateAsync(migrations[task2Index - 1]);
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var property = Guid.NewGuid();
@@ -127,6 +129,24 @@ public sealed class TenantMaintenancePostgresTests
         public Task<byte[]> DownloadBytesAsync(string storageKey, long maximumBytes, CancellationToken cancellationToken = default) => Task.FromResult(new byte[] { 1, 2, 3 });
         public Task<string> GenerateDownloadUrlAsync(string storageKey, string originalFileName, string contentType, TimeSpan lifetime) => Task.FromResult("https://test.invalid/photo.jpg");
         public Task<string> GenerateInlineUrlAsync(string storageKey, string contentType, TimeSpan lifetime) => Task.FromResult("https://test.invalid/photo.jpg");
+    }
+
+    [PostgreSqlFact]
+    public async Task WorkContactMigration_DisablesExistingTechniciansWithoutCopyingPrivatePhone()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await using var before = database.Context();
+        await before.GetService<IMigrator>().MigrateAsync("20261005040047_AddTenantMaintenanceRequestExperience");
+        var id = Guid.NewGuid();
+        var privatePhone = "+94112223344";
+        await before.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"Users\" (\"Id\",\"FullName\",\"Email\",\"NormalizedEmail\",\"PhoneNumber\",\"Role\",\"IsActive\",\"CreatedAt\",\"UpdatedAt\") VALUES ({id},{"Existing Technician"},{"existing-tech@example.test"},{"EXISTING-TECH@EXAMPLE.TEST"},{privatePhone},{"MaintenanceTechnician"},{true},{DateTimeOffset.UtcNow},{DateTimeOffset.UtcNow})");
+        await using var migrated = database.Context();
+        await migrated.Database.MigrateAsync();
+        var technician = await migrated.Users.AsNoTracking().SingleAsync(u => u.Id == id);
+        Assert.Equal(privatePhone, technician.PhoneNumber);
+        Assert.False(technician.MaintenanceContactEnabled);
+        Assert.Null(technician.MaintenanceContactPhone);
+        Assert.False(migrated.Database.HasPendingModelChanges());
     }
 
     private sealed class TestDatabase(string connection, string schema) : IAsyncDisposable

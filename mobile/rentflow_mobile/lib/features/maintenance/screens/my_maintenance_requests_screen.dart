@@ -14,6 +14,8 @@ import '../models/maintenance_request.dart';
 import '../services/maintenance_api_service.dart';
 import '../services/maintenance_photo_picker.dart';
 import '../widgets/tenant_maintenance_ui.dart';
+import '../widgets/maintenance_timeline.dart';
+import '../widgets/assigned_technician_card.dart';
 import 'create_maintenance_request_screen.dart';
 
 class MyMaintenanceRequestsScreen extends StatefulWidget {
@@ -779,7 +781,6 @@ class _MaintenanceRequestDetailsState
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _sectionTitle(context, 'DESCRIPTION', top: 0),
               Text(
                 detail.description,
                 style: const TextStyle(
@@ -788,31 +789,17 @@ class _MaintenanceRequestDetailsState
                   color: AppPalette.primaryText,
                 ),
               ),
-              if (detail.preferredAccessWindow case final access?) ...[
-                _sectionTitle(context, 'PREFERRED ACCESS'),
-                Text(
-                  access.label,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppPalette.primaryText,
-                  ),
+              if (detail.preferredAccessWindow != null ||
+                  (detail.tenantAccessNotes?.trim().isNotEmpty ?? false))
+                _PreferredAccessRow(
+                  window: detail.preferredAccessWindow,
+                  notes: detail.tenantAccessNotes,
                 ),
-              ],
-              if (detail.tenantAccessNotes?.trim().isNotEmpty ?? false) ...[
-                const SizedBox(height: 10),
-                Text(
-                  'Access notes: ${detail.tenantAccessNotes}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.4,
-                    color: AppPalette.primaryText,
-                  ),
-                ),
-              ],
               if (detail.technicianId != null &&
                   (detail.assignedTechnicianName?.trim().isNotEmpty ?? false))
-                _AssignedTechnicianIdentity(
+                AssignedTechnicianCard(
                   name: detail.assignedTechnicianName!.trim(),
+                  contactPhone: detail.assignedTechnicianContactPhone,
                 ),
               FutureBuilder<List<MaintenanceStatusHistory>>(
                 future: _history,
@@ -846,88 +833,28 @@ class _MaintenanceRequestDetailsState
                     );
                   }
                   final history =
-                      List<MaintenanceStatusHistory>.of(
-                        snapshot.data ?? const <MaintenanceStatusHistory>[],
-                      )..sort((a, b) {
-                        final time = a.changedAt.compareTo(b.changedAt);
-                        return time == 0 ? a.id.compareTo(b.id) : time;
-                      });
-                  if (history.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
+                      snapshot.data ?? const <MaintenanceStatusHistory>[];
+                  if (history.isEmpty) return const SizedBox.shrink();
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _sectionTitle(context, 'UPDATES'),
-                      ...history.map(
-                        (entry) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Padding(
-                                padding: EdgeInsets.only(top: 4, right: 10),
-                                child: Icon(
-                                  Icons.circle,
-                                  size: 8,
-                                  color: AppPalette.olive,
-                                ),
-                              ),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _maintenanceHistoryLabel(entry.toStatus),
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        height: 1.35,
-                                        color: AppPalette.primaryText,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${MaterialLocalizations.of(context).formatMediumDate(entry.changedAt.toLocal())}'
-                                      ' · ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(entry.changedAt.toLocal()))}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        height: 1.35,
-                                        color: AppPalette.secondaryText,
-                                      ),
-                                    ),
-                                    if (entry.notes?.trim().isNotEmpty ??
-                                        false) ...[
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        entry.notes!.trim(),
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          height: 1.4,
-                                          color: AppPalette.primaryText,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      MaintenanceTimeline(history: history),
                     ],
                   );
                 },
               ),
               _sectionTitle(context, 'ATTACHMENTS'),
-              Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Text(
-                    'Photos and supporting files',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppPalette.primaryText,
+                  Expanded(
+                    child: const Text(
+                      'Photos and supporting files',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppPalette.primaryText,
+                      ),
                     ),
                   ),
                   TextButton.icon(
@@ -940,7 +867,10 @@ class _MaintenanceRequestDetailsState
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.attach_file),
-                    label: const Text('Add'),
+                    label: const Text(
+                      'Add',
+                      semanticsLabel: 'Add maintenance attachment',
+                    ),
                   ),
                 ],
               ),
@@ -1047,80 +977,62 @@ class _MaintenanceRequestDetailsState
   }
 }
 
-String _maintenanceHistoryLabel(MaintenanceRequestStatus status) =>
-    switch (status) {
-      MaintenanceRequestStatus.submitted => 'Request submitted',
-      MaintenanceRequestStatus.triaged => 'Request triaged',
-      MaintenanceRequestStatus.assigned => 'Technician assigned',
-      MaintenanceRequestStatus.estimatePending => 'Estimate pending',
-      MaintenanceRequestStatus.estimateSubmitted => 'Estimate submitted',
-      MaintenanceRequestStatus.awaitingLandlordApproval =>
-        'Awaiting landlord approval',
-      MaintenanceRequestStatus.approved => 'Estimate approved',
-      MaintenanceRequestStatus.rejected => 'Estimate rejected',
-      MaintenanceRequestStatus.inProgress => 'Work in progress',
-      MaintenanceRequestStatus.completed => 'Work completed',
-      MaintenanceRequestStatus.cancelled => 'Request cancelled',
-    };
-
-class _AssignedTechnicianIdentity extends StatelessWidget {
-  const _AssignedTechnicianIdentity({required this.name});
-  final String name;
+class _PreferredAccessRow extends StatelessWidget {
+  const _PreferredAccessRow({this.window, this.notes});
+  final PreferredAccessWindow? window;
+  final String? notes;
 
   @override
-  Widget build(BuildContext context) {
-    final parts = name.split(RegExp(r'\s+'));
-    final initials = [
-      parts.first,
-      if (parts.length > 1) parts.last,
-    ].map((part) => part.characters.first).join().toUpperCase();
-    return Padding(
-      padding: const EdgeInsets.only(top: 18, bottom: 2),
-      child: Row(
-        key: const ValueKey('assigned-technician-identity'),
-        children: [
-          ExcludeSemantics(
-            child: CircleAvatar(
-              radius: 21,
-              backgroundColor: AppPalette.progress,
-              foregroundColor: AppPalette.darkOlive,
-              child: Text(
-                initials,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppPalette.primaryText,
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.schedule_outlined, size: 17, color: AppPalette.olive),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 3,
+                children: [
+                  Text(
+                    window == null ? 'Access notes' : 'Preferred access',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppPalette.secondaryText,
+                    ),
                   ),
-                ),
+                  if (window case final access?)
+                    Text(
+                      access.label,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppPalette.primaryText,
+                      ),
+                    ),
+                ],
+              ),
+              if (notes?.trim().isNotEmpty ?? false) ...[
                 const SizedBox(height: 3),
-                const Text(
-                  'Assigned technician',
-                  style: TextStyle(
+                Text(
+                  notes!.trim(),
+                  style: const TextStyle(
                     fontSize: 12,
+                    height: 1.4,
                     color: AppPalette.secondaryText,
                   ),
                 ),
               ],
-            ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 }
 
 String _safeErrorMessage(Object? error) {

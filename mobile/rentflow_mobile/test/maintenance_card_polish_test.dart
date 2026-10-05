@@ -43,6 +43,7 @@ Future<void> mountTenant(
   Map<String, dynamic> request, {
   List<Map<String, dynamic>> history = const [],
   List<Map<String, dynamic>> attachments = const [],
+  double scale = 1,
 }) async {
   await tenant.mount(tester, (r) async {
     final Object payload;
@@ -56,7 +57,7 @@ Future<void> mountTenant(
       payload = request;
     }
     return http.Response(jsonEncode(payload), 200);
-  });
+  }, scale: scale);
   await tester.pumpAndSettle();
 }
 
@@ -124,20 +125,20 @@ void main() {
 
       await tester.tap(toggle);
       await tester.pumpAndSettle();
-      expect(find.text('DESCRIPTION'), findsOneWidget);
+      expect(find.text('DESCRIPTION'), findsNothing);
       expect(find.text('The bedroom outlet has no power.'), findsOneWidget);
-      expect(find.text('PREFERRED ACCESS'), findsOneWidget);
+      expect(find.text('Preferred access'), findsOneWidget);
       expect(find.text('Morning 8-12'), findsOneWidget);
       expect(find.text('Mike Reyes'), findsOneWidget);
       expect(find.text('MR'), findsOneWidget);
       expect(find.text('Assigned technician'), findsOneWidget);
       expect(find.byIcon(Icons.expand_less), findsOneWidget);
       final submittedY = tester.getTopLeft(find.text('Request submitted')).dy;
-      final triagedY = tester.getTopLeft(find.text('Request triaged')).dy;
+      final triagedY = tester.getTopLeft(find.text('Request reviewed')).dy;
       final assignedY = tester.getTopLeft(find.text('Technician assigned')).dy;
       expect(submittedY, lessThan(triagedY));
       expect(triagedY, lessThan(assignedY));
-      expect(find.text('Bring an outlet tester.'), findsOneWidget);
+      expect(find.text('Bring an outlet tester.'), findsNothing);
       expect(find.text('ATTACHMENTS'), findsOneWidget);
       expect(find.text('outlet.png'), findsOneWidget);
       expect(find.text('No attachments yet.'), findsNothing);

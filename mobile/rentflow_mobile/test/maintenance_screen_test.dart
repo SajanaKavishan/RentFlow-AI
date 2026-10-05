@@ -391,7 +391,7 @@ void main() {
       expect(find.text('Leaking kitchen tap'), findsOneWidget);
       expect(find.byType(CreateMaintenanceRequestScreen), findsNothing);
       expect(find.text('A clear issue description.'), findsOneWidget);
-      expect(find.text('DESCRIPTION'), findsOneWidget);
+      expect(find.text('DESCRIPTION'), findsNothing);
       expect(find.text('UPDATES'), findsNothing);
       expect(tester.takeException(), isNull);
     },
@@ -913,8 +913,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('UPDATES'), findsOneWidget);
-    expect(find.text('Request triaged'), findsOneWidget);
-    expect(find.textContaining('Request triaged.'), findsOneWidget);
+    expect(find.text('Request reviewed'), findsOneWidget);
+    expect(find.textContaining('Request triaged.'), findsNothing);
     expect(find.text('leak-photo.jpg'), findsOneWidget);
     expect(find.textContaining('image/jpeg'), findsOneWidget);
     expect(tester.takeException(), isNull);

@@ -90,7 +90,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == requestId, cancellationToken);
 
-        return maintenanceRequest is null ? null : await MapToResponseAsync(maintenanceRequest, cancellationToken);
+        return maintenanceRequest is null ? null : await MapToResponseAsync(maintenanceRequest, cancellationToken, includeContact: true);
     }
 
     public async Task<IReadOnlyList<MaintenanceRequestSummaryDto>> GetByTenantAsync(
@@ -806,17 +806,20 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
 
     private async Task<MaintenanceRequestResponseDto> MapToResponseAsync(
         MaintenanceRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includeContact = false)
     {
         var response = MapToResponse(request);
         if (request.TechnicianId is { } technicianId)
         {
             // Project display identity only; account contact and profile data stay private.
-            var name = await dbContext.Users.AsNoTracking()
+            var identity = await dbContext.Users.AsNoTracking()
                 .Where(user => user.Id == technicianId && user.Role == UserRole.MaintenanceTechnician)
-                .Select(user => user.FullName)
+                .Select(user => new { user.FullName, user.MaintenanceContactPhone, user.MaintenanceContactEnabled, user.IsActive })
                 .SingleOrDefaultAsync(cancellationToken);
-            response.AssignedTechnicianName = NormalizeOptionalText(name);
+            response.AssignedTechnicianName = NormalizeOptionalText(identity?.FullName);
+            if (includeContact && identity is { MaintenanceContactEnabled: true, IsActive: true })
+                response.AssignedTechnicianContactPhone = PhoneNumberValidation.UsablePhoneNumber(identity.MaintenanceContactPhone);
         }
 
         return response;
