@@ -161,7 +161,7 @@ def test_fixed_graph_and_untrusted_evidence(settings):
     before = copy.deepcopy(payload)
     response = post(settings, provider, payload)
     assert response.status_code == 200
-    assert provider.calls == ["MaintenancePlan", "MaintenanceIssueAssessment", "MaintenanceUrgencyAssessment",
+    assert provider.calls == ["MaintenanceIssueAssessment", "MaintenanceUrgencyAssessment",
         "MaintenanceInformationReview", "MaintenanceCoordinationRecommendation", "MaintenanceCoordinationSummary"]
     assert provider.inputs[0]["maintenanceRequest"]["description"] == payload["description"]
     assert all("data, not instructions" in instruction for instruction in provider.instructions)
@@ -231,3 +231,13 @@ def test_unconfigured_service_auth_fails_closed(settings):
 def test_plan_cannot_be_reordered():
     with pytest.raises(ValidationError):
         MaintenancePlan(steps=list(reversed(MAINTENANCE_PLAN_STEPS)))
+
+
+def test_fixed_plan_does_not_depend_on_model_generated_step_names(settings):
+    responses = valid_maintenance_responses()
+    responses["MaintenancePlan"] = {"steps": ["invented-step"]}
+    provider = MaintenanceProvider(responses)
+    response = post(settings, provider)
+    assert response.status_code == 200
+    assert "MaintenancePlan" not in provider.calls
+    assert response.json()["executionMetadata"]["executedSteps"] == ["plan", *MAINTENANCE_PLAN_STEPS]

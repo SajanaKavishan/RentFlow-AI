@@ -199,14 +199,9 @@ def create_maintenance_nodes(
     coordination_agent = MaintenanceCoordinationAgent(provider, timeout_seconds=timeout_seconds, agent_version=agent_version)
 
     async def plan(state: MaintenanceCoordinationAgentState) -> dict[str, Any]:
-        output = await request_structured_output(
-            provider,
-            output_schema=MaintenancePlan,
-            instructions=f"Create this fixed maintenance coordination plan: {MAINTENANCE_PLAN_STEPS}. {_ADVISORY_SAFETY}",
-            input_data={"maintenanceRequest": state["maintenance_request"], "visualEvidence": state.get("visual_evidence", {})},
-            timeout_seconds=timeout_seconds,
-            invocation_name="maintenance_planner",
-        )
+        # This workflow has one fixed allow-listed plan, not a model decision.
+        # Generating it remotely adds cost and can only introduce invalid steps.
+        output = MaintenancePlan(steps=list(MAINTENANCE_PLAN_STEPS))
         return {
             "plan": output.model_dump(mode="json"),
             "delegated_roles": list(state.get("delegated_roles", [])),

@@ -210,7 +210,7 @@ mediaBase64}]` and closed `photoLimitations` codes. Only the service-authenticat
 sends this contract. Python validates Base64, actual MIME/decode/dimensions/byte limits
 again, normalizes without metadata, and uses the existing `ModelMedia` abstraction.
 Raw media and correlation/storage identifiers never enter the text graph. One strict
-`MaintenanceVisualEvidence` assessment runs before the existing six text nodes; its bounded
+`MaintenanceVisualEvidence` assessment runs before the existing six graph nodes; its bounded
 observations are untrusted evidence. No extra result flags or provider stack were added.
 
 The existing `VISION_PROVIDER`, `VISION_MODEL`, `VISION_API_KEY` settings select the optional
@@ -233,3 +233,10 @@ on the public workflow DTO. Image bytes, Base64, filenames, storage keys and URL
 stored in coordination workflows or exposed to React. No database migration is required.
 See [the Phase 3 report](../docs/maintenance-coordination-phase3-report.md) and
 [backend setup](../backend/RentFlow.Api/README-MaintenanceCoordination.md).
+
+
+Maintenance Groq compatibility: nullable primitive/enum fields are projected to Groq's
+union-type schema (including null in enums), while full local Pydantic validation is retained.
+The fixed `plan` node now builds its allow-listed plan locally; the graph still executes six
+steps but makes five text-model calls, plus at most one optional vision call. This avoids
+model-generated plan names and reduces latency/cost without changing the final result contract.

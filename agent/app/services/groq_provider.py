@@ -49,12 +49,32 @@ _CONTEXT_SIZE_DIAGNOSTIC_CHARACTERS = 400_000
 def _groq_strict_schema(output_schema: type[StructuredOutput]) -> dict[str, Any]:
     """Build Groq's strict JSON Schema without changing the local model."""
     schema = output_schema.model_json_schema(by_alias=True)
-    _normalize_strict_schema(schema)
+    _normalize_strict_schema(schema, schema.get("$defs", {}))
     return schema
 
 
-def _normalize_strict_schema(value: Any) -> None:
+def _normalize_strict_schema(value: Any, definitions: dict[str, Any] | None = None) -> None:
     if isinstance(value, dict):
+        # Groq rejects nullable primitive anyOf/$ref combinations. Its documented
+        # union-type representation keeps the same enum/null semantics.
+        branches = value.get("anyOf")
+        if isinstance(branches, list) and len(branches) == 2:
+            nulls = [branch for branch in branches if isinstance(branch, dict) and branch.get("type") == "null"]
+            others = [branch for branch in branches if branch not in nulls]
+            if len(nulls) == 1 and len(others) == 1 and isinstance(others[0], dict):
+                candidate = others[0]
+                reference = candidate.get("$ref", "")
+                if reference.startswith("#/$defs/"):
+                    candidate = (definitions or {}).get(reference.removeprefix("#/$defs/"), candidate)
+                if isinstance(candidate.get("type"), str) and candidate["type"] in {"string", "integer", "number", "boolean"}:
+                    value.pop("anyOf")
+                    value.update(candidate)
+                    value["type"] = [candidate["type"], "null"]
+                    if "enum" in candidate:
+                        value["enum"] = [*candidate["enum"], None]
+                    elif "const" in candidate:
+                        value.pop("const", None)
+                        value["enum"] = [candidate["const"], None]
         for keyword in _LOCAL_VALIDATION_ONLY_KEYWORDS:
             value.pop(keyword, None)
 
@@ -66,10 +86,10 @@ def _normalize_strict_schema(value: Any) -> None:
             value["required"] = list(properties)
 
         for nested_value in value.values():
-            _normalize_strict_schema(nested_value)
+            _normalize_strict_schema(nested_value, definitions)
     elif isinstance(value, list):
         for nested_value in value:
-            _normalize_strict_schema(nested_value)
+            _normalize_strict_schema(nested_value, definitions)
 
 
 def _schema_name(output_schema: type[StructuredOutput]) -> str:

@@ -73,11 +73,11 @@ def codes(response):
 
 
 @pytest.mark.parametrize("format", ["JPEG", "PNG", "WEBP"])
-def test_supported_images_use_one_vision_call_and_only_derived_evidence_in_six_text_calls(settings, format):
+def test_supported_images_use_one_vision_call_and_only_derived_evidence_in_five_text_calls(settings, format):
     response, text, vision = analyze(settings, [photo(format=format)])
     assert response.status_code == 200
     assert response.json()["executionMetadata"]["photoEvidence"] == {"suppliedPhotoCount": 1, "analyzedPhotoCount": 1}
-    assert len(vision.calls) == 1 and len(text.calls) == 6
+    assert len(vision.calls) == 1 and len(text.calls) == 5
     assert vision.calls[0]["output_schema"].__name__ == "MaintenanceVisualEvidence"
     assert vision.calls[0]["media"][0].content_type == "image/jpeg"
     assert "mediaBase64" not in json.dumps(text.inputs)
@@ -100,7 +100,7 @@ def test_five_images_still_use_one_vision_call(settings):
 
 def test_no_photos_text_only_has_no_photo_limitation(settings):
     response, text, vision = analyze(settings)
-    assert response.status_code == 200 and len(text.calls) == 6 and not vision.calls
+    assert response.status_code == 200 and len(text.calls) == 5 and not vision.calls
     assert not {"PhotoUnavailable", "PhotoUnreadable"} & codes(response)
 
 
@@ -108,7 +108,7 @@ def test_no_photos_text_only_has_no_photo_limitation(settings):
                                        {"contentType": "image/png"}])
 def test_unreadable_and_mime_spoofed_media_fall_back(settings, changes):
     response, text, vision = analyze(settings, [photo(**changes)])
-    assert response.status_code == 200 and len(text.calls) == 6 and not vision.calls
+    assert response.status_code == 200 and len(text.calls) == 5 and not vision.calls
     assert "PhotoUnreadable" in codes(response)
     assert response.json()["executionMetadata"]["photoEvidence"]["analyzedPhotoCount"] == 0
 
@@ -170,7 +170,7 @@ def test_image_instructions_are_untrusted_in_vision_and_every_downstream_node(se
 def test_invalid_vision_output_is_rejected_and_safe_text_fallback(settings, update):
     vision = VisionProvider({"photos": [observation()], "requiresHumanReview": True, **update})
     response, text, _ = analyze(settings, [photo()], vision)
-    assert response.status_code == 200 and len(text.calls) == 6
+    assert response.status_code == 200 and len(text.calls) == 5
     assert "PhotoUnavailable" in codes(response)
     assert text.inputs[0]["visualEvidence"]["observations"] == []
     assert "private" not in response.text
@@ -178,7 +178,7 @@ def test_invalid_vision_output_is_rejected_and_safe_text_fallback(settings, upda
 
 def test_nonvision_provider_does_not_attempt_media_call(settings):
     response, text, _ = analyze(settings, [photo()], MaintenanceProvider())
-    assert response.status_code == 200 and len(text.calls) == 6
+    assert response.status_code == 200 and len(text.calls) == 5
     assert "PhotoUnavailable" in codes(response)
 
 
@@ -203,7 +203,7 @@ def test_unconfigured_vision_uses_existing_configuration_fallback(settings):
     text = MaintenanceProvider()
     response = authenticated_client(create_app(settings=settings, model_provider=text)).post(
         "/internal/maintenance-coordination/analyze", json=payload)
-    assert response.status_code == 200 and len(text.calls) == 6
+    assert response.status_code == 200 and len(text.calls) == 5
     assert "PhotoUnavailable" in codes(response)
 
 
@@ -226,7 +226,7 @@ def test_provider_partial_readability_reports_only_readable_photos(settings):
 
 def test_vision_sub_budget_leaves_time_for_text_fallback(settings):
     response, text, vision = analyze(settings, [photo()], VisionProvider(delay=1), budget=0.3)
-    assert response.status_code == 200 and len(text.calls) == 6 and len(vision.calls) == 1
+    assert response.status_code == 200 and len(text.calls) == 5 and len(vision.calls) == 1
     assert "PhotoUnavailable" in codes(response)
 
 

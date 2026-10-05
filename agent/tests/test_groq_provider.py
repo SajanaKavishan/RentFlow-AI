@@ -468,3 +468,19 @@ async def test_groq_vision_uses_provider_neutral_in_memory_image_media() -> None
     assert content[1]["type"] == "image_url"
     assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
     assert completions.calls[0]["response_format"] == {"type": "json_object"}
+
+
+def test_maintenance_nullable_enums_use_groq_union_types_without_relaxing_local_contract():
+    from app.schemas.maintenance import MaintenanceIssueAssessment, MaintenanceCoordinationSummary
+    from pydantic import ValidationError
+    issue = _groq_strict_schema(MaintenanceIssueAssessment)["properties"]["suggestedCategory"]
+    assert issue["type"] == ["string", "null"]
+    assert "anyOf" not in issue and "$ref" not in issue
+    assert "Plumbing" in issue["enum"] and None in issue["enum"]
+    final = _groq_strict_schema(MaintenanceCoordinationSummary)["properties"]
+    assert final["nextAction"]["type"] == ["string", "null"]
+    assert None in final["nextAction"]["enum"]
+    assert final["requiresHumanReview"]["const"] is True
+    with pytest.raises(ValidationError):
+        MaintenanceIssueAssessment.model_validate({"suggestedCategory": "Electrician",
+            "categoryConfidence": "High", "findings": [], "explanation": "Not a canonical category."})
