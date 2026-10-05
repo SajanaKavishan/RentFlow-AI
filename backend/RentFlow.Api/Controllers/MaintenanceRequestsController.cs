@@ -149,6 +149,30 @@ public class MaintenanceRequestsController(
                 result));
     }
 
+    [HttpGet("{id:guid}/coordination-workflows/latest")]
+    [ProducesResponseType<MaintenanceCoordinationWorkflowResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MaintenanceCoordinationWorkflowResponseDto?>> GetLatestCoordinationWorkflow(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out var currentUserId, out var authResult))
+            return authResult;
+
+        Response.Headers.CacheControl = "private, no-store";
+        return await ExecuteAsync(
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                var workflow = await maintenanceCoordinationOrchestrator.GetLatestByRequestAsync(id, cancellationToken);
+                return workflow is null ? null : MaintenanceCoordinationWorkflowResponseDto.FromWorkflow(workflow);
+            },
+            result => result is null ? NoContent() : Ok(result));
+    }
+
     [HttpGet("{id:guid}/coordination-workflows/{workflowId:guid}")]
     [ProducesResponseType<MaintenanceCoordinationWorkflowResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

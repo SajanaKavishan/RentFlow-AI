@@ -460,7 +460,7 @@ public sealed class MaintenanceRequestsAuthorizationTests
     public static IEnumerable<object[]> LandlordScopedEndpoints()
     {
         foreach (var route in new[] { "", "/history", "/estimates", "/estimates/latest",
-            "/coordination-analysis", "/coordination-workflows", "/triage", "/assign-technician",
+            "/coordination-analysis", "/coordination-workflows", "/coordination-workflows/latest", "/triage", "/assign-technician",
             "/estimate-pending", "/estimates/ESTIMATE/approve", "/estimates/ESTIMATE/reject",
             "/estimates/ESTIMATE/request-revision", "/coordination-workflows/WORKFLOW",
             "/coordination-workflows/WORKFLOW/approve", "/coordination-workflows/WORKFLOW/reject" })
@@ -556,6 +556,84 @@ public sealed class MaintenanceRequestsAuthorizationTests
         var request = await SeedRequestAsync(factory, tenantId: tenant);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync($"/api/maintenance-requests/{request}/{action}", null)).StatusCode);
         Assert.Equal(0, agent.Calls);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Landlord)]
+    [InlineData(UserRole.Admin)]
+    public async Task LatestWorkflow_ReturnsEmptyOrNewestSafeDtoAndPreservesDecisions(UserRole role)
+    {
+        var agent = new SafeMaintenanceAgent();
+        using var factory = new AuthApiFactory { MaintenanceCoordinationAgentClient = agent };
+        using var client = factory.CreateHttpsClient();
+        var actor = await AuthenticateAsync(client, "latest-" + role + "@example.com", role, factory);
+        var requestId = await SeedRequestAsync(factory);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var request = await db.MaintenanceRequests.SingleAsync(item => item.Id == requestId);
+            var property = new Property { LandlordId = role == UserRole.Landlord ? actor : Guid.NewGuid(), Title = "Owned", Address = "Test", City = "Test" };
+            db.Properties.Add(property);
+            request.PropertyId = property.Id;
+            await db.SaveChangesAsync();
+        }
+        var path = $"/api/maintenance-requests/{requestId}/coordination-workflows/latest";
+        var empty = await client.GetAsync(path);
+        Assert.Equal(HttpStatusCode.NoContent, empty.StatusCode);
+        Assert.True(empty.Headers.CacheControl?.NoStore);
+        var newerId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        var now = DateTimeOffset.UtcNow;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.MaintenanceCoordinationWorkflows.AddRange(
+                new MaintenanceCoordinationWorkflow { Id = Guid.Parse("00000000-0000-0000-0000-000000000003"),
+                    MaintenanceRequestId = requestId, CreatedAt = now.AddDays(-1), UpdatedAt = now.AddDays(1),
+                    Status = MaintenanceCoordinationWorkflowStatus.Completed, ApprovalStatus = MaintenanceCoordinationApprovalStatus.Approved },
+                new MaintenanceCoordinationWorkflow { Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                    MaintenanceRequestId = requestId, CreatedAt = now, UpdatedAt = now,
+                    Status = MaintenanceCoordinationWorkflowStatus.AwaitingHumanReview },
+                new MaintenanceCoordinationWorkflow { Id = newerId,
+                    MaintenanceRequestId = requestId, CreatedAt = now, UpdatedAt = now,
+                    Status = MaintenanceCoordinationWorkflowStatus.Completed, ApprovalStatus = MaintenanceCoordinationApprovalStatus.Approved,
+                    RequiresHumanApproval = true, FinalResultJson = "{\"requiresHumanReview\":true}",
+                    Steps = [new MaintenanceCoordinationStep { StepOrder = 1, StepName = "Validation", Status = MaintenanceCoordinationStepStatus.Completed }] });
+            await db.SaveChangesAsync();
+        }
+        foreach (var decision in new[] { MaintenanceCoordinationApprovalStatus.Approved, MaintenanceCoordinationApprovalStatus.Rejected })
+        {
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var workflow = await db.MaintenanceCoordinationWorkflows.SingleAsync(item => item.Id == newerId);
+                workflow.ApprovalStatus = decision;
+                workflow.Status = decision == MaintenanceCoordinationApprovalStatus.Approved
+                    ? MaintenanceCoordinationWorkflowStatus.Completed : MaintenanceCoordinationWorkflowStatus.Failed;
+                await db.SaveChangesAsync();
+            }
+            using var latest = await client.GetAsync(path);
+            Assert.Equal(HttpStatusCode.OK, latest.StatusCode);
+            using var body = await ParseAsync(latest);
+            Assert.Equal(newerId, body.RootElement.GetProperty("id").GetGuid());
+            Assert.Equal(requestId, body.RootElement.GetProperty("maintenanceRequestId").GetGuid());
+            Assert.Equal((int)decision, body.RootElement.GetProperty("approvalStatus").GetInt32());
+            Assert.False(body.RootElement.TryGetProperty("maintenanceRequest", out _));
+            foreach (var step in body.RootElement.GetProperty("steps").EnumerateArray())
+                Assert.False(step.TryGetProperty("workflow", out _));
+        }
+        Assert.Equal(0, agent.Calls);
+    }
+
+    [Fact]
+    public async Task LatestWorkflow_RejectsTenantAndUnauthenticatedReads()
+    {
+        using var factory = new AuthApiFactory();
+        var request = await SeedRequestAsync(factory);
+        using var client = factory.CreateHttpsClient();
+        var path = $"/api/maintenance-requests/{request}/coordination-workflows/latest";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(path)).StatusCode);
+        await AuthenticateAsync(client, "tenant-latest@example.com", UserRole.Tenant);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path)).StatusCode);
     }
 
     private sealed class SafeMaintenanceAgent : RentFlow.Api.Services.Interfaces.IMaintenanceCoordinationAgentClient

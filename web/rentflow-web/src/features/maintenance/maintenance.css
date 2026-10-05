@@ -759,3 +759,17 @@
   border-color: rgb(95 113 68 / 20%);
   border-top-color: var(--olive-700);
 }
+
+/* Give the selected request and its advisory review room within the existing workspace. */
+.maintenance-page--landlord .maintenance-layout {
+  grid-template-columns: minmax(220px, .7fr) minmax(0, 1.8fr) minmax(220px, .8fr);
+}
+.maintenance-page--landlord .maintenance-panel { min-width: 0; }
+.maintenance-request-actions-heading { border-top: 1px solid var(--border); padding-top: 18px; margin-bottom: 14px; }
+.maintenance-request-actions-heading h3 { color: var(--olive-900); font-size: 1rem; margin: 0 0 6px; }
+.maintenance-request-actions-heading p { color: var(--muted); font-size: .82rem; line-height: 1.6; margin: 0; }
+@media (max-width: 1100px) {
+  .maintenance-page--landlord .maintenance-layout { grid-template-columns: 1fr; }
+}
+
+.maintenance-page--landlord .maintenance-detail__topline h2 { margin: 0; color: var(--olive-900); font-size: 1.2rem; line-height: 1.4; }

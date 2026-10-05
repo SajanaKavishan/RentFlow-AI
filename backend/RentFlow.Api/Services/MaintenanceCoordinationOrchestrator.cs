@@ -225,6 +225,22 @@ public sealed class MaintenanceCoordinationOrchestrator(
             .SingleOrDefaultAsync(item => item.Id == workflowId, cancellationToken);
     }
 
+    public async Task<MaintenanceCoordinationWorkflow?> GetLatestByRequestAsync(
+        Guid maintenanceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        if (maintenanceRequestId == Guid.Empty)
+            throw MaintenanceRequestServiceException.Validation("A maintenance request ID is required.");
+
+        return await dbContext.MaintenanceCoordinationWorkflows
+            .AsNoTracking()
+            .Include(item => item.Steps)
+            .Where(item => item.MaintenanceRequestId == maintenanceRequestId)
+            .OrderByDescending(item => item.CreatedAt)
+            .ThenByDescending(item => item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<MaintenanceCoordinationWorkflow> ApproveAsync(
         Guid workflowId,
         Guid reviewerUserId,

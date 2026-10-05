@@ -114,6 +114,10 @@ export function encodeMaintenanceRequest(payload) {
 
 export function maintenanceEnumLabel(value, definition) {
   const decoded = decodeEnum(value, definition)
+  if (definition === MAINTENANCE_CATEGORY) {
+    if (decoded === 'Hvac') return 'HVAC / A/C'
+    if (decoded === 'LocksDoors') return 'Locks / Doors'
+  }
   return typeof decoded === 'string' && decoded
     ? decoded.replace(/([a-z])([A-Z])/g, '$1 $2')
     : String(decoded ?? 'Unknown')
