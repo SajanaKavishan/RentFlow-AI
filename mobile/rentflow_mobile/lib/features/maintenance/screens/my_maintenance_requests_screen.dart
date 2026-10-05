@@ -12,13 +12,19 @@ import '../models/maintenance_attachment.dart';
 import '../models/maintenance_status_history.dart';
 import '../models/maintenance_request.dart';
 import '../services/maintenance_api_service.dart';
+import '../services/maintenance_photo_picker.dart';
 import '../widgets/tenant_maintenance_ui.dart';
 import 'create_maintenance_request_screen.dart';
 
 class MyMaintenanceRequestsScreen extends StatefulWidget {
-  const MyMaintenanceRequestsScreen({super.key, this.maintenanceApiService});
+  const MyMaintenanceRequestsScreen({
+    super.key,
+    this.maintenanceApiService,
+    this.photoPicker,
+  });
 
   final MaintenanceApiService? maintenanceApiService;
+  final MaintenancePhotoPicker? photoPicker;
 
   @override
   State<MyMaintenanceRequestsScreen> createState() =>
@@ -99,40 +105,10 @@ class _MyMaintenanceRequestsScreenState
     }
   }
 
-  Future<Property?> _selectProperty(List<Property> properties) async {
-    if (properties.isEmpty) return null;
-    return showDialog<Property>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Choose a property'),
-        children: properties
-            .map(
-              (property) => SimpleDialogOption(
-                onPressed: () => Navigator.of(context).pop(property),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      property.title,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    Text(
-                      '${property.address}, ${property.city}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
-
   Future<void> _createRequest() async {
     if (_isLoadingProperties) return;
     setState(() => _isLoadingProperties = true);
-    Property? property;
+    List<Property> eligibleProperties = [];
     try {
       final properties = await _apiService.getTenantProperties();
       if (!mounted) return;
@@ -159,8 +135,8 @@ class _MyMaintenanceRequestsScreenState
             ),
             title: const Text('No associated properties'),
             content: const Text(
-              'A maintenance request can only be created for a property '
-              'associated with your account.',
+              'An active lease for this property is required before '
+              'you can submit a maintenance request.',
               style: TextStyle(
                 fontSize: 14,
                 height: 1.4,
@@ -177,7 +153,7 @@ class _MyMaintenanceRequestsScreenState
         );
         return;
       }
-      property = await _selectProperty(properties);
+      eligibleProperties = properties;
     } on MaintenanceApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -198,11 +174,13 @@ class _MyMaintenanceRequestsScreenState
       if (mounted) setState(() => _isLoadingProperties = false);
     }
 
-    if (!mounted || property == null) return;
+    if (!mounted || eligibleProperties.isEmpty) return;
     final created = await Navigator.of(context).push<MaintenanceRequest>(
       MaterialPageRoute<MaintenanceRequest>(
         builder: (_) => CreateMaintenanceRequestScreen(
-          propertyId: property!.id,
+          propertyId: eligibleProperties.first.id,
+          properties: eligibleProperties,
+          photoPicker: widget.photoPicker,
           maintenanceApiService: _apiService,
         ),
       ),
@@ -216,6 +194,8 @@ class _MyMaintenanceRequestsScreenState
       });
     }
     // Also refresh when a tenant leaves confirmation with system Back.
+    if (_refreshOperation case final refresh?) await refresh;
+    if (!mounted) return;
     await _refresh();
   }
 
@@ -244,6 +224,7 @@ class _MyMaintenanceRequestsScreenState
                     key: const ValueKey('maintenance-title'),
                     'Maintenance',
                     style: AppTypography.pageTitle.copyWith(
+                      fontSize: 22,
                       color: AppPalette.primaryText,
                     ),
                   );
@@ -538,7 +519,7 @@ class _SummaryCard extends StatelessWidget {
       excludeSemantics: true,
       child: Container(
         key: ValueKey('summary-${group.name}'),
-        constraints: const BoxConstraints(minHeight: 80),
+        constraints: const BoxConstraints(minHeight: 64),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
         decoration: BoxDecoration(
           color: background,
@@ -552,7 +533,7 @@ class _SummaryCard extends StatelessWidget {
               key: ValueKey('count-${group.name}'),
               style: TextStyle(
                 height: 1,
-                fontSize: 22,
+                fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: foreground,
               ),
@@ -654,6 +635,10 @@ class _MaintenanceRequestDetailsState
     if (!mounted || file == null) return;
     if (file.bytes.isEmpty) {
       _showMessage('The selected attachment could not be read.');
+      return;
+    }
+    if (file.bytes.length > MaintenancePhoto.maximumBytes) {
+      _showMessage('Each photo must be 10 MB or smaller.');
       return;
     }
 
@@ -803,6 +788,16 @@ class _MaintenanceRequestDetailsState
                   color: AppPalette.secondaryText,
                 ),
               ),
+              if (detail.preferredAccessWindow case final access?) ...[
+                _sectionTitle(context, 'PREFERRED ACCESS'),
+                Text(
+                  access.label,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppPalette.primaryText,
+                  ),
+                ),
+              ],
               if (detail.tenantAccessNotes != null) ...[
                 const SizedBox(height: 10),
                 Text(
@@ -903,7 +898,6 @@ class _MaintenanceRequestDetailsState
                   );
                 },
               ),
-              _sectionTitle(context, 'ATTACHMENTS'),
               Wrap(
                 spacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -958,37 +952,39 @@ class _MaintenanceRequestDetailsState
                   final attachments =
                       snapshot.data ?? const <MaintenanceAttachment>[];
                   if (attachments.isEmpty) {
-                    return const Text('No attachments yet.');
+                    return const SizedBox.shrink();
                   }
                   return Column(
-                    children: attachments
-                        .map(
-                          (attachment) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.insert_drive_file),
-                            title: Text(attachment.fileName),
-                            subtitle: Text(
-                              '${attachment.contentType} · '
-                              '${_formatFileSize(attachment.fileSize)}',
-                            ),
-                            onTap: () => _openAttachment(attachment),
-                            trailing: IconButton(
-                              tooltip: 'Delete attachment',
-                              onPressed: _deletingIds.contains(attachment.id)
-                                  ? null
-                                  : () => _deleteAttachment(attachment),
-                              icon: _deletingIds.contains(attachment.id)
-                                  ? const SizedBox.square(
-                                      dimension: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.delete_outline),
-                            ),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _sectionTitle(context, 'ATTACHMENTS'),
+                      ...attachments.map(
+                        (attachment) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.insert_drive_file),
+                          title: Text(attachment.fileName),
+                          subtitle: Text(
+                            '${attachment.contentType} · '
+                            '${_formatFileSize(attachment.fileSize)}',
                           ),
-                        )
-                        .toList(),
+                          onTap: () => _openAttachment(attachment),
+                          trailing: IconButton(
+                            tooltip: 'Delete attachment',
+                            onPressed: _deletingIds.contains(attachment.id)
+                                ? null
+                                : () => _deleteAttachment(attachment),
+                            icon: _deletingIds.contains(attachment.id)
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.delete_outline),
+                          ),
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),
@@ -1093,13 +1089,18 @@ class _MaintenanceRequestCard extends StatelessWidget {
                             Text(
                               request.title,
                               style: AppTypography.cardTitle.copyWith(
+                                fontSize: 14,
                                 color: AppPalette.primaryText,
                                 height: 1.2,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '${maintenanceLabel(request.category)} \u00b7 ${request.id}',
+                              [
+                                maintenanceLabel(request.category),
+                                if (request.referenceCode != null)
+                                  request.referenceCode!,
+                              ].join(' \u00b7 '),
                               style: const TextStyle(
                                 fontSize: 11,
                                 height: 1.3,

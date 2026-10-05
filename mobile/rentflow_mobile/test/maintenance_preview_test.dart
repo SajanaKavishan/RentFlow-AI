@@ -8,6 +8,7 @@ import 'package:rentflow_mobile/debug/maintenance_preview_dependencies.dart';
 import 'package:rentflow_mobile/features/maintenance/models/maintenance_request.dart';
 import 'package:rentflow_mobile/features/maintenance/screens/create_maintenance_request_screen.dart';
 import 'package:rentflow_mobile/features/maintenance/screens/my_maintenance_requests_screen.dart';
+import 'package:rentflow_mobile/features/maintenance/widgets/tenant_maintenance_ui.dart';
 
 Future<void> _tap(WidgetTester tester, Finder finder) async {
   await tester.ensureVisible(finder);
@@ -17,26 +18,39 @@ Future<void> _tap(WidgetTester tester, Finder finder) async {
 
 Future<void> _openForm(WidgetTester tester) async {
   await _tap(tester, find.byKey(const ValueKey('new-maintenance-request')));
-  expect(find.text('Choose a property'), findsOneWidget);
-  await _tap(tester, find.text('Preview apartment'));
   expect(find.byType(CreateMaintenanceRequestScreen), findsOneWidget);
+  expect(find.text('Preview apartment'), findsOneWidget);
 }
 
 Future<void> _fillForm(WidgetTester tester) async {
-  for (final field in [
-    ('Title', 'Preview security repair'),
-    ('Description', 'The entrance lock is jammed.'),
-    ('Tenant access notes (optional)', 'Please knock first.'),
-  ]) {
-    final finder = find.widgetWithText(TextFormField, field.$1);
-    await tester.ensureVisible(finder);
-    await tester.enterText(finder, field.$2);
-  }
+  final description = find.byKey(const ValueKey('maintenance-description'));
+  await tester.ensureVisible(description);
+  await tester.enterText(description, 'The entrance lock is jammed.');
   tester.testTextInput.hide();
   await tester.pumpAndSettle();
+  await _tap(tester, find.byKey(const ValueKey('access-morning')));
 }
 
 void main() {
+  test(
+    'preview title derivation keeps a nonblank title for punctuation-only descriptions',
+    () async {
+      final dependencies = MaintenancePreviewDependencies();
+      addTearDown(dependencies.dispose);
+      await dependencies.auth.restoreSession();
+      final property =
+          (await dependencies.maintenance.getTenantProperties()).single;
+      final created = await dependencies.maintenance.createMaintenanceRequest(
+        tenantId: dependencies.auth.currentUser!.id,
+        propertyId: property.id,
+        description: '...',
+        category: MaintenanceCategory.plumbing,
+        priority: MaintenancePriority.normal,
+        preferredAccessWindow: PreferredAccessWindow.morning,
+      );
+      expect(created.title, 'Plumbing issue');
+    },
+  );
   test('production sources cannot import or export the debug directory', () {
     final root = Directory('lib').absolute;
     final directives = RegExp(
@@ -104,6 +118,7 @@ void main() {
         description: 'Lock does not turn.',
         category: MaintenanceCategory.security,
         priority: MaintenancePriority.emergency,
+        preferredAccessWindow: PreferredAccessWindow.morning,
         tenantAccessNotes: 'Knock first.',
       );
       expect(
@@ -194,34 +209,42 @@ void main() {
       await tester.pumpWidget(const MaintenancePreviewApp());
       await tester.pumpAndSettle();
       await _openForm(tester);
-      for (final category in MaintenanceCategory.values) {
+      for (final category in tenantCreateCategories) {
         expect(
           find.byKey(ValueKey('category-${category.name}')),
           findsOneWidget,
         );
       }
-      for (final priority in MaintenancePriority.values) {
+      for (final priority in tenantCreatePriorities) {
         expect(
           find.byKey(ValueKey('priority-${priority.name}')),
           findsOneWidget,
         );
       }
-      await _tap(tester, find.text('Submit Request'));
-      expect(find.text('Please enter a title.'), findsOneWidget);
-      expect(find.text('Please describe the issue.'), findsOneWidget);
-      await _tap(tester, find.byKey(const ValueKey('category-security')));
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(const ValueKey('maintenance-submit')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(find.byKey(const ValueKey('priority-low')), findsNothing);
+      await _tap(tester, find.byKey(const ValueKey('category-locksDoors')));
       await _tap(tester, find.byKey(const ValueKey('priority-emergency')));
       await _fillForm(tester);
       await _tap(tester, find.text('Submit Request'));
-      expect(find.text('Request submitted'), findsOneWidget);
-      expect(find.text('Preview security repair'), findsOneWidget);
-      expect(find.text('Security'), findsOneWidget);
+      expect(find.text('Request Submitted'), findsOneWidget);
+      expect(find.text('The entrance lock is jammed'), findsNothing);
+      expect(find.text('Locks / Doors'), findsOneWidget);
       expect(find.text('Emergency'), findsOneWidget);
-      expect(find.text('00000000-0000-4000-8000-000000002000'), findsOneWidget);
+      expect(find.text('00000000-0000-4000-8000-000000002000'), findsNothing);
+      expect(find.textContaining('REQUEST #MR-'), findsOneWidget);
+      expect(find.text('Morning 8-12'), findsOneWidget);
       await _tap(tester, find.text('Track Request'));
       expect(find.byType(MyMaintenanceRequestsScreen), findsOneWidget);
       expect(find.byType(CreateMaintenanceRequestScreen), findsNothing);
-      expect(find.text('Preview security repair'), findsOneWidget);
+      expect(find.text('The entrance lock is jammed'), findsOneWidget);
       expect(find.text('The entrance lock is jammed.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
@@ -237,12 +260,18 @@ void main() {
     await _tap(tester, find.text('Submit Request'));
     await _tap(tester, find.widgetWithText(OutlinedButton, 'New Request'));
     expect(find.byType(CreateMaintenanceRequestScreen), findsOneWidget);
-    expect(find.text('Request submitted'), findsNothing);
+    expect(find.text('Request Submitted'), findsNothing);
     expect(find.text('Preview security repair'), findsNothing);
-    final title = tester.widget<TextFormField>(
-      find.widgetWithText(TextFormField, 'Title'),
+    final description = tester.widget<TextFormField>(
+      find.byKey(const ValueKey('maintenance-description')),
     );
-    expect(title.controller!.text, isEmpty);
+    expect(description.controller!.text, isEmpty);
+    expect(
+      tester
+          .widget<ChoiceChip>(find.byKey(const ValueKey('access-morning')))
+          .selected,
+      isFalse,
+    );
     expect(tester.takeException(), isNull);
   });
 }

@@ -3,7 +3,20 @@ import 'package:flutter/material.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../models/maintenance_request.dart';
 
-String maintenanceLabel(Enum value) => value.name
+String maintenanceLabel(Enum value) {
+  if (value is MaintenanceCategory) {
+    return switch (value) {
+      MaintenanceCategory.hvac => 'HVAC / A/C',
+      MaintenanceCategory.appliance => 'Appliances',
+      MaintenanceCategory.pest => 'Pest Control',
+      MaintenanceCategory.locksDoors => 'Locks / Doors',
+      _ => _enumLabel(value),
+    };
+  }
+  return _enumLabel(value);
+}
+
+String _enumLabel(Enum value) => value.name
     .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}')
     .split(' ')
     .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
@@ -18,7 +31,31 @@ IconData maintenanceCategoryIcon(MaintenanceCategory category) =>
       MaintenanceCategory.security => Icons.lock_outline,
       MaintenanceCategory.pest => Icons.pest_control_outlined,
       MaintenanceCategory.other => Icons.build_outlined,
+      MaintenanceCategory.hvac => Icons.ac_unit_outlined,
+      MaintenanceCategory.locksDoors => Icons.lock_outline,
     };
+
+const tenantCreateCategories = [
+  MaintenanceCategory.plumbing,
+  MaintenanceCategory.electrical,
+  MaintenanceCategory.hvac,
+  MaintenanceCategory.appliance,
+  MaintenanceCategory.structural,
+  MaintenanceCategory.pest,
+  MaintenanceCategory.locksDoors,
+  MaintenanceCategory.other,
+];
+
+const tenantCreatePriorities = [
+  MaintenancePriority.emergency,
+  MaintenancePriority.high,
+  MaintenancePriority.normal,
+];
+
+String maintenanceCreatePriorityLabel(MaintenancePriority priority) =>
+    priority == MaintenancePriority.high
+    ? 'High Priority'
+    : maintenanceLabel(priority);
 
 /// Presentation groups only; exact workflow statuses remain on each card.
 enum TenantMaintenanceFilter {

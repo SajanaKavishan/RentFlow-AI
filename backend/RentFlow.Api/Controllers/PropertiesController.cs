@@ -175,25 +175,9 @@ public class PropertiesController : ControllerBase
         }
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var properties = await _context.Properties
+        var properties = await TenantMaintenanceEligibility.EligibleProperties(_context, tenantId, today)
             .AsNoTracking()
             .Include(property => property.Amenities)
-            .Where(property => _context.LeaseAgreements.Any(lease =>
-                lease.TenantId == tenantId
-                && lease.PropertyId == property.Id
-                && lease.Status == LeaseAgreementStatus.Active
-                && lease.StartDate <= today
-                && lease.EndDate >= today
-                && _context.RentalOffers.Any(offer =>
-                    offer.Id == lease.RentalOfferId
-                    && offer.Status == RentalOfferStatus.Accepted
-                    && offer.TenantId == lease.TenantId
-                    && offer.PropertyId == lease.PropertyId
-                    && _context.RentalApplications.Any(application =>
-                        application.Id == offer.RentalApplicationId
-                        && application.Status == RentalApplicationStatus.Approved
-                        && application.TenantId == lease.TenantId
-                        && application.PropertyId == lease.PropertyId))))
             .OrderByDescending(property => property.CreatedAt)
             .ToListAsync(cancellationToken);
 

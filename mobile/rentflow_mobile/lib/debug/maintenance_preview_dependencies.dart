@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/auth/token_storage.dart';
@@ -10,6 +11,7 @@ import '../features/maintenance/models/maintenance_attachment.dart';
 import '../features/maintenance/models/maintenance_request.dart';
 import '../features/maintenance/models/maintenance_status_history.dart';
 import '../features/maintenance/services/maintenance_api_service.dart';
+import '../features/maintenance/services/maintenance_photo_picker.dart';
 import '../features/properties/models/property.dart';
 
 /// Owned only by the separate debug entry point. No live transport or storage.
@@ -39,6 +41,11 @@ class MaintenancePreviewDependencies {
   final ApiClient _client;
   final AuthController auth;
   final MaintenancePreviewService maintenance;
+  // Optional native capture exercises permissions without enabling live API I/O.
+  final MaintenancePhotoPicker photoPicker =
+      const bool.fromEnvironment('MAINTENANCE_PREVIEW_USE_PLATFORM_PICKER')
+      ? PlatformMaintenancePhotoPicker()
+      : PreviewMaintenancePhotoPicker();
 
   void dispose() {
     auth.dispose();
@@ -135,6 +142,9 @@ class MaintenancePreviewService extends MaintenanceApiService {
         createdAt: createdAt,
         updatedAt: createdAt.add(Duration(hours: statuses.length - 1)),
         tenantAccessNotes: 'Please knock before entering.',
+        preferredAccessWindow: index == 2
+            ? null
+            : PreferredAccessWindow.morning,
       );
       _requests.add(request);
       _history[request.id] = [
@@ -180,8 +190,11 @@ class MaintenancePreviewService extends MaintenanceApiService {
     required DateTime createdAt,
     DateTime? updatedAt,
     String? tenantAccessNotes,
+    PreferredAccessWindow? preferredAccessWindow,
   }) => MaintenanceRequest(
     id: id,
+    referenceCode: 'MR-20261005${id.substring(id.length - 8)}',
+    preferredAccessWindow: preferredAccessWindow,
     propertyId: _propertyId,
     tenantId: _tenantId,
     technicianId: status == MaintenanceRequestStatus.submitted ? null : _id(4),
@@ -245,10 +258,11 @@ class MaintenancePreviewService extends MaintenanceApiService {
   Future<MaintenanceRequest> createMaintenanceRequest({
     required String tenantId,
     required String propertyId,
-    required String title,
+    String? title,
     required String description,
     required MaintenanceCategory category,
     required MaintenancePriority priority,
+    required PreferredAccessWindow preferredAccessWindow,
     String? tenantAccessNotes,
   }) async {
     if (tenantId != _tenantId || propertyId != _propertyId) {
@@ -259,13 +273,16 @@ class MaintenancePreviewService extends MaintenanceApiService {
     final createdAt = _fixtureTime.add(Duration(minutes: _createdCount));
     final request = _request(
       id: _id(2000 + _createdCount++),
-      title: title,
+      title: title == null || title.trim().isEmpty
+          ? _displayTitle(description, category)
+          : title.trim(),
       description: description,
       category: category,
       priority: priority,
       status: MaintenanceRequestStatus.submitted,
       createdAt: createdAt,
       tenantAccessNotes: tenantAccessNotes,
+      preferredAccessWindow: preferredAccessWindow,
     );
     _requests.insert(0, request);
     _history[request.id] = [
@@ -289,6 +306,14 @@ class MaintenancePreviewService extends MaintenanceApiService {
     required Uint8List bytes,
     String? attachmentType,
   }) async {
+    if ((_attachments[maintenanceRequestId]?.length ?? 0) >=
+        MaintenancePhoto.maximumCount) {
+      throw const MaintenanceApiException('A request can have up to 5 photos.');
+    }
+    await getMaintenanceRequestById(maintenanceRequestId);
+    if (tenantId != _tenantId) {
+      throw const MaintenanceApiException('Unknown preview tenant.');
+    }
     final attachment = MaintenanceAttachment(
       id: _id(3001 + _attachmentCount++),
       maintenanceRequestId: maintenanceRequestId,
@@ -301,6 +326,20 @@ class MaintenancePreviewService extends MaintenanceApiService {
     );
     (_attachments[maintenanceRequestId] ??= []).add(attachment);
     return attachment;
+  }
+
+  String _displayTitle(String description, MaintenanceCategory category) {
+    final normalized = description.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final sentence = RegExp(r'^.*?[.!?](?=\s|$)').firstMatch(normalized);
+    final title = sentence == null
+        ? normalized
+        : sentence.group(0)!.replaceFirst(RegExp(r'[.!?]+$'), '');
+    if (title.trim().isEmpty) {
+      return '${category.name[0].toUpperCase()}${category.name.substring(1)} issue';
+    }
+    if (title.length <= 200) return title;
+    final boundary = title.lastIndexOf(' ', 199);
+    return title.substring(0, boundary > 0 ? boundary : 200).trimRight();
   }
 
   @override
@@ -323,5 +362,35 @@ class MaintenancePreviewService extends MaintenanceApiService {
     throw const MaintenanceApiException(
       'Attachment downloads are unavailable in the offline preview.',
     );
+  }
+}
+
+/// Fixture images are selected locally and pass the production image validation.
+class PreviewMaintenancePhotoPicker extends MaintenancePhotoPicker {
+  PreviewMaintenancePhotoPicker({this.permissionDenied = false});
+  final bool permissionDenied;
+
+  @override
+  Future<List<MaintenancePhoto>> pick(MaintenancePhotoSource source) async {
+    if (permissionDenied) {
+      throw const MaintenancePhotoPickerException(
+        'Camera access is denied. You can allow it in your device settings.',
+      );
+    }
+    final bytes = (await rootBundle.load(
+      'assets/auth/residence.png',
+    )).buffer.asUint8List();
+    return [
+      for (
+        var index = 0;
+        index < (source == MaintenancePhotoSource.camera ? 1 : 3);
+        index++
+      )
+        MaintenancePhoto(
+          fileName: 'preview-photo-${index + 1}.png',
+          bytes: bytes,
+          contentType: 'image/png',
+        ),
+    ];
   }
 }

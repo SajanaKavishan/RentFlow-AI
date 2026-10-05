@@ -132,10 +132,11 @@ class MaintenanceApiService {
   Future<MaintenanceRequest> createMaintenanceRequest({
     required String tenantId,
     required String propertyId,
-    required String title,
+    String? title,
     required String description,
     required MaintenanceCategory category,
     required MaintenancePriority priority,
+    required PreferredAccessWindow preferredAccessWindow,
     String? tenantAccessNotes,
   }) async {
     final uri = apiClient.buildUri(
@@ -148,11 +149,12 @@ class MaintenanceApiService {
         uri,
         body: jsonEncode({
           'propertyId': propertyId,
-          'title': title,
+          'title': ?title,
           'description': description,
           'category': category.value,
           'priority': priority.value,
-          'tenantAccessNotes': tenantAccessNotes,
+          'preferredAccessWindow': preferredAccessWindow.apiValue,
+          'tenantAccessNotes': ?tenantAccessNotes,
         }),
       ),
     );

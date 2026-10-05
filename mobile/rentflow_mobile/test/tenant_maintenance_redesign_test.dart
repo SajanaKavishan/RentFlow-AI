@@ -8,16 +8,19 @@ import 'package:http/testing.dart';
 import 'package:rentflow_mobile/core/network/api_client.dart';
 import 'package:rentflow_mobile/features/auth/controllers/auth_controller.dart';
 import 'package:rentflow_mobile/features/auth/models/current_user.dart';
-import 'package:rentflow_mobile/features/maintenance/models/maintenance_request.dart';
 import 'package:rentflow_mobile/features/maintenance/screens/create_maintenance_request_screen.dart';
 import 'package:rentflow_mobile/features/maintenance/screens/my_maintenance_requests_screen.dart';
 import 'package:rentflow_mobile/features/maintenance/services/maintenance_api_service.dart';
+import 'package:rentflow_mobile/features/maintenance/services/maintenance_photo_picker.dart';
 import 'package:rentflow_mobile/shared/theme/app_theme.dart';
+import 'package:rentflow_mobile/features/maintenance/widgets/tenant_maintenance_ui.dart';
 
 import 'widget_test.dart' as fixtures;
 
 Map<String, dynamic> requestJson(int status, {String? title}) => {
   'id': 'real-request-$status',
+  'referenceCode':
+      'MR-${status.toRadixString(16).toUpperCase().padLeft(16, '0')}',
   'propertyId': 'real-property',
   'tenantId': '11111111-1111-1111-1111-111111111112',
   'technicianId': null,
@@ -37,6 +40,7 @@ Future<void> mount(
   bool create = false,
   double scale = 1,
   double keyboard = 0,
+  MaintenancePhotoPicker? photoPicker,
 }) async {
   final storage = fixtures.MemoryTokenStorage('token');
   final auth = fixtures.buildController(storage, role: UserRole.tenant);
@@ -65,6 +69,7 @@ Future<void> mount(
             ? CreateMaintenanceRequestScreen(
                 propertyId: 'real-property',
                 maintenanceApiService: service,
+                photoPicker: photoPicker,
               )
             : MyMaintenanceRequestsScreen(maintenanceApiService: service),
       ),
@@ -73,19 +78,14 @@ Future<void> mount(
 }
 
 Future<void> fillDraft(WidgetTester tester) async {
-  final title = find.widgetWithText(TextFormField, 'Title');
-  await tester.ensureVisible(title);
-  await tester.enterText(title, 'Leaking sink');
-  final description = find.widgetWithText(TextFormField, 'Description');
+  final description = find.byKey(const ValueKey('maintenance-description'));
   await tester.ensureVisible(description);
   await tester.enterText(description, 'Water below the sink.');
-  final access = find.widgetWithText(
-    TextFormField,
-    'Tenant access notes (optional)',
-  );
-  await tester.ensureVisible(access);
-  await tester.enterText(access, 'Use side entrance.');
   tester.testTextInput.hide();
+  await tester.pumpAndSettle();
+  final access = find.byKey(const ValueKey('access-morning'));
+  await tester.ensureVisible(access);
+  await tester.tap(access);
   await tester.pumpAndSettle();
 }
 
@@ -143,7 +143,7 @@ void main() {
     expect(find.text('No associated properties'), findsOneWidget);
     expect(
       find.text(
-        'A maintenance request can only be created for a property associated with your account.',
+        'An active lease for this property is required before you can submit a maintenance request.',
       ),
       findsOneWidget,
     );
@@ -257,7 +257,8 @@ void main() {
       expect(find.text('UPDATES'), findsOneWidget);
       expect(find.text('History'), findsNothing);
       expect(find.textContaining('Real triage notes.'), findsOneWidget);
-      expect(find.text('No attachments yet.'), findsOneWidget);
+      expect(find.text('ATTACHMENTS'), findsNothing);
+      expect(find.text('No attachments yet.'), findsNothing);
       expect(find.text('Call'), findsNothing);
       expect(find.text('Parts ordered'), findsNothing);
       await tester.tap(find.text('Request with status 0'));
@@ -307,48 +308,52 @@ void main() {
   });
 
   testWidgets(
-    'form uses real choices, validation, duplicate protection, preserved failure draft and authoritative success',
+    'form uses approved choices, duplicate protection, preserved failure draft and authoritative success',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(720, 1560));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final pending = Completer<http.Response>();
       var submissions = 0;
       Map<String, dynamic>? body;
+      final response = {
+        ...requestJson(0, title: 'Authoritative API title'),
+        'category': 1,
+        'priority': 2,
+        'preferredAccessWindow': 'Morning',
+      };
       await mount(tester, (r) async {
+        if (r.method != 'POST') {
+          return http.Response(
+            r.url.path.endsWith('/attachments') ? '[]' : jsonEncode(response),
+            200,
+          );
+        }
         submissions++;
         body = jsonDecode(r.body) as Map<String, dynamic>;
-        if (submissions == 1) return pending.future;
-        return http.Response(
-          jsonEncode({
-            ...requestJson(0, title: 'Authoritative API title'),
-            'category': 1,
-            'priority': 2,
-          }),
-          201,
-        );
+        return submissions == 1
+            ? pending.future
+            : http.Response(jsonEncode(response), 201);
       }, create: true);
       await tester.pumpAndSettle();
-      for (final category in MaintenanceCategory.values) {
+      for (final category in tenantCreateCategories) {
         expect(
           find.byKey(ValueKey('category-${category.name}')),
           findsOneWidget,
         );
       }
-      for (final priority in MaintenancePriority.values) {
+      for (final priority in tenantCreatePriorities) {
         expect(
           find.byKey(ValueKey('priority-${priority.name}')),
           findsOneWidget,
         );
       }
-      expect(find.text('HVAC'), findsNothing);
-      expect(find.text('Add photos'), findsNothing);
-      expect(find.text('Preferred access time'), findsNothing);
-      final submit = find.text('Submit Request');
-      await tester.ensureVisible(submit);
-      await tester.tap(submit);
-      await tester.pumpAndSettle();
-      expect(find.text('Please enter a title.'), findsOneWidget);
-      expect(find.text('Please describe the issue.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('priority-low')), findsNothing);
+      expect(find.widgetWithText(TextFormField, 'Title'), findsNothing);
+      expect(find.text('Access notes (optional)'), findsNothing);
+      expect(find.text('Add photos (optional)'), findsOneWidget);
+      expect(find.text('Preferred access time'), findsOneWidget);
+      final submit = find.byKey(const ValueKey('maintenance-submit'));
+      expect(tester.widget<FilledButton>(submit).onPressed, isNull);
       expect(submissions, 0);
       await fillDraft(tester);
       await tester.ensureVisible(
@@ -361,33 +366,22 @@ void main() {
       await tester.tap(submit);
       await tester.pump();
       expect(find.text('Submitting request...'), findsOneWidget);
-      expect(
-        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-        isNull,
-      );
+      expect(tester.widget<FilledButton>(submit).onPressed, isNull);
       expect(submissions, 1);
       expect(body, {
         'propertyId': 'real-property',
-        'title': 'Leaking sink',
         'description': 'Water below the sink.',
         'category': 1,
         'priority': 2,
-        'tenantAccessNotes': 'Use side entrance.',
+        'preferredAccessWindow': 'Morning',
       });
       pending.complete(http.Response('failed', 500));
       await tester.pumpAndSettle();
-      expect(find.text('Request submitted'), findsNothing);
-      expect(
-        tester
-            .widget<TextFormField>(find.widgetWithText(TextFormField, 'Title'))
-            .controller!
-            .text,
-        'Leaking sink',
-      );
+      expect(find.text('Request Submitted'), findsNothing);
       expect(
         tester
             .widget<TextFormField>(
-              find.widgetWithText(TextFormField, 'Description'),
+              find.byKey(const ValueKey('maintenance-description')),
             )
             .controller!
             .text,
@@ -396,33 +390,34 @@ void main() {
       await tester.tap(submit);
       await tester.pumpAndSettle();
       expect(submissions, 2);
-      expect(find.text('Request submitted'), findsOneWidget);
-      expect(find.text('Authoritative API title'), findsOneWidget);
-      expect(find.text('real-request-0'), findsOneWidget);
+      expect(find.text('Request Submitted'), findsOneWidget);
+      expect(find.text('Authoritative API title'), findsNothing);
+      expect(find.text('real-request-0'), findsNothing);
+      expect(find.text('REQUEST #MR-0000000000000000'), findsOneWidget);
       expect(find.text('Electrical'), findsOneWidget);
-      expect(find.text('High'), findsOneWidget);
+      expect(find.text('High Priority'), findsOneWidget);
+      expect(find.text('Morning 8-12'), findsOneWidget);
       expect(find.textContaining('24 hours'), findsNothing);
-      expect(find.textContaining('Today'), findsNothing);
       expect(find.text('real-property'), findsNothing);
       await tester.tap(find.text('New Request'));
       await tester.pumpAndSettle();
-      expect(find.text('Request submitted'), findsNothing);
-      expect(
-        tester
-            .widget<TextFormField>(find.widgetWithText(TextFormField, 'Title'))
-            .controller!
-            .text,
-        isEmpty,
-      );
+      expect(find.text('Request Submitted'), findsNothing);
       expect(
         tester
             .widget<TextFormField>(
-              find.widgetWithText(TextFormField, 'Description'),
+              find.byKey(const ValueKey('maintenance-description')),
             )
             .controller!
             .text,
         isEmpty,
       );
+      expect(
+        tester
+            .widget<ChoiceChip>(find.byKey(const ValueKey('access-morning')))
+            .selected,
+        isFalse,
+      );
+      expect(tester.widget<FilledButton>(submit).onPressed, isNull);
       expect(tester.takeException(), isNull);
     },
   );

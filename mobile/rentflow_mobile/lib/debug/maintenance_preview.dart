@@ -55,6 +55,7 @@ class _MaintenancePreviewAppState extends State<MaintenancePreviewApp> {
             snapshot.connectionState == ConnectionState.done
             ? MyMaintenanceRequestsScreen(
                 maintenanceApiService: _dependencies.maintenance,
+                photoPicker: _dependencies.photoPicker,
               )
             : const Scaffold(body: Center(child: CircularProgressIndicator())),
       ),

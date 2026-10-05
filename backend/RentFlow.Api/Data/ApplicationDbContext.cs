@@ -1317,6 +1317,19 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             entity.HasKey(request => request.Id);
 
+            entity.Property(request => request.ReferenceCode)
+                .HasMaxLength(19)
+                .HasComputedColumnSql("'MR-' || upper(substr(md5(\"Id\"::text), 1, 16))", stored: true)
+                .IsRequired();
+            entity.HasIndex(request => request.ReferenceCode).IsUnique();
+            entity.Property(request => request.PreferredAccessWindow)
+                .HasConversion<string>()
+                .HasMaxLength(16)
+                .IsRequired(false);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_MaintenanceRequest_PreferredAccessWindow",
+                "\"PreferredAccessWindow\" IS NULL OR \"PreferredAccessWindow\" IN ('Morning', 'Afternoon', 'Evening')"));
+
             entity.Property(request => request.PropertyId)
                 .IsRequired();
 

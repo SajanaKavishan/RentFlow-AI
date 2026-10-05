@@ -933,6 +933,8 @@ public class MaintenanceRequestsController(
         {
             MaintenanceRequestServiceError.Validation =>
                 (StatusCodes.Status400BadRequest, "Invalid maintenance request."),
+            MaintenanceRequestServiceError.Forbidden =>
+                (StatusCodes.Status403Forbidden, "Maintenance access unavailable."),
             MaintenanceRequestServiceError.NotFound =>
                 (StatusCodes.Status404NotFound, "Maintenance request not found."),
             MaintenanceRequestServiceError.Conflict =>

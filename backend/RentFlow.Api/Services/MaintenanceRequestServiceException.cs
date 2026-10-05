@@ -3,6 +3,7 @@ namespace RentFlow.Api.Services;
 public enum MaintenanceRequestServiceError
 {
     Validation,
+    Forbidden,
     NotFound,
     Conflict
 }
@@ -21,6 +22,9 @@ public sealed class MaintenanceRequestServiceException : Exception
 
     public static MaintenanceRequestServiceException Validation(string message) =>
         new(MaintenanceRequestServiceError.Validation, message);
+
+    public static MaintenanceRequestServiceException Forbidden(string message) =>
+        new(MaintenanceRequestServiceError.Forbidden, message);
 
     public static MaintenanceRequestServiceException NotFound(string message) =>
         new(MaintenanceRequestServiceError.NotFound, message);

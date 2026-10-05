@@ -337,7 +337,7 @@ void main() {
             );
             createdRequest = _maintenanceRequest(
               id: 'created-request',
-              title: body['title'] as String,
+              title: 'Leaking kitchen tap',
               status: 0,
             )..['propertyId'] = submittedPropertyId;
             return http.Response(jsonEncode(createdRequest), 201);
@@ -360,23 +360,31 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Create maintenance request'));
       await tester.pumpAndSettle();
-      expect(find.text('Choose a property'), findsOneWidget);
+      expect(find.byType(SimpleDialog), findsNothing);
+      await tester.tap(
+        find.byKey(const ValueKey('maintenance-property-selector')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Garden apartment'));
       await tester.pumpAndSettle();
 
-      await tester.enterText(
-        find.widgetWithText(TextFormField, 'Title'),
-        'Leaking kitchen tap',
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('maintenance-description')),
       );
       await tester.enterText(
-        find.widgetWithText(TextFormField, 'Description'),
+        find.byKey(const ValueKey('maintenance-description')),
         'Water is dripping under the kitchen sink.',
       );
+      tester.testTextInput.hide();
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('access-morning')));
+      await tester.tap(find.byKey(const ValueKey('access-morning')));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Submit Request'));
       await tester.tap(find.text('Submit Request'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Request submitted'), findsOneWidget);
+      expect(find.text('Request Submitted'), findsOneWidget);
       await tester.tap(find.text('Track Request'));
       await tester.pumpAndSettle();
       expect(submittedPropertyId, 'property-occupied-b');

@@ -17,6 +17,7 @@ public class MaintenanceRequestServiceTests
         var tenantId = Guid.NewGuid();
         var request = CreateValidRequest();
 
+        await MaintenanceTenancyFixture.SeedAsync(context, tenantId, request.PropertyId);
         var result = await service.CreateAsync(tenantId, request);
 
         Assert.NotEqual(Guid.Empty, result.Id);
@@ -74,16 +75,15 @@ public class MaintenanceRequestServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_RejectsBlankTitle()
+    public async Task CreateAsync_DerivesBlankTitleFromDescription()
     {
         await using var context = CreateContext();
         var request = CreateValidRequest();
         request.Title = "   ";
-
-        var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
-            new MaintenanceRequestService(context).CreateAsync(Guid.NewGuid(), request));
-
-        Assert.Equal(MaintenanceRequestServiceError.Validation, exception.Error);
+        var tenantId = Guid.NewGuid();
+        await MaintenanceTenancyFixture.SeedAsync(context, tenantId, request.PropertyId);
+        var result = await new MaintenanceRequestService(context).CreateAsync(tenantId, request);
+        Assert.Equal("Water is leaking from the kitchen tap whenever it is used", result.Title);
     }
 
     [Fact]
@@ -278,9 +278,11 @@ public class MaintenanceRequestServiceTests
     {
         await using var context = CreateContext();
         var tenantId = Guid.NewGuid();
+        var request = CreateValidRequest();
+        await MaintenanceTenancyFixture.SeedAsync(context, tenantId, request.PropertyId);
 
         var result = await new MaintenanceRequestService(context)
-            .CreateAsync(tenantId, CreateValidRequest());
+            .CreateAsync(tenantId, request);
 
         var history = await context.MaintenanceStatusHistories.SingleAsync();
         Assert.Equal(result.Id, history.MaintenanceRequestId);
@@ -338,7 +340,9 @@ public class MaintenanceRequestServiceTests
         await using var context = CreateContext();
         var service = new MaintenanceRequestService(context);
         var tenantId = Guid.NewGuid();
-        var maintenanceRequest = await service.CreateAsync(tenantId, CreateValidRequest());
+        var request = CreateValidRequest();
+        await MaintenanceTenancyFixture.SeedAsync(context, tenantId, request.PropertyId);
+        var maintenanceRequest = await service.CreateAsync(tenantId, request);
 
         await service.UpdateTenantRequestAsync(
             maintenanceRequest.Id,
@@ -783,6 +787,7 @@ public class MaintenanceRequestServiceTests
             Description = "Water is leaking from the kitchen tap whenever it is used.",
             Category = MaintenanceCategory.Plumbing,
             Priority = MaintenancePriority.Normal,
+            PreferredAccessWindow = PreferredAccessWindow.Morning,
             TenantAccessNotes = "Please call before arriving."
         };
 
