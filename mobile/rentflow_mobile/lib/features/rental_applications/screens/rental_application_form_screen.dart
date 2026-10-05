@@ -1,11 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../shared/follow_up/follow_up_activity.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../application_documents/models/application_document.dart';
-import '../../application_documents/screens/application_documents_screen.dart';
+import '../../application_documents/services/application_document_picker.dart';
 import '../../application_documents/services/application_document_api_service.dart';
 import '../../application_documents/widgets/document_requirement_badge.dart';
 import '../../auth/models/current_user.dart';
@@ -25,19 +27,22 @@ class RentalApplicationFormScreen extends StatefulWidget {
     this.application,
     this.rentalApplicationApiService,
     this.returnToApplicationDetails = false,
+    this.documentPicker,
   });
   final String propertyId;
   final String? propertyTitle;
   final RentalApplication? application;
   final RentalApplicationApiService? rentalApplicationApiService;
   final bool returnToApplicationDetails;
+  final Future<SelectedDocumentFile?> Function()? documentPicker;
   @override
   State<RentalApplicationFormScreen> createState() =>
       _RentalApplicationFormScreenState();
 }
 
 class _RentalApplicationFormScreenState
-    extends State<RentalApplicationFormScreen> {
+    extends State<RentalApplicationFormScreen>
+    with WidgetsBindingObserver {
   static const _titles = [
     'Personal information',
     'Financial information',
@@ -64,14 +69,29 @@ class _RentalApplicationFormScreenState
   bool _saving = false;
   bool _submitting = false;
   bool _documentsLoading = false;
-  bool _openingDocuments = false;
+  ApplicationDocumentType? _documentActionType;
+  bool _pickingDocument = false, _uploadingDocument = false;
+  bool _documentsKnown = false,
+      _refreshingContext = false,
+      _pickerBackgrounded = false;
+  bool _resumeRefreshScheduled = false;
+  String? _openingDocumentId;
+  final Map<ApplicationDocumentType, String> _documentUploadErrors = {};
+  final Map<ApplicationDocumentType, SelectedDocumentFile> _retryFiles = {};
   bool _allowExit = false;
   String? _loadError;
   String? _error;
   String? _dateError;
   String? _documentsError;
 
-  bool get _busy => _loading || _saving || _submitting || _openingDocuments;
+  bool get _busy =>
+      _loading ||
+      _saving ||
+      _submitting ||
+      _documentsLoading ||
+      _documentActionType != null ||
+      _openingDocumentId != null ||
+      _refreshingContext;
   bool get _canEdit =>
       _ready &&
       (_application == null ||
@@ -81,6 +101,7 @@ class _RentalApplicationFormScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _application = widget.application;
     _propertyTitle = widget.propertyTitle;
     if (widget.rentalApplicationApiService case final service?) {
@@ -95,6 +116,7 @@ class _RentalApplicationFormScreenState
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scroll.dispose();
     _income.dispose();
     _occupation.dispose();
@@ -444,7 +466,12 @@ class _RentalApplicationFormScreenState
           'The document service returned an invalid response.',
         );
       }
-      if (mounted) setState(() => _documents = documents);
+      if (mounted) {
+        setState(() {
+          _documents = documents;
+          _documentsKnown = true;
+        });
+      }
     } catch (error) {
       if (mounted) {
         setState(
@@ -455,28 +482,46 @@ class _RentalApplicationFormScreenState
         );
       }
     } finally {
-      if (mounted) setState(() => _documentsLoading = false);
+      if (mounted) {
+        setState(() {
+          _documentsLoading = false;
+          if (_step == 2 && _documentsComplete) _error = null;
+        });
+      }
     }
   }
 
-  Future<void> _openDocuments(ApplicationDocumentType type) async {
-    final application = _application;
-    if (application == null || _busy) return;
-    setState(() => _openingDocuments = true);
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      if (_pickingDocument) _pickerBackgrounded = true;
+      return;
+    }
+    // The native picker owns this resume. Cancellation must not trigger an API fetch.
+    if (_pickerBackgrounded) {
+      _pickerBackgrounded = false;
+      return;
+    }
+    if (_busy || !_ready || _application == null) return;
+    if (_resumeRefreshScheduled) return;
+    _resumeRefreshScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resumeRefreshScheduled = false;
+      if (mounted &&
+          !_busy &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        unawaited(_refreshDocumentContext());
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  Future<void> _refreshDocumentContext() async {
+    if (_busy || _application == null) return;
+    setState(() => _refreshingContext = true);
     final hadEdits = _dirty;
     try {
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => ApplicationDocumentsScreen(
-            applicationId: application.id,
-            initialDocumentType: type,
-            rentalApplicationApiService: _api,
-            applicationDocumentApiService: _documentApi,
-          ),
-        ),
-      );
-      if (!mounted) return;
-      final fresh = await _api.getApplicationById(application.id);
+      final fresh = await _api.getApplicationById(_application!.id);
       _checkIdentity(fresh);
       if (!mounted) return;
       setState(() {
@@ -490,12 +535,211 @@ class _RentalApplicationFormScreenState
         setState(
           () => _documentsError = _message(
             error,
-            'Unable to refresh this application. Please try again.',
+            'Unable to refresh your documents. Please try again.',
           ),
         );
       }
     } finally {
-      if (mounted) setState(() => _openingDocuments = false);
+      if (mounted) setState(() => _refreshingContext = false);
+    }
+  }
+
+  Future<void> _openDocumentRow(ApplicationDocumentType type) async {
+    if (_busy || _application == null) return;
+    final uploaded = _documents
+        .where((doc) => doc.documentType == type)
+        .toList();
+    if (uploaded.isEmpty) {
+      if (_canEdit) {
+        await _pickAndUploadDocument(
+          type,
+          retry: _retryFiles.containsKey(type),
+        );
+      }
+      return;
+    }
+    final choice =
+        await showModalBottomSheet<
+          ({ApplicationDocument? document, bool retry})
+        >(
+          context: context,
+          isScrollControlled: true,
+          builder: (sheetContext) => SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(type.label, style: AppTypography.cardTitle),
+                  ),
+                  for (final document in uploaded)
+                    ListTile(
+                      key: ValueKey('wizard-view-document-${document.id}'),
+                      leading: const Icon(
+                        Icons.open_in_new,
+                        color: AppPalette.olive,
+                      ),
+                      title: const Text('View document'),
+                      subtitle: Text(document.originalFileName),
+                      onTap: () => Navigator.pop(sheetContext, (
+                        document: document,
+                        retry: false,
+                      )),
+                    ),
+                  if (_canEdit && _retryFiles.containsKey(type))
+                    ListTile(
+                      leading: const Icon(
+                        Icons.refresh,
+                        color: AppPalette.olive,
+                      ),
+                      title: const Text('Retry upload'),
+                      onTap: () => Navigator.pop(sheetContext, (
+                        document: null,
+                        retry: true,
+                      )),
+                    ),
+                  if (_canEdit)
+                    ListTile(
+                      leading: const Icon(
+                        Icons.upload_file_outlined,
+                        color: AppPalette.olive,
+                      ),
+                      title: const Text('Add another file'),
+                      onTap: () => Navigator.pop(sheetContext, (
+                        document: null,
+                        retry: false,
+                      )),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+    if (!mounted || choice == null) return;
+    if (choice.document != null) {
+      await _viewDocument(choice.document!);
+    } else if (_canEdit) {
+      await _pickAndUploadDocument(type, retry: choice.retry);
+    }
+  }
+
+  Future<void> _pickAndUploadDocument(
+    ApplicationDocumentType type, {
+    bool retry = false,
+  }) async {
+    final application = _application;
+    if (_busy || !_canEdit || application == null) return;
+    setState(() {
+      _documentActionType = type;
+      _pickingDocument = !retry;
+      _uploadingDocument = retry;
+    });
+    final hadEdits = _dirty;
+    try {
+      final file = retry
+          ? _retryFiles[type]
+          : await (widget.documentPicker?.call() ??
+                ApplicationDocumentPicker.pick());
+      if (!mounted || file == null) return;
+      final mime = ApplicationDocumentPicker.validate(file);
+      _retryFiles[type] = file;
+      setState(() {
+        _pickingDocument = false;
+        _uploadingDocument = true;
+        _documentUploadErrors.remove(type);
+      });
+      final fresh = await _api.getApplicationById(application.id);
+      _checkIdentity(fresh);
+      if (!mounted) return;
+      setState(() {
+        _application = fresh;
+        if (!hadEdits) _prefill(fresh);
+      });
+      if (!_canEdit) {
+        throw const ApplicationDocumentApiException(
+          'Documents can only be uploaded for Draft or Changes Requested applications.',
+        );
+      }
+      final uploaded = await _documentApi.uploadDocument(
+        applicationId: application.id,
+        documentType: type,
+        fileName: file.name,
+        contentType: mime,
+        bytes: file.bytes,
+      );
+      if (!mounted) return;
+      if (uploaded.applicationId != application.id ||
+          uploaded.documentType != type ||
+          uploaded.fileSizeBytes <= 0) {
+        throw const ApplicationDocumentApiException(
+          'The document service returned an invalid response.',
+        );
+      }
+      setState(() {
+        _documents = [
+          uploaded,
+          ..._documents.where((doc) => doc.id != uploaded.id),
+        ];
+        _documentsKnown = true;
+        _retryFiles.remove(type);
+        _documentUploadErrors.remove(type);
+      });
+      await _refreshDocuments();
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () =>
+              _documentUploadErrors[type] = error is DocumentSelectionException
+              ? error.message
+              : _message(
+                  error,
+                  _pickingDocument
+                      ? ApplicationDocumentPicker.accessError
+                      : 'Unable to upload this document. Tap the row to retry.',
+                ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _documentActionType = null;
+          _pickingDocument = false;
+          _uploadingDocument = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _viewDocument(ApplicationDocument document) async {
+    if (_busy) return;
+    setState(() => _openingDocumentId = document.id);
+    try {
+      final url = await _documentApi.requestDownloadUrl(
+        documentId: document.id,
+      );
+      if (!mounted) return;
+      final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        AppSnackbars.show(
+          context,
+          message: 'No app was available to open this document.',
+          tone: SnackTone.error,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        AppSnackbars.show(
+          context,
+          message: _message(
+            error,
+            'Unable to open this document. Please try again.',
+          ),
+          tone: SnackTone.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _openingDocumentId = null);
     }
   }
 
@@ -880,22 +1124,36 @@ class _RentalApplicationFormScreenState
       children: [
         Text('Add supporting documents', style: wizardLabel),
         const SizedBox(height: 12),
-        if (_documentsLoading)
-          const LoadingState(title: 'Loading documents', compact: true)
-        else if (_documentsError != null) ...[
+        if (_documentsLoading && !_documentsKnown)
+          const LoadingState(title: 'Loading documents', compact: true),
+        if (_documentsKnown && (_refreshingContext || _documentsLoading)) ...[
+          const LinearProgressIndicator(),
+          const SizedBox(height: 8),
+          const Text('Refreshing documents...'),
+          const SizedBox(height: 12),
+        ],
+        if (_documentsError != null) ...[
           Text(_documentsError!, style: wizardHelper),
           TextButton(
             onPressed: _busy ? null : _refreshDocuments,
             child: const Text('Reload documents'),
           ),
-        ] else ...[
+        ],
+        if (_documentsKnown) ...[
           for (final type in ApplicationDocumentType.values) ...[
             ApplicationWizardDocumentRow(
               type: type,
               documents: _documents,
-              onOpen: _application == null || _busy
+              picking: _documentActionType == type && _pickingDocument,
+              uploading: _documentActionType == type && _uploadingDocument,
+              uploadError: _documentUploadErrors[type],
+              onOpen:
+                  _application == null ||
+                      _busy ||
+                      (!_canEdit &&
+                          !_documents.any((doc) => doc.documentType == type))
                   ? null
-                  : () => _openDocuments(type),
+                  : () => _openDocumentRow(type),
             ),
             if (type != ApplicationDocumentType.values.last)
               const SizedBox(height: 10),

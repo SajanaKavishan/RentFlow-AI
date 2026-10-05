@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:rentflow_mobile/features/application_documents/models/application_document.dart';
 import 'package:rentflow_mobile/features/application_documents/screens/application_documents_screen.dart';
-import 'package:rentflow_mobile/features/application_documents/widgets/document_type_selector.dart';
 import 'package:rentflow_mobile/features/rental_applications/models/rental_application.dart';
 import 'package:rentflow_mobile/features/rental_applications/screens/my_rental_applications_screen.dart';
 import 'package:rentflow_mobile/features/rental_applications/screens/rental_application_details_screen.dart';
@@ -63,7 +62,8 @@ class Backend {
   };
   bool failRead = false;
   bool failSave = false;
-  bool failDocuments = false;
+  bool failDocuments = false, failUpload = false, invalidUploadResponse = false;
+  Completer<void>? uploadGate;
   bool failSubmit = false;
   bool underReviewAfterSubmit = false;
   Completer<void>? submitGate;
@@ -116,6 +116,26 @@ class Backend {
         application = {...application, ...body};
         return DiscoveryBackend.json(application);
       }
+      if (path == '$detail/documents' && request.method == 'POST') {
+        await uploadGate?.future;
+        if (failUpload) return http.Response('{}', 500);
+        if (invalidUploadResponse) return http.Response('', 201);
+        final type = int.parse(
+          RegExp(
+            r'name="documentType"\r\n\r\n(\d)',
+          ).firstMatch(request.body)!.group(1)!,
+        );
+        final name = RegExp(
+          r'filename="([^"]+)"',
+        ).firstMatch(request.body)!.group(1)!;
+        final uploaded = {
+          ...documentJson(type),
+          'id': 'document-$type-${documents.length}',
+          'originalFileName': name,
+        };
+        documents.add(uploaded);
+        return http.Response(jsonEncode(uploaded), 201);
+      }
       if (path == '$detail/documents') {
         return failDocuments
             ? http.Response('{}', 500)
@@ -160,6 +180,7 @@ Future<void> open(
   double ratio = 1,
   double scale = 1,
   bool keyboard = false,
+  Future<SelectedDocumentFile?> Function()? documentPicker,
 }) async {
   tester.view.devicePixelRatio = ratio;
   tester.view.physicalSize = Size(width, height);
@@ -187,6 +208,7 @@ Future<void> open(
             )
           : RentalApplicationFormScreen(
               propertyId: property.id,
+              documentPicker: documentPicker,
               application: newApplication
                   ? null
                   : RentalApplication.fromJson(applicationJson()),
@@ -293,7 +315,16 @@ void main() {
     'missing required uploads route Changes Requested to Documents using the same ID',
     (tester) async {
       final backend = Backend(status: 3, step: 2);
-      await open(tester, backend);
+      await open(
+        tester,
+        backend,
+        documentPicker: () async => SelectedDocumentFile(
+          name: 'income.pdf',
+          extension: 'pdf',
+          size: 3,
+          bytes: Uint8List.fromList([1, 2, 3]),
+        ),
+      );
       expect(find.text('Documents information'), findsOneWidget);
       expect(find.textContaining('Uploaded · identity.pdf'), findsOneWidget);
       expect(find.text('Missing · Required'), findsOneWidget);
@@ -306,18 +337,8 @@ void main() {
       );
       expect(find.byKey(const ValueKey('submit-application')), findsNothing);
       await tap(tester, find.byKey(const ValueKey('wizard-document-1')));
-      final screen = tester.widget<ApplicationDocumentsScreen>(
-        find.byType(ApplicationDocumentsScreen),
-      );
-      expect(screen.applicationId, id);
-      expect(screen.initialDocumentType, ApplicationDocumentType.incomeProof);
-      expect(
-        screen.applicationDocumentApiService!.apiClient,
-        same(backend.discovery.client),
-      );
-      backend.documents.add(documentJson(1));
-      await tester.pageBack();
-      await tester.pumpAndSettle();
+      expect(find.byType(ApplicationDocumentsScreen), findsNothing);
+      expect(backend.calls('$detail/documents', 'POST'), 1);
       expect(find.textContaining('Uploaded · income.pdf'), findsOneWidget);
       await next(tester);
       expect(find.text('Review information'), findsOneWidget);
@@ -561,36 +582,25 @@ void main() {
   );
 
   testWidgets(
-    'document row opens the supported type dropdown at narrow width and 2x text',
+    'document row opens Files directly without repeated type selection at 320px and 2x text',
     (tester) async {
       final backend = Backend(step: 2);
-      await open(tester, backend, width: 320, scale: 2);
-      await tap(tester, find.byKey(const ValueKey('wizard-document-2')));
-      expect(
-        tester
-            .widget<ApplicationDocumentsScreen>(
-              find.byType(ApplicationDocumentsScreen),
-            )
-            .initialDocumentType,
-        ApplicationDocumentType.employmentLetter,
-      );
-      // The existing documents page builds its lower upload panel lazily.
-      await tester.scrollUntilVisible(
-        find.byType(DropdownButtonFormField<ApplicationDocumentType>),
-        300,
-      );
-      await tap(
+      var picked = 0;
+      await open(
         tester,
-        find.byType(DropdownButtonFormField<ApplicationDocumentType>),
+        backend,
+        width: 320,
+        scale: 2,
+        documentPicker: () async {
+          picked++;
+          return null;
+        },
       );
-      expect(tester.takeException(), isNull);
-      await tap(tester, find.text('Income Proof').last);
-      expect(
-        tester
-            .widget<DocumentTypeSelector>(find.byType(DocumentTypeSelector))
-            .value,
-        ApplicationDocumentType.incomeProof,
-      );
+      await tap(tester, find.byKey(const ValueKey('wizard-document-2')));
+      expect(picked, 1);
+      expect(find.byType(ApplicationDocumentsScreen), findsNothing);
+      expect(find.text('Documents information'), findsOneWidget);
+      expect(backend.calls('$detail/documents', 'POST'), 0);
       expect(tester.takeException(), isNull);
     },
   );
