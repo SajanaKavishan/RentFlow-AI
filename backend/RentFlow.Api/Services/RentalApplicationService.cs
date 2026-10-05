@@ -13,6 +13,24 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
 {
     private const string ViewingRequired = "Complete a viewing for this property before starting a rental application.";
 
+    public async Task<IReadOnlyList<PropertyApplicationActionCountDto>> GetActionCountsForLandlordAsync(
+        Guid landlordId,
+        CancellationToken cancellationToken = default)
+    {
+        return await (
+            from application in dbContext.RentalApplications.AsNoTracking()
+            join property in dbContext.Properties.AsNoTracking() on application.PropertyId equals property.Id
+            where property.LandlordId == landlordId
+                && (application.Status == RentalApplicationStatus.Submitted
+                    || application.Status == RentalApplicationStatus.UnderReview)
+            group application by application.PropertyId into applications
+            select new PropertyApplicationActionCountDto
+            {
+                PropertyId = applications.Key,
+                ActionRequiredCount = applications.Count()
+            }).ToListAsync(cancellationToken);
+    }
+
     private IQueryable<ViewingRequest> CompletedViewings(Guid tenantId) =>
         dbContext.ViewingRequests.AsNoTracking().Where(v => v.TenantId == tenantId && v.Status == ViewingStatus.Completed);
 

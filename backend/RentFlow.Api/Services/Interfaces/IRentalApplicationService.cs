@@ -7,6 +7,10 @@ namespace RentFlow.Api.Services.Interfaces;
 /// </summary>
 public interface IRentalApplicationService
 {
+    Task<IReadOnlyList<PropertyApplicationActionCountDto>> GetActionCountsForLandlordAsync(
+        Guid landlordId,
+        CancellationToken cancellationToken = default);
+
     Task<RentalApplicationEligibilityDto> GetEligibilityAsync(Guid tenantId, Guid propertyId,
         CancellationToken cancellationToken = default);
 

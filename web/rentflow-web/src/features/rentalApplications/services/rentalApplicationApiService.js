@@ -42,6 +42,10 @@ export function getApplicationsByProperty(propertyId) {
   )
 }
 
+export function getOwnedPropertyApplicationActionCounts() {
+  return request('/api/rental-applications/mine/action-counts', { cache: 'no-store' })
+}
+
 export function getApplicationById(id) {
   return request(applicationPath(id))
 }

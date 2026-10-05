@@ -93,6 +93,17 @@ public class RentalApplicationsController(
             result => Ok(result));
     }
 
+    [HttpGet("mine/action-counts")]
+    [Authorize(Roles = nameof(UserRole.Landlord))]
+    [ProducesResponseType<IReadOnlyList<PropertyApplicationActionCountDto>>(StatusCodes.Status200OK)]
+    public Task<ActionResult<IReadOnlyList<PropertyApplicationActionCountDto>>> GetActionCounts(
+        CancellationToken cancellationToken)
+    {
+        return ExecuteAsync(
+            () => rentalApplicationService.GetActionCountsForLandlordAsync(GetRequiredUserId(), cancellationToken),
+            result => Ok(result));
+    }
+
     [HttpPut("{id:guid}")]
     [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType<RentalApplicationResponseDto>(StatusCodes.Status200OK)]

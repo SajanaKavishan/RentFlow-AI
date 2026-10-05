@@ -5,6 +5,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import OwnedPropertiesContext from '../../../shared/property/OwnedPropertiesContext.js'
 import RentalApplicationsPage from './RentalApplicationsPage.jsx'
 
+vi.mock('../../properties/services/propertyApiService.js', () => ({
+  getPropertyImages: vi.fn().mockResolvedValue([]),
+  getPropertyImageUrl: vi.fn(),
+}))
+vi.mock('../services/rentalApplicationApiService.js', async (importOriginal) => ({
+  ...await importOriginal(),
+  getOwnedPropertyApplicationActionCounts: vi.fn().mockResolvedValue([]),
+}))
+
 const propertyId = '22222222-2222-2222-2222-222222222222'
 const tenantId = '11111111-1111-1111-1111-111111111111'
 const property = {
