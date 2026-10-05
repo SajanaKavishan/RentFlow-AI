@@ -130,7 +130,7 @@ public class MaintenanceCoordinationOrchestratorTests
 
         var payload = JsonSerializer.SerializeToElement(agentRequest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.Equal(
-            ["maintenanceRequestId", "title", "description", "category", "priority", "currentStatus", "preferredAccessWindow", "hasAssignedTechnician", "repairEstimate", "attachments"],
+            ["maintenanceRequestId", "title", "description", "category", "priority", "currentStatus", "preferredAccessWindow", "hasAssignedTechnician", "repairEstimate", "attachments", "evidencePhotos", "photoLimitations"],
             payload.EnumerateObject().Select(property => property.Name).ToArray());
         Assert.Equal(
             ["attachmentId", "contentType", "fileSize"],
@@ -388,6 +388,37 @@ public class MaintenanceCoordinationOrchestratorTests
             await Task.Delay(Timeout.Infinite, cancellationToken);
             throw new InvalidOperationException();
         }
+    }
+
+    [Fact]
+    public async Task TotalDeadline_IncludesMediaPreparationAndKeepsBusinessStateIntact()
+    {
+        await using var context = CreateContext();
+        var request = CreateRequest();
+        var originalTechnician = request.TechnicianId;
+        context.MaintenanceRequests.Add(request);
+        await context.SaveChangesAsync();
+        var agent = new FakeAgentClient();
+        var orchestrator = new MaintenanceCoordinationOrchestrator(context, new FakeValidationTool(), new FakeRuleTool(),
+            agent, TimeProvider.System, NullLogger<MaintenanceCoordinationOrchestrator>.Instance,
+            Microsoft.Extensions.Options.Options.Create(new RentFlow.Api.Configuration.AgentServiceOptions { TimeoutSeconds = 1 }),
+            new SlowPhotoEvidence());
+        var workflow = await orchestrator.StartAnalysisAsync(request.Id);
+        Assert.Equal(MaintenanceCoordinationWorkflowStatus.Failed, workflow.Status);
+        Assert.Equal(MaintenanceCoordinationStepStatus.Failed, workflow.Steps.Single(step => step.StepOrder == 3).Status);
+        Assert.Null(workflow.FinalResultJson);
+        Assert.Empty(agent.CallOrder);
+        Assert.Equal(originalTechnician, request.TechnicianId);
+        Assert.Equal(MaintenanceRequestStatus.Submitted, request.Status);
+        Assert.Equal(MaintenanceCategory.Plumbing, request.Category);
+        Assert.Equal(MaintenancePriority.High, request.Priority);
+        Assert.Empty(context.MaintenanceStatusHistories);
+    }
+
+    private sealed class SlowPhotoEvidence : IMaintenancePhotoEvidenceService
+    {
+        public Task PrepareAsync(MaintenanceRequest request, IReadOnlyCollection<MaintenanceAttachment> attachments,
+            MaintenanceCoordinationAgentRequest payload, CancellationToken token) => Task.Delay(Timeout.Infinite, token);
     }
 
     private static ApplicationDbContext CreateContext() => new(new DbContextOptionsBuilder<ApplicationDbContext>()

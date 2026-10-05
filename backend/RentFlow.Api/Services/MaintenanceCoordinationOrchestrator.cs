@@ -21,7 +21,8 @@ public sealed class MaintenanceCoordinationOrchestrator(
     IMaintenanceCoordinationAgentClient maintenanceCoordinationAgentClient,
     TimeProvider timeProvider,
     ILogger<MaintenanceCoordinationOrchestrator> logger,
-    IOptions<AgentServiceOptions>? agentOptions = null) : IMaintenanceCoordinationOrchestrator
+    IOptions<AgentServiceOptions>? agentOptions = null,
+    IMaintenancePhotoEvidenceService? photoEvidenceService = null) : IMaintenanceCoordinationOrchestrator
 {
     private const string WorkflowObjective = "Review the maintenance request and recommend a safe advisory action without approving or changing status.";
     private const string SafeStepErrorMessage = "The maintenance coordination step failed unexpectedly.";
@@ -36,8 +37,10 @@ public sealed class MaintenanceCoordinationOrchestrator(
         CancellationToken cancellationToken = default)
     {
         var callerToken = cancellationToken;
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var totalSeconds = agentOptions?.Value.TimeoutSeconds ?? 30;
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
-        budget.CancelAfter(TimeSpan.FromSeconds(agentOptions?.Value.TimeoutSeconds ?? 30));
+        budget.CancelAfter(TimeSpan.FromSeconds(totalSeconds));
         cancellationToken = budget.Token;
 
         if (maintenanceRequestId == Guid.Empty)
@@ -121,6 +124,10 @@ public sealed class MaintenanceCoordinationOrchestrator(
                 workflow.Steps.Single(step => step.StepOrder == 3),
                 async token =>
                 {
+                    if (photoEvidenceService is not null)
+                        await photoEvidenceService.PrepareAsync(request, attachments, agentRequest, token);
+                    token.ThrowIfCancellationRequested();
+                    agentRequest.RemainingBudgetSeconds = Math.Max(0.1, totalSeconds - started.Elapsed.TotalSeconds - 0.5);
                     var response = await maintenanceCoordinationAgentClient.AnalyzeAsync(agentRequest, token);
                     var current = await dbContext.MaintenanceRequests.AsNoTracking().SingleAsync(item => item.Id == request.Id, token);
                     if (current.Status.ToString() != agentRequest.CurrentStatus)
@@ -415,6 +422,8 @@ public sealed class MaintenanceCoordinationOrchestrator(
         {
             MaintenanceDataValidationResult validation => $"Valid={validation.IsValid}; completeness={validation.CompletenessScore}; missing={validation.MissingFields.Count}; warnings={validation.Warnings.Count}",
             MaintenanceCoordinationRuleValidationResult rules => $"Passed={rules.Passed}; failed={rules.FailedRules.Count}; warnings={rules.Warnings.Count}",
+            MaintenanceCoordinationAgentResponse { ExecutionMetadata.PhotoEvidence: { } evidence } =>
+                JsonSerializer.Serialize(evidence, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
             MaintenanceCoordinationAgentResponse agent => $"Agent result valid; priority={agent.Result.SuggestedPriority}; nextAction={agent.Result.NextAction}; warnings={agent.Result.ValidationFlags.Count}",
             _ => "Validation summary recorded."
         };

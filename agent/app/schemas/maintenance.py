@@ -85,6 +85,12 @@ class MaintenanceAttachmentMetadata(StrictModel):
     file_size: int = Field(ge=1, le=10 * 1024 * 1024, alias="fileSize")
 
 
+class MaintenanceEvidencePhoto(StrictModel):
+    attachment_id: str = Field(min_length=1, max_length=200, alias="attachmentId")
+    content_type: Literal["image/jpeg", "image/png", "image/webp"] = Field(alias="contentType")
+    media_base64: str = Field(min_length=1, max_length=699052, alias="mediaBase64")
+
+
 class MaintenanceCoordinationRequest(StrictModel):
     maintenance_request_id: str = Field(min_length=1, max_length=200, alias="maintenanceRequestId")
     title: str = Field(min_length=1, max_length=200)
@@ -96,6 +102,18 @@ class MaintenanceCoordinationRequest(StrictModel):
     has_assigned_technician: bool = Field(alias="hasAssignedTechnician")
     repair_estimate: RepairEstimate | None = Field(default=None, alias="repairEstimate")
     attachments: list[MaintenanceAttachmentMetadata] = Field(default_factory=list, max_length=5)
+    evidence_photos: list[MaintenanceEvidencePhoto] = Field(default_factory=list, max_length=5, alias="evidencePhotos")
+    photo_limitations: list[Literal["PhotoUnavailable", "PhotoUnreadable"]] = Field(default_factory=list, max_length=2, alias="photoLimitations")
+
+    @model_validator(mode="after")
+    def bounded_correlated_media(self):
+        ids = [item.attachment_id for item in self.attachments]
+        media_ids = [item.attachment_id for item in self.evidence_photos]
+        if len(ids) != len(set(ids)) or len(media_ids) != len(set(media_ids)) or not set(media_ids).issubset(ids):
+            raise ValueError("Photos must correlate to unique request attachments")
+        if sum(len(item.media_base64) for item in self.evidence_photos) > 2796208:
+            raise ValueError("Aggregate media payload exceeds its limit")
+        return self
 
 
 MAINTENANCE_PLAN_STEPS = (
@@ -172,6 +190,47 @@ class MaintenanceCoordinationSummary(MaintenanceCoordinationRecommendation):
     agent_version: str = Field(min_length=1, max_length=100, alias="agentVersion")
 
 
+class MaintenanceVisualObservation(StrictModel):
+    photo_index: int = Field(ge=0, le=4, alias="photoIndex")
+    relevance: Literal["Relevant", "Irrelevant", "Unreadable"]
+    observations: list[Annotated[str, Field(min_length=1, max_length=300)]] = Field(max_length=4)
+    suggested_category: MaintenanceCategory | None = Field(strict=False, alias="suggestedCategory")
+    category_confidence: Confidence = Field(alias="categoryConfidence")
+    safety_concern: bool = Field(alias="safetyConcern")
+    text_photo_conflict: bool = Field(alias="textPhotoConflict")
+
+    @model_validator(mode="after")
+    def require_visible_evidence(self):
+        if (self.relevance != "Relevant" and self.suggested_category is not None
+                or self.suggested_category is None and self.category_confidence not in {"Low", "Unknown"}
+                or self.relevance == "Relevant" and not self.observations):
+            raise ValueError("Visual suggestions require visible relevant evidence")
+        return self
+
+
+class MaintenanceVisualEvidence(StrictModel):
+    photos: list[MaintenanceVisualObservation] = Field(min_length=1, max_length=5)
+    requires_human_review: Literal[True] = Field(alias="requiresHumanReview")
+
+    @field_validator("requires_human_review", mode="before")
+    @classmethod
+    def literal_review(cls, value):
+        if value is not True:
+            raise ValueError("Human review must be explicitly true")
+        return value
+
+
+class MaintenancePhotoEvidenceSummary(StrictModel):
+    supplied_photo_count: int = Field(ge=0, le=5, alias="suppliedPhotoCount")
+    analyzed_photo_count: int = Field(ge=0, le=5, alias="analyzedPhotoCount")
+
+    @model_validator(mode="after")
+    def truthful_counts(self):
+        if self.analyzed_photo_count > self.supplied_photo_count:
+            raise ValueError("Analyzed count cannot exceed supplied count")
+        return self
+
+
 def validate_next_action(status: MaintenanceStatus, action: MaintenanceNextAction | None) -> None:
     # Null is a valid abstention; closed states always require it.
     if action is not None and action != NEXT_ACTION_BY_STATUS[status]:
@@ -180,6 +239,7 @@ def validate_next_action(status: MaintenanceStatus, action: MaintenanceNextActio
 
 class MaintenanceExecutionMetadata(StrictModel):
     executed_steps: list[str] = Field(min_length=6, max_length=6, alias="executedSteps")
+    photo_evidence: MaintenancePhotoEvidenceSummary | None = Field(default=None, alias="photoEvidence")
 
 
 class MaintenanceCoordinationResponse(StrictModel):

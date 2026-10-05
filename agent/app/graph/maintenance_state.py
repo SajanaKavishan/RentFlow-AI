@@ -7,6 +7,7 @@ from typing import Any, TypedDict
 
 class MaintenanceCoordinationAgentState(TypedDict):
     maintenance_request: dict[str, Any]
+    visual_evidence: dict[str, Any]
     plan: dict[str, Any] | None
     issue_assessment: dict[str, Any] | None
     urgency_assessment: dict[str, Any] | None

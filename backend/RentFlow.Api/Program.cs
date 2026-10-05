@@ -431,6 +431,8 @@ builder.Services.AddScoped<
     IMaintenanceCoordinationOrchestrator,
     MaintenanceCoordinationOrchestrator>();
 
+builder.Services.AddScoped<IMaintenancePhotoEvidenceService, MaintenancePhotoEvidenceService>();
+
 builder.Services.AddScoped<
     IMaintenanceCoordinationService,
     MaintenanceCoordinationService>();

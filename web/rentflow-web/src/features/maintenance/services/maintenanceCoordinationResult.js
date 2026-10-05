@@ -22,12 +22,21 @@ export const COORDINATION_FLAGS = Object.freeze({
   CategoryDescriptionMismatch: { title: 'Check the selected category', tone: 'attention' },
   EstimateExplanationMissing: { title: 'The estimate needs more detail', tone: 'attention' },
   EstimateScopeMismatch: { title: 'Check the scope of the estimate', tone: 'attention' },
-  PhotoUnavailable: { title: 'Photos were not analyzed', tone: 'neutral' },
+  PhotoUnavailable: { title: 'Some photo evidence is unavailable', tone: 'neutral' },
   PhotoUnreadable: { title: 'Photo information is unclear', tone: 'neutral' },
   UrgencyNeedsHumanReview: { title: 'Urgency needs human review', tone: 'warning' },
 })
 
 const confidenceValues = new Set(['High', 'Medium', 'Low', 'Unknown'])
+
+export function parsePhotoEvidence(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+    Object.keys(value).some((key) => !['suppliedPhotoCount', 'analyzedPhotoCount'].includes(key))) return null
+  const { suppliedPhotoCount, analyzedPhotoCount } = value
+  if (!Number.isInteger(suppliedPhotoCount) || suppliedPhotoCount < 1 || suppliedPhotoCount > 5 ||
+    !Number.isInteger(analyzedPhotoCount) || analyzedPhotoCount < 0 || analyzedPhotoCount > suppliedPhotoCount) return null
+  return { suppliedPhotoCount, analyzedPhotoCount }
+}
 const resultFields = new Set([
   'suggestedCategory', 'categoryConfidence', 'suggestedPriority', 'priorityConfidence',
   'recommendedTechnicianCategory', 'nextAction', 'validationFlags', 'rationale',

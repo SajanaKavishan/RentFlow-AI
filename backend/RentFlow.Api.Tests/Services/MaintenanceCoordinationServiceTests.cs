@@ -61,7 +61,7 @@ public class MaintenanceCoordinationServiceTests
 
         var payload = JsonSerializer.SerializeToElement(agent.Request, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.Equal(
-            ["maintenanceRequestId", "title", "description", "category", "priority", "currentStatus", "preferredAccessWindow", "hasAssignedTechnician", "repairEstimate", "attachments"],
+            ["maintenanceRequestId", "title", "description", "category", "priority", "currentStatus", "preferredAccessWindow", "hasAssignedTechnician", "repairEstimate", "attachments", "evidencePhotos", "photoLimitations"],
             payload.EnumerateObject().Select(property => property.Name).ToArray());
         Assert.Equal(
             ["attachmentId", "contentType", "fileSize"],

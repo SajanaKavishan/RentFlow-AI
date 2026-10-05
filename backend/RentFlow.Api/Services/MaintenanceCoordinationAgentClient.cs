@@ -32,12 +32,13 @@ public sealed class MaintenanceCoordinationAgentClient(
 
         var endpoint = new Uri(baseUri, "/internal/maintenance-coordination/analyze");
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(TimeSpan.FromSeconds(serviceOptions.TimeoutSeconds));
+        var remainingSeconds = Math.Min(serviceOptions.TimeoutSeconds, request.RemainingBudgetSeconds ?? serviceOptions.TimeoutSeconds);
+        timeoutSource.CancelAfter(TimeSpan.FromSeconds(remainingSeconds));
         HttpResponseMessage response;
         try
         {
             response = await AgentServiceRequest.PostAsync(httpClient, endpoint, request, JsonOptions,
-                serviceOptions.ServiceApiKey, timeoutSource.Token, Math.Max(0.1, serviceOptions.TimeoutSeconds - 1.0));
+                serviceOptions.ServiceApiKey, timeoutSource.Token, Math.Max(0.1, remainingSeconds - 1.0));
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {

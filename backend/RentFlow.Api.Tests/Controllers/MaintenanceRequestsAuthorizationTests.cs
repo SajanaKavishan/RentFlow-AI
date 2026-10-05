@@ -20,6 +20,94 @@ public sealed class MaintenanceRequestsAuthorizationTests
     private const string ValidPassword = "Secure1!Password";
 
     [Theory]
+    [InlineData(UserRole.Landlord, true, "coordination-workflows")]
+    [InlineData(UserRole.Landlord, false, "coordination-workflows")]
+    [InlineData(UserRole.Tenant, true, "coordination-workflows")]
+    [InlineData(UserRole.MaintenanceTechnician, true, "coordination-workflows")]
+    [InlineData(UserRole.Admin, false, "coordination-workflows")]
+    [InlineData(UserRole.Landlord, true, "coordination-analysis")]
+    [InlineData(UserRole.Landlord, false, "coordination-analysis")]
+    [InlineData(UserRole.Tenant, true, "coordination-analysis")]
+    [InlineData(UserRole.MaintenanceTechnician, true, "coordination-analysis")]
+    [InlineData(UserRole.Admin, false, "coordination-analysis")]
+    public async Task PhotoAnalysis_AuthorizesBeforeStorageAndPersistsOnlySafeMetadata(UserRole role, bool owns, string action)
+    {
+        var agent = new PhotoMaintenanceAgent();
+        using var factory = new AuthApiFactory { MaintenanceCoordinationAgentClient = agent };
+        using var client = factory.CreateHttpsClient();
+        var actor = await AuthenticateAsync(client, $"photos-{role}-{owns}-{action}@example.com", role, factory);
+        var requestId = await SeedRequestAsync(factory, tenantId: role == UserRole.Tenant ? actor : null,
+            technicianId: role == UserRole.MaintenanceTechnician ? actor : null);
+        var source = MaintenancePhotoEvidenceServiceTests.ImageBytes(metadata: true);
+        const string key = "private-photo-storage-key";
+        await factory.FileStorage.UploadAsync(new MemoryStream(source), key, "image/png");
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var request = await db.MaintenanceRequests.SingleAsync(item => item.Id == requestId);
+            db.Properties.Add(new Property { Id = request.PropertyId, LandlordId = owns ? actor : Guid.NewGuid(),
+                Title = "Private property", Address = "private-address", City = "private-city" });
+            db.MaintenanceAttachments.Add(new MaintenanceAttachment { MaintenanceRequestId = requestId,
+                FileName = "private-original-photo.png", StorageKey = key, ContentType = "image/png", FileSize = source.Length });
+            await db.SaveChangesAsync();
+        }
+        var allowed = role == UserRole.Admin || role == UserRole.Landlord && owns;
+        var response = await client.PostAsync($"/api/maintenance-requests/{requestId}/{action}", null);
+        Assert.Equal(allowed ? (action == "coordination-workflows" ? HttpStatusCode.Created : HttpStatusCode.OK)
+            : HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(allowed ? 1 : 0, factory.FileStorage.DownloadBytesCalls);
+        Assert.Equal(0, factory.FileStorage.DownloadUrlCalls);
+        Assert.Equal(allowed ? 1 : 0, agent.Calls);
+        if (allowed)
+        {
+            Assert.Single(agent.Request!.EvidencePhotos);
+            var payload = JsonSerializer.Serialize(agent.Request);
+            foreach (var forbidden in new[] { key, "private-original-photo", "private-address", "private-city",
+                         "tenantId", "propertyId", "storageKey", "fileName", "signedUrl", "94770000000", "accessToken" })
+                Assert.DoesNotContain(forbidden, payload, StringComparison.OrdinalIgnoreCase);
+            if (action == "coordination-workflows")
+            {
+                var latest = await client.GetAsync($"/api/maintenance-requests/{requestId}/coordination-workflows/latest");
+                var body = await latest.Content.ReadAsStringAsync();
+                using var json = JsonDocument.Parse(body);
+                Assert.Equal(1, json.RootElement.GetProperty("photoEvidence").GetProperty("analyzedPhotoCount").GetInt32());
+                Assert.DoesNotContain("mediaBase64", body, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(agent.Request.EvidencePhotos.Single().MediaBase64, body);
+                Assert.DoesNotContain(key, body);
+                Assert.DoesNotContain("photoEvidence", json.RootElement.GetProperty("finalResultJson").GetString());
+            }
+        }
+        using var finalScope = factory.Services.CreateScope();
+        var context = finalScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var stored = await context.MaintenanceRequests.SingleAsync(item => item.Id == requestId);
+        Assert.Equal(MaintenanceRequestStatus.Submitted, stored.Status);
+        Assert.Equal(MaintenanceCategory.Plumbing, stored.Category);
+        Assert.Equal(MaintenancePriority.Normal, stored.Priority);
+        Assert.Empty(context.MaintenanceStatusHistories);
+    }
+
+    private sealed class PhotoMaintenanceAgent : RentFlow.Api.Services.Interfaces.IMaintenanceCoordinationAgentClient
+    {
+        public int Calls { get; private set; }
+        public MaintenanceCoordinationAgentRequest? Request { get; private set; }
+        public Task<MaintenanceCoordinationAgentResponse> AnalyzeAsync(MaintenanceCoordinationAgentRequest request, CancellationToken token = default)
+        {
+            Calls++;
+            Request = request;
+            Assert.True(request.RemainingBudgetSeconds is > 0 and < 30);
+            return Task.FromResult(new MaintenanceCoordinationAgentResponse
+            {
+                MaintenanceRequestId = request.MaintenanceRequestId, Result = MaintenanceCoordinationTestData.Result(request),
+                ExecutionMetadata = new MaintenanceCoordinationExecutionMetadata
+                {
+                    ExecutedSteps = MaintenanceCoordinationTestData.Metadata().ExecutedSteps,
+                    PhotoEvidence = new() { SuppliedPhotoCount = request.Attachments.Count, AnalyzedPhotoCount = request.EvidencePhotos.Count }
+                }
+            });
+        }
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("Night")]
     [InlineData(1)]

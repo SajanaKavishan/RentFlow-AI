@@ -30,7 +30,7 @@ public static partial class MaintenanceCoordinationRequestMapper
                 Notes = estimate.Notes is null ? null : Redact(estimate.Notes, 4000),
                 Status = Canonical(estimate.Status)
             },
-            Attachments = attachments.OrderBy(item => item.Id).Take(5).Select(item => new MaintenanceCoordinationAttachment
+            Attachments = MaintenancePhotoEvidenceService.Select(request.Id, attachments).Select(item => new MaintenanceCoordinationAttachment
             {
                 AttachmentId = item.Id,
                 ContentType = item.ContentType.Trim().ToLowerInvariant(),

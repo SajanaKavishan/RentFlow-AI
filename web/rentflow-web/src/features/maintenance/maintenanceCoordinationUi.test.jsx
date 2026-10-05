@@ -78,6 +78,32 @@ beforeEach(() => {
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals() })
 
 describe('landlord AI Coordination', () => {
+  it.each([
+    [1, 1, 'Photo evidence: 1 photo analyzed.'],
+    [3, 3, 'Photo evidence: 3 photos analyzed.'],
+    [3, 2, 'Photo evidence: 2 of 3 photos analyzed.'],
+    [3, 0, 'Photo evidence: 0 of 3 photos analyzed.'],
+  ])('renders truthful persisted photo evidence counts (%i, %i)', async (suppliedPhotoCount, analyzedPhotoCount, wording) => {
+    const mock = mockApi({ latest: workflow({ photoEvidence: { suppliedPhotoCount, analyzedPhotoCount } }) })
+    renderPage()
+    expect(await screen.findByText(wording)).toBeInTheDocument()
+    expect(within(aiCard()).getByText(result().rationale)).toBeInTheDocument()
+    expect(writes(mock)).toHaveLength(0)
+    expect(aiCard().querySelector('img')).toBeNull()
+  })
+
+  it.each([undefined, null, {}, { suppliedPhotoCount: 0, analyzedPhotoCount: 0 },
+    { suppliedPhotoCount: 3, analyzedPhotoCount: 4 }, { suppliedPhotoCount: '3', analyzedPhotoCount: 2 },
+    { suppliedPhotoCount: 6, analyzedPhotoCount: 1 }, { suppliedPhotoCount: 3, analyzedPhotoCount: -1 },
+    { suppliedPhotoCount: 3, analyzedPhotoCount: 1, mediaBase64: 'private-bytes', signedUrl: 'https://private.example/photo' },
+  ])('omits absent or invalid photo metadata without exposing its content', async (photoEvidence) => {
+    mockApi({ latest: workflow({ photoEvidence }) })
+    renderPage()
+    expect(await screen.findByText(result().rationale)).toBeInTheDocument()
+    expect(within(aiCard()).queryByText(/Photo evidence:/)).not.toBeInTheDocument()
+    expect(aiCard().textContent).not.toMatch(/private-bytes|private\.example|AI verified image/)
+  })
+
   it('restores from the server and offers explicit analysis without generating a result automatically', async () => {
     const mock = mockApi()
     window.localStorage.setItem(`rentflow.maintenance.workflow.${requestId}`, 'obsolete-workflow')
@@ -312,7 +338,7 @@ describe('friendly action and flag presentation', () => {
     ['CategoryDescriptionMismatch', 'Check the selected category'],
     ['EstimateExplanationMissing', 'The estimate needs more detail'],
     ['EstimateScopeMismatch', 'Check the scope of the estimate'],
-    ['PhotoUnavailable', 'Photos were not analyzed'],
+    ['PhotoUnavailable', 'Some photo evidence is unavailable'],
     ['PhotoUnreadable', 'Photo information is unclear'],
     ['UrgencyNeedsHumanReview', 'Urgency needs human review'],
   ])('renders %s as a readable consideration', (code, title) => {

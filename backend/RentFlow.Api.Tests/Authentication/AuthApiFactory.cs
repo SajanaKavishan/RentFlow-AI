@@ -216,6 +216,7 @@ internal sealed class RecordingFileStorageService : IFileStorageService
         new(StringComparer.Ordinal);
 
     public int DownloadUrlCalls { get; private set; }
+    public int DownloadBytesCalls { get; private set; }
 
     public async Task UploadAsync(
         Stream content,
@@ -241,6 +242,8 @@ internal sealed class RecordingFileStorageService : IFileStorageService
         long maximumBytes,
         CancellationToken cancellationToken = default)
     {
+        DownloadBytesCalls++;
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(
             _objects.TryGetValue(storageKey, out var content)
                 ? content

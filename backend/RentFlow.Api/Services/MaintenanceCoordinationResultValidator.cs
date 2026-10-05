@@ -53,6 +53,11 @@ public static class MaintenanceCoordinationResultValidator
                 MaintenanceCoordinationAgentClientError.MalformedResponse,
                 "The maintenance coordination agent returned an invalid structured response.");
         }
+        if (response.ExecutionMetadata.PhotoEvidence is { } evidence
+            && (!evidence.IsValid || evidence.SuppliedPhotoCount != request.Attachments.Count
+                || evidence.AnalyzedPhotoCount > request.EvidencePhotos.Count))
+            throw new MaintenanceCoordinationAgentClientException(MaintenanceCoordinationAgentClientError.MalformedResponse,
+                "The maintenance coordination agent returned invalid evidence counts.");
     }
 
     private static bool OptionalMember(string? value, HashSet<string> allowed) => value is null || allowed.Contains(value);

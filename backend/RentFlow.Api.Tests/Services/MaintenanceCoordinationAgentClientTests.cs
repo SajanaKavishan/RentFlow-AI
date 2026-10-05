@@ -119,6 +119,41 @@ public class MaintenanceCoordinationAgentClientTests
         Assert.Null(response.Result.SuggestedCategory);
     }
 
+    [Fact]
+    public async Task AnalyzeAsync_ForwardsRemainingBudgetAndOnlyPrivateInlineMedia()
+    {
+        var request = CreateRequest();
+        request.RemainingBudgetSeconds = 2.5;
+        request.EvidencePhotos = [new() { AttachmentId = Guid.NewGuid(), MediaBase64 = "safe-normalized-media" }];
+        var handler = new StubHttpMessageHandler(async (message, _) =>
+        {
+            Assert.Equal("1.5", Assert.Single(message.Headers.GetValues("X-RentFlow-Analysis-Budget-Seconds")));
+            Assert.Null(message.Headers.Authorization);
+            Assert.Equal("test-service-key", Assert.Single(message.Headers.GetValues("X-RentFlow-Service-Key")));
+            var json = await message.Content!.ReadAsStringAsync();
+            Assert.Contains("mediaBase64", json);
+            foreach (var forbidden in new[] { "remainingBudgetSeconds", "signedUrl", "storageKey", "fileName", "bucketName", "tenantId" })
+                Assert.DoesNotContain(forbidden, json, StringComparison.OrdinalIgnoreCase);
+            return JsonResponse(SuccessJson(request));
+        });
+        await CreateClient(handler).AnalyzeAsync(request);
+    }
+
+    [Theory]
+    [InlineData(-1, 0)]
+    [InlineData(6, 0)]
+    [InlineData(0, 1)]
+    [InlineData(1, 1)]
+    public async Task AnalyzeAsync_RejectsUntruthfulEvidenceCounts(int supplied, int analyzed)
+    {
+        var request = CreateRequest();
+        var json = JsonNode.Parse(SuccessJson(request))!;
+        json["executionMetadata"]!["photoEvidence"] = JsonSerializer.SerializeToNode(new
+            { suppliedPhotoCount = supplied, analyzedPhotoCount = analyzed });
+        await Assert.ThrowsAsync<MaintenanceCoordinationAgentClientException>(() =>
+            CreateClient(new((_, _) => Task.FromResult(JsonResponse(json.ToJsonString())))).AnalyzeAsync(request));
+    }
+
     [Theory]
     [InlineData(MaintenanceRequestStatus.Submitted, "triage")]
     [InlineData(MaintenanceRequestStatus.Triaged, "assign-technician")]

@@ -1,4 +1,5 @@
 using RentFlow.Api.Models;
+using System.Text.Json;
 
 namespace RentFlow.Api.DTOs.Maintenance;
 
@@ -23,6 +24,8 @@ public sealed class MaintenanceCoordinationWorkflowResponseDto
     public string? FinalResultJson { get; init; }
 
     public string? ErrorMessage { get; init; }
+
+    public MaintenancePhotoEvidenceSummary? PhotoEvidence { get; init; }
 
     public bool RequiresHumanApproval { get; init; }
 
@@ -51,6 +54,7 @@ public sealed class MaintenanceCoordinationWorkflowResponseDto
             ExecutionSummary = workflow.ExecutionSummary,
             FinalResultJson = workflow.FinalResultJson,
             ErrorMessage = workflow.ErrorMessage,
+            PhotoEvidence = ReadPhotoEvidence(workflow),
             RequiresHumanApproval = workflow.RequiresHumanApproval,
             ApprovalStatus = workflow.ApprovalStatus,
             CreatedAt = workflow.CreatedAt,
@@ -60,6 +64,20 @@ public sealed class MaintenanceCoordinationWorkflowResponseDto
                 .Select(MaintenanceCoordinationStepResponseDto.FromStep)
                 .ToArray()
         };
+    }
+
+    private static MaintenancePhotoEvidenceSummary? ReadPhotoEvidence(MaintenanceCoordinationWorkflow workflow)
+    {
+        var summary = workflow.Steps.FirstOrDefault(step => step.StepOrder == 3
+            && step.Status == MaintenanceCoordinationStepStatus.Completed)?.ValidationSummary;
+        if (string.IsNullOrWhiteSpace(summary) || !summary.StartsWith('{')) return null;
+        try
+        {
+            var evidence = JsonSerializer.Deserialize<MaintenancePhotoEvidenceSummary>(summary,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            return evidence?.IsValid == true ? evidence : null;
+        }
+        catch (JsonException) { return null; }
     }
 }
 

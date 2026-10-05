@@ -1,7 +1,7 @@
 import { useId } from 'react'
 import {
   COORDINATION_CATEGORY_LABELS, COORDINATION_FLAGS, COORDINATION_NEXT_STEPS,
-  parseCoordinationResult,
+  parseCoordinationResult, parsePhotoEvidence,
 } from '../services/maintenanceCoordinationResult.js'
 import './ai-coordination.css'
 
@@ -18,6 +18,7 @@ export default function AiCoordinationCard({
   const headingId = useId()
   const notesId = useId()
   const result = parseCoordinationResult(workflow, request.id)
+  const photoEvidence = parsePhotoEvidence(workflow?.photoEvidence)
   const accepted = workflow?.approvalStatus === 'Approved' && workflow?.status === 'Completed'
   const rejected = workflow?.approvalStatus === 'Rejected' && workflow?.status === 'Failed'
   const reviewed = accepted || rejected
@@ -47,7 +48,7 @@ export default function AiCoordinationCard({
     {loading && <div className="ai-coordination__state" role="status" aria-live="polite">
       <span className="ai-coordination__spinner" aria-hidden="true" />
       <strong>{state === 'loading' ? 'Loading saved analysis?' : 'Analyzing maintenance request?'}</strong>
-      <p>{state === 'loading' ? 'Checking for a saved recommendation.' : 'Reviewing the description and current request information.'}</p>
+      <p>{state === 'loading' ? 'Checking for a saved recommendation.' : 'Reviewing the request details and available evidence.'}</p>
       {running && state !== 'analyzing' && <button type="button" className="button button--quiet" onClick={onRefresh} disabled={pending}>Check progress</button>}
     </div>}
 
@@ -63,6 +64,11 @@ export default function AiCoordinationCard({
     </div>}
 
     {showResult && <>
+      {photoEvidence && <p className="ai-coordination__support">
+        Photo evidence: {photoEvidence.analyzedPhotoCount === photoEvidence.suppliedPhotoCount
+          ? `${photoEvidence.analyzedPhotoCount} ${photoEvidence.analyzedPhotoCount === 1 ? 'photo' : 'photos'} analyzed`
+          : `${photoEvidence.analyzedPhotoCount} of ${photoEvidence.suppliedPhotoCount} photos analyzed`}.
+      </p>}
       {reviewed && <div className="ai-coordination__reviewed" role="status">
         <strong>{accepted ? 'Recommendation accepted' : 'Recommendation rejected'}</strong>
         <p>{accepted ? 'The advisory review was accepted.' : 'The advisory review was rejected.'} The maintenance request has not been changed by this decision.</p>

@@ -15,6 +15,27 @@ public sealed class MaintenanceCoordinationAgentRequest
     public bool HasAssignedTechnician { get; init; }
     public MaintenanceCoordinationEstimate? RepairEstimate { get; init; }
     public IReadOnlyCollection<MaintenanceCoordinationAttachment> Attachments { get; init; } = [];
+    public IReadOnlyCollection<MaintenanceEvidencePhoto> EvidencePhotos { get; set; } = [];
+    public IReadOnlyCollection<string> PhotoLimitations { get; set; } = [];
+    [JsonIgnore] public double? RemainingBudgetSeconds { get; set; }
+}
+
+// Internal service contract only. Never projected into a public request/workflow DTO.
+public sealed class MaintenanceEvidencePhoto
+{
+    public Guid AttachmentId { get; init; }
+    public string ContentType { get; init; } = "image/jpeg";
+    public string MediaBase64 { get; init; } = string.Empty;
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class MaintenancePhotoEvidenceSummary
+{
+    [JsonRequired] public int SuppliedPhotoCount { get; init; }
+    [JsonRequired] public int AnalyzedPhotoCount { get; init; }
+
+    [JsonIgnore] public bool IsValid => SuppliedPhotoCount is >= 0 and <= 5
+        && AnalyzedPhotoCount >= 0 && AnalyzedPhotoCount <= SuppliedPhotoCount;
 }
 
 public sealed class MaintenanceCoordinationEstimate
@@ -70,4 +91,5 @@ public sealed class MaintenanceCoordinationValidationFlag
 public sealed class MaintenanceCoordinationExecutionMetadata
 {
     [JsonRequired] public IReadOnlyCollection<string> ExecutedSteps { get; init; } = [];
+    public MaintenancePhotoEvidenceSummary? PhotoEvidence { get; init; }
 }
