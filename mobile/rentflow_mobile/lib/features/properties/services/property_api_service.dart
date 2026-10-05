@@ -179,6 +179,15 @@ class PropertyApiService {
     return _parsePropertyList(response.body);
   }
 
+  Future<List<Property>> getMyProperties() async {
+    final response = await _send(
+      () => apiClient.get(
+        apiClient.buildUri('${ApiConstants.propertiesPath}/mine'),
+      ),
+    );
+    return _parsePropertyList(response.body);
+  }
+
   Future<Property> getPropertyById(String id) async {
     final uri = apiClient.buildUri('${ApiConstants.propertiesPath}/$id');
 

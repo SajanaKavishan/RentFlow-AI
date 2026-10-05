@@ -236,7 +236,8 @@ class _SharedAppShellState extends State<SharedAppShell>
     final contentOwnsAppBar =
         selected.experience == DestinationExperience.feature ||
         (selected.id == RoleDestinationId.home &&
-            widget.user.role == UserRole.tenant);
+            (widget.user.role == UserRole.tenant ||
+                widget.user.role == UserRole.landlord));
 
     return Scaffold(
       appBar: contentOwnsAppBar ? null : _appBar(selected),
@@ -326,7 +327,8 @@ class _SharedAppShellState extends State<SharedAppShell>
           onPressed: _openNotifications,
           icon: _NotificationBell(unreadCount: _unreadCount),
         ),
-        if (widget.user.role != UserRole.tenant)
+        if (widget.user.role != UserRole.tenant &&
+            widget.user.role != UserRole.landlord)
           IconButton(
             tooltip: 'Open profile',
             onPressed: () => _selectDestination(RoleDestinationId.profile),
@@ -404,6 +406,7 @@ class _SharedAppShellState extends State<SharedAppShell>
       widget.viewingsContent ??
           LandlordViewingRequestsScreen(
             propertyId: widget.landlordPropertyId,
+            propertyApiService: widget.propertyApiService,
             viewingApiService: widget.viewingApiService,
           ),
 
@@ -412,6 +415,7 @@ class _SharedAppShellState extends State<SharedAppShell>
           (widget.user.role == UserRole.landlord
               ? LandlordRentalApplicationsScreen(
                   propertyId: widget.landlordPropertyId,
+                  propertyApiService: widget.propertyApiService,
                   rentalApplicationApiService:
                       widget.rentalApplicationApiService,
                 )
@@ -461,6 +465,9 @@ class _SharedAppShellState extends State<SharedAppShell>
       return LandlordHome(
         user: widget.user,
         onDestinationSelected: _selectDestination,
+        onOpenNotifications: _openNotifications,
+        notificationApiService: widget.notificationApiService,
+        unreadNotificationCount: _unreadCount,
       );
     }
 

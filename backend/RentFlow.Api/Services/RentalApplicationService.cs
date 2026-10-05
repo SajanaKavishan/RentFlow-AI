@@ -116,7 +116,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
         await dbContext.SaveChangesAsync(cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
-        return MapToResponse(application);
+        return await MapToResponseAsync(application, cancellationToken);
     }
 
     public async Task<RentalApplicationResponseDto?> GetByIdAsync(
@@ -127,7 +127,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == applicationId, cancellationToken);
 
-        return application is null ? null : MapToResponse(application);
+        return application is null ? null : await MapToResponseAsync(application, cancellationToken);
     }
 
     public async Task<RentalApplicationResponseDto?> GetByIdForTenantAsync(
@@ -141,7 +141,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
                 item => item.Id == applicationId && item.TenantId == tenantId,
                 cancellationToken);
 
-        return application is null ? null : MapToResponse(application);
+        return application is null ? null : await MapToResponseAsync(application, cancellationToken);
     }
 
     public async Task<IReadOnlyList<RentalApplicationResponseDto>> GetByTenantAsync(
@@ -156,7 +156,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             .OrderByDescending(application => application.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        return applications.Select(MapToResponse).ToList();
+        return await MapListAsync(applications, cancellationToken);
     }
 
     public async Task<IReadOnlyList<RentalApplicationResponseDto>> GetByPropertyAsync(
@@ -174,7 +174,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             .OrderByDescending(application => application.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        return applications.Select(MapToResponse).ToList();
+        return await MapListAsync(applications, cancellationToken);
     }
 
     public async Task<RentalApplicationResponseDto> UpdateAsync(
@@ -212,7 +212,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToResponse(application);
+        return await MapToResponseAsync(application, cancellationToken);
     }
 
     public async Task<RentalApplicationResponseDto> SubmitAsync(
@@ -274,7 +274,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             await transaction.CommitAsync(cancellationToken);
         }
 
-        return MapToResponse(application);
+        return await MapToResponseAsync(application, cancellationToken);
     }
 
     public async Task<RentalApplicationResponseDto> MarkUnderReviewAsync(
@@ -289,7 +289,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToResponse(application);
+        return await MapToResponseAsync(application, cancellationToken);
     }
 
     public Task<RentalApplicationResponseDto> ApproveAsync(
@@ -365,7 +365,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToResponse(application);
+        return await MapToResponseAsync(application, cancellationToken);
     }
 
     private async Task<RentalApplicationResponseDto> ApplyLandlordDecisionAsync(
@@ -412,7 +412,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             await transaction.CommitAsync(cancellationToken);
         }
 
-        return MapToResponse(application);
+        return await MapToResponseAsync(application, cancellationToken);
     }
 
     private async Task EnsureNoActiveApplicationAsync(
@@ -540,6 +540,27 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
+
+    // Display-only summaries use the existing authorized application scope. No contact data is exposed.
+    private async Task<IReadOnlyList<RentalApplicationResponseDto>> MapListAsync(
+        List<RentalApplication> applications, CancellationToken ct)
+    {
+        var propertyIds = applications.Select(a => a.PropertyId).Distinct().ToArray();
+        var tenantIds = applications.Select(a => a.TenantId).Distinct().ToArray();
+        var titles = await dbContext.Properties.AsNoTracking().Where(p => propertyIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.Title, ct);
+        var names = await dbContext.Users.AsNoTracking().Where(u => tenantIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+        return applications.Select(application => {
+            var response = MapToResponse(application);
+            response.PropertyTitle = titles.GetValueOrDefault(application.PropertyId);
+            response.ApplicantName = NormalizeOptionalText(names.GetValueOrDefault(application.TenantId));
+            return response;
+        }).ToList();
+    }
+
+    private async Task<RentalApplicationResponseDto> MapToResponseAsync(RentalApplication application, CancellationToken ct) =>
+        (await MapListAsync([application], ct))[0];
 
     private static RentalApplicationResponseDto MapToResponse(RentalApplication application)
     {

@@ -28,6 +28,8 @@ const _tenant = '11111111-1111-4111-8111-111111111111';
 Map<String, dynamic> _application(int status) => {
   'id': '33333333-3333-4333-8333-33333333333$status',
   'propertyId': _property,
+  'propertyTitle': 'Garden House',
+  'applicantName': 'Nimal Perera',
   'tenantId': _tenant,
   'moveInDate': '2026-12-01',
   'monthlyIncome': 2500,
@@ -168,8 +170,8 @@ void main() {
       await _pump(tester, queue: true, width: width);
       expect(find.text('4 total · 2 ready for your decision'), findsOneWidget);
       expect(find.text('Submitted'), findsOneWidget);
-      expect(find.text(_property), findsWidgets);
-      expect(find.text(_tenant), findsWidgets);
+      expect(find.text('Garden House'), findsWidgets);
+      expect(find.text('Nimal Perera'), findsWidgets);
       final positions = <double>[];
       for (final status in [
         'Submitted',
@@ -197,8 +199,8 @@ void main() {
       tester,
     ) async {
       await _pump(tester, width: width, scale: 1.3);
-      expect(find.text(_property), findsOneWidget);
-      expect(find.text(_tenant), findsOneWidget);
+      expect(find.text('Garden House'), findsOneWidget);
+      expect(find.text('Nimal Perera'), findsOneWidget);
       for (final label in [
         'Created',
         'Submitted',

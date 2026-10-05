@@ -292,19 +292,17 @@ class _StatusHeader extends StatelessWidget {
         const SizedBox(height: AppSpacing.sm),
         RentalApplicationStatusChip(status: application.status),
         const SizedBox(height: AppSpacing.md),
-        Text(
-          'Property reference',
-          style: Theme.of(context).textTheme.labelMedium,
-        ),
+        Text('Property', style: Theme.of(context).textTheme.labelMedium),
         const SizedBox(height: AppSpacing.xs),
-        SelectableText(application.propertyId),
+        SelectableText(
+          application.propertyTitle ?? 'Property details unavailable',
+        ),
         const SizedBox(height: AppSpacing.md),
-        Text(
-          'Tenant reference',
-          style: Theme.of(context).textTheme.labelMedium,
-        ),
+        Text('Applicant', style: Theme.of(context).textTheme.labelMedium),
         const SizedBox(height: AppSpacing.xs),
-        SelectableText(application.tenantId),
+        SelectableText(
+          application.applicantName ?? 'Applicant name unavailable',
+        ),
       ],
     ),
   );

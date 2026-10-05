@@ -15,6 +15,8 @@ public class ViewingResponseDto
 
     public Guid PropertyId { get; set; }
 
+    public string? PropertyTitle { get; set; }
+
     public DateTimeOffset RequestedDateTime { get; set; }
     public int? DurationMinutes { get; set; }
     public string? TimeZoneId { get; set; }

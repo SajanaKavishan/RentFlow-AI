@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'features/properties/services/property_api_service.dart';
 import 'core/auth/token_storage.dart';
 import 'core/network/api_client.dart';
@@ -17,12 +18,12 @@ import 'features/viewings/services/viewing_api_service.dart';
 import 'features/auth/models/current_user.dart';
 import 'features/viewing_follow_ups/services/viewing_follow_up_api_service.dart';
 import 'features/viewing_follow_ups/widgets/tenant_follow_up_host.dart';
+import 'features/viewings/widgets/landlord_reminder_host.dart';
+import 'features/viewings/services/local_reminder_device.dart';
 import 'shared/shell/shared_app_shell.dart';
 import 'shared/theme/app_theme.dart';
 import 'shared/widgets/shared_widgets.dart';
 
-// Integration TODO: the owned Viewing/Application workflows still use a
-// temporary property UUID. The shared shell does not introduce or use it.
 void main() {
   runApp(const MyApp(showPublicLanding: true));
 }
@@ -58,11 +59,23 @@ class _MyAppState extends State<MyApp> {
       );
       apiClient.setUnauthorizedHandler(_authController.handleUnauthorized);
     }
+    _authController.addListener(_syncReminderOwner);
     _authController.restoreSession();
+  }
+
+  void _syncReminderOwner() {
+    if (_authController.isLoading) return;
+    final user = _authController.currentUser;
+    unawaited(
+      viewingReminders.setOwner(
+        user?.role == UserRole.landlord ? user!.id : null,
+      ),
+    );
   }
 
   @override
   void dispose() {
+    _authController.removeListener(_syncReminderOwner);
     _ownedApiClient?.close();
     if (widget.authController == null) _authController.dispose();
     super.dispose();
@@ -93,6 +106,20 @@ class _MyAppState extends State<MyApp> {
       navigatorKey: _navigatorKey,
       navigatorObservers: [_followUpNavigation],
       builder: (context, child) {
+        if (!_authController.isLoading &&
+            _authController.currentUser?.role == UserRole.landlord) {
+          final client = _authController.authService.apiClient;
+          return LandlordReminderHost(
+            key: ValueKey(_authController.currentUser!.id),
+            ownerId: _authController.currentUser!.id,
+            navigatorKey: _navigatorKey,
+            navigation: _followUpNavigation,
+            service: ViewingApiService(client),
+            properties: PropertyApiService(client),
+            reminders: viewingReminders,
+            child: child!,
+          );
+        }
         if (_authController.isLoading ||
             _authController.currentUser?.role != UserRole.tenant) {
           return child!;

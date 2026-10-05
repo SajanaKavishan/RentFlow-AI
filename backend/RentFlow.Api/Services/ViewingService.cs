@@ -344,7 +344,7 @@ public class ViewingService(
     private async Task<ViewingResponseDto> MapToResponseAsync(ViewingRequest viewing, CancellationToken ct)
     {
         var property = await dbContext.Properties.AsNoTracking().Where(p => p.Id == viewing.PropertyId)
-            .Select(p => new { p.ViewingTimeZoneId, p.LandlordId }).SingleOrDefaultAsync(ct);
+            .Select(p => new { p.ViewingTimeZoneId, p.LandlordId, p.Title }).SingleOrDefaultAsync(ct);
         // Never disclose contact data in lists or to tenants/admins. Recheck ownership
         // here as well as retaining the controller's existing access guards.
         var disclosePhone = viewing.Status == ViewingStatus.Approved
@@ -358,14 +358,14 @@ public class ViewingService(
         {
             DisplayName = TenantDisplayName(tenant?.FullName),
             PhoneNumber = PhoneNumberValidation.UsablePhoneNumber(tenant?.PhoneNumber)
-        }, property?.LandlordId);
+        }, property?.LandlordId, property?.Title);
     }
 
     private async Task<IReadOnlyList<ViewingResponseDto>> MapListAsync(List<ViewingRequest> viewings, CancellationToken ct)
     {
         var ids = viewings.Select(v => v.PropertyId).Distinct().ToArray();
         var properties = await dbContext.Properties.AsNoTracking().Where(p => ids.Contains(p.Id))
-            .Select(p => new { p.Id, p.ViewingTimeZoneId, p.LandlordId })
+            .Select(p => new { p.Id, p.ViewingTimeZoneId, p.LandlordId, p.Title })
             .ToDictionaryAsync(p => p.Id, ct);
         var tenantIds = viewings.Select(v => v.TenantId).Distinct().ToArray();
         // Batch only the names needed by these viewings; no user directory or phone lookup.
@@ -373,7 +373,7 @@ public class ViewingService(
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
         return viewings.Select(v => MapToResponse(v, properties.GetValueOrDefault(v.PropertyId)?.ViewingTimeZoneId,
             new ViewingTenantSummaryDto { DisplayName = TenantDisplayName(names.GetValueOrDefault(v.TenantId)) },
-            properties.GetValueOrDefault(v.PropertyId)?.LandlordId))
+            properties.GetValueOrDefault(v.PropertyId)?.LandlordId, properties.GetValueOrDefault(v.PropertyId)?.Title))
             .ToList();
     }
 
@@ -381,7 +381,7 @@ public class ViewingService(
         string.IsNullOrWhiteSpace(name) ? "Tenant" : name.Trim();
 
     private ViewingResponseDto MapToResponse(
-        ViewingRequest viewing, string? zoneId, ViewingTenantSummaryDto tenant, Guid? landlordId)
+        ViewingRequest viewing, string? zoneId, ViewingTenantSummaryDto tenant, Guid? landlordId, string? propertyTitle)
     {
         var local = zoneId is null ? (DateTimeOffset?)null : TimeZoneInfo.ConvertTime(viewing.RequestedDateTime,
             ViewingAvailabilityService.ResolveZone(zoneId));
@@ -391,6 +391,7 @@ public class ViewingService(
             TenantId = viewing.TenantId,
             Tenant = tenant,
             PropertyId = viewing.PropertyId,
+            PropertyTitle = propertyTitle,
             RequestedDateTime = viewing.RequestedDateTime,
             DurationMinutes = viewing.DurationMinutes,
             TimeZoneId = zoneId,

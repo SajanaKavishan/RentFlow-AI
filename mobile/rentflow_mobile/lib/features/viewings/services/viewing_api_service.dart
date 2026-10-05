@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 import 'package:http/http.dart' as http;
 
@@ -10,6 +11,8 @@ import '../models/viewing_slots.dart';
 
 class ViewingApiService {
   const ViewingApiService(this.apiClient);
+
+  static final changes = ValueNotifier<int>(0);
 
   final ApiClient apiClient;
 
@@ -104,7 +107,9 @@ class ViewingApiService {
   Future<Viewing> cancelViewing({required String id}) async {
     final uri = apiClient.buildUri('${ApiConstants.viewingsPath}/$id/cancel');
     final response = await _send(() => apiClient.patch(uri));
-    return _parseViewing(response.body);
+    final viewing = _parseViewing(response.body);
+    changes.value++;
+    return viewing;
   }
 
   Future<Viewing> completeViewing({required String id}) async {
@@ -217,6 +222,7 @@ class ViewingApiService {
         'The viewing service did not confirm the requested status change.',
       );
     }
+    changes.value++;
     return viewing;
   }
 

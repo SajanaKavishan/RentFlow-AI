@@ -437,8 +437,10 @@ class _LandlordViewingRequestDetailsScreenState
               child: Column(
                 children: [
                   _ReferenceRow(
-                    label: 'Property reference',
-                    value: _viewing.propertyId,
+                    label: 'Property',
+                    value:
+                        _viewing.propertyTitle ??
+                        'Property details unavailable',
                   ),
                   const Divider(height: AppSpacing.lg),
                   _ReferenceRow(
@@ -470,6 +472,13 @@ class _LandlordViewingRequestDetailsScreenState
                   _ReferenceRow(label: 'Requested date', value: date),
                   const Divider(height: AppSpacing.lg),
                   _ReferenceRow(label: 'Requested time', value: time),
+                  const SizedBox(height: AppSpacing.md),
+                  _ReferenceRow(
+                    label: 'Duration',
+                    value: _viewing.durationMinutes == null
+                        ? 'Not recorded'
+                        : '${_viewing.durationMinutes} minutes',
+                  ),
                 ],
               ),
             ),
