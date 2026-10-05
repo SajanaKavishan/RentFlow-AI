@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../features/auth/models/current_user.dart';
+import '../../features/application_documents/screens/tenant_documents_screen.dart';
+import '../../features/tenant_lease_payments/screens/tenant_lease_payments_screen.dart';
+import '../../features/tenant_lease_payments/services/tenant_lease_payments_api_service.dart';
 import '../../features/maintenance/screens/assigned_work_screen.dart';
+import '../../features/maintenance/screens/landlord_maintenance_screen.dart';
 import '../../features/maintenance/screens/my_maintenance_requests_screen.dart';
 import '../../features/maintenance/services/maintenance_api_service.dart';
 import '../../features/lease_agreements/screens/my_leases_screen.dart';
@@ -20,6 +24,8 @@ import '../../features/rent_schedules/services/rent_schedule_api_service.dart';
 import '../../features/viewings/screens/landlord_viewing_requests_screen.dart';
 import '../../features/viewings/screens/my_viewings_screen.dart';
 import '../../features/viewings/services/viewing_api_service.dart';
+import '../../features/viewing_reviews/screens/landlord_reviews_screen.dart';
+import '../../features/viewing_reviews/services/viewing_review_api_service.dart';
 import '../home/landlord_home.dart';
 import '../home/tenant_home.dart';
 import '../navigation/role_navigation.dart';
@@ -105,12 +111,14 @@ class _SharedAppShellState extends State<SharedAppShell>
   }
 
   void _openDocuments() {
-    AppSnackbars.show(
-      context,
-      message: 'Open an application to view or manage its documents.',
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => TenantDocumentsScreen(
+          rentalApplicationApiService: widget.rentalApplicationApiService,
+          propertyApiService: widget.propertyApiService,
+        ),
+      ),
     );
-
-    _selectDestination(RoleDestinationId.applications);
   }
 
   void _openViewings() {
@@ -164,12 +172,7 @@ class _SharedAppShellState extends State<SharedAppShell>
     final leaseService = widget.leaseAgreementApiService;
     final offerService = widget.rentalOfferApiService;
     if (leaseService == null || offerService == null) {
-      _openPendingTenantModule(
-        title: 'My Lease',
-        explanation:
-            'Lease services are unavailable right now. Return to Home and try again.',
-        owner: 'Lease management',
-      );
+      _openTenantAccount(TenantAccountSection.lease);
       return;
     }
 
@@ -189,12 +192,7 @@ class _SharedAppShellState extends State<SharedAppShell>
     final rentScheduleService = widget.rentScheduleApiService;
     final paymentService = widget.paymentApiService;
     if (rentScheduleService == null || paymentService == null) {
-      _openPendingTenantModule(
-        title: 'Pay Rent',
-        explanation:
-            'Payment services are unavailable right now. Return to Home and try again.',
-        owner: 'Payments',
-      );
+      _openTenantAccount(TenantAccountSection.rent);
       return;
     }
     Navigator.of(context).push<void>(
@@ -207,26 +205,25 @@ class _SharedAppShellState extends State<SharedAppShell>
     );
   }
 
-  void _openPendingTenantModule({
-    required String title,
-    required String explanation,
-    required String owner,
-  }) {
+  void _openTenantAccount(TenantAccountSection section) {
+    final client =
+        widget.rentalApplicationApiService?.apiClient ??
+        widget.propertyApiService?.apiClient ??
+        widget.viewingApiService?.apiClient ??
+        widget.notificationApiService?.apiClient ??
+        widget.maintenanceApiService?.apiClient ??
+        widget.leaseAgreementApiService?.apiClient ??
+        widget.rentalOfferApiService?.apiClient ??
+        widget.rentScheduleApiService?.apiClient ??
+        widget.paymentApiService?.apiClient;
     Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => Scaffold(
-          appBar: AppBar(
-            title: Text(title),
-            bottom: const PreferredSize(
-              preferredSize: Size.fromHeight(1),
-              child: Divider(height: 1),
-            ),
-          ),
-          body: ModuleUnavailableState(
-            title: title,
-            explanation: explanation,
-            owner: owner,
-          ),
+      MaterialPageRoute(
+        builder: (_) => TenantLeasePaymentsScreen(
+          section: section,
+          apiService: client == null
+              ? null
+              : TenantLeasePaymentsApiService(client),
+          propertyApiService: widget.propertyApiService,
         ),
       ),
     );
@@ -316,7 +313,12 @@ class _SharedAppShellState extends State<SharedAppShell>
             fit: BoxFit.contain,
             semanticLabel: 'RentFlow AI',
           )
-        : Text(selected.label),
+        : Text(
+            selected.label,
+            style: selected.id == RoleDestinationId.profile
+                ? AppTypography.pageTitle
+                : null,
+          ),
     actions: switch (selected.id) {
       RoleDestinationId.home => [
         IconButton(
@@ -346,7 +348,21 @@ class _SharedAppShellState extends State<SharedAppShell>
 
       DestinationExperience.profile => SharedProfileContent(
         user: widget.user,
-        onOpenApplications: widget.user.role == UserRole.tenant
+        propertyApiService: widget.propertyApiService,
+        onOpenReviews: widget.user.role == UserRole.landlord
+            ? () => Navigator.of(context).push<void>(
+                MaterialPageRoute(
+                  builder: (_) => LandlordReviewsScreen(
+                    apiService: widget.propertyApiService == null
+                        ? null
+                        : ViewingReviewApiService(
+                            widget.propertyApiService!.apiClient,
+                          ),
+                  ),
+                ),
+              )
+            : null,
+        onOpenDocuments: widget.user.role == UserRole.tenant
             ? _openDocuments
             : null,
       ),
@@ -374,7 +390,11 @@ class _SharedAppShellState extends State<SharedAppShell>
               explanation: 'Property discovery is currently unavailable.',
               owner: 'Property management',
             )
-          : PropertyListScreen(propertyApiService: widget.propertyApiService!),
+          : PropertyListScreen(
+              propertyApiService: widget.propertyApiService!,
+              viewingApiService: widget.viewingApiService,
+              rentalApplicationApiService: widget.rentalApplicationApiService,
+            ),
 
     RoleDestinationId.viewings =>
       widget.viewingsContent ??
@@ -404,6 +424,12 @@ class _SharedAppShellState extends State<SharedAppShell>
       maintenanceApiService: widget.maintenanceApiService,
     ),
 
+    RoleDestinationId.landlordMaintenance => LandlordMaintenanceScreen(
+      landlordId: widget.user.id,
+      propertyApiService: widget.propertyApiService,
+      maintenanceApiService: widget.maintenanceApiService,
+    ),
+
     RoleDestinationId.assignedWork => AssignedWorkScreen(
       maintenanceApiService: widget.maintenanceApiService,
       technicianId: widget.user.id,
@@ -418,6 +444,9 @@ class _SharedAppShellState extends State<SharedAppShell>
         user: widget.user,
         viewingApiService: widget.viewingApiService,
         rentalApplicationApiService: widget.rentalApplicationApiService,
+        propertyApiService: widget.propertyApiService,
+        notificationApiService: widget.notificationApiService,
+        maintenanceApiService: widget.maintenanceApiService,
         onDestinationSelected: _selectDestination,
         onOpenViewings: _openViewings,
         onOpenLease: _openLease,
@@ -569,13 +598,13 @@ class _QuickLinkCard extends StatelessWidget {
 }
 
 IconData _selectedIcon(RoleDestinationId id) => switch (id) {
-      RoleDestinationId.home => Icons.home,
-      RoleDestinationId.properties => Icons.home_work,
-      RoleDestinationId.viewings ||
-      RoleDestinationId.viewingRequests =>
-        Icons.calendar_month,
-      RoleDestinationId.applications => Icons.description,
-      RoleDestinationId.maintenance => Icons.build,
-      RoleDestinationId.assignedWork => Icons.handyman,
-      RoleDestinationId.profile => Icons.person,
-    };
+  RoleDestinationId.home => Icons.home,
+  RoleDestinationId.properties => Icons.home_work,
+  RoleDestinationId.viewings ||
+  RoleDestinationId.viewingRequests => Icons.calendar_month,
+  RoleDestinationId.applications => Icons.description,
+  RoleDestinationId.maintenance => Icons.build,
+  RoleDestinationId.landlordMaintenance => Icons.build,
+  RoleDestinationId.assignedWork => Icons.handyman,
+  RoleDestinationId.profile => Icons.person,
+};

@@ -9,6 +9,10 @@ public class MaintenanceRequestResponseDto
 {
     public Guid Id { get; set; }
 
+    public string ReferenceCode { get; set; } = string.Empty;
+
+    public PreferredAccessWindow? PreferredAccessWindow { get; set; }
+
     public Guid PropertyId { get; set; }
 
     public Guid TenantId { get; set; }

@@ -4,6 +4,7 @@
         android:label="RentFlow AI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <meta-data android:name="com.rentflow.GOOGLE_PLACES_API_KEY" android:value="${googlePlacesApiKey}" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

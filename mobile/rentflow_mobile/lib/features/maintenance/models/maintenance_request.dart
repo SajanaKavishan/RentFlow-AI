@@ -46,7 +46,9 @@ enum MaintenanceCategory {
   structural(3),
   security(4),
   pest(5),
-  other(6);
+  other(6),
+  hvac(7),
+  locksDoors(8);
 
   const MaintenanceCategory(this.value);
 
@@ -65,9 +67,9 @@ enum MaintenanceCategory {
       4 => MaintenanceCategory.security,
       5 => MaintenanceCategory.pest,
       6 => MaintenanceCategory.other,
-      _ => throw FormatException(
-        'Invalid maintenance category value: $value',
-      ),
+      7 => MaintenanceCategory.hvac,
+      8 => MaintenanceCategory.locksDoors,
+      _ => throw FormatException('Invalid maintenance category value: $value'),
     };
   }
 }
@@ -92,10 +94,27 @@ enum MaintenancePriority {
       1 => MaintenancePriority.normal,
       2 => MaintenancePriority.high,
       3 => MaintenancePriority.emergency,
-      _ => throw FormatException(
-        'Invalid maintenance priority value: $value',
-      ),
+      _ => throw FormatException('Invalid maintenance priority value: $value'),
     };
+  }
+}
+
+enum PreferredAccessWindow {
+  morning('Morning', 'Morning 8-12'),
+  afternoon('Afternoon', 'Afternoon 12-5'),
+  evening('Evening', 'Evening 5-8');
+
+  const PreferredAccessWindow(this.apiValue, this.label);
+  final String apiValue;
+  final String label;
+
+  static PreferredAccessWindow? fromJson(Object? value) {
+    if (value == null) return null;
+    return values.firstWhere(
+      (window) => window.apiValue == value,
+      orElse: () =>
+          throw const FormatException('Invalid preferred access window.'),
+    );
   }
 }
 
@@ -117,9 +136,13 @@ class MaintenanceRequest {
     required this.completedAt,
     required this.createdAt,
     required this.updatedAt,
+    this.referenceCode,
+    this.preferredAccessWindow,
   });
 
   final String id;
+  final String? referenceCode;
+  final PreferredAccessWindow? preferredAccessWindow;
   final String propertyId;
   final String tenantId;
   final String? technicianId;
@@ -136,14 +159,27 @@ class MaintenanceRequest {
   final DateTime createdAt;
   final DateTime? updatedAt;
 
-  factory MaintenanceRequest.fromJson(Map<String, dynamic> json) {
+  factory MaintenanceRequest.fromJson(Map<String, dynamic> json) =>
+      _fromJson(json, hasDescription: true);
+
+  factory MaintenanceRequest.fromSummaryJson(Map<String, dynamic> json) =>
+      _fromJson(json, hasDescription: false);
+
+  static MaintenanceRequest _fromJson(
+    Map<String, dynamic> json, {
+    required bool hasDescription,
+  }) {
     return MaintenanceRequest(
       id: _requiredString(json, 'id'),
+      referenceCode: _referenceCode(json['referenceCode']),
+      preferredAccessWindow: PreferredAccessWindow.fromJson(
+        json['preferredAccessWindow'],
+      ),
       propertyId: _requiredString(json, 'propertyId'),
       tenantId: _requiredString(json, 'tenantId'),
       technicianId: _nullableString(json, 'technicianId'),
       title: _requiredString(json, 'title'),
-      description: _requiredString(json, 'description'),
+      description: hasDescription ? _requiredString(json, 'description') : '',
       category: MaintenanceCategory.fromJson(json['category']),
       priority: MaintenancePriority.fromJson(json['priority']),
       status: MaintenanceRequestStatus.fromJson(json['status']),
@@ -155,6 +191,14 @@ class MaintenanceRequest {
       createdAt: _requiredDateTime(json, 'createdAt'),
       updatedAt: _nullableDateTime(json, 'updatedAt'),
     );
+  }
+
+  static String? _referenceCode(Object? value) {
+    if (value == null) return null;
+    if (value is String && RegExp(r'^MR-[A-Z0-9]{6,32}$').hasMatch(value)) {
+      return value;
+    }
+    throw const FormatException('Invalid maintenance reference.');
   }
 
   static String _requiredString(Map<String, dynamic> json, String key) {

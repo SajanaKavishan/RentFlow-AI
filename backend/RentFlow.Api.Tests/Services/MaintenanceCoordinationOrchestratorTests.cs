@@ -91,6 +91,73 @@ public class MaintenanceCoordinationOrchestratorTests
     }
 
     [Fact]
+    public async Task StartAnalysisAsync_SendsAttachmentMetadataAndLkrInPythonContractShape()
+    {
+        await using var context = CreateContext();
+        var request = CreateRequest();
+        var attachmentId = Guid.NewGuid();
+        context.MaintenanceRequests.Add(request);
+        context.MaintenanceAttachments.Add(new MaintenanceAttachment
+        {
+            Id = attachmentId,
+            MaintenanceRequestId = request.Id,
+            StorageKey = "private/not-forwarded",
+            FileName = "leak.jpg",
+            ContentType = "image/jpeg",
+            FileSize = 1234,
+            AttachmentType = "damage photo",
+            UploadedByUserId = Guid.NewGuid()
+        });
+        context.RepairEstimates.Add(new RepairEstimate
+        {
+            MaintenanceRequestId = request.Id,
+            TechnicianId = request.TechnicianId!.Value,
+            VersionNumber = 1,
+            TotalCost = 250m,
+            Status = RepairEstimateStatus.Submitted
+        });
+        await context.SaveChangesAsync();
+
+        var agent = new FakeAgentClient();
+        await CreateOrchestrator(context, agent).StartAnalysisAsync(request.Id);
+
+        var agentRequest = Assert.IsType<MaintenanceCoordinationAgentRequest>(agent.Request);
+        var attachment = Assert.Single(agentRequest.Attachments);
+        Assert.Equal(attachmentId, attachment.AttachmentId);
+        Assert.Equal("leak.jpg", attachment.FileName);
+        Assert.Equal("image/jpeg", attachment.ContentType);
+        Assert.Equal("LKR", agentRequest.RepairEstimate!.Currency);
+
+        var payload = JsonSerializer.SerializeToElement(agentRequest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal(
+            ["maintenanceRequestId", "title", "description", "category", "priority", "currentStatus", "assignedTechnicianId", "repairEstimate", "attachments"],
+            payload.EnumerateObject().Select(property => property.Name).ToArray());
+        Assert.Equal(
+            ["attachmentId", "fileName", "contentType"],
+            payload.GetProperty("attachments")[0].EnumerateObject().Select(property => property.Name).ToArray());
+        Assert.Equal("LKR", payload.GetProperty("repairEstimate").GetProperty("currency").GetString());
+        Assert.DoesNotContain("storageKey", payload.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StartAnalysisAsync_SendsEmptyAttachmentCollectionWhenNoneExist()
+    {
+        await using var context = CreateContext();
+        var request = CreateRequest();
+        context.MaintenanceRequests.Add(request);
+        await context.SaveChangesAsync();
+
+        var agent = new FakeAgentClient();
+        await CreateOrchestrator(context, agent).StartAnalysisAsync(request.Id);
+
+        var agentRequest = Assert.IsType<MaintenanceCoordinationAgentRequest>(agent.Request);
+        Assert.Empty(agentRequest.Attachments);
+
+        var payload = JsonSerializer.SerializeToElement(agentRequest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Empty(payload.GetProperty("attachments").EnumerateArray());
+    }
+
+    [Fact]
     public async Task StartAnalysisAsync_PersistsExecutionOrder()
     {
         await using var context = CreateContext();
@@ -105,6 +172,95 @@ public class MaintenanceCoordinationOrchestratorTests
         Assert.Equal(
             ["Maintenance data validation", "Maintenance coordination rules", "Maintenance coordination agent"],
             workflow.Steps.OrderBy(step => step.StepOrder).Select(step => step.StepName).ToArray());
+    }
+
+    [Fact]
+    public async Task StartAnalysisAsync_ValidationFailurePersistsResultsAndSkipsAgent()
+    {
+        await using var context = CreateContext();
+        var request = CreateRequest();
+        context.MaintenanceRequests.Add(request);
+        await context.SaveChangesAsync();
+
+        var agent = new FakeAgentClient();
+        var validationTool = new FakeValidationTool(isValid: false);
+        var ruleTool = new FakeRuleTool();
+        var orchestrator = CreateOrchestrator(context, agent, validationTool, ruleTool);
+
+        var workflow = await orchestrator.StartAnalysisAsync(request.Id);
+
+        Assert.Equal(MaintenanceCoordinationWorkflowStatus.Failed, workflow.Status);
+        Assert.False(workflow.RequiresHumanApproval);
+        Assert.Equal(MaintenanceCoordinationApprovalStatus.NotRequired, workflow.ApprovalStatus);
+        Assert.Contains("Maintenance data validation failed", workflow.ErrorMessage);
+        Assert.Contains("Title", workflow.ErrorMessage);
+        Assert.Empty(agent.CallOrder);
+        Assert.Single(validationTool.CallOrder);
+        Assert.Single(ruleTool.CallOrder);
+        Assert.Equal(2, workflow.CurrentStep);
+        Assert.Equal(MaintenanceCoordinationStepStatus.Completed, workflow.Steps.Single(step => step.StepOrder == 1).Status);
+        Assert.Equal(MaintenanceCoordinationStepStatus.Completed, workflow.Steps.Single(step => step.StepOrder == 2).Status);
+        Assert.Equal(MaintenanceCoordinationStepStatus.Pending, workflow.Steps.Single(step => step.StepOrder == 3).Status);
+        Assert.Contains("\"isValid\":false", workflow.Steps.Single(step => step.StepOrder == 1).OutputSummary);
+        Assert.Contains("\"passed\":true", workflow.Steps.Single(step => step.StepOrder == 2).OutputSummary);
+        Assert.Contains("stopped before AI agent execution", workflow.ExecutionSummary);
+    }
+
+    [Fact]
+    public async Task StartAnalysisAsync_RuleFailurePersistsResultsAndSkipsAgent()
+    {
+        await using var context = CreateContext();
+        var request = CreateRequest();
+        context.MaintenanceRequests.Add(request);
+        await context.SaveChangesAsync();
+
+        var agent = new FakeAgentClient();
+        var validationTool = new FakeValidationTool();
+        var ruleTool = new FakeRuleTool(passed: false);
+        var orchestrator = CreateOrchestrator(context, agent, validationTool, ruleTool);
+
+        var workflow = await orchestrator.StartAnalysisAsync(request.Id);
+
+        Assert.Equal(MaintenanceCoordinationWorkflowStatus.Failed, workflow.Status);
+        Assert.False(workflow.RequiresHumanApproval);
+        Assert.Equal(MaintenanceCoordinationApprovalStatus.NotRequired, workflow.ApprovalStatus);
+        Assert.Contains("Maintenance coordination rules failed", workflow.ErrorMessage);
+        Assert.Contains("MaintenanceDescriptionIsPresent", workflow.ErrorMessage);
+        Assert.Empty(agent.CallOrder);
+        Assert.Single(validationTool.CallOrder);
+        Assert.Single(ruleTool.CallOrder);
+        Assert.Equal(2, workflow.CurrentStep);
+        Assert.Equal(MaintenanceCoordinationStepStatus.Completed, workflow.Steps.Single(step => step.StepOrder == 1).Status);
+        Assert.Equal(MaintenanceCoordinationStepStatus.Completed, workflow.Steps.Single(step => step.StepOrder == 2).Status);
+        Assert.Equal(MaintenanceCoordinationStepStatus.Pending, workflow.Steps.Single(step => step.StepOrder == 3).Status);
+        Assert.Contains("\"isValid\":true", workflow.Steps.Single(step => step.StepOrder == 1).OutputSummary);
+        Assert.Contains("\"passed\":false", workflow.Steps.Single(step => step.StepOrder == 2).OutputSummary);
+        Assert.Contains("stopped before AI agent execution", workflow.ExecutionSummary);
+    }
+
+    [Fact]
+    public async Task StartAnalysisAsync_SuccessfulDeterministicChecksInvokeAgentAndAwaitReview()
+    {
+        await using var context = CreateContext();
+        var request = CreateRequest();
+        context.MaintenanceRequests.Add(request);
+        await context.SaveChangesAsync();
+
+        var agent = new FakeAgentClient();
+        var validationTool = new FakeValidationTool();
+        var ruleTool = new FakeRuleTool();
+        var orchestrator = CreateOrchestrator(context, agent, validationTool, ruleTool);
+
+        var workflow = await orchestrator.StartAnalysisAsync(request.Id);
+
+        Assert.Equal(MaintenanceCoordinationWorkflowStatus.AwaitingHumanReview, workflow.Status);
+        Assert.Equal(MaintenanceCoordinationApprovalStatus.Pending, workflow.ApprovalStatus);
+        Assert.Single(agent.CallOrder);
+        Assert.Single(validationTool.CallOrder);
+        Assert.Single(ruleTool.CallOrder);
+        Assert.All(workflow.Steps, step => Assert.Equal(MaintenanceCoordinationStepStatus.Completed, step.Status));
+        Assert.NotNull(workflow.FinalResultJson);
+        Assert.Contains("Schedule technician review", workflow.FinalResultJson);
     }
 
     [Fact]
@@ -218,24 +374,36 @@ public class MaintenanceCoordinationOrchestratorTests
 
     private sealed class FakeValidationTool : IMaintenanceRequestDataValidationTool
     {
+        public FakeValidationTool(bool isValid = true)
+        {
+            IsValid = isValid;
+        }
+
         public List<string> CallOrder { get; } = [];
+        private bool IsValid { get; }
 
         public Task<MaintenanceDataValidationResult> ValidateAsync(MaintenanceRequest? request, CancellationToken cancellationToken = default)
         {
             CallOrder.Add("MaintenanceRequestDataValidationTool");
             return Task.FromResult(new MaintenanceDataValidationResult
             {
-                IsValid = true,
-                CompletenessScore = 100m,
-                MissingFields = [],
-                Warnings = []
+                IsValid = IsValid,
+                CompletenessScore = IsValid ? 100m : 85.71m,
+                MissingFields = IsValid ? [] : ["Title"],
+                Warnings = IsValid ? [] : ["A title is required."]
             });
         }
     }
 
     private sealed class FakeRuleTool : IMaintenanceCoordinationRuleTool
     {
+        public FakeRuleTool(bool passed = true)
+        {
+            Passed = passed;
+        }
+
         public List<string> CallOrder { get; } = [];
+        private bool Passed { get; }
 
         public Task<MaintenanceCoordinationRuleValidationResult> ValidateAsync(
             MaintenanceRequest? request,
@@ -245,10 +413,12 @@ public class MaintenanceCoordinationOrchestratorTests
             CallOrder.Add("MaintenanceCoordinationRuleTool");
             return Task.FromResult(new MaintenanceCoordinationRuleValidationResult
             {
-                Passed = true,
-                PassedRules = ["MaintenanceRequestExists", "MaintenanceCategoryIsDefined", "MaintenancePriorityIsDefined", "MaintenanceDescriptionIsPresent"],
-                FailedRules = [],
-                Warnings = []
+                Passed = Passed,
+                PassedRules = Passed
+                    ? ["MaintenanceRequestExists", "MaintenanceCategoryIsDefined", "MaintenancePriorityIsDefined", "MaintenanceDescriptionIsPresent"]
+                    : ["MaintenanceRequestExists", "MaintenanceCategoryIsDefined", "MaintenancePriorityIsDefined"],
+                FailedRules = Passed ? [] : ["MaintenanceDescriptionIsPresent"],
+                Warnings = Passed ? [] : ["A maintenance description is required."]
             });
         }
     }
@@ -257,10 +427,12 @@ public class MaintenanceCoordinationOrchestratorTests
     {
         public List<string> CallOrder { get; } = [];
         public bool ThrowOnAnalyze { get; init; }
+        public MaintenanceCoordinationAgentRequest? Request { get; private set; }
 
         public Task<MaintenanceCoordinationAgentResponse> AnalyzeAsync(MaintenanceCoordinationAgentRequest request, CancellationToken cancellationToken = default)
         {
             CallOrder.Add("MaintenanceCoordinationAgentClient");
+            Request = request;
             if (ThrowOnAnalyze)
             {
                 throw new MaintenanceCoordinationAgentClientException(MaintenanceCoordinationAgentClientError.ServiceUnavailable, "down");

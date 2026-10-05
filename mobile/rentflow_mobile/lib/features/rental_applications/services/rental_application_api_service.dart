@@ -5,11 +5,66 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../models/rental_application.dart';
+import '../models/application_eligibility.dart';
 
 class RentalApplicationApiService {
   const RentalApplicationApiService(this.apiClient);
 
   final ApiClient apiClient;
+
+  Future<ApplicationEligibility> getEligibility(String propertyId) async {
+    final response = await _send(
+      () => apiClient.get(
+        apiClient.buildUri(
+          '/api/properties/$propertyId/rental-application-eligibility',
+        ),
+      ),
+    );
+    try {
+      return ApplicationEligibility.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    } on FormatException {
+      throw const RentalApplicationApiException(
+        'Unable to check application eligibility. Please try again.',
+      );
+    } on TypeError {
+      throw const RentalApplicationApiException(
+        'Unable to check application eligibility. Please try again.',
+      );
+    }
+  }
+
+  Future<List<EligibleApplicationProperty>> getEligibleProperties() async {
+    final response = await _send(
+      () => apiClient.get(
+        apiClient.buildUri(
+          '${ApiConstants.rentalApplicationsPath}/eligible-properties',
+        ),
+      ),
+    );
+    try {
+      final values = jsonDecode(response.body) as List<dynamic>;
+      final properties = values
+          .map(
+            (v) =>
+                EligibleApplicationProperty.fromJson(v as Map<String, dynamic>),
+          )
+          .toList();
+      if (properties.map((p) => p.id).toSet().length != properties.length) {
+        throw const FormatException('Duplicate property.');
+      }
+      return properties;
+    } on FormatException {
+      throw const RentalApplicationApiException(
+        'Unable to load eligible properties. Please try again.',
+      );
+    } on TypeError {
+      throw const RentalApplicationApiException(
+        'Unable to load eligible properties. Please try again.',
+      );
+    }
+  }
 
   Future<RentalApplication> createApplication({
     required String propertyId,

@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { USER_ROLES } from '../../auth/authModel.js'
 import { useAuth } from '../../auth/useAuth.js'
 import Icon from '../../../shared/ui/Icons.jsx'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import PropertyLocationMap from '../components/PropertyLocationMap.jsx'
+import PublicLandlordAvatar from '../components/PublicLandlordAvatar.jsx'
+import LandlordContact from '../components/LandlordContact.jsx'
+import { CompactViewingRating, ViewingReviewSummary } from '../components/ViewingReviews.jsx'
+import { useViewingReviews } from '../useViewingReviews.js'
 import { formatPropertyArea } from '../propertyArea.js'
 import {
   UTILITY_CATALOG,
@@ -15,7 +19,6 @@ import {
   deleteProperty,
   getMyProperties,
   getProperty,
-  getPublicLandlordImageUrl,
   getPublicLandlordSummary,
   getSavedPropertyMatches,
   updateProperty,
@@ -26,6 +29,7 @@ import {
   RENTAL_APPLICATION_STATUS,
 } from '../../rentalApplications/services/rentalApplicationApiService.js'
 import '../properties.css'
+import { useApplicationEligibility } from '../../rentalApplications/useApplicationEligibility.js'
 
 const MANAGE_PROPERTIES_PATH = '/modules/manage-properties'
 const ACTIVE_APPLICATION_STATUSES = new Set([
@@ -34,11 +38,6 @@ const ACTIVE_APPLICATION_STATUSES = new Set([
   RENTAL_APPLICATION_STATUS.UNDER_REVIEW,
   RENTAL_APPLICATION_STATUS.CHANGES_REQUESTED,
 ])
-
-function getInitials(name) {
-  const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
-  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'L'
-}
 
 function formatAvailableFrom(value) {
   if (!value) return null
@@ -76,7 +75,6 @@ export default function PropertyDetailsPage() {
   const [toast, setToast] = useState(null)
   const [matchResult, setMatchResult] = useState({ propertyId: null, score: null, reasons: [] })
   const [loadedLandlordState, setLandlordState] = useState({ propertyId: null, status: 'loading', summary: null })
-  const [landlordImageFailedFor, setLandlordImageFailedFor] = useState(null)
   const [loadedWorkflowState, setWorkflowState] = useState({
     propertyId: null,
     viewings: 0,
@@ -93,6 +91,15 @@ export default function PropertyDetailsPage() {
   const isOwner = user?.role === USER_ROLES.LANDLORD
     && String(user.id).toLowerCase() === String(property?.landlordId).toLowerCase()
   const isTenant = user?.role === USER_ROLES.TENANT
+  const propertyReviews = useViewingReviews(propertyId, false, 0, Boolean(property))
+  const landlordReviews = useViewingReviews(propertyId, true, 0, isTenant && Boolean(property))
+  const reviewSection = useRef(null)
+  const showReviews = () => {
+    reviewSection.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    reviewSection.current?.focus({ preventScroll: true })
+  }
+  const eligibility = useApplicationEligibility(propertyId, isTenant && Boolean(property))
+  const canOpenApplication = !eligibility.loading && (eligibility.data?.canApply === true || Boolean(eligibility.data?.existingApplicationId))
   const matchScore = matchResult.propertyId === propertyId ? matchResult.score : null
   const matchReasons = matchResult.propertyId === propertyId ? matchResult.reasons : []
   const backPath = user?.role === USER_ROLES.LANDLORD
@@ -416,6 +423,9 @@ export default function PropertyDetailsPage() {
             </div>
 
             <div className="property-details-actions">
+              <Link to={`/properties/${encodeURIComponent(property.id)}/viewing-availability`}>
+                <Icon name="calendar" size={17} /> Viewing availability
+              </Link>
               <Link to={`/properties/${encodeURIComponent(property.id)}/edit`}>
                 <Icon name="edit" size={17} /> Edit
               </Link>
@@ -442,6 +452,7 @@ export default function PropertyDetailsPage() {
               <strong>Rs. {Number(property.monthlyRent).toLocaleString()}</strong>
               <span>/month</span>
             </div>
+            {isTenant && <CompactViewingRating summary={propertyReviews} onClick={showReviews} />}
 
             <dl className="property-details-summary__details">
               {property.advertisedSecurityDeposit != null && (
@@ -494,15 +505,16 @@ export default function PropertyDetailsPage() {
                   {workflowState.viewings > 0 ? 'View viewing requests' : 'Book a Viewing'}
                 </Link>
                 <Link
-                  className={`property-details-summary__secondary${property.isAvailable || workflowState.applications > 0 ? '' : ' is-disabled'}`}
-                  to={`/modules/my-applications?propertyId=${encodeURIComponent(property.id)}`}
-                  aria-disabled={!property.isAvailable && workflowState.applications === 0}
-                  onClick={(event) => { if (!property.isAvailable && workflowState.applications === 0) event.preventDefault() }}
+                  className={`property-details-summary__secondary${canOpenApplication ? '' : ' is-disabled'}`}
+                  to={eligibility.data?.existingApplicationId ? `/notifications/rental-application/${encodeURIComponent(eligibility.data.existingApplicationId)}` : `/modules/my-applications?propertyId=${encodeURIComponent(property.id)}`}
+                  aria-disabled={!canOpenApplication}
+                  onClick={(event) => { if (!canOpenApplication) event.preventDefault() }}
                 >
-                  {workflowState.activeApplication || (!property.isAvailable && workflowState.applications > 0)
+                  {eligibility.data?.existingApplicationId
                     ? 'View application'
-                    : 'Apply for Rental'}
+                    : eligibility.loading ? 'Checking eligibility…' : eligibility.data?.canApply ? 'Apply for Rental' : 'Apply after viewing'}
                 </Link>
+                {!canOpenApplication && !eligibility.loading && <p>{eligibility.error || eligibility.data?.reason || 'Complete a viewing before applying for this property.'}</p>}
                 <p>{property.isAvailable
                   ? 'Your selected property will be carried into each workspace. New bookings and applications are completed in the RentFlow mobile app.'
                   : 'This property is currently unavailable. Existing requests and applications remain accessible.'}</p>
@@ -518,6 +530,7 @@ export default function PropertyDetailsPage() {
             <p>{property.description || 'No property description has been provided.'}</p>
           </section>
 
+          <ViewingReviewSummary summary={propertyReviews} sectionRef={reviewSection} />
           <section className="property-details-section">
             <h2>Amenities</h2>
             {amenityDetails.length > 0 ? (
@@ -551,18 +564,14 @@ export default function PropertyDetailsPage() {
               <div className="property-listed-by__profile">
                 {landlordState.status === 'ready' ? (
                   <>
-                    <span className="property-listed-by__avatar" aria-hidden="true">
-                      {landlordState.summary.hasProfileImage && landlordImageFailedFor !== property.id ? (
-                        <img
-                          src={getPublicLandlordImageUrl(property.id)}
-                          alt=""
-                          onError={() => setLandlordImageFailedFor(property.id)}
-                        />
-                      ) : getInitials(landlordState.summary.displayName)}
-                    </span>
+                    <PublicLandlordAvatar propertyId={property.id} summary={landlordState.summary} />
                     <div>
                       <strong>{landlordState.summary.displayName}</strong>
                       <p>Member since {landlordState.summary.memberSinceYear}</p>
+                      <CompactViewingRating summary={landlordReviews} />
+                      <Link className="property-listed-by__link" to={`/properties/${encodeURIComponent(property.id)}/landlord`}>
+                        View landlord profile <span aria-hidden="true">→</span>
+                      </Link>
                     </div>
                   </>
                 ) : (
@@ -577,6 +586,7 @@ export default function PropertyDetailsPage() {
                   </>
                 )}
               </div>
+              <LandlordContact key={property.id} propertyId={property.id} isTenant={isTenant} />
             </section>
           )}
         </div>

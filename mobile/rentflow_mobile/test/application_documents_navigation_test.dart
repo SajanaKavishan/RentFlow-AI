@@ -82,7 +82,9 @@ void main() {
         final documentsButton = find.byKey(
           ValueKey('application-documents-$selectedId'),
         );
-        await tester.scrollUntilVisible(documentsButton, 500);
+        final actions = find.byKey(ValueKey('application-actions-$selectedId'));
+        await tester.scrollUntilVisible(actions, 500);
+        await tester.tap(actions);
         await tester.pumpAndSettle();
         await tester.tap(documentsButton);
         await tester.pumpAndSettle();
@@ -98,6 +100,7 @@ void main() {
         );
         expect(requests.map((request) => request.url.toString()), [
           'http://test/api/rental-applications',
+          'http://test/api/properties/22222222-2222-4222-8222-222222222222',
           'http://test/api/rental-applications/$selectedId',
           'http://test/api/rental-applications/$selectedId/documents',
         ]);
@@ -148,12 +151,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('application-actions-$selectedId')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Documents'));
     await tester.pumpAndSettle();
 
     expect(find.text('The requested resource is unavailable.'), findsOneWidget);
     expect(requests.map((request) => request.url.path), [
       '/api/rental-applications',
+      '/api/properties/22222222-2222-4222-8222-222222222222',
       '/api/rental-applications/$selectedId',
     ]);
     expect(tester.takeException(), isNull);

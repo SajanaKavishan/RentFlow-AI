@@ -12,6 +12,7 @@ import {
 import {
   approveApplication,
   getApplicationsByProperty,
+  getApplicationEligibility,
 } from './rentalApplicationApiService.js'
 
 const applicationId = '33333333-3333-3333-3333-333333333333'
@@ -49,6 +50,26 @@ describe('JWT client contracts', () => {
     }
     expect(fetch.mock.calls[0][1].method).toBeUndefined()
     expect(fetch.mock.calls[1][1].method).toBe('POST')
+  })
+
+  it('checks property eligibility with JWT and no supplied tenant identity', async () => {
+    fetch.mockResolvedValueOnce(jsonResponse({ canApply: true, hasCompletedViewing: true, reason: null }))
+    expect(await getApplicationEligibility(propertyId)).toMatchObject({ canApply: true })
+    const [url, options] = fetch.mock.calls[0]
+    expect(url).toContain(`/api/properties/${propertyId}/rental-application-eligibility`)
+    expect(url).not.toContain('tenantId')
+    expect(options.headers.Authorization).toBe('Bearer test-token')
+  })
+
+  it.each([{}, { canApply: true, hasCompletedViewing: false }, { canApply: false, hasCompletedViewing: true, existingApplicationId: applicationId }])('rejects malformed eligibility %j', async (body) => {
+    fetch.mockResolvedValueOnce(jsonResponse(body))
+    await expect(getApplicationEligibility(propertyId)).rejects.toThrow('Unable to check application eligibility. Please try again.')
+  })
+
+  it('displays the backend viewing business rejection safely', async () => {
+    const message = 'Complete a viewing for this property before starting a rental application.'
+    fetch.mockResolvedValueOnce(jsonResponse({ detail: message }, 409))
+    await expect(getApplicationEligibility(propertyId)).rejects.toMatchObject({ message, statusCode: 409 })
   })
 
   it('keeps landlord review resource IDs without tenant identity parameters', async () => {

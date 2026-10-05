@@ -1,0 +1,3 @@
+.landlord-contact { margin-top: 20px; padding: 18px; border: 1px solid var(--olive-100, #dde2cf); border-radius: 12px; background: var(--cream, #faf9f3); }
+.landlord-contact h2 { margin: 0 0 8px; font-size: 1rem; }
+.landlord-contact p { margin: 0; overflow-wrap: anywhere; user-select: text; }

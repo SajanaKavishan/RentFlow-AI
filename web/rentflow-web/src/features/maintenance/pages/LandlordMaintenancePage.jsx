@@ -529,7 +529,7 @@ export default function LandlordMaintenancePage() {
   const isPageLoading = Boolean(isLandlord && pageState === 'loading')
 
   return (
-    <main className="maintenance-page" aria-busy={isPageLoading}>
+    <main className="maintenance-page maintenance-page--landlord" aria-busy={isPageLoading}>
       <header className="maintenance-page__header">
         <div>
           <p className="maintenance-page__eyebrow">Landlord workspace</p>

@@ -252,7 +252,7 @@ public class PropertyService : IPropertyService
     }
 
     // Convert Property entity to PropertyResponseDto.
-    private static PropertyResponseDto MapToResponseDto(
+    internal static PropertyResponseDto MapToResponseDto(
         Property property)
     {
         return new PropertyResponseDto

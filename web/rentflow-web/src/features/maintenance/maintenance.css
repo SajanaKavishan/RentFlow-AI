@@ -441,3 +441,321 @@
     flex-direction: column;
   }
 }
+
+.maintenance-page--landlord .maintenance-page__header p:not(.maintenance-page__eyebrow) {
+  color: var(--muted);
+}
+
+.maintenance-page--landlord .maintenance-page__eyebrow {
+  color: var(--olive-700);
+}
+
+.maintenance-page--landlord .maintenance-panel {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: var(--card-shadow);
+}
+
+.maintenance-page--landlord .maintenance-property-selector select {
+  border-color: var(--border);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.maintenance-page--landlord .maintenance-request-card {
+  border-color: var(--border);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.maintenance-page--landlord .maintenance-request-card:hover,
+.maintenance-page--landlord .maintenance-request-card:focus-visible {
+  border-color: var(--olive-700);
+  box-shadow: 0 10px 18px rgb(48 60 31 / 8%);
+}
+
+.maintenance-page--landlord .maintenance-request-card--selected {
+  border-color: var(--olive-700);
+  background: var(--olive-50);
+}
+
+.maintenance-page--landlord .maintenance-request-card__topline strong {
+  color: var(--ink);
+}
+
+.maintenance-page--landlord .maintenance-request-card__meta,
+.maintenance-page--landlord .maintenance-request-card small {
+  color: var(--muted);
+}
+
+.maintenance-page--landlord .maintenance-form label {
+  color: var(--ink);
+}
+
+.maintenance-page--landlord .maintenance-form input,
+.maintenance-page--landlord .maintenance-form textarea,
+.maintenance-page--landlord .maintenance-form select {
+  border-color: var(--border);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.maintenance-page--landlord .maintenance-form input:focus,
+.maintenance-page--landlord .maintenance-form textarea:focus,
+.maintenance-page--landlord .maintenance-form select:focus,
+.maintenance-page--landlord .maintenance-property-selector select:focus {
+  outline-color: rgb(95 113 68 / 20%);
+  border-color: var(--olive-700);
+}
+
+.maintenance-page--landlord .maintenance-detail__topline h3,
+.maintenance-page--landlord .maintenance-detail__meta dd {
+  color: var(--ink);
+}
+
+.maintenance-page--landlord .maintenance-detail__meta div {
+  border-color: var(--border);
+  background: var(--cream-50);
+}
+
+.maintenance-page--landlord .maintenance-detail__meta dt,
+.maintenance-page--landlord .maintenance-detail__section p {
+  color: var(--muted);
+}
+
+.maintenance-page--landlord .maintenance-detail__section {
+  border-color: var(--border);
+}
+
+.maintenance-page--landlord .maintenance-detail__section h4 {
+  color: var(--ink);
+}
+
+.maintenance-page--landlord .status-badge--submitted,
+.maintenance-page--landlord .status-badge--triaged,
+.maintenance-page--landlord .status-badge--estimate-pending,
+.maintenance-page--landlord .status-badge--estimate-submitted,
+.maintenance-page--landlord .status-badge--awaiting-landlord-approval {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.maintenance-page--landlord .status-badge--assigned,
+.maintenance-page--landlord .status-badge--in-progress {
+  color: var(--olive-700);
+  background: var(--progress);
+}
+
+.maintenance-page--landlord .status-badge--approved,
+.maintenance-page--landlord .status-badge--completed {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.maintenance-page--landlord .status-badge--rejected {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.maintenance-page--landlord .status-badge--cancelled {
+  color: var(--neutral);
+  background: var(--neutral-bg);
+}
+
+.maintenance-page--landlord .form-message--error {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.maintenance-page--landlord .page-notice {
+  border-color: var(--success);
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.maintenance-page--landlord .page-state {
+  border-color: var(--border);
+  color: var(--muted);
+  background: rgb(255 255 255 / 70%);
+}
+
+.maintenance-page--landlord .page-state__icon {
+  color: var(--olive-700);
+  background: var(--olive-50);
+}
+
+.maintenance-page--landlord .page-state--error {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.maintenance-page--landlord .page-state--error .page-state__icon {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.maintenance-page--landlord .loading-spinner {
+  border-color: rgb(95 113 68 / 20%);
+  border-top-color: var(--olive-700);
+}
+
+.maintenance-page--tenant .maintenance-page__header p:not(.maintenance-page__eyebrow) {
+  color: var(--muted);
+}
+
+.maintenance-page--tenant .maintenance-page__eyebrow {
+  color: var(--olive-700);
+}
+
+.maintenance-page--tenant .maintenance-panel {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: var(--card-shadow);
+}
+
+.maintenance-page--tenant .maintenance-request-card {
+  border-color: var(--border);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.maintenance-page--tenant .maintenance-request-card:hover,
+.maintenance-page--tenant .maintenance-request-card:focus-visible {
+  border-color: var(--olive-700);
+  box-shadow: 0 10px 18px rgb(48 60 31 / 8%);
+}
+
+.maintenance-page--tenant .maintenance-request-card--selected {
+  border-color: var(--olive-700);
+  background: var(--olive-50);
+}
+
+.maintenance-page--tenant .maintenance-request-card__topline strong {
+  color: var(--ink);
+}
+
+.maintenance-page--tenant .maintenance-request-card__meta,
+.maintenance-page--tenant .maintenance-request-card small {
+  color: var(--muted);
+}
+
+.maintenance-page--tenant .maintenance-form label {
+  color: var(--ink);
+}
+
+.maintenance-page--tenant .maintenance-form input,
+.maintenance-page--tenant .maintenance-form textarea,
+.maintenance-page--tenant .maintenance-form select {
+  border-color: var(--border);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.maintenance-page--tenant .maintenance-form input:focus,
+.maintenance-page--tenant .maintenance-form textarea:focus,
+.maintenance-page--tenant .maintenance-form select:focus {
+  outline-color: rgb(95 113 68 / 20%);
+  border-color: var(--olive-700);
+}
+
+.maintenance-page--tenant .maintenance-detail__topline h3,
+.maintenance-page--tenant .maintenance-detail__meta dd {
+  color: var(--ink);
+}
+
+.maintenance-page--tenant .maintenance-detail__meta div {
+  border-color: var(--border);
+  background: var(--cream-50);
+}
+
+.maintenance-page--tenant .maintenance-detail__meta dt,
+.maintenance-page--tenant .maintenance-detail__section p {
+  color: var(--muted);
+}
+
+.maintenance-page--tenant .maintenance-detail__section {
+  border-color: var(--border);
+}
+
+.maintenance-page--tenant .maintenance-detail__section h4 {
+  color: var(--ink);
+}
+
+.maintenance-page--tenant .maintenance-attachment-list li {
+  border-color: var(--border);
+  background: var(--cream-50);
+}
+
+.maintenance-page--tenant .maintenance-attachment-list small {
+  color: var(--muted);
+}
+
+.maintenance-page--tenant .status-badge--submitted,
+.maintenance-page--tenant .status-badge--triaged,
+.maintenance-page--tenant .status-badge--estimate-pending,
+.maintenance-page--tenant .status-badge--estimate-submitted,
+.maintenance-page--tenant .status-badge--awaiting-landlord-approval {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.maintenance-page--tenant .status-badge--assigned,
+.maintenance-page--tenant .status-badge--in-progress {
+  color: var(--olive-700);
+  background: var(--progress);
+}
+
+.maintenance-page--tenant .status-badge--approved,
+.maintenance-page--tenant .status-badge--completed {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.maintenance-page--tenant .status-badge--rejected {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.maintenance-page--tenant .status-badge--cancelled {
+  color: var(--neutral);
+  background: var(--neutral-bg);
+}
+
+.maintenance-page--tenant .form-message--error {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.maintenance-page--tenant .page-notice {
+  border-color: var(--success);
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.maintenance-page--tenant .page-state {
+  border-color: var(--border);
+  color: var(--muted);
+  background: rgb(255 255 255 / 70%);
+}
+
+.maintenance-page--tenant .page-state__icon {
+  color: var(--olive-700);
+  background: var(--olive-50);
+}
+
+.maintenance-page--tenant .page-state--error {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.maintenance-page--tenant .page-state--error .page-state__icon {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.maintenance-page--tenant .loading-spinner {
+  border-color: rgb(95 113 68 / 20%);
+  border-top-color: var(--olive-700);
+}

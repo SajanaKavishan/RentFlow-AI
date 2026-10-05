@@ -4,10 +4,12 @@ import '../../../shared/theme/app_theme.dart';
 import '../controllers/auth_controller.dart';
 import '../services/auth_service.dart';
 import '../widgets/auth_shell.dart';
+import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.notice});
+  final String? notice;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -61,73 +63,116 @@ class _LoginScreenState extends State<LoginScreen> {
               'WELCOME BACK',
               style: TextStyle(
                 color: AppPalette.authPrimary,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.5,
+                fontSize: AppTypography.captionSize,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Sign in to RentFlow',
-              style: TextStyle(
-                color: AppPalette.authText,
-                fontSize: 28,
-                height: 1.15,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.8,
-              ),
-            ),
+            const Text('Sign in to RentFlow', style: AppTypography.pageTitle),
             const SizedBox(height: 6),
             const Text(
               'Enter your details to continue your rental journey.',
               style: TextStyle(
                 color: AppPalette.authMuted,
-                fontSize: 13,
+                fontSize: AppTypography.bodySmallSize,
                 height: 1.4,
               ),
             ),
             const SizedBox(height: 16),
-            const AuthFieldLabel('Email'),
-            const SizedBox(height: 6),
-            TextFormField(
-              key: const Key('login-email'),
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              autofillHints: const [AutofillHints.email],
-              decoration: const InputDecoration(),
-              validator: (value) =>
-                  value == null ||
-                      !RegExp(r'^\S+@\S+\.\S+$').hasMatch(value.trim())
-                  ? 'Enter a valid email address.'
-                  : null,
-              enabled: !_isSubmitting,
-            ),
-            const SizedBox(height: 12),
-            const AuthFieldLabel('Password'),
-            const SizedBox(height: 6),
-            TextFormField(
-              key: const Key('login-password'),
-              controller: _passwordController,
-              obscureText: _obscurePassword,
-              autofillHints: const [AutofillHints.password],
-              decoration: InputDecoration(
-                suffixIcon: IconButton(
-                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                  onPressed: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
-                  icon: Icon(
-                    _obscurePassword
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                  ),
+            if (widget.notice != null) ...[
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  widget.notice!,
+                  key: const Key('login-session-notice'),
+                  style: AppTypography.body,
                 ),
               ),
-              validator: (value) => value == null || value.isEmpty
-                  ? 'Enter your password.'
-                  : null,
-              enabled: !_isSubmitting,
-              onFieldSubmitted: (_) => _submit(),
+              const SizedBox(height: 16),
+            ],
+            const AuthFieldLabel('Email'),
+            const SizedBox(height: 6),
+            Semantics(
+              label: 'Email',
+              child: TextFormField(
+                key: const Key('login-email'),
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.email],
+                decoration: const InputDecoration(),
+                validator: (value) =>
+                    value == null ||
+                        !RegExp(r'^\S+@\S+\.\S+$').hasMatch(value.trim())
+                    ? 'Enter a valid email address.'
+                    : null,
+                enabled: !_isSubmitting,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OverflowBar(
+              key: const Key('login-password-heading'),
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.end,
+              spacing: 12,
+              children: [
+                const AuthFieldLabel('Password'),
+                TextButton(
+                  key: const Key('login-forgot-password'),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    textStyle: const TextStyle(
+                      fontSize: AppTypography.labelSize,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                  onPressed: _isSubmitting
+                      ? null
+                      : () {
+                          FocusScope.of(context).unfocus();
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => ForgotPasswordScreen(
+                                initialEmail: _emailController.text,
+                              ),
+                            ),
+                          );
+                        },
+                  child: const Text('Forgot password?'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Semantics(
+              label: 'Password',
+              child: TextFormField(
+                key: const Key('login-password'),
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                autofillHints: const [AutofillHints.password],
+                decoration: InputDecoration(
+                  suffixIcon: IconButton(
+                    tooltip: _obscurePassword
+                        ? 'Show password'
+                        : 'Hide password',
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                  ),
+                ),
+                validator: (value) => value == null || value.isEmpty
+                    ? 'Enter your password.'
+                    : null,
+                enabled: !_isSubmitting,
+                onFieldSubmitted: (_) => _submit(),
+              ),
             ),
             if (_error != null)
               Padding(
@@ -183,7 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12),
+                style: AppTypography.label,
               ),
             ),
           ],

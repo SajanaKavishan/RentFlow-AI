@@ -50,6 +50,19 @@ export function getMyApplications() {
   return request('/api/rental-applications')
 }
 
+export async function getApplicationEligibility(propertyId) {
+  const result = await request(`/api/properties/${encodeURIComponent(propertyId)}/rental-application-eligibility`)
+  if (!result || typeof result.canApply !== 'boolean' || typeof result.hasCompletedViewing !== 'boolean'
+    || (result.reason != null && typeof result.reason !== 'string')
+    || (result.existingApplicationId != null && (typeof result.existingApplicationId !== 'string' || !result.existingApplicationId.trim()))
+    || ((result.existingApplicationId == null) !== (result.existingApplicationStatus == null))
+    || (result.existingApplicationStatus != null && !Object.values(RENTAL_APPLICATION_STATUS).includes(result.existingApplicationStatus))
+    || (result.canApply && (!result.hasCompletedViewing || result.existingApplicationId != null))) {
+    throw new RentalApplicationApiError('Unable to check application eligibility. Please try again.')
+  }
+  return result
+}
+
 export function markUnderReview(id) {
   return request(applicationPath(id, 'review'), { method: 'PATCH' })
 }

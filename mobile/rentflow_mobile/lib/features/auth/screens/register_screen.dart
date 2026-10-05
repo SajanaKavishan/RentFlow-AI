@@ -81,28 +81,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
               'GET STARTED',
               style: TextStyle(
                 color: AppPalette.authPrimary,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.5,
+                fontSize: AppTypography.captionSize,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Create your account',
-              style: TextStyle(
-                color: AppPalette.authText,
-                fontSize: 28,
-                height: 1.15,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.8,
-              ),
-            ),
+            const Text('Create your account', style: AppTypography.pageTitle),
             const SizedBox(height: 6),
             const Text(
               'Enter your details to begin your rental journey.',
               style: TextStyle(
                 color: AppPalette.authMuted,
-                fontSize: 13,
+                fontSize: AppTypography.bodySmallSize,
                 height: 1.4,
               ),
             ),
@@ -156,6 +147,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: 6),
             DropdownButtonFormField<UserRole>(
               key: const Key('register-role'),
+              isExpanded: true,
               initialValue: _role,
               decoration: const InputDecoration(),
               items: RegisterScreen.publicRoles
@@ -266,7 +258,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ],
                 ),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12),
+                style: AppTypography.label,
               ),
             ),
           ],

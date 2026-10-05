@@ -1,3 +1,4 @@
+import 'package:rentflow_mobile/features/maintenance/screens/my_maintenance_requests_screen.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -74,6 +75,128 @@ Future<fixtures.MemoryTokenStorage> pumpShell(
 
 void main() {
   testWidgets(
+    'quick actions give three cards room and keep the fourth reachable across phone sizes',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      const labels = ['My Viewings', 'My Lease', 'Pay Rent', 'Documents'];
+      final semantics = tester.ensureSemantics();
+      for (final display in [
+        (size: const Size(320, 640), density: 1.0),
+        (size: const Size(720, 1560), density: 2.0),
+        (size: const Size(1080, 2340), density: 3.0),
+        (size: const Size(240, 640), density: 1.0),
+      ]) {
+        for (final scale in [1.0, 2.0]) {
+          tester.view.physicalSize = display.size;
+          tester.view.devicePixelRatio = display.density;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          final opened = <String>[];
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: AppTheme.build(),
+              home: Scaffold(
+                body: TenantHome(
+                  user: userFor(UserRole.tenant),
+                  onDestinationSelected: (_) =>
+                      fail('Quick action destinations must stay unchanged.'),
+                  onOpenViewings: () => opened.add(labels[0]),
+                  onOpenLease: () => opened.add(labels[1]),
+                  onPayRent: () => opened.add(labels[2]),
+                  onOpenDocuments: () => opened.add(labels[3]),
+                  onOpenNotifications: () {},
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final row = find.byKey(const Key('tenant-quick-actions-row'));
+          final cards = [
+            for (var index = 0; index < 4; index++)
+              find.byKey(ValueKey('tenant-quick-action-$index')),
+          ];
+          final rowTop = tester.getTopLeft(cards.first).dy;
+          final rowWidth = tester.getSize(row).width;
+          for (var index = 0; index < cards.length; index++) {
+            final size = tester.getSize(cards[index]);
+            expect(size.width, greaterThanOrEqualTo(48));
+            expect(tester.getTopLeft(cards[index]).dy, rowTop);
+            expect(size, tester.getSize(cards.first));
+            final label = tester.widget<Text>(find.text(labels[index]));
+            expect(label.maxLines, 2);
+            expect(label.textAlign, TextAlign.center);
+            expect(label.style!.fontSize, 12);
+            expect(label.style!.fontWeight, FontWeight.w600);
+          }
+          if (scale == 1 && display.size.width / display.density >= 320) {
+            expect(tester.getSize(cards.first).height, 88);
+            expect(
+              tester.getBottomRight(cards[2]).dx,
+              lessThanOrEqualTo(tester.getBottomRight(row).dx + 0.01),
+            );
+            expect(
+              tester.getSize(cards.first).width * 3 + 14,
+              closeTo(rowWidth, 0.01),
+            );
+            expect(
+              tester.getTopLeft(cards.last).dx,
+              greaterThan(tester.getBottomRight(row).dx),
+            );
+          } else {
+            expect(
+              tester.getSize(cards.first).width * 4 + 21,
+              greaterThan(rowWidth),
+            );
+            expect(
+              tester.widget<SingleChildScrollView>(row).scrollDirection,
+              Axis.horizontal,
+            );
+          }
+          expect(
+            find.descendant(
+              of: row,
+              matching: find.byIcon(Icons.chevron_right_rounded),
+            ),
+            findsNothing,
+          );
+          final lastCardBottom = tester.getBottomRight(cards.last).dy;
+          expect(
+            tester.getTopLeft(find.text('Recent activity')).dy - lastCardBottom,
+            18,
+          );
+          final headingBottom = tester
+              .getBottomRight(find.text('What would you like to do?'))
+              .dy;
+          expect(rowTop - headingBottom, 8);
+          for (var index = 0; index < cards.length; index++) {
+            await tester.ensureVisible(cards[index]);
+            await tester.pumpAndSettle();
+            expect(
+              tester.getSemantics(find.bySemanticsLabel(labels[index])),
+              matchesSemantics(
+                label: labels[index],
+                isButton: true,
+                hasEnabledState: true,
+                isEnabled: true,
+                hasTapAction: true,
+              ),
+            );
+            // Tapping the card surface, outside the icon, invokes the same callback.
+            await tester.tapAt(
+              tester.getTopLeft(cards[index]) + const Offset(8, 8),
+            );
+          }
+          expect(opened, labels);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        }
+      }
+      semantics.dispose();
+    },
+  );
+
+  testWidgets(
     'populated tenant home stays compact and accessible at mobile widths',
     (tester) async {
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -83,7 +206,7 @@ void main() {
         httpClient: MockClient(
           (request) async => http.Response(
             jsonEncode(
-              request.url.path.endsWith('/viewings')
+              !request.url.path.endsWith('/rental-applications')
                   ? []
                   : [
                       {
@@ -111,39 +234,54 @@ void main() {
         await tester.binding.setSurfaceSize(Size(width, 800));
         await pumpShell(tester, UserRole.tenant, apiClient: apiClient);
         expect(find.text('Your application is being reviewed'), findsOneWidget);
-        expect(find.text('UNDER REVIEW'), findsOneWidget);
+        expect(find.text('IN PROGRESS'), findsOneWidget);
         expect(find.text('Move-in requested for Oct 1, 2026'), findsOneWidget);
         expect(find.text('Recent activity'), findsOneWidget);
-        expect(find.text('Application updated'), findsOneWidget);
+        expect(find.text('Application under review'), findsOneWidget);
         expect(find.text('Sep 15, 2026'), findsOneWidget);
         expect(find.text('See all'), findsNothing);
 
         final journey = find.byKey(const Key('tenant-journey-card'));
-        expect(tester.getSize(journey).height, lessThan(200));
+        expect(tester.getSize(journey).height, lessThan(300));
         final decoration =
             tester.widget<Container>(journey).decoration! as BoxDecoration;
         expect(decoration.color, AppPalette.darkOlive);
 
-        final cards = ['My Viewings', 'My Lease', 'Pay Rent', 'Documents']
-            .map(
-              (label) => find.ancestor(
-                of: find.text(label),
-                matching: find.byType(AppCard),
-              ),
-            )
-            .toList();
-        expect(tester.getTopLeft(cards[0]).dy, tester.getTopLeft(cards[1]).dy);
-        expect(tester.getTopLeft(cards[2]).dy, tester.getTopLeft(cards[3]).dy);
-        expect(tester.getTopLeft(cards[0]).dx, tester.getTopLeft(cards[2]).dx);
-        expect(tester.getSize(cards[0]).height, lessThan(110));
-        for (final card in cards) {
-          expect(tester.getSize(card), tester.getSize(cards[0]));
+        final cards = [
+          for (var index = 0; index < 4; index++)
+            find.byKey(ValueKey('tenant-quick-action-$index')),
+        ];
+        for (var index = 0; index < cards.length; index++) {
+          expect(
+            tester.getTopLeft(cards[index]).dy,
+            tester.getTopLeft(cards[0]).dy,
+          );
+          expect(tester.getSize(cards[index]), tester.getSize(cards[0]));
+          expect(tester.getSize(cards[index]).height, inInclusiveRange(82, 90));
+          if (index > 0) {
+            expect(
+              tester.getTopLeft(cards[index]).dx -
+                  tester.getBottomRight(cards[index - 1]).dx,
+              closeTo(7, 0.01),
+            );
+          }
         }
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('tenant-quick-actions-row')),
+            matching: find.byIcon(Icons.chevron_right_rounded),
+          ),
+          findsNothing,
+        );
+        await tester.ensureVisible(find.text('Documents'));
+        await tester.pumpAndSettle();
         expect(
           tester.getSemantics(find.bySemanticsLabel('Documents')),
           matchesSemantics(
             label: 'Documents',
             isButton: true,
+            hasEnabledState: true,
+            isEnabled: true,
             hasTapAction: true,
           ),
         );
@@ -165,7 +303,7 @@ void main() {
       httpClient: MockClient(
         (request) async => http.Response(
           jsonEncode(
-            request.url.path.endsWith('/viewings')
+            !request.url.path.endsWith('/rental-applications')
                 ? []
                 : [
                     for (var index = 0; index < 5; index++)
@@ -192,7 +330,10 @@ void main() {
     await pumpShell(tester, UserRole.tenant, apiClient: apiClient);
     final homeList = find.byKey(const Key('tenant-home-activity-list'));
     expect(
-      find.descendant(of: homeList, matching: find.text('Application updated')),
+      find.descendant(
+        of: homeList,
+        matching: find.text('Application submitted'),
+      ),
       findsNWidgets(3),
     );
     expect(
@@ -208,8 +349,12 @@ void main() {
     final allActivity = find.byKey(const Key('tenant-all-activity-sheet'));
     expect(find.text('All recent activity'), findsOneWidget);
     expect(
-      find.descendant(of: allActivity, matching: find.byType(AppCard)),
-      findsNWidgets(5),
+      tester
+          .widget<ListView>(
+            find.descendant(of: allActivity, matching: find.byType(ListView)),
+          )
+          .semanticChildCount,
+      5,
     );
     expect(tester.takeException(), isNull);
   });
@@ -232,7 +377,7 @@ void main() {
       addTearDown(apiClient.close);
       await pumpShell(tester, UserRole.tenant, apiClient: apiClient);
       expect(find.text('Journey unavailable'), findsOneWidget);
-      expect(find.text('Recent activity'), findsNothing);
+      expect(find.text('Recent activity'), findsOneWidget);
       expect(tester.takeException(), isNull);
       unavailable = false;
       await tester.ensureVisible(find.text('Try again'));
@@ -240,7 +385,7 @@ void main() {
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
       expect(find.text('No rental journey yet'), findsOneWidget);
-      expect(find.text('Recent activity'), findsNothing);
+      expect(find.text('Recent activity'), findsOneWidget);
       await tester.ensureVisible(find.text('Documents'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
@@ -285,7 +430,7 @@ void main() {
       find.text('AI helps with the work. People stay in control.'),
       findsNothing,
     );
-    expect(find.text('Recent activity'), findsNothing);
+    expect(find.text('Recent activity'), findsOneWidget);
 
     final semantics = tester.ensureSemantics();
     for (final label in ['My Viewings', 'My Lease', 'Pay Rent', 'Documents']) {
@@ -305,13 +450,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('My Lease'));
     await tester.pumpAndSettle();
-    expect(find.text('Integration pending'), findsOneWidget);
-    expect(
-      find.text(
-        'Lease services are unavailable right now. Return to Home and try again.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Your lease'), findsOneWidget);
+    expect(find.text('Integration pending'), findsNothing);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
@@ -319,13 +459,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Pay Rent'));
     await tester.pumpAndSettle();
-    expect(find.text('Integration pending'), findsOneWidget);
-    expect(
-      find.text(
-        'Payment services are unavailable right now. Return to Home and try again.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Rent & payments'), findsOneWidget);
+    expect(find.text('Integration pending'), findsNothing);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
@@ -333,10 +468,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Documents'));
     await tester.pumpAndSettle();
-    expect(find.text('Applications content'), findsOneWidget);
+    expect(find.text('Your documents'), findsOneWidget);
+    expect(find.text('Applications content'), findsNothing);
     expect(
       find.text('Open an application to view or manage its documents.'),
-      findsOneWidget,
+      findsNothing,
     );
   });
 
@@ -441,8 +577,14 @@ void main() {
     expect(find.text('Applications content'), findsOneWidget);
     await tester.tap(navigationDestination('Maintenance'));
     await tester.pumpAndSettle();
-    expect(find.text('My Maintenance Requests'), findsOneWidget);
-    expect(find.text('No maintenance requests yet'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(MyMaintenanceRequestsScreen),
+        matching: find.text('Maintenance'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('No maintenance requests yet.'), findsOneWidget);
     expect(find.text('Integration pending'), findsNothing);
     await tester.tap(navigationDestination('Properties'));
     await tester.pumpAndSettle();
@@ -453,9 +595,12 @@ void main() {
     await tester.tap(navigationDestination('Profile'));
     await tester.pumpAndSettle();
     expect(find.text('user@example.com'), findsOneWidget);
-    for (final section in ['Account', 'Preferences', 'Support']) {
-      expect(find.text(section), findsOneWidget);
-    }
+    expect(find.text('Account'), findsOneWidget);
+    expect(find.text('Preferences'), findsOneWidget);
+    expect(find.text('Notifications'), findsOneWidget);
+    expect(find.text('Match preferences'), findsOneWidget);
+    expect(find.text('Support'), findsOneWidget);
+    expect(find.text('Help & support'), findsOneWidget);
   });
 
   testWidgets(

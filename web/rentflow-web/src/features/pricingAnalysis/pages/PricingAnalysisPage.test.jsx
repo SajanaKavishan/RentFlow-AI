@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -11,7 +11,7 @@ const workflowId = '33333333-3333-3333-3333-333333333333'
 const properties = [{ id: firstId, title: 'Lake House', city: 'Kandy' }, { id: secondId, title: 'Garden Flat', city: 'Colombo' }]
 
 function workflow(result) {
-  return { workflowId, propertyId: secondId, status: 2, evidenceSufficiency: result.evidenceSufficiency, confidence: result.confidence, createdAt: '2026-09-27T10:00:00Z', completedAt: '2026-09-27T10:01:00Z', result, steps: [{ order: 1, name: 'Gather property facts', status: 2, outputSummary: 'Property facts loaded.', validationSummary: 'Valid.' }, { order: 4, name: 'Review evidence', status: 4 }] }
+  return { workflowId, propertyId: secondId, status: 2, evidenceSufficiency: result.evidenceSufficiency, confidence: result.confidence, createdAt: '2026-09-27T10:00:00Z', completedAt: '2026-09-27T10:01:00Z', result, steps: [{ order: 1, name: 'collect_property_facts', status: 2, outputSummary: 'Property facts loaded.', validationSummary: 'Valid.' }, { order: 2, name: 'collect_rental_evidence', status: 2, outputSummary: 'Eligible comparable evidence collected: 0; sufficiency=INSUFFICIENT; confidence=LOW.' }, { order: 3, name: 'analyse_pricing_evidence', status: 4, outputSummary: 'Skipped because deterministic evidence sufficiency is INSUFFICIENT.' }] }
 }
 
 function response(body, status = 200) {
@@ -41,7 +41,7 @@ function renderPage() {
 }
 
 describe('rental price analysis', () => {
-  it('shows a completed numeric recommendation and workflow steps', async () => {
+  it('shows a completed recommendation and keeps friendly workflow details collapsed until requested', async () => {
     mockApi({ postResult: workflow({ evidenceSufficiency: 'MODERATE', confidence: 'MEDIUM', recommendedMinRent: 60000, recommendedMaxRent: 70000, rationale: 'Comparable rents support this range.', citedEvidenceRefs: ['listing:1'] }) })
     renderPage()
     await selectSecondProperty()
@@ -50,7 +50,14 @@ describe('rental price analysis', () => {
     expect(screen.getByText('60,000')).toBeInTheDocument()
     expect(screen.getByText('70,000')).toBeInTheDocument()
     expect(screen.getByText('listing:1')).toBeInTheDocument()
-    expect(screen.getByText('Gather property facts')).toBeInTheDocument()
+    const details = screen.getByText('View Analysis Details')
+    expect(details.closest('details')).not.toHaveAttribute('open')
+    await userEvent.click(details)
+    expect(screen.getByText('Property Information')).toBeInTheDocument()
+    expect(screen.getByText('Comparable Rental Search')).toBeInTheDocument()
+    expect(within(details.closest('details')).getAllByText('Rental Price Analysis')).toHaveLength(1)
+    expect(screen.getByText(/not enough market evidence/i)).toBeInTheDocument()
+    expect(screen.getByText(/was skipped because there was not enough reliable/i)).toBeInTheDocument()
     expect(screen.getByText('Skipped')).toBeInTheDocument()
   })
 
@@ -59,9 +66,21 @@ describe('rental price analysis', () => {
     renderPage()
     await selectSecondProperty()
     await userEvent.click(screen.getByRole('button', { name: 'Start analysis' }))
-    expect(await screen.findByText(/completed with insufficient evidence/i)).toBeInTheDocument()
+    expect(await screen.findByText(/not enough comparable rental properties were found/i)).toBeInTheDocument()
     expect(screen.getByText('More comparable evidence is needed.')).toBeInTheDocument()
     expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument()
+  })
+
+  it('shows unavailable recommendation, count, and confidence in the default view', async () => {
+    mockApi({ postResult: workflow({ evidenceSufficiency: 'INSUFFICIENT', confidence: 'LOW', recommendedMinRent: null, recommendedMaxRent: null }) })
+    renderPage()
+    await selectSecondProperty()
+    await userEvent.click(screen.getByRole('button', { name: 'Start analysis' }))
+    expect(await screen.findByText('Recommendation unavailable')).toBeInTheDocument()
+    expect(screen.getByText('Not enough comparable rental properties were found to produce a reliable pricing recommendation.')).toBeInTheDocument()
+    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByText('Low')).toBeInTheDocument()
+    expect(screen.queryByText(/sufficiency=INSUFFICIENT/i)).not.toBeInTheDocument()
   })
 
   it('shows a safe API error when starting fails', async () => {

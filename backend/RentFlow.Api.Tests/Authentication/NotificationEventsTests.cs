@@ -118,6 +118,8 @@ public sealed class NotificationEventsTests
         using var factory = new AuthApiFactory();
         var propertyA = await SeedPropertyAsync(factory, LandlordA);
         var propertyB = await SeedPropertyAsync(factory, LandlordB);
+        await SeedAsync(factory, db => db.ViewingRequests.Add(new ViewingRequest
+        { TenantId = TenantA, PropertyId = propertyB.Id, Status = ViewingStatus.Completed }));
         using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant);
 
         var viewingResponse = await tenant.PostAsJsonAsync(
@@ -125,7 +127,7 @@ public sealed class NotificationEventsTests
             new
             {
                 propertyId = propertyA.Id,
-                requestedDateTime = DateTimeOffset.UtcNow.AddDays(3),
+                requestedDateTime = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(3).AddHours(3.5)),
                 tenantMessage = "I would like to view the property."
             });
         var applicationResponse = await tenant.PostAsJsonAsync(
@@ -302,7 +304,13 @@ public sealed class NotificationEventsTests
             IsAvailable = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        await SeedAsync(factory, context => context.Properties.Add(property));
+        await SeedAsync(factory, context =>
+        {
+            context.Properties.Add(property);
+            context.PropertyViewingAvailabilities.AddRange(Enumerable.Range(0, 7).Select(day =>
+                new PropertyViewingAvailability { PropertyId = property.Id, DayOfWeek = day,
+                    IsEnabled = true, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0) }));
+        });
         return property;
     }
 
@@ -342,7 +350,12 @@ public sealed class NotificationEventsTests
             Status = status,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        await SeedAsync(factory, context => context.RentalApplications.Add(application));
+        await SeedAsync(factory, context =>
+        {
+            context.RentalApplications.Add(application);
+            context.ViewingRequests.Add(new ViewingRequest
+            { TenantId = tenantId, PropertyId = propertyId, Status = ViewingStatus.Completed });
+        });
         return application;
     }
 

@@ -8,4 +8,8 @@ public sealed record UserProfileDto(
     string Email,
     string PhoneNumber,
     UserRole Role,
-    bool HasProfileImage);
+    bool HasProfileImage,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? PublicContactPhone = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    bool? PublicContactEnabled = null);

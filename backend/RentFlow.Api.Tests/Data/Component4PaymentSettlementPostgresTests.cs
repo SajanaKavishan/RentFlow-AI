@@ -55,7 +55,7 @@ public sealed class Component4PaymentSettlementPostgresTests
             var offer = CreateOffer(application.Id, application.TenantId, property.Id);
             var lease = CreateLease(offer, property.Id);
             var schedule = CreateSchedule(lease.Id);
-            dbContext.Users.Add(landlord);
+            dbContext.Users.AddRange(landlord, CreateTenant(application.TenantId));
             dbContext.Properties.Add(property);
             dbContext.RentalApplications.Add(application);
             dbContext.RentalOffers.Add(offer);
@@ -73,11 +73,11 @@ public sealed class Component4PaymentSettlementPostgresTests
             Assert.Null(legacyPayment.StripePaymentIntentId);
 
             dbContext.Payments.AddRange(
-                CreatePayment(schedule, PaymentStatus.Pending),
-                CreatePayment(schedule, PaymentStatus.Pending),
-                CreatePayment(schedule, PaymentStatus.Failed),
-                CreatePayment(schedule, PaymentStatus.Failed),
-                CreatePayment(schedule, PaymentStatus.Completed));
+                CreatePayment(schedule, lease.TenantId, PaymentStatus.Pending),
+                CreatePayment(schedule, lease.TenantId, PaymentStatus.Pending),
+                CreatePayment(schedule, lease.TenantId, PaymentStatus.Failed),
+                CreatePayment(schedule, lease.TenantId, PaymentStatus.Failed),
+                CreatePayment(schedule, lease.TenantId, PaymentStatus.Completed));
             await dbContext.SaveChangesAsync();
 
             var completedPayments = await dbContext.Payments
@@ -87,7 +87,7 @@ public sealed class Component4PaymentSettlementPostgresTests
                     payment.Status == PaymentStatus.Completed);
             Assert.Equal(1, completedPayments);
 
-            dbContext.Payments.Add(CreatePayment(schedule, PaymentStatus.Completed));
+            dbContext.Payments.Add(CreatePayment(schedule, lease.TenantId, PaymentStatus.Completed));
             await Assert.ThrowsAsync<DbUpdateException>(
                 () => dbContext.SaveChangesAsync());
             dbContext.ChangeTracker.Clear();
@@ -99,7 +99,7 @@ public sealed class Component4PaymentSettlementPostgresTests
             dbContext.RentScheduleItems.AddRange(stripeSchedule, otherSchedule);
             await dbContext.SaveChangesAsync();
 
-            var firstStripeAttempt = CreatePayment(stripeSchedule, PaymentStatus.Pending);
+            var firstStripeAttempt = CreatePayment(stripeSchedule, lease.TenantId, PaymentStatus.Pending);
             firstStripeAttempt.Provider = PaymentProvider.Stripe;
             firstStripeAttempt.StripePaymentIntentId = "pi_test_first";
             dbContext.Payments.Add(firstStripeAttempt);
@@ -107,14 +107,14 @@ public sealed class Component4PaymentSettlementPostgresTests
             Assert.Equal("pi_test_first", (await dbContext.Payments.AsNoTracking()
                 .SingleAsync(payment => payment.Id == firstStripeAttempt.Id)).StripePaymentIntentId);
 
-            var duplicateActiveAttempt = CreatePayment(stripeSchedule, PaymentStatus.Pending);
+            var duplicateActiveAttempt = CreatePayment(stripeSchedule, lease.TenantId, PaymentStatus.Pending);
             duplicateActiveAttempt.Provider = PaymentProvider.Stripe;
             duplicateActiveAttempt.StripePaymentIntentId = "pi_test_second";
             dbContext.Payments.Add(duplicateActiveAttempt);
             await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync());
             dbContext.ChangeTracker.Clear();
 
-            var duplicateIntent = CreatePayment(otherSchedule, PaymentStatus.Pending);
+            var duplicateIntent = CreatePayment(otherSchedule, lease.TenantId, PaymentStatus.Pending);
             duplicateIntent.Provider = PaymentProvider.Stripe;
             duplicateIntent.StripePaymentIntentId = firstStripeAttempt.StripePaymentIntentId;
             dbContext.Payments.Add(duplicateIntent);
@@ -125,7 +125,7 @@ public sealed class Component4PaymentSettlementPostgresTests
                 payment => payment.Id == firstStripeAttempt.Id);
             persistedAttempt.Status = PaymentStatus.Failed;
             await dbContext.SaveChangesAsync();
-            var retry = CreatePayment(stripeSchedule, PaymentStatus.Pending);
+            var retry = CreatePayment(stripeSchedule, lease.TenantId, PaymentStatus.Pending);
             retry.Provider = PaymentProvider.Stripe;
             retry.StripePaymentIntentId = "pi_test_retry";
             dbContext.Payments.Add(retry);
@@ -138,8 +138,7 @@ public sealed class Component4PaymentSettlementPostgresTests
             settlementSchedule.DueDate = settlementSchedule.DueDate.AddMonths(3);
             dbContext.RentScheduleItems.Add(settlementSchedule);
             await dbContext.SaveChangesAsync();
-            var settlementPayment = CreatePayment(settlementSchedule, PaymentStatus.Pending);
-            settlementPayment.TenantId = offer.TenantId;
+            var settlementPayment = CreatePayment(settlementSchedule, lease.TenantId, PaymentStatus.Pending);
             settlementPayment.Provider = PaymentProvider.Stripe;
             settlementPayment.StripePaymentIntentId = "pi_test_verified_settlement";
             dbContext.Payments.Add(settlementPayment);
@@ -175,8 +174,7 @@ public sealed class Component4PaymentSettlementPostgresTests
             concurrentSchedule.DueDate = concurrentSchedule.DueDate.AddMonths(4);
             dbContext.RentScheduleItems.Add(concurrentSchedule);
             await dbContext.SaveChangesAsync();
-            var concurrentPayment = CreatePayment(concurrentSchedule, PaymentStatus.Pending);
-            concurrentPayment.TenantId = offer.TenantId;
+            var concurrentPayment = CreatePayment(concurrentSchedule, lease.TenantId, PaymentStatus.Pending);
             concurrentPayment.Provider = PaymentProvider.Stripe;
             concurrentPayment.StripePaymentIntentId = "pi_test_concurrent_settlement";
             dbContext.Payments.Add(concurrentPayment);
@@ -249,6 +247,23 @@ public sealed class Component4PaymentSettlementPostgresTests
         };
     }
 
+    private static ApplicationUser CreateTenant(Guid id)
+    {
+        var email = $"{id:N}@example.test";
+        return new ApplicationUser
+        {
+            Id = id,
+            FullName = "PostgreSQL Payment Test Tenant",
+            Email = email,
+            NormalizedEmail = email.ToUpperInvariant(),
+            PhoneNumber = "0000000000",
+            PasswordHash = "test-only",
+            Role = UserRole.Tenant,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
     private static Property CreateProperty(Guid landlordId) => new()
     {
         LandlordId = landlordId,
@@ -305,10 +320,13 @@ public sealed class Component4PaymentSettlementPostgresTests
         Status = RentScheduleStatus.Pending
     };
 
-    private static Payment CreatePayment(RentScheduleItem schedule, PaymentStatus status) => new()
+    private static Payment CreatePayment(
+        RentScheduleItem schedule,
+        Guid tenantId,
+        PaymentStatus status) => new()
     {
         RentScheduleItemId = schedule.Id,
-        TenantId = Guid.NewGuid(),
+        TenantId = tenantId,
         Amount = schedule.Amount,
         PaymentMethod = "BankTransfer",
         Status = status

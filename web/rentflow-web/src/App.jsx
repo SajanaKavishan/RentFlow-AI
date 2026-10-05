@@ -14,13 +14,17 @@ import ApplicationValidationReportPage from './features/rentalApplications/pages
 import MyApplicationsPage from './features/rentalApplications/pages/MyApplicationsPage.jsx'
 import ViewingRequestsPage from './features/viewings/pages/ViewingRequestsPage.jsx'
 import MyViewingsPage from './features/viewings/pages/MyViewingsPage.jsx'
+import LandlordMaintenancePage from './features/maintenance/pages/LandlordMaintenancePage.jsx'
 import NotificationsPage from './features/notifications/NotificationsPage.jsx'
 import NotificationResourcePage from './features/notifications/NotificationResourcePage.jsx'
 import PropertiesPage from './features/properties/pages/PropertiesPage.jsx'
 import PropertyDetailsPage from './features/properties/pages/PropertyDetailsPage.jsx'
+import PublicLandlordProfilePage from './features/properties/pages/PublicLandlordProfilePage.jsx'
+import LandlordReviewsPage from './features/properties/pages/LandlordReviewsPage.jsx'
 import PropertyMatchingRedirect from './features/properties/pages/PropertyMatchingRedirect.jsx'
 import ManagePropertiesPage from './features/properties/pages/ManagePropertiesPage.jsx'
 import PropertyFormPage from './features/properties/pages/PropertyFormPage.jsx'
+import ViewingAvailabilityPage from './features/properties/pages/ViewingAvailabilityPage.jsx'
 import OwnedPropertiesProvider from './shared/property/OwnedPropertiesProvider.jsx'
 import PricingAnalysisPage from './features/pricingAnalysis/pages/PricingAnalysisPage.jsx'
 import RentalOffersPage from './features/rentalOffers/pages/RentalOffersPage.jsx'
@@ -62,6 +66,9 @@ export default function App() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/unauthorized" element={<UnauthorizedState />} />
         <Route path="/properties/:propertyId" element={<PropertyDetailsPage />} />
+        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD, USER_ROLES.ADMIN]} />}>
+          <Route path="/properties/:propertyId/viewing-availability" element={<ViewingAvailabilityPage />} />
+        </Route>
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT, USER_ROLES.LANDLORD]} />}>
           <Route path="/notifications/rental-application/:id" element={<NotificationResourcePage resourceType="RentalApplication" />} />
@@ -72,10 +79,12 @@ export default function App() {
           <Route path="/modules/pricing-lease/leases" element={<LeaseAgreementsPage />} />
           <Route path="/modules/pricing-lease/schedules" element={<RentSchedulesPage />} />
           <Route path="/modules/payments" element={<PaymentsPage />} />
+          <Route path="/modules/reviews" element={<LandlordReviewsPage />} />
           <Route path="/notifications/viewing-request/:id" element={<NotificationResourcePage resourceType="ViewingRequest" />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT]} />}>
+          <Route path="/properties/:propertyId/landlord" element={<PublicLandlordProfilePage />} />
           <Route path="/modules/lease-payments" element={<TenantLeasePaymentsPage />} />
           <Route path="/modules/my-viewings" element={<MyViewingsPage />} />
           <Route path="/modules/my-applications" element={<MyApplicationsPage />} />
@@ -92,11 +101,14 @@ export default function App() {
           <Route path="/modules/support-requests" element={<AdminSupportRequestsPage />} />
           <Route path="/modules/ai-system-overview" element={<AdminSystemOverviewPage />} />
         </Route>
-
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD]} />}>
           <Route path="/modules/manage-properties" element={<ManagePropertiesPage />} />
           <Route path="/properties/new" element={<PropertyFormPage />} />
           <Route path="/properties/:propertyId/edit" element={<PropertyFormPage />} />
+          <Route path="/modules/maintenance/landlord" element={<LandlordMaintenancePage />} />
+          <Route path="/properties/:propertyId/maintenance" element={<LandlordMaintenancePage />} />
+        </Route>
+        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD, USER_ROLES.ADMIN]} />}>
           <Route element={<OwnedPropertiesProvider />}>
             <Route path="/viewing-requests" element={<ViewingRequestsPage />} />
             <Route path="/properties/:propertyId/viewing-requests" element={<ViewingRequestsPage />} />

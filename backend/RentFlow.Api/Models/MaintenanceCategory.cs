@@ -11,5 +11,7 @@ public enum MaintenanceCategory
     Structural,
     Security,
     Pest,
-    Other
+    Other,
+    Hvac,
+    LocksDoors
 }

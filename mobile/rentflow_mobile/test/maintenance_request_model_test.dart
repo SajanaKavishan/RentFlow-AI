@@ -4,6 +4,58 @@ import 'package:rentflow_mobile/features/maintenance/models/repair_estimate.dart
 
 void main() {
   group('MaintenanceRequest', () {
+    test(
+      'decodes new fields and keeps legacy Low/Security payloads readable',
+      () {
+        final legacy = <String, dynamic>{
+          'id': '11efbe01-9196-44b6-b1b2-73767fae5cf1',
+          'propertyId': 'property',
+          'tenantId': 'tenant',
+          'title': 'Legacy request',
+          'description': 'Old issue',
+          'category': 4,
+          'priority': 0,
+          'status': 0,
+          'createdAt': '2026-10-05T09:00:00Z',
+        };
+        final old = MaintenanceRequest.fromJson(legacy);
+        expect(old.referenceCode, isNull);
+        expect(old.preferredAccessWindow, isNull);
+        expect(old.category, MaintenanceCategory.security);
+        expect(old.priority, MaintenancePriority.low);
+        for (final category in [7, 8]) {
+          final current = {
+            ...legacy,
+            'category': category,
+            'referenceCode': 'MR-C8070B6D94F6A810',
+            'preferredAccessWindow': 'Afternoon',
+          };
+          final full = MaintenanceRequest.fromJson(current);
+          final summary = MaintenanceRequest.fromSummaryJson(current);
+          expect(full.category.value, category);
+          expect(summary.referenceCode, full.referenceCode);
+          expect(
+            summary.preferredAccessWindow,
+            PreferredAccessWindow.afternoon,
+          );
+          expect(PreferredAccessWindow.afternoon.apiValue, 'Afternoon');
+        }
+        expect(
+          () => MaintenanceRequest.fromJson({
+            ...legacy,
+            'preferredAccessWindow': 'Night',
+          }),
+          throwsFormatException,
+        );
+        expect(
+          () => MaintenanceRequest.fromJson({
+            ...legacy,
+            'referenceCode': legacy['id'],
+          }),
+          throwsFormatException,
+        );
+      },
+    );
     test('parses a valid maintenance request payload', () {
       final json = <String, dynamic>{
         'id': '7d4d0f16-1a1d-442a-8c1f-cf6c0b66b200',

@@ -40,6 +40,8 @@ Map<String, dynamic> get _viewingJson => {
   'propertyId': _propertyId,
   'requestedDateTime': '2030-01-02T10:00:00Z',
   'status': 0,
+  'canCancel': true,
+  'cancellationDeadline': null,
   'tenantMessage': null,
   'landlordResponse': null,
   'createdAt': '2026-09-14T10:00:00Z',
@@ -170,6 +172,7 @@ void main() {
               jsonEncode({
                 ..._viewingJson,
                 'status': 3,
+                'canCancel': false,
                 'updatedAt': '2026-09-14T10:05:00Z',
               }),
               200,
@@ -201,9 +204,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Cancel viewing'));
+      await tester.ensureVisible(find.text('Cancel request'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel viewing'));
+      await tester.tap(find.text('Cancel request'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Cancel viewing'));
       await tester.pumpAndSettle();
@@ -245,9 +248,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Cancel viewing'));
+    await tester.ensureVisible(find.text('Cancel request'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel viewing'));
+    await tester.tap(find.text('Cancel request'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Cancel viewing'));
     await tester.pumpAndSettle();

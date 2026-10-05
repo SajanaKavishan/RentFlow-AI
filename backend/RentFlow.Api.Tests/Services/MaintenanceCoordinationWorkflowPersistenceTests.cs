@@ -139,6 +139,8 @@ public class MaintenanceCoordinationWorkflowPersistenceTests
             .SingleAsync();
 
         Assert.Equal(MaintenanceCoordinationWorkflowStatus.Failed, stored.Status);
+        Assert.True(stored.RequiresHumanApproval);
+        Assert.Equal(MaintenanceCoordinationApprovalStatus.Pending, stored.ApprovalStatus);
         Assert.Equal("The maintenance coordination step failed unexpectedly.", stored.ErrorMessage);
         Assert.DoesNotContain("token", stored.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(stored.Steps, step => step.StepName == "summarize" && step.ErrorMessage != null);

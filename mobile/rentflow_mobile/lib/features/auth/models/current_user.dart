@@ -20,6 +20,9 @@ class CurrentUser {
     required this.email,
     required this.phoneNumber,
     required this.role,
+    this.hasProfileImage = false,
+    this.publicContactPhone,
+    this.publicContactEnabled = false,
   });
 
   final String id;
@@ -27,6 +30,9 @@ class CurrentUser {
   final String email;
   final String phoneNumber;
   final UserRole role;
+  final bool hasProfileImage;
+  final String? publicContactPhone;
+  final bool publicContactEnabled;
 
   factory CurrentUser.fromJson(Map<String, dynamic> json) {
     final id = json['id'];
@@ -45,6 +51,15 @@ class CurrentUser {
       email: email,
       phoneNumber: phoneNumber,
       role: UserRole.parse(json['role']),
+      hasProfileImage: json['hasProfileImage'] == true,
+      publicContactPhone:
+          json['role'] == UserRole.landlord.value &&
+              json['publicContactPhone'] is String
+          ? json['publicContactPhone'] as String
+          : null,
+      publicContactEnabled:
+          json['role'] == UserRole.landlord.value &&
+          json['publicContactEnabled'] == true,
     );
   }
 }

@@ -11,11 +11,29 @@ public class ViewingResponseDto
 
     public Guid TenantId { get; set; }
 
+    public ViewingTenantSummaryDto Tenant { get; set; } = new();
+
     public Guid PropertyId { get; set; }
 
     public DateTimeOffset RequestedDateTime { get; set; }
+    public int? DurationMinutes { get; set; }
+    public string? TimeZoneId { get; set; }
+    public string? RequestedLocalDate { get; set; }
+    public string? RequestedDisplayTime { get; set; }
 
     public ViewingStatus Status { get; set; }
+
+    /// <summary>Server cancellation eligibility at the time of this response.</summary>
+    public bool CanCancel { get; set; }
+
+    /// <summary>Inclusive cancellation deadline for Approved viewings only.</summary>
+    public DateTimeOffset? CancellationDeadline { get; set; }
+
+    /// <summary>Server completion eligibility for the authenticated property owner or Admin.</summary>
+    public bool CanMarkCompleted { get; set; }
+
+    /// <summary>Inclusive scheduled end for Approved viewings with a valid duration.</summary>
+    public DateTimeOffset? CompletionEligibleAt { get; set; }
 
     public string? TenantMessage { get; set; }
 

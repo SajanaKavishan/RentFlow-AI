@@ -19,6 +19,23 @@ public class RentalApplicationsController(
     ICurrentUserService currentUser,
     ILogger<RentalApplicationsController> logger) : ControllerBase
 {
+    [HttpGet("/api/properties/{propertyId:guid}/rental-application-eligibility")]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
+    [ProducesResponseType<RentalApplicationEligibilityDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public Task<ActionResult<RentalApplicationEligibilityDto>> GetEligibility(
+        Guid propertyId, CancellationToken cancellationToken) => ExecuteAsync(
+            () => rentalApplicationService.GetEligibilityAsync(GetRequiredUserId(), propertyId, cancellationToken),
+            result => Ok(result));
+
+    [HttpGet("eligible-properties")]
+    [Authorize(Roles = nameof(UserRole.Tenant))]
+    [ProducesResponseType<IReadOnlyList<EligibleApplicationPropertyDto>>(StatusCodes.Status200OK)]
+    public Task<ActionResult<IReadOnlyList<EligibleApplicationPropertyDto>>> GetEligibleProperties(
+        CancellationToken cancellationToken) => ExecuteAsync(
+            () => rentalApplicationService.GetEligiblePropertiesAsync(GetRequiredUserId(), cancellationToken),
+            result => Ok(result));
+
     [HttpPost]
     [Authorize(Roles = nameof(UserRole.Tenant))]
     [ProducesResponseType<RentalApplicationResponseDto>(StatusCodes.Status201Created)]

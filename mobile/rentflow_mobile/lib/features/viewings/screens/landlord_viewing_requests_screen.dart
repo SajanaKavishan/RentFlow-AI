@@ -189,10 +189,14 @@ class _ViewingRequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final local = viewing.requestedDateTime.toLocal();
+    final local = viewing.requestedLocalDate == null
+        ? viewing.requestedDateTime.toLocal()
+        : DateTime.parse(viewing.requestedLocalDate!);
     final localizations = MaterialLocalizations.of(context);
     final date = localizations.formatMediumDate(local);
-    final time = localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local));
+    final time = viewing.requestedDisplayTime == null
+        ? localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local))
+        : '${viewing.requestedDisplayTime} (${viewing.timeZoneId})';
     return AppCard(
       key: ValueKey('landlord-viewing-card-${viewing.id}'),
       onTap: onOpen,
@@ -227,9 +231,12 @@ class _ViewingRequestCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              ViewingStatusChip(status: viewing.status),
             ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ViewingStatusChip(status: viewing.status),
           ),
           const SizedBox(height: AppSpacing.base),
           _QueueReference(
@@ -237,7 +244,7 @@ class _ViewingRequestCard extends StatelessWidget {
             value: viewing.propertyId,
           ),
           const SizedBox(height: AppSpacing.sm),
-          _QueueReference(label: 'Tenant reference', value: viewing.tenantId),
+          _QueueReference(label: 'Tenant', value: viewing.tenant.displayName),
           if (_hasText(viewing.tenantMessage)) ...[
             const SizedBox(height: AppSpacing.md),
             Container(

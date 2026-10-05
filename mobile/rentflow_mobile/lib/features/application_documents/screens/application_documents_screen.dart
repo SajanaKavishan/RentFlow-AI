@@ -1,10 +1,12 @@
 import 'package:file_picker/file_picker.dart';
+import '../../../shared/follow_up/follow_up_activity.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../shared/theme/app_theme.dart';
+import '../../../shared/profile/profile_page.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../rental_applications/models/rental_application.dart';
 import '../../rental_applications/services/rental_application_api_service.dart';
@@ -21,12 +23,14 @@ class ApplicationDocumentsScreen extends StatefulWidget {
     this.applicationDocumentApiService,
     this.rentalApplicationApiService,
     this.documentPicker,
+    this.initialDocumentType = ApplicationDocumentType.identityDocument,
   });
 
   final String applicationId;
   final ApplicationDocumentApiService? applicationDocumentApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
   final Future<SelectedDocumentFile?> Function()? documentPicker;
+  final ApplicationDocumentType initialDocumentType;
 
   @override
   State<ApplicationDocumentsScreen> createState() =>
@@ -54,6 +58,7 @@ class _ApplicationDocumentsScreenState
   @override
   void initState() {
     super.initState();
+    _selectedType = widget.initialDocumentType;
     if (widget.applicationDocumentApiService case final documentService?) {
       _documentApiService = documentService;
     } else {
@@ -374,90 +379,94 @@ class _ApplicationDocumentsScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppPalette.background,
-      appBar: AppBar(
-        title: const Text('Application Documents'),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1),
-        ),
-      ),
-      body: SafeArea(
-        child: FutureBuilder<_DocumentsData>(
-          future: _data,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const _DocumentsLoadingState(
-                title: 'Loading documents',
-                message: 'Checking this application and its uploaded files.',
-              );
-            }
-            if (snapshot.hasError) {
-              return _MessageState(
-                icon: Icons.cloud_off_outlined,
-                title: 'Could not load documents',
-                message: _safeErrorMessage(snapshot.error),
-                onRetry: _refresh,
-              );
-            }
+    return FollowUpPause(child: _buildScaffold(context));
+  }
 
-            final data = snapshot.requireData;
-            return RefreshIndicator(
-              color: AppPalette.primary,
-              onRefresh: _refresh,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.base,
-                  AppSpacing.lg,
-                  AppSpacing.base,
-                  AppSpacing.xl,
-                ),
-                children: [
-                  _DocumentsHeader(
-                    applicationId: widget.applicationId,
-                    count: data.documents.length,
-                    canChangeDocuments: data.canChangeDocuments,
+  Widget _buildScaffold(BuildContext context) {
+    return ProfileSurface(
+      child: Scaffold(
+        backgroundColor: AppPalette.background,
+        appBar: profilePageAppBar(
+          context,
+          title: 'Application Documents',
+          backLabel: 'Back',
+        ),
+        body: SafeArea(
+          child: FutureBuilder<_DocumentsData>(
+            future: _data,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const _DocumentsLoadingState(
+                  title: 'Loading documents',
+                  message: 'Checking this application and its uploaded files.',
+                );
+              }
+              if (snapshot.hasError) {
+                return _MessageState(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Could not load documents',
+                  message: _safeErrorMessage(snapshot.error),
+                  onRetry: _refresh,
+                );
+              }
+
+              final data = snapshot.requireData;
+              return RefreshIndicator(
+                color: AppPalette.primary,
+                onRefresh: _refresh,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.base,
+                    AppSpacing.lg,
+                    AppSpacing.base,
+                    AppSpacing.xl,
                   ),
-                  const SizedBox(height: AppSpacing.base),
-                  _RequiredDocumentsCallout(documents: data.documents),
-                  const SizedBox(height: AppSpacing.base),
-                  _buildUploadPanel(data.canChangeDocuments),
-                  const SizedBox(height: AppSpacing.lg),
-                  SectionHeader(
-                    title: 'Uploaded documents',
-                    subtitle: 'Files supplied with this rental application.',
-                    trailing: StatusChip(
-                      label:
-                          '${data.documents.length} ${data.documents.length == 1 ? 'file' : 'files'}',
-                      tone: StatusTone.neutral,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  if (data.documents.isEmpty)
-                    _EmptyDocumentsState(
+                  children: [
+                    _DocumentsHeader(
+                      applicationId: widget.applicationId,
+                      count: data.documents.length,
                       canChangeDocuments: data.canChangeDocuments,
-                    )
-                  else
-                    ...data.documents.map(
-                      (document) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: ApplicationDocumentCard(
-                          document: document,
-                          isOpening: _openingIds.contains(document.id),
-                          isDeleting: _deletingIds.contains(document.id),
-                          onOpen: () => _openDocument(document),
-                          onDelete: data.canChangeDocuments
-                              ? () => _confirmDelete(document)
-                              : null,
-                        ),
+                    ),
+                    const SizedBox(height: AppSpacing.base),
+                    _RequiredDocumentsCallout(documents: data.documents),
+                    const SizedBox(height: AppSpacing.base),
+                    _buildUploadPanel(data.canChangeDocuments),
+                    const SizedBox(height: AppSpacing.lg),
+                    SectionHeader(
+                      title: 'Uploaded documents',
+                      subtitle: 'Files supplied with this rental application.',
+                      trailing: StatusChip(
+                        label:
+                            '${data.documents.length} ${data.documents.length == 1 ? 'file' : 'files'}',
+                        tone: StatusTone.neutral,
                       ),
                     ),
-                ],
-              ),
-            );
-          },
+                    const SizedBox(height: AppSpacing.md),
+                    if (data.documents.isEmpty)
+                      _EmptyDocumentsState(
+                        canChangeDocuments: data.canChangeDocuments,
+                      )
+                    else
+                      ...data.documents.map(
+                        (document) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: ApplicationDocumentCard(
+                            document: document,
+                            isOpening: _openingIds.contains(document.id),
+                            isDeleting: _deletingIds.contains(document.id),
+                            onOpen: () => _openDocument(document),
+                            onDelete: data.canChangeDocuments
+                                ? () => _confirmDelete(document)
+                                : null,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -771,7 +780,10 @@ class _RequiredDocumentsCallout extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Icon(
                 missingCount == 0
@@ -781,12 +793,9 @@ class _RequiredDocumentsCallout extends StatelessWidget {
                     ? AppPalette.success
                     : AppPalette.darkOlive,
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  'Required documents',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+              Text(
+                'Required documents',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
               StatusChip(
                 label: missingCount == 0 ? 'Uploaded' : '$missingCount Missing',
@@ -935,10 +944,12 @@ class _RequirementGuideItem extends StatelessWidget {
         border: Border.all(color: AppPalette.border),
         borderRadius: BorderRadius.circular(AppRadii.small),
       ),
-      child: Row(
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Expanded(child: Text(type.label)),
-          const SizedBox(width: AppSpacing.sm),
+          Text(type.label),
           DocumentRequirementBadge(documentType: type, compact: true),
         ],
       ),
@@ -998,7 +1009,10 @@ class _EmptyDocumentsState extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           const Text(
             'No documents uploaded',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              fontSize: AppTypography.sectionTitleSize,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(

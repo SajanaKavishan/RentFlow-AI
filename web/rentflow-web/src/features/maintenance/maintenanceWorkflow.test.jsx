@@ -64,6 +64,29 @@ afterEach(() => {
 })
 
 describe('maintenance workflows', () => {
+  it('keeps legacy title/notes while sending the required access window and new HVAC category', async () => {
+    let created = null
+    fetch.mockImplementation(async (url, options = {}) => {
+      const path = String(url)
+      if (path.includes('/api/properties/tenant/mine')) return response([{ id: propertyId, title: 'Riverside Flat', city: 'Colombo' }])
+      if (options.method === 'POST' && path.includes('/api/maintenance-requests?')) {
+        created = JSON.parse(options.body)
+        return response({ ...maintenanceRequest(), ...created, referenceCode: 'MR-C8070B6D94F6A810' }, 201)
+      }
+      if (path.includes(`/api/maintenance-requests/tenant/${tenantId}`)) return response([])
+      return response([])
+    })
+    renderWithUser('Tenant', tenantId, <TenantMaintenancePage />)
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Associated property' }), propertyId)
+    await userEvent.type(screen.getByLabelText('Title'), 'A/C rattling')
+    await userEvent.type(screen.getByLabelText('Description'), 'The bedroom air conditioner is rattling.')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Category' }), 'Hvac')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Preferred access time' }), 'Evening')
+    await userEvent.type(screen.getByLabelText('Tenant access notes'), 'Please knock.')
+    await userEvent.click(screen.getByRole('button', { name: 'Submit request' }))
+    await waitFor(() => expect(created).toMatchObject({ propertyId, title: 'A/C rattling', category: 7, preferredAccessWindow: 'Evening', tenantAccessNotes: 'Please knock.' }))
+  })
+
   it('triages a submitted request and assigns a selected active technician', async () => {
     let currentRequest = maintenanceRequest()
     fetch.mockImplementation(async (url, options = {}) => {

@@ -31,10 +31,11 @@ public sealed class PricingComparableRentalsTool(ApplicationDbContext dbContext)
 
         var properties = await dbContext.Properties
             .AsNoTracking()
-            .Where(property => property.LandlordId == subject.SubjectLandlordId
-                && property.Id != subject.SubjectPropertyId
-                && property.Bedrooms == subject.SubjectFacts.Bedrooms
-                && property.Bathrooms == subject.SubjectFacts.Bathrooms)
+            .Where(property => property.Id != subject.SubjectPropertyId
+                && property.Bedrooms >= Math.Max(0, subject.SubjectFacts.Bedrooms - 1)
+                && property.Bedrooms <= subject.SubjectFacts.Bedrooms + 1
+                && property.Bathrooms >= Math.Max(0, subject.SubjectFacts.Bathrooms - 1)
+                && property.Bathrooms <= subject.SubjectFacts.Bathrooms + 1)
             .ToListAsync(cancellationToken);
 
         var relevantProperties = properties

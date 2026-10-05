@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.Maintenance;
 using RentFlow.Api.Models;
@@ -17,24 +18,40 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         CancellationToken cancellationToken = default)
     {
         ValidateTenantId(tenantId);
-        ValidateRequestDetails(
-            request.PropertyId,
-            request.Title,
-            request.Description,
-            request.TenantAccessNotes);
         ValidateCategory(request.Category);
         ValidatePriority(request.Priority);
+        if (request.PreferredAccessWindow is not { } access || !Enum.IsDefined(access))
+        {
+            throw MaintenanceRequestServiceException.Validation("Choose a valid preferred access time.");
+        }
+        var title = string.IsNullOrWhiteSpace(request.Title)
+            ? DeriveTitle(request.Description, request.Category)
+            : request.Title.Trim();
+        ValidateRequestDetails(
+            request.PropertyId,
+            title,
+            request.Description,
+            request.TenantAccessNotes);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (!await TenantMaintenanceEligibility.EligibleProperties(dbContext, tenantId, today)
+            .AnyAsync(property => property.Id == request.PropertyId, cancellationToken))
+        {
+            throw MaintenanceRequestServiceException.Forbidden(
+                "You need a current active lease for this property to submit a maintenance request.");
+        }
 
         var maintenanceRequest = new MaintenanceRequest
         {
             TenantId = tenantId,
             PropertyId = request.PropertyId,
-            Title = request.Title.Trim(),
+            Title = title,
             Description = request.Description.Trim(),
             Category = request.Category,
             Priority = request.Priority,
             Status = MaintenanceRequestStatus.Submitted,
             TenantAccessNotes = NormalizeOptionalText(request.TenantAccessNotes),
+            PreferredAccessWindow = access,
             CreatedAt = DateTimeOffset.UtcNow
         };
 
@@ -48,6 +65,19 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return MapToResponse(maintenanceRequest);
+    }
+
+    private static string DeriveTitle(string? description, MaintenanceCategory category)
+    {
+        var normalized = Regex.Replace(description?.Trim() ?? string.Empty, @"\s+", " ");
+        if (normalized.Length == 0) return $"{category} issue";
+        var sentence = Regex.Match(normalized, @"^.*?[.!?](?=\s|$)");
+        var title = sentence.Success ? sentence.Value.TrimEnd('.', '!', '?') : normalized;
+        if (string.IsNullOrWhiteSpace(title)) return $"{category} issue";
+        if (string.IsNullOrWhiteSpace(title)) return $"{category} issue";
+        if (title.Length <= 200) return title;
+        var boundary = title.LastIndexOf(' ', 199, 200);
+        return title[..(boundary > 0 ? boundary : 200)].TrimEnd();
     }
 
     public async Task<MaintenanceRequestResponseDto?> GetByIdAsync(
@@ -779,6 +809,9 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         return new MaintenanceRequestResponseDto
         {
             Id = request.Id,
+            ReferenceCode = string.IsNullOrEmpty(request.ReferenceCode)
+                ? MaintenanceReferenceCode.FromId(request.Id) : request.ReferenceCode,
+            PreferredAccessWindow = request.PreferredAccessWindow,
             PropertyId = request.PropertyId,
             TenantId = request.TenantId,
             TechnicianId = request.TechnicianId,
@@ -823,6 +856,9 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         return new MaintenanceRequestSummaryDto
         {
             Id = request.Id,
+            ReferenceCode = string.IsNullOrEmpty(request.ReferenceCode)
+                ? MaintenanceReferenceCode.FromId(request.Id) : request.ReferenceCode,
+            PreferredAccessWindow = request.PreferredAccessWindow,
             PropertyId = request.PropertyId,
             TenantId = request.TenantId,
             TechnicianId = request.TechnicianId,

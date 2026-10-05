@@ -377,6 +377,8 @@
 
 .viewing-card__references dd small { display: block; margin-top: 4px; color: var(--muted); font-family: inherit; font-size: .78rem; }
 
+.viewing-card__references dd.viewing-card__tenant { font-family: inherit; }
+
 .viewing-card__created {
   display: flex;
   flex-wrap: wrap;

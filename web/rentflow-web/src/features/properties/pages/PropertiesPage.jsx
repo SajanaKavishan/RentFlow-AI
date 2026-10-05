@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import Icon from '../../../shared/ui/Icons.jsx'
 import MatchPreferenceSummary from '../components/MatchPreferenceSummary.jsx'
 import MatchPreferencesDialog from '../components/MatchPreferencesDialog.jsx'
-import PropertyImageCarousel from '../components/PropertyImageCarousel.jsx'
+import PropertyListingCard from '../components/PropertyListingCard.jsx'
 import {
   addPropertyFavorite,
   getMatchPreferences,
@@ -19,7 +19,6 @@ import {
 import '../properties.css'
 
 const initialFilters = { search: '', city: '', maxRent: '', minBedrooms: '', minBathrooms: '', amenity: '' }
-const money = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 })
 const isPositiveReason = (reason) => !/^(above|does not|matches 0\b)/i.test(reason)
 
 export default function PropertiesPage() {
@@ -116,7 +115,10 @@ export default function PropertiesPage() {
   const closePreferences = () => {
     setEditingPreferences(false)
     setSearchParams({}, { replace: true })
-    window.requestAnimationFrame(() => preferenceActionRef.current?.focus())
+    window.requestAnimationFrame(() => {
+      // Restore dialog focus only if the user has not focused another control.
+      if (document.activeElement === document.body) preferenceActionRef.current?.focus()
+    })
   }
   const savePreferences = async (request) => {
     const saved = await saveMatchPreferences(request)
@@ -242,14 +244,13 @@ export default function PropertiesPage() {
     {propertyState.status === 'ready' && visibleProperties.length > 0 && <section className="property-grid" aria-label="Available properties">{visibleProperties.map((property) => {
       const match = hasPreferences && matchState.status === 'ready' ? matchByPropertyId.get(property.id) : null
       const reasonsOpen = expandedReasons.has(property.id)
-      return <article className="property-card" key={property.id}>
-        <PropertyImageCarousel property={property} images={propertyImages[property.id] || []} match={match} liked={favoriteIds.has(property.id)} favoritePending={favoritePending.has(property.id) || favoriteState.status !== 'ready'} onToggleFavorite={toggleFavorite} />
-        <div className="property-card__body">
-          <div className="property-card__summary"><div><h2><Link to={`/properties/${property.id}`}>{property.title}</Link></h2><p className="property-card__location"><Icon name="location" size={14} />{property.city}</p></div><div className="property-card__price"><strong>Rs. {money.format(Number(property.monthlyRent))}</strong><span>/month</span></div></div>
-          <div className="property-card__features"><span><Icon name="bed" size={16} />{property.bedrooms} {property.bedrooms === 1 ? 'bed' : 'beds'}</span><span><Icon name="bath" size={16} />{property.bathrooms} {property.bathrooms === 1 ? 'bath' : 'baths'}</span>{property.area != null && <span className="property-card__area">{money.format(Number(property.area))} {property.areaUnit || ''}</span>}</div>
+      return <PropertyListingCard key={property.id} property={property}
+        images={propertyImages[property.id] || []} match={match}
+        liked={favoriteIds.has(property.id)}
+        favoritePending={favoritePending.has(property.id) || favoriteState.status !== 'ready'}
+        onToggleFavorite={toggleFavorite}>
           {match?.matchReasons?.length > 0 && <div className="property-card__reasons"><button type="button" aria-expanded={reasonsOpen} onClick={() => toggleReasons(property.id)}>Why this matches <span aria-hidden="true">{reasonsOpen ? '−' : '+'}</span></button>{reasonsOpen && <ul>{match.matchReasons.map((reason) => <li key={reason}><span className={isPositiveReason(reason) ? 'is-positive' : 'is-neutral'} aria-hidden="true">{isPositiveReason(reason) ? '✓' : '•'}</span>{reason}</li>)}</ul>}</div>}
-        </div>
-      </article>
+      </PropertyListingCard>
     })}</section>}
 
     {editingPreferences && <MatchPreferencesDialog preferences={preferenceState.data} onClose={closePreferences} onSave={savePreferences} onReset={resetPreferences} />}

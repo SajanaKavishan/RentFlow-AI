@@ -13,6 +13,9 @@ public class ViewingRequest
 
     public DateTimeOffset RequestedDateTime { get; set; }
 
+    // Legacy rows receive the explicitly approved 60-minute migration backfill.
+    public int DurationMinutes { get; set; } = 60;
+
     public ViewingStatus Status { get; set; } = ViewingStatus.Pending;
 
     public string? TenantMessage { get; set; }

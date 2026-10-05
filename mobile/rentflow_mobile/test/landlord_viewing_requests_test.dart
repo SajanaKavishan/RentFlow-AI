@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -26,6 +27,8 @@ class _TokenStorage implements TokenStorage {
 
 const _propertyId = '22222222-2222-4222-8222-222222222222';
 const _tenantId = '11111111-1111-4111-8111-111111111111';
+const _phone = '+94 77 123 4567';
+const _launcherChannel = MethodChannel('plugins.flutter.io/url_launcher');
 
 Map<String, dynamic> _viewingJson(
   int status, {
@@ -33,9 +36,12 @@ Map<String, dynamic> _viewingJson(
   String propertyId = _propertyId,
   String tenantId = _tenantId,
   String? landlordResponse,
+  String? phoneNumber,
+  String displayName = 'Chamodya Sayanjali',
 }) => {
   'id': id,
   'tenantId': tenantId,
+  'tenant': {'displayName': displayName, 'phoneNumber': phoneNumber},
   'propertyId': propertyId,
   'requestedDateTime': '2030-02-03T14:30:00Z',
   'status': status,
@@ -96,6 +102,182 @@ Future<void> _pumpDetails(
 }
 
 void main() {
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_launcherChannel, null);
+  });
+
+  for (final status in [0, 2, 3, 4]) {
+    testWidgets(
+      'status $status shows tenant identity without contact or call action',
+      (tester) async {
+        addTearDown(tester.view.reset);
+        await _pumpDetails(
+          tester,
+          viewing: Viewing.fromJson(_viewingJson(status, phoneNumber: _phone)),
+          client: MockClient((_) async => http.Response('{}', 500)),
+        );
+        expect(find.text('Chamodya Sayanjali'), findsOneWidget);
+        expect(find.text(_tenantId), findsNothing);
+        expect(find.text(_phone), findsNothing);
+        expect(find.text('Call tenant'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'Approved details refresh contact and open only a tel URI externally',
+    (tester) async {
+      addTearDown(tester.view.reset);
+      MethodCall? launched;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(_launcherChannel, (call) async {
+            launched = call;
+            return true;
+          });
+      await _pumpDetails(
+        tester,
+        viewing: _viewing(1),
+        client: MockClient((request) async {
+          expect(request.method, 'GET');
+          expect(
+            request.url.path,
+            '/api/viewings/33333333-3333-4333-8333-333333333333',
+          );
+          return http.Response(
+            jsonEncode(_viewingJson(1, phoneNumber: '  $_phone  ')),
+            200,
+          );
+        }),
+      );
+      expect(find.text('Chamodya Sayanjali'), findsOneWidget);
+      expect(find.text(_phone), findsOneWidget);
+      expect(find.text('Call tenant'), findsOneWidget);
+      expect(launched, isNull);
+      await tester.ensureVisible(find.text('Call tenant'));
+      await tester.tap(find.text('Call tenant'));
+      await tester.pumpAndSettle();
+      expect(launched!.method, 'launch');
+      final uri = Uri.parse(launched!.arguments['url'] as String);
+      expect(uri.scheme, 'tel');
+      expect(uri.path, '+94771234567');
+      expect(launched!.arguments['useWebView'], false);
+      expect(launched!.arguments['useSafariVC'], false);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final throwsError in [false, true]) {
+    testWidgets(
+      'dialer failure (throws: $throwsError) leaves the phone visible',
+      (tester) async {
+        addTearDown(tester.view.reset);
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(_launcherChannel, (_) async {
+              if (throwsError) throw PlatformException(code: 'unavailable');
+              return false;
+            });
+        await _pumpDetails(
+          tester,
+          viewing: _viewing(1),
+          client: MockClient(
+            (_) async => http.Response(
+              jsonEncode(_viewingJson(1, phoneNumber: _phone)),
+              200,
+            ),
+          ),
+        );
+        await tester.ensureVisible(find.text('Call tenant'));
+        await tester.tap(find.text('Call tenant'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Calling is not available on this device.'),
+          findsOneWidget,
+        );
+        expect(find.text(_phone), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final phone in [null, '', '  ', 'invalid', '+12', 'tel:+94771234567']) {
+    testWidgets(
+      'Approved missing or invalid phone "$phone" has no call action',
+      (tester) async {
+        addTearDown(tester.view.reset);
+        await _pumpDetails(
+          tester,
+          viewing: _viewing(1),
+          client: MockClient(
+            (_) async => http.Response(
+              jsonEncode(_viewingJson(1, phoneNumber: phone)),
+              200,
+            ),
+          ),
+        );
+        expect(find.text('Chamodya Sayanjali'), findsOneWidget);
+        expect(find.text('Call tenant'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'refresh replaces Approved contact with authoritative Cancelled details',
+    (tester) async {
+      addTearDown(tester.view.reset);
+      var calls = 0;
+      await _pumpDetails(
+        tester,
+        viewing: _viewing(1),
+        client: MockClient((_) async {
+          calls++;
+          return http.Response(
+            jsonEncode(
+              _viewingJson(
+                calls == 1 ? 1 : 3,
+                phoneNumber: calls == 1 ? _phone : null,
+              ),
+            ),
+            200,
+          );
+        }),
+      );
+      expect(find.text(_phone), findsOneWidget);
+      await tester.tap(find.byTooltip('Refresh viewing request'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cancelled'), findsOneWidget);
+      expect(find.text(_phone), findsNothing);
+      expect(find.text('Call tenant'), findsNothing);
+    },
+  );
+
+  testWidgets('failed contact refresh hides previously supplied contact', (
+    tester,
+  ) async {
+    addTearDown(tester.view.reset);
+    await _pumpDetails(
+      tester,
+      viewing: Viewing.fromJson(_viewingJson(1, phoneNumber: _phone)),
+      client: MockClient((_) async => http.Response('{}', 404)),
+    );
+    expect(find.text(_phone), findsNothing);
+    expect(find.text('Call tenant'), findsNothing);
+    expect(
+      find.text('Unable to refresh this viewing request. Please try again.'),
+      findsWidgets,
+    );
+  });
+
+  test('legacy summary uses Tenant and retains internal relationship ID', () {
+    final json = _viewingJson(0)..remove('tenant');
+    final viewing = Viewing.fromJson(json);
+    expect(viewing.tenant.displayName, 'Tenant');
+    expect(viewing.tenantId, _tenantId);
+    expect(viewing.tenant.dialerUri, isNull);
+  });
+
   final queue = [
     _viewingJson(
       1,
@@ -137,7 +319,9 @@ void main() {
         expect(find.text('Approved'), findsOneWidget);
         expect(find.text('Rejected'), findsOneWidget);
         expect(find.text('Property reference'), findsNWidgets(3));
-        expect(find.text('Tenant reference'), findsNWidgets(3));
+        expect(find.text('Tenant'), findsNWidgets(3));
+        expect(find.text('Chamodya Sayanjali'), findsNWidgets(3));
+        expect(find.text(_tenantId), findsNothing);
         expect(
           find.text('Please confirm whether parking is available.'),
           findsNWidgets(3),
@@ -202,7 +386,10 @@ void main() {
     );
 
     expect(find.text(_propertyId), findsOneWidget);
-    expect(find.text(_tenantId), findsOneWidget);
+    expect(find.text(_tenantId), findsNothing);
+    expect(find.text('Chamodya Sayanjali'), findsOneWidget);
+    expect(find.text(_phone), findsNothing);
+    expect(find.text('Call tenant'), findsNothing);
     expect(
       find.text('Please confirm whether parking is available.'),
       findsOneWidget,
@@ -215,7 +402,9 @@ void main() {
     expect(find.text('Approving...'), findsOneWidget);
     expect(find.text('Viewing approved.'), findsNothing);
 
-    response.complete(http.Response(jsonEncode(_viewingJson(1)), 200));
+    response.complete(
+      http.Response(jsonEncode(_viewingJson(1, phoneNumber: _phone)), 200),
+    );
     await tester.pumpAndSettle();
 
     expect(request.method, 'PATCH');
@@ -226,6 +415,8 @@ void main() {
     expect(request.headers['Authorization'], 'Bearer landlord-viewing-token');
     expect(jsonDecode(request.body), {'status': 1, 'landlordResponse': null});
     expect(find.text('Approved'), findsOneWidget);
+    expect(find.text(_phone), findsOneWidget);
+    expect(find.text('Call tenant'), findsOneWidget);
     expect(find.text('Viewing approved.'), findsOneWidget);
     expect(find.text('Approve'), findsNothing);
     expect(find.text('Reject'), findsNothing);

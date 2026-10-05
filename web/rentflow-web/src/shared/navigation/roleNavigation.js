@@ -89,6 +89,13 @@ export const NAV_ITEMS = Object.freeze([
     available: true,
     note: 'Application validation and document review',
   },
+  {
+    id: 'reviews',
+    label: 'Reviews',
+    path: '/modules/reviews',
+    roles: [L],
+    available: true,
+  },
 
   // =========================================================
   // LEASE / PAYMENT / MAINTENANCE
@@ -137,7 +144,7 @@ export const NAV_ITEMS = Object.freeze([
   {
     id: 'maintenance',
     label: 'Maintenance',
-    path: '/modules/maintenance',
+    path: '/modules/maintenance/landlord',
     roles: [L],
     available: true,
     owner: 'Maintenance',
@@ -155,8 +162,7 @@ export const NAV_ITEMS = Object.freeze([
     roles: [M],
     available: true,
     owner: 'Maintenance',
-    description:
-      'The Technician work area is available while its assigned-work collection awaits Maintenance integration.',
+    description: 'Review assigned maintenance requests and update work status.',
   },
 
   // =========================================================
