@@ -7,6 +7,10 @@ namespace RentFlow.Api.Services.Interfaces;
 /// </summary>
 public interface IViewingService
 {
+    Task<IReadOnlyList<PropertyPendingViewingCountDto>> GetPendingCountsForLandlordAsync(
+        Guid landlordId,
+        CancellationToken cancellationToken = default);
+
     Task<ViewingResponseDto> CreateAsync(
         Guid tenantId,
         CreateViewingRequestDto request,

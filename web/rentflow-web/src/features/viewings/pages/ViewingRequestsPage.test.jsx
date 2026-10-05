@@ -5,6 +5,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import OwnedPropertiesContext from '../../../shared/property/OwnedPropertiesContext.js'
 import ViewingRequestsPage from './ViewingRequestsPage.jsx'
 
+vi.mock('../../properties/services/propertyApiService.js', () => ({
+  getPropertyImages: vi.fn().mockResolvedValue([]),
+  getPropertyImageUrl: vi.fn(),
+}))
+vi.mock('../services/viewingApiService.js', async (importOriginal) => ({
+  ...await importOriginal(),
+  getOwnedPropertyPendingViewingCounts: vi.fn().mockResolvedValue([]),
+}))
+
 const tenantId = '11111111-1111-1111-1111-111111111112'
 const propertyId = '22222222-2222-2222-2222-222222222222'
 const property = {
@@ -402,8 +411,7 @@ describe('Landlord viewing requests', () => {
       screen.getByRole('heading', { name: 'Select a property' }),
     ).toBeInTheDocument()
     expect(screen.getByText(/Choose one of your owned properties/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Harbour View Residence/ }))
-      .toHaveAttribute('href', `/properties/${propertyId}/viewing-requests`)
+    expect(screen.getByRole('button', { name: /Harbour View Residence/ })).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

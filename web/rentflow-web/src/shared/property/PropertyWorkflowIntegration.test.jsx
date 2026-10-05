@@ -106,6 +106,7 @@ beforeEach(() => {
     if (path === '/api/properties/mine') return Promise.resolve(json([property]))
     if (path === `/api/properties/${propertyId}`) return Promise.resolve(json(property))
     if (path === `/api/viewings/property/${propertyId}`) return Promise.resolve(json([viewing]))
+    if (path === '/api/viewings/mine/pending-counts') return Promise.resolve(json([{ propertyId, pendingCount: 1 }]))
     if (path === `/api/rental-applications/${applicationId}`) return Promise.resolve(json(application))
     if (path.startsWith(`/api/properties/${propertyId}/images`)) return Promise.resolve(json([]))
     return Promise.resolve(json([]))
@@ -121,8 +122,7 @@ afterEach(() => {
 describe('owned property landlord workflow integration', () => {
   it('selects from the authenticated collection and opens canonical viewing requests with property display data', async () => {
     const router = renderApp('/viewing-requests')
-    const propertyLink = await screen.findByRole('link', { name: /Harbour View Residence/ })
-    expect(propertyLink).toHaveAttribute('href', `/properties/${propertyId}/viewing-requests`)
+    const propertyLink = await screen.findByRole('button', { name: 'Harbour View Residence, 1 pending viewing request' })
 
     await userEvent.click(propertyLink)
 
@@ -134,8 +134,11 @@ describe('owned property landlord workflow integration', () => {
     const propertyCalls = fetch.mock.calls.filter(([url]) =>
       new URL(url, 'http://localhost').pathname.startsWith('/api/properties'))
     expect(propertyCalls.map(([url]) => new URL(url, 'http://localhost').pathname))
-      .toEqual(['/api/properties/mine'])
+      .toEqual(['/api/properties/mine', `/api/properties/${propertyId}/images`])
     expect(propertyCalls[0][1].headers.Authorization).toBe('Bearer landlord-token')
+    const summaryCalls = fetch.mock.calls.filter(([url]) => url.includes('/api/viewings/mine/pending-counts'))
+    expect(summaryCalls).toHaveLength(1)
+    expect(summaryCalls[0][1].headers.Authorization).toBe('Bearer landlord-token')
   })
 
   it('rejects a property outside the authenticated owned collection', async () => {
@@ -392,7 +395,7 @@ describe('owned property landlord workflow integration', () => {
 
     expect(await screen.findByRole('heading', { name: 'We could not load your properties' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
-    expect(await screen.findByRole('link', { name: /Harbour View Residence/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Harbour View Residence/ })).toBeInTheDocument()
     expect(attempts).toBe(2)
   })
 })

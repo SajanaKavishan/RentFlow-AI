@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import PropertySelectionState from '../../../shared/property/PropertySelectionState.jsx'
+import ViewingPropertySelector from '../components/ViewingPropertySelector.jsx'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
 import { useOwnedPropertySelection } from '../../../shared/property/useOwnedProperties.js'
 import { PendingViewingsContext } from '../../../shared/layout/PendingViewingsContext.js'
@@ -259,6 +259,7 @@ function ViewingRequestsPage() {
           <Icon name="arrowLeft" size={16} /> Back to Property
         </Link>
       )}
+      {selection.property && <Link className="viewings-page__back" to="/viewing-requests">Change property</Link>}
 
       <header className="viewings-page__header">
         <div className="viewings-page__intro">
@@ -311,7 +312,7 @@ function ViewingRequestsPage() {
       </header>
 
       {pageStatus === 'property-context' && (
-        <PropertySelectionState className="page-state" destination="viewing-requests"
+        <ViewingPropertySelector
           selectedPropertyId={selection.status === 'unauthorized' ? propertyId : null} />
       )}
 

@@ -16,6 +16,22 @@ public class ViewingService(
 {
     private DateTimeOffset Now => (timeProvider ?? TimeProvider.System).GetUtcNow();
     private readonly ViewingAvailabilityService availability = new(dbContext, timeProvider);
+    public async Task<IReadOnlyList<PropertyPendingViewingCountDto>> GetPendingCountsForLandlordAsync(
+        Guid landlordId,
+        CancellationToken cancellationToken = default)
+    {
+        return await (
+            from viewing in dbContext.ViewingRequests.AsNoTracking()
+            join property in dbContext.Properties.AsNoTracking() on viewing.PropertyId equals property.Id
+            where property.LandlordId == landlordId && viewing.Status == ViewingStatus.Pending
+            group viewing by viewing.PropertyId into requests
+            select new PropertyPendingViewingCountDto
+            {
+                PropertyId = requests.Key,
+                PendingCount = requests.Count()
+            }).ToListAsync(cancellationToken);
+    }
+
     public async Task<ViewingResponseDto> CreateAsync(
         Guid tenantId,
         CreateViewingRequestDto request,
