@@ -9,12 +9,14 @@ import {
 import { useNotificationCount } from '../../features/notifications/NotificationCountContext.js'
 import { StatusBadge } from '../ui/States.jsx'
 import Icon from '../ui/Icons.jsx'
+import AdminReportingPanel, { AdminReportState } from './AdminReportingPanels.jsx'
+import useAdminReport from './useAdminReport.js'
 import './role-dashboard.css'
 
 const summaryCards = [
-  { title: 'Properties', icon: 'building', dependency: 'Admin property aggregate required' },
-  { title: 'Active Applications', icon: 'document', dependency: 'Admin application aggregate required' },
-  { title: 'Monthly Volume', icon: 'trend', dependency: 'Admin payment aggregate required' },
+  { title: 'Properties', icon: 'building', field: 'propertyCount', description: 'All properties on the platform' },
+  { title: 'Active Applications', icon: 'document', field: 'activeApplicationCount', description: 'Submitted, under review or changes requested' },
+  { title: 'Monthly Volume', icon: 'trend', field: 'monthlyVolume', description: 'Completed rent payments this month' },
 ]
 
 function totalUsersError(error) {
@@ -49,7 +51,7 @@ function TotalUsersCard({ state, retry }) {
   </section>
 }
 
-function SummaryCard({ title, icon, dependency }) {
+function SummaryCard({ title, icon, field, description, state }) {
   const id = `admin-summary-${title.toLowerCase().replaceAll(' ', '-')}`
 
   return <section className="shared-card admin-summary-card" aria-labelledby={id}>
@@ -57,8 +59,9 @@ function SummaryCard({ title, icon, dependency }) {
       <span className="admin-overview__icon admin-overview__icon--summary"><Icon name={icon} size={20} /></span>
       <h2 id={id}>{title}</h2>
     </div>
-    <StatusBadge tone="warning">Integration pending</StatusBadge>
-    <p>{dependency}</p>
+    <AdminReportState state={state} />
+    {state.status === 'ready' && <><strong className="admin-summary-card__value">{field === 'monthlyVolume' ? `Rs. ${state.data[field].toLocaleString('en-US', { maximumFractionDigits: 2 })}` : state.data[field].toLocaleString('en-US')}</strong>
+      <p>{description}{field === 'monthlyVolume' ? ` · ${state.data.month}` : ''}</p></>}
   </section>
 }
 
@@ -104,22 +107,6 @@ function UserDistributionPanel({ state, totalUsers, retry }) {
   </section>
 }
 
-function IntegrationPanel({ id, title, icon, description, dependency, path, linkLabel }) {
-  return <section className="shared-card admin-overview-panel" aria-labelledby={id}>
-    <div className="admin-overview-panel__heading">
-      <span className="admin-overview__icon"><Icon name={icon} size={21} /></span>
-      <div><p className="role-dashboard__eyebrow">Reporting</p><h2 id={id}>{title}</h2></div>
-      <StatusBadge tone="warning">Integration pending</StatusBadge>
-    </div>
-    <p className="admin-overview-panel__description">{description}</p>
-    <div className="admin-overview-panel__dependency">
-      <Icon name="info" size={17} />
-      <span><strong>Required integration</strong>{dependency}</span>
-    </div>
-    {path && <Link className="role-dashboard__text-link" to={path}>{linkLabel} <Icon name="arrow" size={17} /></Link>}
-  </section>
-}
-
 function notificationSummary(notificationState) {
   if (notificationState?.countStatus === 'loading') return 'Checking unread count'
   if (notificationState?.countStatus !== 'ready') return 'Unread count unavailable — open the inbox directly'
@@ -155,6 +142,7 @@ export default function AdminDashboard({ user }) {
   const notificationState = useNotificationCount()
   const currentDay = useCurrentDay()
   const identityKey = user?.id ?? ''
+  const reporting = useAdminReport('summary', identityKey)
   const [totalUsersRequest, setTotalUsersRequest] = useState(0)
   const totalUsersRequestKey = `${identityKey}:${totalUsersRequest}`
   const [totalUsersState, setTotalUsersState] = useState({ requestKey: '', status: 'loading', totalCount: null, error: null })
@@ -208,24 +196,18 @@ export default function AdminDashboard({ user }) {
 
     <section className="admin-overview__summary" aria-label="System summary">
       <TotalUsersCard state={totalUsers} retry={retryTotalUsers} />
-      {summaryCards.map((card) => <SummaryCard key={card.title} {...card} />)}
+      {summaryCards.map((card) => <SummaryCard key={card.title} {...card} state={reporting} />)}
     </section>
 
     <div className="admin-overview__workspace">
       <div className="admin-overview__main">
-        <IntegrationPanel id="admin-platform-activity-title" title="Platform Activity" icon="trend"
-          description="Recent platform-wide activity is not shown because no authorized Admin activity feed is available."
-          dependency="Admin activity-feed contract" />
+        <AdminReportingPanel kind="activity" identityKey={identityKey} />
         <UserDistributionPanel state={distribution} totalUsers={totalUsers} retry={retryDistribution} />
-        <IntegrationPanel id="admin-ai-workflows-title" title="AI Workflows" icon="devices"
-          description="System-wide AI usage and outcomes are not available from the existing record-scoped workflow APIs."
-          dependency="Admin AI reporting aggregate" path="/modules/ai-system-overview" linkLabel="View integration details" />
+        <AdminReportingPanel kind="workflows" identityKey={identityKey} monitorLink />
       </div>
 
       <aside className="admin-overview__rail" aria-label="System status and quick access">
-        <IntegrationPanel id="admin-system-health-title" title="System Health" icon="refresh"
-          description="No health result is displayed without an authoritative service-status contract."
-          dependency="Admin service-health contract" />
+        <AdminReportingPanel kind="health" identityKey={identityKey} />
 
         <section className="shared-card admin-quick-access" aria-labelledby="admin-quick-access-title">
           <div className="admin-quick-access__heading">
@@ -250,7 +232,7 @@ export default function AdminDashboard({ user }) {
             </Link>
             <Link to="/modules/ai-system-overview" aria-label="AI / System Overview">
               <span className="admin-overview__icon admin-overview__icon--small"><Icon name="devices" size={19} /></span>
-              <span><strong>AI Workflow Monitor</strong><small>Open the current integration dependency.</small></span>
+              <span><strong>AI Workflow Monitor</strong><small>Review recorded runs and live service checks.</small></span>
               <Icon name="arrow" size={17} />
             </Link>
           </nav>

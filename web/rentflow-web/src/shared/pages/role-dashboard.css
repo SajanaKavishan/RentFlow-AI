@@ -153,3 +153,15 @@
   .admin-overview-panel__heading { grid-template-columns: auto minmax(0, 1fr); }
   .admin-overview-panel__heading .shared-status { grid-column: 2; justify-self: start; }
 }
+.admin-reporting__activity, .admin-reporting__health { list-style: none; padding: 0; margin: 14px 0; }
+.admin-reporting__activity li { display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid var(--border); }
+.admin-reporting__activity span, .admin-reporting__activity time, .admin-reporting__health p, .admin-reporting__checked { color: var(--muted); font-size: .78rem; }
+.admin-reporting__health li { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
+.admin-reporting__health p { margin: 5px 0 0; line-height: 1.5; }
+.admin-reporting__table-wrap { overflow-x: auto; }
+.admin-reporting__table { border-collapse: collapse; width: 100%; font-size: .75rem; text-align: left; }
+.admin-reporting__table th, .admin-reporting__table td { padding: 10px 8px; border-bottom: 1px solid var(--border); }
+.admin-reporting__table thead { color: var(--muted); }
+.admin-overview__main > .admin-reporting-panel:has(.admin-reporting__table) { grid-column: 1 / -1; }
+.admin-reporting__activity-expanded { max-height: 560px; overflow-y: auto; overscroll-behavior: contain; padding-right: 8px; margin-bottom: 16px; }
+.admin-reporting__activity-expanded:focus-visible { outline: 2px solid var(--olive-700); outline-offset: 4px; }

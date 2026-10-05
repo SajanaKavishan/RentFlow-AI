@@ -282,14 +282,6 @@ function RentalApplicationsPage() {
             <div><dt>Total</dt><dd>{applications.length}</dd></div>
             <div><dt>Awaiting review</dt><dd>{awaitingReview}</dd></div>
           </dl>}
-          <button
-            type="button"
-            className="application-button application-button--quiet"
-            onClick={loadApplications}
-            disabled={!canRefreshPortfolio && (selection.status !== 'selected' || pageStatus === 'loading')}
-          >
-            <Icon name="refresh" size={17} />Refresh
-          </button>
         </div>
       </header>
 

@@ -63,6 +63,22 @@ afterEach(() => {
 })
 
 describe('maintenance workflows', () => {
+  it('opens the maintenance request selected by a dashboard attention link', async () => {
+    const otherRequest = { ...maintenanceRequest(), id: '77777777-7777-4777-8777-777777777777', title: 'Older request' }
+    fetch.mockImplementation(async (url) => {
+      const path = String(url)
+      if (path.endsWith('/api/properties/mine')) return response([{ id: propertyId, title: 'Riverside Flat', city: 'Colombo' }])
+      if (path.includes(`/api/maintenance-requests/property/${propertyId}`)) return response([otherRequest, maintenanceRequest()])
+      if (path.endsWith('/history') || path.endsWith('/technicians')) return response([])
+      if (path.endsWith('/coordination-workflows/latest')) return response(undefined, 204)
+      if (path.endsWith('/estimates/latest')) return response({}, 404)
+      if (path.endsWith(`/api/maintenance-requests/${requestId}`)) return response(maintenanceRequest())
+      return response({}, 404)
+    })
+    renderWithUser('Landlord', landlordId, <LandlordMaintenancePage />, `/properties/${propertyId}/maintenance?propertyId=${propertyId}&requestId=${requestId}`)
+    expect(await screen.findByRole('heading', { name: 'Leaking kitchen sink' })).toBeInTheDocument()
+    expect(fetch.mock.calls.some(([url]) => String(url).endsWith(`/api/maintenance-requests/${otherRequest.id}`))).toBe(false)
+  })
   it('triages a submitted request and assigns a selected active technician', async () => {
     let currentRequest = maintenanceRequest()
     fetch.mockImplementation(async (url, options = {}) => {

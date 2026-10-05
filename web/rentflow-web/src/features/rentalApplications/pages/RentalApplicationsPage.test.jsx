@@ -279,17 +279,14 @@ describe('Landlord rental applications', () => {
     expect(within(screen.getByRole('group', { name: 'Rental application counts' })).getByText('Total').parentElement).toHaveTextContent('3')
   })
 
-  it('refreshes the scoped list and removes stale cards', async () => {
+  it('does not render a manual refresh control', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse([application()]))
-      .mockResolvedValueOnce(jsonResponse([]))
     vi.stubGlobal('fetch', fetchMock)
     renderPage()
     expect(await screen.findByRole('region', { name: 'Rental applications' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-    expect(await screen.findByRole('heading', { name: 'No rental applications yet' })).toBeInTheDocument()
-    expect(screen.queryByRole('article')).not.toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     for (const [url] of fetchMock.mock.calls) expect(url).toContain(`/api/rental-applications/property/${propertyId}`)
   })
 

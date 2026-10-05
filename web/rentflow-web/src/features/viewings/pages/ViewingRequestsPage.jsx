@@ -299,15 +299,6 @@ function ViewingRequestsPage() {
               </div>
             </dl>
           )}
-          <button
-            type="button"
-            className="button button--quiet viewings-page__refresh"
-            onClick={loadViewings}
-            disabled={selection.status !== 'selected' || pageStatus === 'loading'}
-          >
-            <span aria-hidden="true">↻</span>
-            {pageStatus === 'loading' ? 'Refreshing...' : 'Refresh'}
-          </button>
         </div>
       </header>
 

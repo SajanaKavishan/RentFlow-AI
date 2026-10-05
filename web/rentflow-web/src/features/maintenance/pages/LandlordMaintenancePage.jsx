@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/useAuth.js'
 import { USER_ROLES } from '../../auth/authModel.js'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
@@ -89,6 +90,8 @@ function money(value) {
 }
 
 export default function LandlordMaintenancePage() {
+  const [searchParams] = useSearchParams()
+  const requestedRequestId = searchParams.get('requestId')
   const { propertyId } = usePropertyContext()
   const { user } = useAuth()
 
@@ -366,7 +369,7 @@ export default function LandlordMaintenancePage() {
       const currentRequestId = selectedRequestIdRef.current
       const nextSelectedId = currentRequestId && safeRequests.some((request) => request.id === currentRequestId)
         ? currentRequestId
-        : safeRequests[0].id
+        : safeRequests.find((request) => request.id === requestedRequestId)?.id || safeRequests[0].id
 
       setPageState('success')
       updateSelectedRequestId(nextSelectedId)
@@ -388,7 +391,7 @@ export default function LandlordMaintenancePage() {
       setDetailState('idle')
       setDetailError('')
     }
-  }, [activePropertyId, loadRequestDetails, updateSelectedRequestId])
+  }, [activePropertyId, loadRequestDetails, updateSelectedRequestId, requestedRequestId])
 
   useEffect(() => {
     if (!isLandlord) return undefined
@@ -548,15 +551,6 @@ export default function LandlordMaintenancePage() {
             Review property maintenance issues and keep every maintenance decision under human control.
           </p>
         </div>
-        <button
-          type="button"
-          className="button button--quiet maintenance-page__refresh"
-          onClick={loadRequests}
-          disabled={isPageLoading || !activePropertyId || !isLandlord}
-        >
-          <span aria-hidden="true">↻</span>
-          {isPageLoading ? 'Refreshing...' : 'Refresh'}
-        </button>
       </header>
 
       {!isLandlord && (

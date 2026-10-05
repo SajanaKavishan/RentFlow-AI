@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../../core/api/apiClient.js'
 import { getMyProperties } from '../../properties/services/propertyApiService.js'
 import { getLandlordOffers } from '../../rentalOffers/services/rentalOfferApiService.js'
@@ -54,6 +55,8 @@ function LeaseDetails({ lease, propertyName, acting, onAction }) {
 }
 
 export default function LeaseAgreementsPage() {
+  const [searchParams] = useSearchParams()
+  const requestedLeaseId = searchParams.get('leaseId')
   const [leasesState, setLeasesState] = useState({ status: 'loading', items: [], error: '' })
   const [offersState, setOffersState] = useState({ status: 'loading', items: [], error: '' })
   const [properties, setProperties] = useState([])
@@ -66,6 +69,18 @@ export default function LeaseAgreementsPage() {
   const [acting, setActing] = useState('')
   const [detailState, setDetailState] = useState({ status: 'idle', lease: null, error: '' })
   const detailRequest = useRef(0)
+
+  useEffect(() => {
+    if (!requestedLeaseId) return undefined
+    let active = true
+    const request = ++detailRequest.current
+    getLeaseAgreement(requestedLeaseId).then((lease) => {
+      if (active && request === detailRequest.current) setDetailState({ status: 'ready', lease, error: '' })
+    }).catch((error) => {
+      if (active && request === detailRequest.current) setDetailState({ status: 'error', lease: null, error: safeError(error, 'Unable to load the lease agreement.') })
+    })
+    return () => { active = false }
+  }, [requestedLeaseId])
 
   useEffect(() => {
     let active = true

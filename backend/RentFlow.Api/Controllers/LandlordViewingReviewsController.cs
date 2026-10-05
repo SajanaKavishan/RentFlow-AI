@@ -9,13 +9,21 @@ namespace RentFlow.Api.Controllers;
 
 [ApiController]
 [Authorize(Roles = nameof(UserRole.Landlord))]
-[Route("api/landlord/viewing-reviews/summary")]
+[Route("api/landlord/viewing-reviews")]
 public sealed class LandlordViewingReviewsController(ViewingReviewService reviews, ICurrentUserService currentUser) : ControllerBase
 {
-    [HttpGet]
+    [HttpGet("summary")]
     public async Task<ActionResult<LandlordViewingReviewSummaryDto>> Get(CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not Guid landlord) return Unauthorized();
         return Ok(await reviews.GetLandlordSummaryAsync(landlord, cancellationToken));
+    }
+
+    [HttpGet("properties/{propertyId:guid}")]
+    public async Task<ActionResult<ViewingReviewSummaryDto>> GetProperty(Guid propertyId, CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not Guid landlord) return Unauthorized();
+        try { return Ok(await reviews.GetLandlordPropertyReviewsAsync(landlord, propertyId, cancellationToken)); }
+        catch (ViewingServiceException error) when (error.Error == ViewingServiceError.NotFound) { return NotFound(); }
     }
 }

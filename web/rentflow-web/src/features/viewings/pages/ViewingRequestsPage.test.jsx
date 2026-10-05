@@ -85,8 +85,7 @@ afterEach(() => {
 })
 
 describe('Landlord viewing requests', () => {
-  it('loads Approved contact through viewing details and removes it after a cancellation refresh', async () => {
-    let cancelled = false
+  it('loads Approved contact without a manual refresh control', async () => {
     const phone = '+94 77 123 4567'
     const fetchMock = vi.fn().mockImplementation((url) => {
       if (url.includes(`/api/viewings/property/${propertyId}`)) {
@@ -95,8 +94,8 @@ describe('Landlord viewing requests', () => {
       expect(url).toContain(`/api/viewings/${approvedViewing.id}`)
       return Promise.resolve(jsonResponse({
         ...approvedViewing,
-        status: cancelled ? 3 : 1,
-        tenant: { displayName: 'Alex Tenant', phoneNumber: cancelled ? null : phone },
+        status: 1,
+        tenant: { displayName: 'Alex Tenant', phoneNumber: phone },
       }))
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -105,11 +104,7 @@ describe('Landlord viewing requests', () => {
     expect(container.querySelector('a[href^="tel:"]')).toBeNull()
     expect(screen.queryByRole('button', { name: /call tenant/i })).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    cancelled = true
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-    await screen.findByRole('article')
-    expect(within(screen.getByRole('article')).getByText('Cancelled')).toBeInTheDocument()
-    expect(screen.queryByText(phone)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
   })
 
   it('hides contact if Approved detail access fails, even when the list has stale contact', async () => {
@@ -382,7 +377,7 @@ describe('Landlord viewing requests', () => {
     expect(screen.getByText('No matching viewing requests')).toBeInTheDocument()
   })
 
-  it('refreshes the same property scope and preserves the Back to Property route', async () => {
+  it('preserves the Back to Property route without a manual refresh control', async () => {
     const fetchMock = vi.fn().mockImplementation(() => (
       Promise.resolve(jsonResponse([pendingViewing]))
     ))
@@ -390,15 +385,14 @@ describe('Landlord viewing requests', () => {
 
     renderPage()
     await screen.findByRole('article')
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-    await screen.findByRole('article')
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls.every(([url]) => (
       url.includes(`/api/viewings/property/${propertyId}`)
     ))).toBe(true)
     expect(screen.getByRole('link', { name: 'Back to Property' }))
       .toHaveAttribute('href', `/properties/${propertyId}`)
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
   })
 
   it('requires a property selection without calling the API with a fallback ID', () => {

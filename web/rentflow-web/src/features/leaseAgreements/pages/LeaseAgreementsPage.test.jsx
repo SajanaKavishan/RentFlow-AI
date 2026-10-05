@@ -23,7 +23,7 @@ function response(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
-function setupApi({ leases = [], offers = [], leaseListStatus = 200 } = {}) {
+function setupApi({ leases = [], offers = [], leaseListStatus = 200, entry = '/modules/pricing-lease/leases' } = {}) {
   const fetchMock = vi.fn((url, options = {}) => {
     if (url.endsWith('/api/lease-agreements/landlord')) return Promise.resolve(response(leases, leaseListStatus))
     if (url.endsWith('/api/rental-offers/landlord')) return Promise.resolve(response(offers))
@@ -38,13 +38,19 @@ function setupApi({ leases = [], offers = [], leaseListStatus = 200 } = {}) {
   })
   vi.stubGlobal('fetch', fetchMock)
   tokenStorage.setToken('landlord-token')
-  render(<MemoryRouter initialEntries={['/modules/pricing-lease/leases']}><LeaseAgreementsPage /></MemoryRouter>)
+  render(<MemoryRouter initialEntries={[entry]}><LeaseAgreementsPage /></MemoryRouter>)
   return fetchMock
 }
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); tokenStorage.clearToken() })
 
 describe('landlord lease agreements', () => {
+  it('opens the lease selected by a dashboard renewal link', async () => {
+    const fetchMock = setupApi({ leases: [lease()], entry: `/modules/pricing-lease/leases?leaseId=${leaseId}` })
+    expect(await screen.findByRole('heading', { name: 'Lease details' })).toBeInTheDocument()
+    expect(screen.getByText('170,000')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining(`/api/lease-agreements/${leaseId}`), expect.any(Object))
+  })
   it('renders leases and opens details', async () => {
     const fetchMock = setupApi({ leases: [lease()] })
     expect(await screen.findByText(/Monthly rent 85,000/)).toBeInTheDocument()
