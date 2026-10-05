@@ -749,7 +749,7 @@ class _MaintenanceRequestDetailsState
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
       child: FutureBuilder<MaintenanceRequest>(
         future: _detail,
         builder: (context, snapshot) {
@@ -783,9 +783,9 @@ class _MaintenanceRequestDetailsState
               Text(
                 detail.description,
                 style: const TextStyle(
-                  fontSize: 13,
+                  fontSize: 14,
                   height: 1.45,
-                  color: AppPalette.secondaryText,
+                  color: AppPalette.primaryText,
                 ),
               ),
               if (detail.preferredAccessWindow case final access?) ...[
@@ -793,22 +793,27 @@ class _MaintenanceRequestDetailsState
                 Text(
                   access.label,
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 14,
                     color: AppPalette.primaryText,
                   ),
                 ),
               ],
-              if (detail.tenantAccessNotes != null) ...[
+              if (detail.tenantAccessNotes?.trim().isNotEmpty ?? false) ...[
                 const SizedBox(height: 10),
                 Text(
                   'Access notes: ${detail.tenantAccessNotes}',
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     height: 1.4,
                     color: AppPalette.primaryText,
                   ),
                 ),
               ],
+              if (detail.technicianId != null &&
+                  (detail.assignedTechnicianName?.trim().isNotEmpty ?? false))
+                _AssignedTechnicianIdentity(
+                  name: detail.assignedTechnicianName!.trim(),
+                ),
               FutureBuilder<List<MaintenanceStatusHistory>>(
                 future: _history,
                 builder: (context, snapshot) {
@@ -841,7 +846,12 @@ class _MaintenanceRequestDetailsState
                     );
                   }
                   final history =
-                      snapshot.data ?? const <MaintenanceStatusHistory>[];
+                      List<MaintenanceStatusHistory>.of(
+                        snapshot.data ?? const <MaintenanceStatusHistory>[],
+                      )..sort((a, b) {
+                        final time = a.changedAt.compareTo(b.changedAt);
+                        return time == 0 ? a.id.compareTo(b.id) : time;
+                      });
                   if (history.isEmpty) {
                     return const SizedBox.shrink();
                   }
@@ -868,10 +878,9 @@ class _MaintenanceRequestDetailsState
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      '${entry.fromStatus == null ? 'Created' : maintenanceLabel(entry.fromStatus!)}'
-                                      ' → ${maintenanceLabel(entry.toStatus)}',
+                                      _maintenanceHistoryLabel(entry.toStatus),
                                       style: const TextStyle(
-                                        fontSize: 12,
+                                        fontSize: 14,
                                         height: 1.35,
                                         color: AppPalette.primaryText,
                                         fontWeight: FontWeight.w600,
@@ -879,14 +888,25 @@ class _MaintenanceRequestDetailsState
                                     ),
                                     Text(
                                       '${MaterialLocalizations.of(context).formatMediumDate(entry.changedAt.toLocal())}'
-                                      ' · ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(entry.changedAt.toLocal()))}'
-                                      '${entry.notes == null ? '' : '\n${entry.notes}'}',
+                                      ' · ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(entry.changedAt.toLocal()))}',
                                       style: const TextStyle(
                                         fontSize: 12,
                                         height: 1.35,
                                         color: AppPalette.secondaryText,
                                       ),
                                     ),
+                                    if (entry.notes?.trim().isNotEmpty ??
+                                        false) ...[
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        entry.notes!.trim(),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          height: 1.4,
+                                          color: AppPalette.primaryText,
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -898,6 +918,7 @@ class _MaintenanceRequestDetailsState
                   );
                 },
               ),
+              _sectionTitle(context, 'ATTACHMENTS'),
               Wrap(
                 spacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -905,8 +926,8 @@ class _MaintenanceRequestDetailsState
                   const Text(
                     'Photos and supporting files',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: AppPalette.secondaryText,
+                      fontSize: 13,
+                      color: AppPalette.primaryText,
                     ),
                   ),
                   TextButton.icon(
@@ -952,17 +973,33 @@ class _MaintenanceRequestDetailsState
                   final attachments =
                       snapshot.data ?? const <MaintenanceAttachment>[];
                   if (attachments.isEmpty) {
-                    return const SizedBox.shrink();
+                    return const Text(
+                      'No attachments yet.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppPalette.secondaryText,
+                      ),
+                    );
                   }
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _sectionTitle(context, 'ATTACHMENTS'),
                       ...attachments.map(
                         (attachment) => ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.insert_drive_file),
-                          title: Text(attachment.fileName),
+                          leading: Icon(
+                            attachment.contentType.startsWith('image/')
+                                ? Icons.image_outlined
+                                : Icons.insert_drive_file_outlined,
+                            color: AppPalette.olive,
+                          ),
+                          title: Text(
+                            attachment.fileName,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppPalette.primaryText,
+                            ),
+                          ),
                           subtitle: Text(
                             '${attachment.contentType} · '
                             '${_formatFileSize(attachment.fileSize)}',
@@ -1001,9 +1038,86 @@ class _MaintenanceRequestDetailsState
       child: Text(
         title,
         style: AppTypography.eyebrow.copyWith(
+          fontSize: 11,
           color: AppPalette.primaryText,
           letterSpacing: .7,
         ),
+      ),
+    );
+  }
+}
+
+String _maintenanceHistoryLabel(MaintenanceRequestStatus status) =>
+    switch (status) {
+      MaintenanceRequestStatus.submitted => 'Request submitted',
+      MaintenanceRequestStatus.triaged => 'Request triaged',
+      MaintenanceRequestStatus.assigned => 'Technician assigned',
+      MaintenanceRequestStatus.estimatePending => 'Estimate pending',
+      MaintenanceRequestStatus.estimateSubmitted => 'Estimate submitted',
+      MaintenanceRequestStatus.awaitingLandlordApproval =>
+        'Awaiting landlord approval',
+      MaintenanceRequestStatus.approved => 'Estimate approved',
+      MaintenanceRequestStatus.rejected => 'Estimate rejected',
+      MaintenanceRequestStatus.inProgress => 'Work in progress',
+      MaintenanceRequestStatus.completed => 'Work completed',
+      MaintenanceRequestStatus.cancelled => 'Request cancelled',
+    };
+
+class _AssignedTechnicianIdentity extends StatelessWidget {
+  const _AssignedTechnicianIdentity({required this.name});
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = name.split(RegExp(r'\s+'));
+    final initials = [
+      parts.first,
+      if (parts.length > 1) parts.last,
+    ].map((part) => part.characters.first).join().toUpperCase();
+    return Padding(
+      padding: const EdgeInsets.only(top: 18, bottom: 2),
+      child: Row(
+        key: const ValueKey('assigned-technician-identity'),
+        children: [
+          ExcludeSemantics(
+            child: CircleAvatar(
+              radius: 21,
+              backgroundColor: AppPalette.progress,
+              foregroundColor: AppPalette.darkOlive,
+              child: Text(
+                initials,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppPalette.primaryText,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                const Text(
+                  'Assigned technician',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppPalette.secondaryText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1089,7 +1203,7 @@ class _MaintenanceRequestCard extends StatelessWidget {
                             Text(
                               request.title,
                               style: AppTypography.cardTitle.copyWith(
-                                fontSize: 14,
+                                fontSize: 15,
                                 color: AppPalette.primaryText,
                                 height: 1.2,
                               ),
@@ -1121,7 +1235,7 @@ class _MaintenanceRequestCard extends StatelessWidget {
                                 final date = Text(
                                   MaterialLocalizations.of(
                                     context,
-                                  ).formatMediumDate(
+                                  ).formatShortMonthDay(
                                     request.createdAt.toLocal(),
                                   ),
                                   style: const TextStyle(

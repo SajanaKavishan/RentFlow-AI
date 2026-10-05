@@ -29,6 +29,27 @@ beforeEach(() => {
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals() })
 
 describe('Technician Assigned Work page', () => {
+  it.each(['MR-C8070B6D94F6A810', null])('shows only the friendly reference or a neutral fallback (%s)', (referenceCode) => {
+    const ids = {
+      id: '11efbe01-9196-44b6-b1b2-73767fae5cf1',
+      tenantId: '21efbe01-9196-44b6-b1b2-73767fae5cf1',
+      propertyId: '31efbe01-9196-44b6-b1b2-73767fae5cf1',
+    }
+    render(<AssignedWorkState status="ready" requests={[{
+      ...ids, referenceCode, title: 'Bedroom outlet not working', selected: true,
+      category: 'Electrical', priority: 'Normal', status: 'Assigned',
+    }]} />)
+    expect(screen.getByRole('heading', { name: 'Bedroom outlet not working' })).toBeInTheDocument()
+    if (referenceCode) {
+      expect(screen.getByText(`Request #${referenceCode}`)).toBeInTheDocument()
+      expect(screen.getByText(referenceCode)).toBeInTheDocument()
+    } else {
+      expect(screen.getAllByText('Reference unavailable')).toHaveLength(2)
+    }
+    for (const id of Object.values(ids)) expect(screen.queryByText(id)).not.toBeInTheDocument()
+    expect(screen.queryByText('Request ID')).not.toBeInTheDocument()
+  })
+
   it('loads the signed-in technician work queue and renders live maintenance items', async () => {
     fetch.mockResolvedValueOnce({
       ok: true,
@@ -145,7 +166,7 @@ describe('Technician Assigned Work page', () => {
 
     renderRoute()
     await userEvent.click(await screen.findByRole('button', { name: 'View details' }))
-    expect(screen.getByText('tenant-1')).toBeInTheDocument()
+    expect(screen.queryByText('tenant-1')).not.toBeInTheDocument()
     expect(screen.getByText('Use the back door.')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Start work' }))

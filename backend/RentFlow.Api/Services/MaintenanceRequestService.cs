@@ -64,7 +64,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             notes: "Maintenance request submitted.");
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     private static string DeriveTitle(string? description, MaintenanceCategory category)
@@ -90,7 +90,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == requestId, cancellationToken);
 
-        return maintenanceRequest is null ? null : MapToResponse(maintenanceRequest);
+        return maintenanceRequest is null ? null : await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<IReadOnlyList<MaintenanceRequestSummaryDto>> GetByTenantAsync(
@@ -210,7 +210,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<MaintenanceRequestResponseDto> TriageAsync(
@@ -240,7 +240,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<MaintenanceRequestResponseDto> AssignTechnicianAsync(
@@ -273,7 +273,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<MaintenanceRequestResponseDto> MarkEstimatePendingAsync(
@@ -295,7 +295,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             "Technician estimate requested.");
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<RepairEstimateResponseDto> SubmitEstimateAsync(
@@ -376,7 +376,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             "Repair estimate submitted for landlord approval.");
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public Task<RepairEstimateResponseDto> ApproveEstimateAsync(
@@ -455,7 +455,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             "Work started.");
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<MaintenanceRequestResponseDto> CompleteWorkAsync(
@@ -487,7 +487,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             "Work completed.");
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<IReadOnlyList<RepairEstimateResponseDto>> GetEstimatesAsync(
@@ -802,6 +802,24 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             ChangedAt = DateTimeOffset.UtcNow,
             Notes = NormalizeOptionalText(notes)
         });
+    }
+
+    private async Task<MaintenanceRequestResponseDto> MapToResponseAsync(
+        MaintenanceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = MapToResponse(request);
+        if (request.TechnicianId is { } technicianId)
+        {
+            // Project display identity only; account contact and profile data stay private.
+            var name = await dbContext.Users.AsNoTracking()
+                .Where(user => user.Id == technicianId && user.Role == UserRole.MaintenanceTechnician)
+                .Select(user => user.FullName)
+                .SingleOrDefaultAsync(cancellationToken);
+            response.AssignedTechnicianName = NormalizeOptionalText(name);
+        }
+
+        return response;
     }
 
     private static MaintenanceRequestResponseDto MapToResponse(MaintenanceRequest request)

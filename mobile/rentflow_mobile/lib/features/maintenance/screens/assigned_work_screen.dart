@@ -8,6 +8,7 @@ import '../models/maintenance_status_history.dart';
 import '../models/maintenance_request.dart';
 import '../models/repair_estimate.dart';
 import '../services/maintenance_api_service.dart';
+import '../widgets/tenant_maintenance_ui.dart';
 
 class AssignedWorkScreen extends StatefulWidget {
   const AssignedWorkScreen({
@@ -766,8 +767,21 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                         onPressed: () => _selectRequest(item),
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: Text(
-                            '${item.title} · ${_statusLabel(item.status)}',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${item.title} · ${_statusLabel(item.status)}',
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${maintenanceLabel(item.category)} · ${item.referenceCode ?? 'Reference unavailable'}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppPalette.secondaryText,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -779,18 +793,30 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Text(
+                        activeRequest.title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppPalette.primaryText,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        '${maintenanceLabel(activeRequest.category)} · ${activeRequest.referenceCode ?? 'Reference unavailable'}',
+                        key: const ValueKey('technician-request-reference'),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppPalette.secondaryText,
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
                         children: [
-                          Expanded(
-                            child: Text(
-                              activeRequest.title,
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                          ),
-                          StatusChip(
-                            label: _statusLabel(activeRequest.status),
-                            tone: _statusTone(activeRequest.status),
-                          ),
+                          MaintenanceBadge.status(activeRequest.status),
+                          MaintenanceBadge.priority(activeRequest.priority),
                         ],
                       ),
                       const SizedBox(height: AppSpacing.md),
@@ -892,13 +918,6 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
                 AppCard(
                   child: Column(
                     children: [
-                      _InfoRow(
-                        label: 'Property',
-                        value: activeRequest.propertyId,
-                      ),
-                      const Divider(height: AppSpacing.lg),
-                      _InfoRow(label: 'Tenant', value: activeRequest.tenantId),
-                      const Divider(height: AppSpacing.lg),
                       _InfoRow(
                         label: 'Priority',
                         value: _capitalise(activeRequest.priority.name),
@@ -1055,15 +1074,6 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
         (match) => '${match.group(1)} ${match.group(2)}',
       )
       .replaceAll('_', ' ');
-
-  StatusTone _statusTone(MaintenanceRequestStatus status) => switch (status) {
-    MaintenanceRequestStatus.approved => StatusTone.success,
-    MaintenanceRequestStatus.inProgress => StatusTone.progress,
-    MaintenanceRequestStatus.completed => StatusTone.success,
-    MaintenanceRequestStatus.rejected ||
-    MaintenanceRequestStatus.cancelled => StatusTone.danger,
-    _ => StatusTone.pending,
-  };
 
   String _capitalise(String value) {
     final normalised = value.replaceAll('_', ' ');

@@ -580,7 +580,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(reviewSubmissionCount, 1);
-      expect(find.text('awaiting Landlord Approval'), findsOneWidget);
+      expect(find.text('Awaiting Landlord Approval'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -743,7 +743,7 @@ void main() {
       await tester.tap(submitButton);
       await tester.pumpAndSettle();
       expect(reviewSubmissionCount, 1);
-      expect(find.text('awaiting Landlord Approval'), findsOneWidget);
+      expect(find.text('Awaiting Landlord Approval'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('submit-maintenance-estimate-for-review')),
         findsNothing,
@@ -823,7 +823,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Rejected'), findsOneWidget);
+    expect(find.text('Rejected'), findsNWidgets(2));
     expect(
       find.text('Review notes: Please use the approved supplier.'),
       findsOneWidget,
@@ -913,7 +913,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('UPDATES'), findsOneWidget);
-    expect(find.textContaining('Submitted → Triaged'), findsOneWidget);
+    expect(find.text('Request triaged'), findsOneWidget);
     expect(find.textContaining('Request triaged.'), findsOneWidget);
     expect(find.text('leak-photo.jpg'), findsOneWidget);
     expect(find.textContaining('image/jpeg'), findsOneWidget);

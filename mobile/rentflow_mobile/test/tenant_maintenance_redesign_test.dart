@@ -257,8 +257,8 @@ void main() {
       expect(find.text('UPDATES'), findsOneWidget);
       expect(find.text('History'), findsNothing);
       expect(find.textContaining('Real triage notes.'), findsOneWidget);
-      expect(find.text('ATTACHMENTS'), findsNothing);
-      expect(find.text('No attachments yet.'), findsNothing);
+      expect(find.text('ATTACHMENTS'), findsOneWidget);
+      expect(find.text('No attachments yet.'), findsOneWidget);
       expect(find.text('Call'), findsNothing);
       expect(find.text('Parts ordered'), findsNothing);
       await tester.tap(find.text('Request with status 0'));

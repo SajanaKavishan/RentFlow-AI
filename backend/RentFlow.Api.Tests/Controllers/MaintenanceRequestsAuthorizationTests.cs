@@ -167,6 +167,65 @@ public sealed class MaintenanceRequestsAuthorizationTests
         Assert.Equal(requestId, body.RootElement[0].GetProperty("id").GetGuid());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetById_TenantReceivesOnlyAssignedTechnicianDisplayName(bool assigned)
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        var tenantId = await AuthenticateAsync(client, "tenant-display-name@example.com", UserRole.Tenant);
+        const string privateEmail = "private-technician@example.com";
+        const string privatePhone = "+94779998888";
+        var technicianId = await SeedUserAsync(factory, privateEmail, UserRole.MaintenanceTechnician);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var technician = await context.Users.SingleAsync(user => user.Id == technicianId);
+            technician.FullName = " Mike Reyes ";
+            technician.PhoneNumber = privatePhone;
+            await context.SaveChangesAsync();
+        }
+        var requestId = await SeedRequestAsync(factory, tenantId,
+            assigned ? MaintenanceRequestStatus.Assigned : MaintenanceRequestStatus.Submitted,
+            assigned ? technicianId : null);
+
+        var response = await client.GetAsync($"/api/maintenance-requests/{requestId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        using var body = JsonDocument.Parse(json);
+        Assert.Equal(assigned ? "Mike Reyes" : null,
+            body.RootElement.GetProperty("assignedTechnicianName").GetString());
+        Assert.DoesNotContain(privateEmail, json);
+        Assert.DoesNotContain(privatePhone, json);
+        var allowedFields = new[]
+        {
+            "id", "referenceCode", "preferredAccessWindow", "propertyId", "tenantId", "technicianId",
+            "assignedTechnicianName", "title", "description", "category", "priority", "status",
+            "tenantAccessNotes", "triageNotes", "assignmentNotes", "cancellationReason",
+            "completedAt", "createdAt", "updatedAt"
+        };
+        Assert.Equal(allowedFields.OrderBy(name => name),
+            body.RootElement.EnumerateObject().Select(property => property.Name).OrderBy(name => name));
+    }
+
+    [Fact]
+    public async Task GetById_DoesNotProjectNonTechnicianAccountIdentity()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        var tenantId = await AuthenticateAsync(client, "tenant-wrong-assignment@example.com", UserRole.Tenant);
+        var otherUserId = await SeedUserAsync(factory, "unrelated-account@example.com", UserRole.Tenant);
+        var requestId = await SeedRequestAsync(factory, tenantId, MaintenanceRequestStatus.Assigned, otherUserId);
+
+        var response = await client.GetAsync($"/api/maintenance-requests/{requestId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = await ParseAsync(response);
+        Assert.Equal(JsonValueKind.Null, body.RootElement.GetProperty("assignedTechnicianName").ValueKind);
+    }
+
     [Fact]
     public async Task GetByTechnician_WithAnotherTechnicianId_ReturnsForbidden()
     {

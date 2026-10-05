@@ -138,11 +138,13 @@ class MaintenanceRequest {
     required this.updatedAt,
     this.referenceCode,
     this.preferredAccessWindow,
+    this.assignedTechnicianName,
   });
 
   final String id;
   final String? referenceCode;
   final PreferredAccessWindow? preferredAccessWindow;
+  final String? assignedTechnicianName;
   final String propertyId;
   final String tenantId;
   final String? technicianId;
@@ -178,6 +180,7 @@ class MaintenanceRequest {
       propertyId: _requiredString(json, 'propertyId'),
       tenantId: _requiredString(json, 'tenantId'),
       technicianId: _nullableString(json, 'technicianId'),
+      assignedTechnicianName: _nullableString(json, 'assignedTechnicianName'),
       title: _requiredString(json, 'title'),
       description: hasDescription ? _requiredString(json, 'description') : '',
       category: MaintenanceCategory.fromJson(json['category']),

@@ -94,7 +94,7 @@ export function AssignedWorkState({
         <article key={request.id} className="assigned-work-item shared-card">
           <div className="assigned-work-item__header">
             <div>
-              <p className="assigned-work-page__eyebrow">Maintenance request</p>
+              <p className="assigned-work-page__eyebrow">{request.referenceCode ? `Request #${request.referenceCode}` : 'Reference unavailable'}</p>
               <h3>{request.title}</h3>
             </div>
             <StatusBadge tone={statusToneMap[request.status] ?? 'warning'}>{maintenanceEnumLabel(request.status, MAINTENANCE_STATUS)}</StatusBadge>
@@ -103,7 +103,6 @@ export function AssignedWorkState({
           <dl className="assigned-work-item__meta">
               <div><dt>Priority</dt><dd>{maintenanceEnumLabel(request.priority, MAINTENANCE_PRIORITY)}</dd></div>
               <div><dt>Category</dt><dd>{maintenanceEnumLabel(request.category, MAINTENANCE_CATEGORY)}</dd></div>
-            <div><dt>Property</dt><dd>{request.propertyId}</dd></div>
           </dl>
           <div className="assigned-work-item__actions">
               <button type="button" className="shared-button shared-button--outline" onClick={request.onToggleDetails} aria-expanded={request.selected}>
@@ -123,8 +122,7 @@ export function AssignedWorkState({
           {request.selected && (
             <>
               <dl className="assigned-work-item__details">
-                <div><dt>Request ID</dt><dd>{request.id}</dd></div>
-                <div><dt>Tenant</dt><dd>{request.tenantId || 'Not provided'}</dd></div>
+                <div><dt>Request</dt><dd>{request.referenceCode || 'Reference unavailable'}</dd></div>
                 <div><dt>Access notes</dt><dd>{request.tenantAccessNotes || 'None provided'}</dd></div>
                 <div><dt>Assignment notes</dt><dd>{request.assignmentNotes || 'None provided'}</dd></div>
               </dl>

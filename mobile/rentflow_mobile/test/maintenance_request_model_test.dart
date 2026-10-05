@@ -4,6 +4,48 @@ import 'package:rentflow_mobile/features/maintenance/models/repair_estimate.dart
 
 void main() {
   group('MaintenanceRequest', () {
+    test('parses the optional display name without adding contact fields', () {
+      final payload = <String, dynamic>{
+        'id': 'request',
+        'propertyId': 'property',
+        'tenantId': 'tenant',
+        'title': 'Leaking tap',
+        'description': 'The kitchen tap is leaking.',
+        'category': 0,
+        'priority': 1,
+        'status': 2,
+        'createdAt': '2026-10-05T09:00:00Z',
+        'technicianId': 'technician',
+        'assignedTechnicianName': 'Mike Reyes',
+      };
+      expect(
+        MaintenanceRequest.fromJson(payload).assignedTechnicianName,
+        'Mike Reyes',
+      );
+      expect(
+        MaintenanceRequest.fromSummaryJson(payload).assignedTechnicianName,
+        'Mike Reyes',
+      );
+      expect(
+        MaintenanceRequest.fromJson({
+          ...payload,
+          'assignedTechnicianName': null,
+        }).assignedTechnicianName,
+        isNull,
+      );
+      payload.remove('assignedTechnicianName');
+      expect(
+        MaintenanceRequest.fromJson(payload).assignedTechnicianName,
+        isNull,
+      );
+      expect(
+        () => MaintenanceRequest.fromJson({
+          ...payload,
+          'assignedTechnicianName': 42,
+        }),
+        throwsFormatException,
+      );
+    });
     test(
       'decodes new fields and keeps legacy Low/Security payloads readable',
       () {
