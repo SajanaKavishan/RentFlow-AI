@@ -486,7 +486,8 @@ void main() {
         find.widgetWithText(FilledButton, 'Browse properties'),
         findsOneWidget,
       );
-      expect(find.widgetWithText(TextButton, 'Refresh'), findsOneWidget);
+      expect(find.text('Refresh'), findsNothing);
+      expect(find.byType(RefreshIndicator), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

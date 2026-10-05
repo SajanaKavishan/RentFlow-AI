@@ -1,3 +1,4 @@
+import 'package:rentflow_mobile/features/maintenance/screens/my_maintenance_requests_screen.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -576,8 +577,14 @@ void main() {
     expect(find.text('Applications content'), findsOneWidget);
     await tester.tap(navigationDestination('Maintenance'));
     await tester.pumpAndSettle();
-    expect(find.text('My Maintenance Requests'), findsOneWidget);
-    expect(find.text('No maintenance requests yet'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(MyMaintenanceRequestsScreen),
+        matching: find.text('Maintenance'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('No maintenance requests yet.'), findsOneWidget);
     expect(find.text('Integration pending'), findsNothing);
     await tester.tap(navigationDestination('Properties'));
     await tester.pumpAndSettle();

@@ -39,6 +39,7 @@ class _MyRentalApplicationsScreenState
   late final PropertyApiService _propertyApiService;
   final Map<String, Property?> _properties = {};
   late Future<List<RentalApplication>> _applications;
+  Future<void>? _refreshOperation;
   final Set<String> _submittingIds = {};
   final Set<String> _withdrawingIds = {};
 
@@ -62,7 +63,10 @@ class _MyRentalApplicationsScreenState
     super.dispose();
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh() => _refreshOperation ??= _reloadApplications()
+      .whenComplete(() => _refreshOperation = null);
+
+  Future<void> _reloadApplications() async {
     final request = _loadApplications();
     setState(() {
       _applications = request;
@@ -404,44 +408,46 @@ class _MyRentalApplicationsScreenState
             ),
           ),
           Expanded(
-            child: FutureBuilder<List<RentalApplication>>(
-              future: _applications,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.all(24),
-                      child: LoadingState(
-                        key: ValueKey('applications-loading'),
-                        title: 'Loading your applications',
-                        message: 'Getting the latest application updates.',
-                        compact: true,
+            child: RefreshIndicator(
+              color: AppPalette.olive,
+              onRefresh: _refresh,
+              child: FutureBuilder<List<RentalApplication>>(
+                future: _applications,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData &&
+                      !snapshot.hasError) {
+                    return const Center(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.all(24),
+                        child: LoadingState(
+                          key: ValueKey('applications-loading'),
+                          title: 'Loading your applications',
+                          message: 'Getting the latest application updates.',
+                          compact: true,
+                        ),
                       ),
-                    ),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return _ApplicationListState(
-                    isError: true,
-                    title: 'Could not load applications',
-                    message: _safeErrorMessage(snapshot.error),
-                    onRetry: _refresh,
-                  );
-                }
-                final applications = _prioritized(snapshot.data ?? const []);
-                if (applications.isEmpty) {
-                  return _ApplicationListState(
-                    title: 'No applications yet',
-                    message:
-                        'Find a home you like, then start an application from its property page.',
-                    onBrowse: _browseProperties,
-                    onRetry: _refresh,
-                  );
-                }
-                return RefreshIndicator(
-                  color: AppPalette.olive,
-                  onRefresh: _refresh,
-                  child: ListView.separated(
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return _ApplicationListState(
+                      isError: true,
+                      title: 'Could not load applications',
+                      message: _safeErrorMessage(snapshot.error),
+                      onRetry: _refresh,
+                    );
+                  }
+                  final applications = _prioritized(snapshot.data ?? const []);
+                  if (applications.isEmpty) {
+                    return _ApplicationListState(
+                      title: 'No applications yet',
+                      message:
+                          'Find a home you like, then start an application from its property page.',
+                      onBrowse: _browseProperties,
+                      onRetry: _refresh,
+                    );
+                  }
+                  return ListView.separated(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                     itemCount: applications.length,
@@ -463,9 +469,9 @@ class _MyRentalApplicationsScreenState
                         onContinue: () => _continueApplication(application),
                       );
                     },
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -632,46 +638,62 @@ class _ApplicationListState extends StatelessWidget {
   final bool isError;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: SingleChildScrollView(
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-      child: Column(
-        key: ValueKey(isError ? 'applications-error' : 'applications-empty'),
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: isError
-                ? const Color(0xFFF5DDDC)
-                : AppPalette.sage,
-            child: Icon(
-              isError ? Icons.cloud_off_outlined : Icons.description_outlined,
-              color: isError ? AppPalette.danger : AppPalette.olive,
-              size: 26,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: (constraints.maxHeight - 40).clamp(0, double.infinity),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            key: ValueKey(
+              isError ? 'applications-error' : 'applications-empty',
             ),
+            children: [
+              CircleAvatar(
+                radius: 30,
+                backgroundColor: isError
+                    ? const Color(0xFFF5DDDC)
+                    : AppPalette.sage,
+                child: Icon(
+                  isError
+                      ? Icons.cloud_off_outlined
+                      : Icons.description_outlined,
+                  color: isError ? AppPalette.danger : AppPalette.olive,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: applicationSectionTitle,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: AppTypography.body.copyWith(
+                  color: AppPalette.secondaryText,
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (onBrowse != null)
+                FilledButton(
+                  onPressed: onBrowse,
+                  child: const Text('Browse properties'),
+                ),
+              if (isError)
+                OutlinedButton(
+                  onPressed: onRetry,
+                  child: const Text('Try again'),
+                ),
+            ],
           ),
-          const SizedBox(height: 20),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: applicationSectionTitle,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: AppTypography.body.copyWith(color: AppPalette.secondaryText),
-          ),
-          const SizedBox(height: 20),
-          if (onBrowse != null)
-            FilledButton(
-              onPressed: onBrowse,
-              child: const Text('Browse properties'),
-            ),
-          if (isError)
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again'))
-          else
-            TextButton(onPressed: onRetry, child: const Text('Refresh')),
-        ],
+        ),
       ),
     ),
   );
