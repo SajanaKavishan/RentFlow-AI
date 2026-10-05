@@ -18,6 +18,60 @@ public sealed class MaintenanceRequestsAuthorizationTests
 {
     private const string ValidPassword = "Secure1!Password";
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Night")]
+    [InlineData(1)]
+    public async Task Create_RejectsMissingInvalidOrNumericAccessWindow(object? access)
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        var tenant = await AuthenticateAsync(client, "access-validation@example.com", UserRole.Tenant);
+        var input = new { propertyId = Guid.NewGuid(), description = "Kitchen tap leak.", category = 0, priority = 1, preferredAccessWindow = access };
+        var response = await client.PostAsJsonAsync($"/api/maintenance-requests?tenantId={tenant}", input);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var scope = factory.Services.CreateScope();
+        Assert.Empty(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().MaintenanceRequests);
+    }
+
+    [Fact]
+    public async Task Create_RequiresActiveTenancyAndReturnsSafeForbidden()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        var tenant = await AuthenticateAsync(client, "no-lease-create@example.com", UserRole.Tenant);
+        var response = await client.PostAsJsonAsync($"/api/maintenance-requests?tenantId={tenant}", CreateRequest());
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await ParseAsync(response);
+        Assert.Contains("active lease", body.RootElement.GetProperty("detail").GetString());
+        using var scope = factory.Services.CreateScope();
+        Assert.Empty(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().MaintenanceRequests);
+        Assert.Empty(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().MaintenanceStatusHistories);
+    }
+
+    [Fact]
+    public async Task Create_WithoutTitleReturnsStableReferenceAndStringAccessAcrossApiReads()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        var tenant = await AuthenticateAsync(client, "new-contract@example.com", UserRole.Tenant);
+        var landlord = await SeedUserAsync(factory, "new-contract-landlord@example.com", UserRole.Landlord);
+        var property = await SeedPropertyWithLeaseAsync(factory, landlord, tenant);
+        var response = await client.PostAsJsonAsync($"/api/maintenance-requests?tenantId={tenant}", new { propertyId = property, description = "The A/C is rattling. It happens at night.", category = 7, priority = 2, preferredAccessWindow = "Evening" });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = (await ParseAsync(response)).RootElement;
+        Assert.Equal("The A/C is rattling", created.GetProperty("title").GetString());
+        Assert.Equal("Evening", created.GetProperty("preferredAccessWindow").GetString());
+        var reference = created.GetProperty("referenceCode").GetString();
+        Assert.Matches("^MR-[A-F0-9]{16}$", reference!);
+        var id = created.GetProperty("id").GetGuid();
+        var detail = (await ParseAsync(await client.GetAsync($"/api/maintenance-requests/{id}"))).RootElement;
+        var summary = (await ParseAsync(await client.GetAsync($"/api/maintenance-requests/tenant/{tenant}"))).RootElement[0];
+        Assert.Equal(reference, detail.GetProperty("referenceCode").GetString());
+        Assert.Equal(reference, summary.GetProperty("referenceCode").GetString());
+        Assert.Equal("Evening", summary.GetProperty("preferredAccessWindow").GetString());
+    }
+
     [Fact]
     public async Task GetById_WithoutToken_ReturnsUnauthorized()
     {
@@ -49,10 +103,12 @@ public sealed class MaintenanceRequestsAuthorizationTests
         using var factory = new AuthApiFactory();
         using var client = factory.CreateHttpsClient();
         var tenantId = await AuthenticateAsync(client, "tenant-create@example.com", UserRole.Tenant);
+        var request = CreateRequest();
+        request.PropertyId = await SeedPropertyWithLeaseAsync(factory, Guid.NewGuid(), tenantId);
 
         var response = await client.PostAsJsonAsync(
             "/api/maintenance-requests",
-            CreateRequest());
+            request);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var body = await ParseAsync(response);
@@ -550,7 +606,8 @@ public sealed class MaintenanceRequestsAuthorizationTests
         Title = "Leak",
         Description = "Kitchen tap leak",
         Category = MaintenanceCategory.Plumbing,
-        Priority = MaintenancePriority.Normal
+        Priority = MaintenancePriority.Normal,
+        PreferredAccessWindow = PreferredAccessWindow.Morning
     };
 
     private static async Task<JsonDocument> ParseAsync(HttpResponseMessage response) =>

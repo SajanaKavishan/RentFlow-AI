@@ -7,6 +7,12 @@ namespace RentFlow.Api.Services.Interfaces;
 /// </summary>
 public interface IRentalApplicationService
 {
+    Task<RentalApplicationEligibilityDto> GetEligibilityAsync(Guid tenantId, Guid propertyId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<EligibleApplicationPropertyDto>> GetEligiblePropertiesAsync(Guid tenantId,
+        CancellationToken cancellationToken = default);
+
     Task<RentalApplicationResponseDto> CreateAsync(
         Guid tenantId,
         CreateRentalApplicationDto request,

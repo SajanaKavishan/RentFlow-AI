@@ -53,7 +53,7 @@ public sealed class BusinessAuthorizationTests
             new
             {
                 propertyId = property.Id,
-                requestedDateTime = DateTimeOffset.UtcNow.AddDays(3),
+                requestedDateTime = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(3).AddHours(3.5)),
                 tenantMessage = "JWT owner"
             });
         var createdJson = await create.Content.ReadAsStringAsync();
@@ -96,6 +96,8 @@ public sealed class BusinessAuthorizationTests
         using var factory = new AuthApiFactory();
         var property = await SeedPropertyAsync(factory, LandlordA);
         var other = await SeedApplicationAsync(factory, TenantB, RentalApplicationStatus.Draft);
+        await SeedAsync(factory, db => db.ViewingRequests.Add(new ViewingRequest
+        { TenantId = TenantA, PropertyId = property.Id, Status = ViewingStatus.Completed }));
         using var client = AuthorizedClient(factory, TenantA, UserRole.Tenant);
 
         var create = await client.PostAsJsonAsync(
@@ -283,7 +285,7 @@ public sealed class BusinessAuthorizationTests
         var create = await tenant.PostAsJsonAsync("/api/viewings", new
         {
             propertyId,
-            requestedDateTime = DateTimeOffset.UtcNow.AddDays(4),
+            requestedDateTime = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(4).AddHours(3.5)),
             tenantMessage = "Please confirm accessibility."
         });
         var created = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement;
@@ -313,6 +315,8 @@ public sealed class BusinessAuthorizationTests
         using var factory = new AuthApiFactory();
         var propertyId = (await SeedPropertyAsync(factory, LandlordA)).Id;
         using var tenant = AuthorizedClient(factory, TenantA, UserRole.Tenant, false);
+        await SeedAsync(factory, db => db.ViewingRequests.Add(new ViewingRequest
+        { TenantId = TenantA, PropertyId = propertyId, Status = ViewingStatus.Completed }));
         using var landlord = AuthorizedClient(factory, LandlordA, UserRole.Landlord, false);
 
         var create = await tenant.PostAsJsonAsync("/api/rental-applications", new
@@ -1530,7 +1534,13 @@ public sealed class BusinessAuthorizationTests
             IsAvailable = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        await SeedAsync(factory, context => context.Properties.Add(property));
+        await SeedAsync(factory, context =>
+        {
+            context.Properties.Add(property);
+            context.PropertyViewingAvailabilities.AddRange(Enumerable.Range(0, 7).Select(day =>
+                new PropertyViewingAvailability { PropertyId = property.Id, DayOfWeek = day,
+                    IsEnabled = true, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0) }));
+        });
         return property;
     }
 
@@ -1564,7 +1574,12 @@ public sealed class BusinessAuthorizationTests
             MonthlyIncome = 250000m, Occupation = "Engineer", NumberOfOccupants = 1,
             Status = status, CreatedAt = DateTimeOffset.UtcNow
         };
-        await SeedAsync(factory, context => context.RentalApplications.Add(application));
+        await SeedAsync(factory, context =>
+        {
+            context.RentalApplications.Add(application);
+            context.ViewingRequests.Add(new ViewingRequest
+            { TenantId = tenantId, PropertyId = application.PropertyId, Status = ViewingStatus.Completed });
+        });
         return application;
     }
 

@@ -46,4 +46,14 @@ public sealed class PropertyLandlordSummariesController(
 
         return File(image.Content, image.ContentType);
     }
+
+    [HttpGet("properties")]
+    public async Task<ActionResult<IReadOnlyList<PropertyResponseDto>>> GetListings(
+        Guid propertyId,
+        CancellationToken cancellationToken)
+    {
+        var listings = await landlordSummaryService.GetListingsForPropertyAsync(
+            propertyId, cancellationToken);
+        return listings is null ? NotFound() : Ok(listings);
+    }
 }

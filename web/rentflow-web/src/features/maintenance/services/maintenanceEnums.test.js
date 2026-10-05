@@ -32,6 +32,15 @@ describe('maintenance enum API boundary', () => {
     })).toEqual({ category: 1, priority: 2 })
   })
 
+  it('preserves new category values and API-confirmed access/reference fields', () => {
+    expect(encodeMaintenanceRequest({ category: 'Hvac', priority: 'Normal', preferredAccessWindow: 'Morning' }))
+      .toEqual({ category: 7, priority: 1, preferredAccessWindow: 'Morning' })
+    expect(normalizeMaintenanceRequest({ category: 8, referenceCode: 'MR-0123456789ABCDEF', preferredAccessWindow: 'Evening' }))
+      .toMatchObject({ category: 'LocksDoors', referenceCode: 'MR-0123456789ABCDEF', preferredAccessWindow: 'Evening' })
+    expect(MAINTENANCE_CATEGORY.byName.Security).toBe(4)
+    expect(MAINTENANCE_CATEGORY.byName.Other).toBe(6)
+  })
+
   it('keeps enum labels centralized and rejects invalid request enum names', () => {
     expect(maintenanceEnumLabel(5, MAINTENANCE_STATUS)).toBe('Awaiting Landlord Approval')
     expect(maintenanceEnumLabel(6, MAINTENANCE_CATEGORY)).toBe('Other')

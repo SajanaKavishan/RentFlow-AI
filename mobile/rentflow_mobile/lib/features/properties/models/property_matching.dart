@@ -33,9 +33,7 @@ class PropertyMatchingResponse {
   final List<PropertyMatch> matches;
   final String summary;
 
-  factory PropertyMatchingResponse.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory PropertyMatchingResponse.fromJson(Map<String, dynamic> json) {
     final matchesJson = json['matches'];
 
     if (matchesJson is! List) {
@@ -43,16 +41,16 @@ class PropertyMatchingResponse {
     }
 
     return PropertyMatchingResponse(
-      matches: matchesJson.map((item) {
-        if (item is! Map<String, dynamic>) {
-          throw const FormatException();
-        }
+      matches: matchesJson
+          .map((item) {
+            if (item is! Map<String, dynamic>) {
+              throw const FormatException();
+            }
 
-        return PropertyMatch.fromJson(item);
-      }).toList(growable: false),
-      summary: json['summary'] is String
-          ? json['summary'] as String
-          : '',
+            return PropertyMatch.fromJson(item);
+          })
+          .toList(growable: false),
+      summary: json['summary'] is String ? json['summary'] as String : '',
     );
   }
 }
@@ -77,7 +75,7 @@ class PropertyMatch {
   final int bedrooms;
   final int bathrooms;
   final List<String> amenities;
-  final int matchScore;
+  final int? matchScore;
   final List<String> matchReasons;
 
   factory PropertyMatch.fromJson(Map<String, dynamic> json) {
@@ -89,7 +87,9 @@ class PropertyMatch {
       bedrooms: _asInt(json['bedrooms']),
       bathrooms: _asInt(json['bathrooms']),
       amenities: _stringList(json['amenities']),
-      matchScore: _asInt(json['matchScore']),
+      matchScore: json['matchScore'] == null
+          ? null
+          : _asInt(json['matchScore']),
       matchReasons: _stringList(json['matchReasons']),
     );
   }
@@ -99,7 +99,8 @@ class PropertyMatch {
       return value.toDouble();
     }
 
-    return double.tryParse(value?.toString() ?? '') ?? 0;
+    return double.tryParse(value?.toString() ?? '') ??
+        (throw const FormatException('Invalid match rent.'));
   }
 
   static int _asInt(dynamic value) {
@@ -107,7 +108,8 @@ class PropertyMatch {
       return value.toInt();
     }
 
-    return int.tryParse(value?.toString() ?? '') ?? 0;
+    return int.tryParse(value?.toString() ?? '') ??
+        (throw const FormatException('Invalid match number.'));
   }
 
   static List<String> _stringList(dynamic value) {

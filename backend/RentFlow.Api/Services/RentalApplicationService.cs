@@ -11,6 +11,58 @@ namespace RentFlow.Api.Services;
 /// </summary>
 public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalApplicationService
 {
+    private const string ViewingRequired = "Complete a viewing for this property before starting a rental application.";
+
+    private IQueryable<ViewingRequest> CompletedViewings(Guid tenantId) =>
+        dbContext.ViewingRequests.AsNoTracking().Where(v => v.TenantId == tenantId && v.Status == ViewingStatus.Completed);
+
+    private Task<bool> HasCompletedViewingAsync(Guid tenantId, Guid propertyId, CancellationToken ct) =>
+        CompletedViewings(tenantId).AnyAsync(v => v.PropertyId == propertyId, ct);
+
+    private async Task EnsureCompletedViewingAsync(Guid tenantId, Guid propertyId, CancellationToken ct)
+    {
+        if (!await HasCompletedViewingAsync(tenantId, propertyId, ct))
+            throw RentalApplicationServiceException.Conflict(ViewingRequired);
+    }
+
+    public async Task<RentalApplicationEligibilityDto> GetEligibilityAsync(Guid tenantId, Guid propertyId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateTenantId(tenantId);
+        var property = await dbContext.Properties.AsNoTracking().SingleOrDefaultAsync(p => p.Id == propertyId, cancellationToken)
+            ?? throw RentalApplicationServiceException.NotFound("The property was not found.");
+        var completed = await HasCompletedViewingAsync(tenantId, propertyId, cancellationToken);
+        var existing = await dbContext.RentalApplications.AsNoTracking()
+            .Where(a => a.TenantId == tenantId && a.PropertyId == propertyId && ActiveStatuses.Contains(a.Status))
+            .OrderByDescending(a => a.CreatedAt)
+            .Select(a => new { a.Id, a.Status }).FirstOrDefaultAsync(cancellationToken);
+        return new RentalApplicationEligibilityDto
+        {
+            CanApply = completed && property.IsAvailable && existing is null,
+            HasCompletedViewing = completed,
+            Reason = existing is not null ? "You already have an active application for this property."
+                : !property.IsAvailable ? "This property is currently unavailable."
+                : !completed ? "Complete a viewing before applying for this property." : null,
+            ExistingApplicationId = existing?.Id,
+            ExistingApplicationStatus = existing?.Status
+        };
+    }
+
+    public async Task<IReadOnlyList<EligibleApplicationPropertyDto>> GetEligiblePropertiesAsync(Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateTenantId(tenantId);
+        // Query properties once: multiple Completed viewings cannot duplicate a property.
+        var completedPropertyIds = CompletedViewings(tenantId).Select(v => v.PropertyId);
+        return await dbContext.Properties.AsNoTracking()
+            .Where(p => p.IsAvailable && completedPropertyIds.Contains(p.Id)
+                && !dbContext.RentalApplications.Any(a => a.TenantId == tenantId && a.PropertyId == p.Id && ActiveStatuses.Contains(a.Status)))
+            .OrderBy(p => p.Title).ThenBy(p => p.Id)
+            .Select(p => new EligibleApplicationPropertyDto
+            { Id = p.Id, Title = p.Title, Address = p.Address, City = p.City, MonthlyRent = p.MonthlyRent })
+            .ToListAsync(cancellationToken);
+    }
+
     private static readonly RentalApplicationStatus[] ActiveStatuses =
     [
         RentalApplicationStatus.Draft,
@@ -32,11 +84,19 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
             request.Occupation,
             request.NumberOfOccupants);
 
+        await using var transaction = await ViewingPropertyLock.AcquireAsync(dbContext, request.PropertyId, cancellationToken);
+        var property = await dbContext.Properties.AsNoTracking().SingleOrDefaultAsync(p => p.Id == request.PropertyId, cancellationToken)
+            ?? throw RentalApplicationServiceException.NotFound("The property was not found.");
+        if (!property.IsAvailable)
+            throw RentalApplicationServiceException.Conflict("This property is currently unavailable.");
+
         await EnsureNoActiveApplicationAsync(
             tenantId,
             request.PropertyId,
             applicationIdToExclude: null,
             cancellationToken);
+
+        await EnsureCompletedViewingAsync(tenantId, request.PropertyId, cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
         var application = new RentalApplication
@@ -54,6 +114,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
 
         dbContext.RentalApplications.Add(application);
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
         return MapToResponse(application);
     }
@@ -187,6 +248,7 @@ public class RentalApplicationService(ApplicationDbContext dbContext) : IRentalA
 
         var now = DateTimeOffset.UtcNow;
         var isResubmission = application.Status == RentalApplicationStatus.ChangesRequested;
+        await EnsureCompletedViewingAsync(application.TenantId, application.PropertyId, cancellationToken);
         application.Status = RentalApplicationStatus.Submitted;
         application.SubmittedAt = now;
         application.UpdatedAt = now;

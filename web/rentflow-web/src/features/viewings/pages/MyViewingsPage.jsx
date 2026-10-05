@@ -71,7 +71,9 @@ export default function MyViewingsPage() {
         <div className="my-viewing-card__top"><h2>Viewing request</h2><ViewingStatusBadge status={viewing.status} /></div>
         <dl className="my-viewing-card__details">
           <div><dt>Property reference</dt><dd><code>{viewing.propertyId}</code></dd></div>
-          <div><dt>Requested date and time</dt><dd><time dateTime={viewing.requestedDateTime}>{dateTimeFormatter.format(new Date(viewing.requestedDateTime))}</time></dd></div>
+          <div><dt>Requested date and time</dt><dd><time dateTime={viewing.requestedDateTime}>{(viewing.timeZoneId
+            ? new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short', timeZone: viewing.timeZoneId })
+            : dateTimeFormatter).format(new Date(viewing.requestedDateTime))}</time>{viewing.timeZoneId && ` (${viewing.timeZoneId})`}</dd></div>
         </dl>
         {viewing.landlordResponse?.trim() && <div className="my-viewing-card__response"><h3>Landlord response</h3><p>{viewing.landlordResponse}</p></div>}
       </AppCard>)}

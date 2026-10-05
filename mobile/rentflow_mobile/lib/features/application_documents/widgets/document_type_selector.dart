@@ -20,6 +20,10 @@ class DocumentTypeSelector extends StatelessWidget {
     return DropdownButtonFormField<ApplicationDocumentType>(
       initialValue: value,
       isExpanded: true,
+      itemHeight: null,
+      selectedItemBuilder: (context) => ApplicationDocumentType.values
+          .map((type) => Text(type.label, overflow: TextOverflow.ellipsis))
+          .toList(growable: false),
       decoration: InputDecoration(
         labelText: 'Document type',
         prefixIcon: const Icon(Icons.category_outlined),
@@ -29,14 +33,17 @@ class DocumentTypeSelector extends StatelessWidget {
           .map(
             (type) => DropdownMenuItem(
               value: type,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(type.label, overflow: TextOverflow.ellipsis),
-                  ),
-                  const SizedBox(width: 8),
-                  DocumentRequirementBadge(documentType: type, compact: true),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(type.label),
+                    const SizedBox(height: 4),
+                    DocumentRequirementBadge(documentType: type, compact: true),
+                  ],
+                ),
               ),
             ),
           )

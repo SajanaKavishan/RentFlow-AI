@@ -28,6 +28,8 @@ export const MAINTENANCE_CATEGORY = defineEnum([
   ['Security', 4],
   ['Pest', 5],
   ['Other', 6],
+  ['Hvac', 7],
+  ['LocksDoors', 8],
 ])
 
 export const MAINTENANCE_PRIORITY = defineEnum([

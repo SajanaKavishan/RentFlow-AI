@@ -5,12 +5,129 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../models/property.dart';
+import '../models/property_image.dart';
+import '../models/landlord_contact.dart';
 import '../models/property_matching.dart';
+import '../models/property_preferences.dart';
 
 class PropertyApiService {
-  const PropertyApiService(this.apiClient);
+  PropertyApiService(this.apiClient);
 
   final ApiClient apiClient;
+
+  Future<LandlordContact?> getLandlordContact(String propertyId) async {
+    final response = await _send(
+      () => apiClient.get(
+        apiClient.buildUri(
+          '${ApiConstants.propertiesPath}/$propertyId/landlord-contact',
+        ),
+      ),
+    );
+    if (response.statusCode == 204) return null;
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) return null;
+    return LandlordContact.fromJson(decoded);
+  }
+
+  final Map<String, Future<List<PropertyImage>>> _imageCache = {};
+  final Map<String, ({DateTime fetchedAt, Future<String?> value})> _urlCache =
+      {};
+
+  Future<List<PropertyImage>> getImages(String propertyId) =>
+      _imageCache.putIfAbsent(propertyId, () async {
+        try {
+          final response = await _send(
+            () => apiClient.get(
+              apiClient.buildUri(
+                '${ApiConstants.propertiesPath}/$propertyId/images',
+              ),
+              authenticated: false,
+            ),
+          );
+          final decoded = jsonDecode(response.body);
+          if (decoded is! List) throw const FormatException();
+          final images = decoded
+              .map(
+                (item) => PropertyImage.fromJson(item as Map<String, dynamic>),
+              )
+              .toList();
+          images.sort((a, b) {
+            if (a.isPrimary != b.isPrimary) return a.isPrimary ? -1 : 1;
+            final order = a.sortOrder.compareTo(b.sortOrder);
+            return order != 0 ? order : a.id.compareTo(b.id);
+          });
+          return images;
+        } catch (_) {
+          _imageCache.remove(propertyId);
+          rethrow;
+        }
+      });
+
+  Future<String?> getImageUrl(String propertyId, String imageId) {
+    final key = '$propertyId/$imageId';
+    final cached = _urlCache[key];
+    if (cached != null &&
+        DateTime.now().difference(cached.fetchedAt) <
+            const Duration(minutes: 4)) {
+      return cached.value;
+    }
+    final value = _fetchImageUrl(propertyId, imageId);
+    _urlCache[key] = (fetchedAt: DateTime.now(), value: value);
+    return value;
+  }
+
+  Future<String?> _fetchImageUrl(String propertyId, String imageId) async {
+    try {
+      final response = await _send(
+        () => apiClient.get(
+          apiClient.buildUri(
+            '${ApiConstants.propertiesPath}/$propertyId/images/$imageId/url',
+          ),
+          authenticated: false,
+        ),
+      );
+      final decoded = jsonDecode(response.body);
+      final value = decoded is Map<String, dynamic> ? decoded['url'] : null;
+      return value is String && Uri.tryParse(value)?.hasScheme == true
+          ? value
+          : null;
+    } catch (_) {
+      _urlCache.remove('$propertyId/$imageId');
+      rethrow;
+    }
+  }
+
+  Future<PublicLandlordSummary> getLandlordSummary(String propertyId) async {
+    final response = await _send(
+      () => apiClient.get(
+        apiClient.buildUri(
+          '${ApiConstants.propertiesPath}/$propertyId/landlord-summary',
+        ),
+        authenticated: false,
+      ),
+    );
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) throw const FormatException();
+    return PublicLandlordSummary.fromJson(decoded);
+  }
+
+  String landlordImageUrl(String propertyId) => apiClient
+      .buildUri(
+        '${ApiConstants.propertiesPath}/$propertyId/landlord-summary/image',
+      )
+      .toString();
+
+  Future<List<Property>> getLandlordProperties(String propertyId) async {
+    final response = await _send(
+      () => apiClient.get(
+        apiClient.buildUri(
+          '${ApiConstants.propertiesPath}/$propertyId/landlord-summary/properties',
+        ),
+        authenticated: false,
+      ),
+    );
+    return _parsePropertyList(response.body);
+  }
 
   Future<List<Property>> getProperties({
     String? city,
@@ -51,28 +168,21 @@ class PropertyApiService {
       queryParameters['amenity'] = amenity.trim();
     }
 
-    final baseUri =
-        apiClient.buildUri(ApiConstants.propertiesPath);
+    final baseUri = apiClient.buildUri(ApiConstants.propertiesPath);
 
     final uri = queryParameters.isEmpty
         ? baseUri
-        : baseUri.replace(
-            queryParameters: queryParameters,
-          );
+        : baseUri.replace(queryParameters: queryParameters);
 
-    final response =
-        await _send(() => apiClient.get(uri));
+    final response = await _send(() => apiClient.get(uri));
 
     return _parsePropertyList(response.body);
   }
 
   Future<Property> getPropertyById(String id) async {
-    final uri = apiClient.buildUri(
-      '${ApiConstants.propertiesPath}/$id',
-    );
+    final uri = apiClient.buildUri('${ApiConstants.propertiesPath}/$id');
 
-    final response =
-        await _send(() => apiClient.get(uri));
+    final response = await _send(() => apiClient.get(uri));
 
     return _parseProperty(response.body);
   }
@@ -80,9 +190,7 @@ class PropertyApiService {
   Future<PropertyMatchingResponse> matchProperties(
     PropertyMatchingRequest preferences,
   ) async {
-    final uri = apiClient.buildUri(
-      '${ApiConstants.propertiesPath}/match',
-    );
+    final uri = apiClient.buildUri('${ApiConstants.propertiesPath}/match');
 
     final response = await _send(
       () => apiClient.post(
@@ -92,14 +200,97 @@ class PropertyApiService {
       ),
     );
 
-    return _parsePropertyMatchingResponse(
-      response.body,
+    return _parsePropertyMatchingResponse(response.body);
+  }
+
+  Future<bool> hasSavedMatchPreferences() async {
+    final response = await _send(
+      () =>
+          apiClient.get(apiClient.buildUri('/api/tenant/property-preferences')),
+    );
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic> || decoded['isConfigured'] is! bool) {
+      throw const FormatException('Invalid saved preferences response.');
+    }
+    return decoded['isConfigured'] as bool;
+  }
+
+  Future<PropertyMatchingResponse> getSavedPropertyMatches() async {
+    final response = await _send(
+      () => apiClient.get(
+        apiClient.buildUri('${ApiConstants.propertiesPath}/matches'),
+      ),
+    );
+    return _parsePropertyMatchingResponse(response.body);
+  }
+
+  Future<PropertyPreferences> getMatchPreferences() async {
+    final response = await _send(
+      () =>
+          apiClient.get(apiClient.buildUri('/api/tenant/property-preferences')),
+    );
+    return _parsePreferences(response.body);
+  }
+
+  Future<PropertyPreferences> saveMatchPreferences(
+    PropertyMatchingRequest preferences,
+  ) async {
+    final response = await _send(
+      () => apiClient.put(
+        apiClient.buildUri('/api/tenant/property-preferences'),
+        body: jsonEncode(preferences.toJson()),
+      ),
+    );
+    return _parsePreferences(response.body);
+  }
+
+  Future<void> resetMatchPreferences() async {
+    await _send(
+      () => apiClient.delete(
+        apiClient.buildUri('/api/tenant/property-preferences'),
+      ),
     );
   }
 
-  Future<http.Response> _send(
-    Future<http.Response> Function() request,
-  ) async {
+  PropertyPreferences _parsePreferences(String body) {
+    try {
+      final json = jsonDecode(body);
+      if (json is! Map<String, dynamic>) throw const FormatException();
+      return PropertyPreferences.fromJson(json);
+    } on FormatException {
+      throw const PropertyApiException(
+        'Unable to read your match preferences.',
+      );
+    }
+  }
+
+  Future<Set<String>> getPropertyFavorites() async {
+    final response = await _send(
+      () => apiClient.get(apiClient.buildUri('/api/tenant/property-favorites')),
+    );
+    try {
+      final json = jsonDecode(response.body);
+      final ids = json is Map<String, dynamic> ? json['propertyIds'] : null;
+      if (ids is! List || ids.any((id) => id is! String)) {
+        throw const FormatException();
+      }
+      return Set<String>.from(ids);
+    } on FormatException {
+      throw const PropertyApiException('Unable to read your saved properties.');
+    }
+  }
+
+  Future<void> setPropertyFavorite(
+    String propertyId, {
+    required bool saved,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/tenant/property-favorites/${Uri.encodeComponent(propertyId)}',
+    );
+    await _send(() => saved ? apiClient.put(uri) : apiClient.delete(uri));
+  }
+
+  Future<http.Response> _send(Future<http.Response> Function() request) async {
     late final http.Response response;
 
     try {
@@ -110,8 +301,7 @@ class PropertyApiService {
       );
     }
 
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
       throw PropertyApiException(
         _safeErrorMessage(response) ??
             'The property request failed. Please try again.',
@@ -146,13 +336,15 @@ class PropertyApiService {
         throw const FormatException();
       }
 
-      return decoded.map((item) {
-        if (item is! Map<String, dynamic>) {
-          throw const FormatException();
-        }
+      return decoded
+          .map((item) {
+            if (item is! Map<String, dynamic>) {
+              throw const FormatException();
+            }
 
-        return Property.fromJson(item);
-      }).toList(growable: false);
+            return Property.fromJson(item);
+          })
+          .toList(growable: false);
     } on FormatException {
       throw const PropertyApiException(
         'The property service returned an invalid response.',
@@ -160,8 +352,7 @@ class PropertyApiService {
     }
   }
 
-  PropertyMatchingResponse
-      _parsePropertyMatchingResponse(String body) {
+  PropertyMatchingResponse _parsePropertyMatchingResponse(String body) {
     try {
       final decoded = jsonDecode(body);
 
@@ -169,9 +360,7 @@ class PropertyApiService {
         throw const FormatException();
       }
 
-      return PropertyMatchingResponse.fromJson(
-        decoded,
-      );
+      return PropertyMatchingResponse.fromJson(decoded);
     } on FormatException {
       throw const PropertyApiException(
         'The property matching service returned an invalid response.',
@@ -179,9 +368,7 @@ class PropertyApiService {
     }
   }
 
-  String? _safeErrorMessage(
-    http.Response response,
-  ) {
+  String? _safeErrorMessage(http.Response response) {
     if (response.statusCode == 403) {
       return 'You do not have permission to access this resource.';
     }
@@ -209,15 +396,10 @@ class PropertyApiService {
         return null;
       }
 
-      for (final key in [
-        'detail',
-        'title',
-        'message',
-      ]) {
+      for (final key in ['detail', 'title', 'message']) {
         final value = decoded[key];
 
-        if (value is String &&
-            value.trim().isNotEmpty) {
+        if (value is String && value.trim().isNotEmpty) {
           return value.trim();
         }
       }
@@ -230,10 +412,7 @@ class PropertyApiService {
 }
 
 class PropertyApiException implements Exception {
-  const PropertyApiException(
-    this.message, {
-    this.statusCode,
-  });
+  const PropertyApiException(this.message, {this.statusCode});
 
   final String message;
   final int? statusCode;

@@ -182,6 +182,14 @@ describe('owned property landlord workflow integration', () => {
     expect(screen.getByRole('link', { name: /Open in Google Maps/ }))
       .toHaveAttribute('href', expect.stringContaining('query=18+Marine+Drive%2C+Colombo'))
     const management = screen.getByRole('complementary', { name: 'Manage property' })
+    expect(screen.queryByText('RentFlow AI')).not.toBeInTheDocument()
+    expect(document.querySelector('.shared-topbar__title')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Notifications' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Profile for Nila Perera' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to properties' }))
+      .toHaveAttribute('href', '/modules/manage-properties')
+    expect(within(management).getByRole('link', { name: 'Viewing availability' }))
+      .toHaveAttribute('href', `/properties/${propertyId}/viewing-availability`)
     expect(within(management).getByRole('link', { name: 'Viewing Requests' }))
       .toHaveAttribute('href', `/properties/${propertyId}/viewing-requests`)
     expect(within(management).getByRole('link', { name: 'Rental Applications' }))
@@ -204,6 +212,8 @@ describe('owned property landlord workflow integration', () => {
     expect(screen.getByRole('link', { name: 'Back to properties' }))
       .toHaveAttribute('href', '/modules/properties')
     expect(screen.queryByRole('complementary', { name: 'Manage property' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Viewing availability' })).not.toBeInTheDocument()
+    expect(document.querySelector('.shared-topbar__title')).toHaveTextContent('RentFlow AI')
 
     const propertyRead = fetch.mock.calls.find(([url]) => (
       new URL(url, 'http://localhost').pathname === `/api/properties/${propertyId}`

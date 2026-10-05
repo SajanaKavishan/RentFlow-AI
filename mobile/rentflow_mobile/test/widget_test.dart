@@ -580,10 +580,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Book a Viewing'), findsNothing);
     expect(find.byType(NavigationBar), findsOneWidget);
-    expect(
-      find.textContaining('Property selection has not been integrated yet'),
-      findsOneWidget,
-    );
+    expect(find.text('Journey unavailable'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
 
     final landlordController = buildController(

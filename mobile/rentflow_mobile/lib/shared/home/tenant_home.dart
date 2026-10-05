@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../../features/auth/models/current_user.dart';
-import '../../features/rental_applications/models/rental_application.dart';
+import '../../features/maintenance/services/maintenance_api_service.dart';
+import '../../features/notifications/services/notification_api_service.dart';
+import '../../features/properties/screens/property_details_screen.dart';
+import '../../features/properties/screens/property_matching_screen.dart';
+import '../../features/properties/services/property_api_service.dart';
+import '../../features/properties/widgets/property_photo.dart';
 import '../../features/rental_applications/services/rental_application_api_service.dart';
-import '../../features/viewings/models/viewing.dart';
 import '../../features/viewings/services/viewing_api_service.dart';
 import '../navigation/role_navigation.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
+import 'tenant_dashboard_data.dart';
 
 class TenantHome extends StatefulWidget {
   const TenantHome({
@@ -15,39 +20,42 @@ class TenantHome extends StatefulWidget {
     required this.user,
     required this.onDestinationSelected,
     required this.onOpenViewings,
-    required this.onOpenLease,
-    required this.onPayRent,
     required this.onOpenDocuments,
     required this.onOpenNotifications,
+    this.onOpenLease,
+    this.onPayRent,
     this.unreadNotificationCount,
     this.viewingApiService,
     this.rentalApplicationApiService,
+    this.propertyApiService,
+    this.notificationApiService,
+    this.maintenanceApiService,
+    this.dashboardService,
     this.now,
   });
-
   final CurrentUser user;
   final ValueChanged<RoleDestinationId> onDestinationSelected;
   final VoidCallback onOpenViewings;
-  final VoidCallback onOpenLease;
-  final VoidCallback onPayRent;
   final VoidCallback onOpenDocuments;
   final VoidCallback onOpenNotifications;
+  final VoidCallback? onOpenLease;
+  final VoidCallback? onPayRent;
   final int? unreadNotificationCount;
   final ViewingApiService? viewingApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
+  final PropertyApiService? propertyApiService;
+  final NotificationApiService? notificationApiService;
+  final MaintenanceApiService? maintenanceApiService;
+  final TenantDashboardService? dashboardService;
   final DateTime Function()? now;
-
   @override
   State<TenantHome> createState() => _TenantHomeState();
 }
 
 class _TenantHomeState extends State<TenantHome> {
-  Future<_TenantHomeSnapshot>? _snapshot;
-
-  bool get _hasActivityIntegration =>
-      widget.viewingApiService != null &&
-      widget.rentalApplicationApiService != null;
-
+  Future<TenantDashboardSnapshot>? _snapshot;
+  Future<TenantRecommendations>? _recommendations;
+  DateTime get _now => widget.now?.call() ?? DateTime.now();
   @override
   void initState() {
     super.initState();
@@ -55,190 +63,465 @@ class _TenantHomeState extends State<TenantHome> {
   }
 
   @override
-  void didUpdateWidget(covariant TenantHome oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.viewingApiService != widget.viewingApiService ||
-        oldWidget.rentalApplicationApiService !=
-            widget.rentalApplicationApiService) {
+  void didUpdateWidget(covariant TenantHome old) {
+    super.didUpdateWidget(old);
+    if (old.user.id != widget.user.id ||
+        old.viewingApiService != widget.viewingApiService ||
+        old.rentalApplicationApiService != widget.rentalApplicationApiService ||
+        old.propertyApiService != widget.propertyApiService ||
+        old.notificationApiService != widget.notificationApiService ||
+        old.maintenanceApiService != widget.maintenanceApiService ||
+        old.dashboardService != widget.dashboardService) {
       _load();
     }
   }
 
   void _load() {
-    if (!_hasActivityIntegration) {
-      _snapshot = null;
-      return;
-    }
-    _snapshot = _fetchSnapshot();
-  }
-
-  Future<_TenantHomeSnapshot> _fetchSnapshot() async {
-    final results = await Future.wait<Object>([
-      widget.viewingApiService!.getMyViewings(),
-      widget.rentalApplicationApiService!.getMyApplications(),
-    ]);
-    return _TenantHomeSnapshot(
-      viewings: results[0] as List<Viewing>,
-      applications: results[1] as List<RentalApplication>,
+    final client =
+        widget.propertyApiService?.apiClient ??
+        widget.viewingApiService?.apiClient ??
+        widget.rentalApplicationApiService?.apiClient ??
+        widget.notificationApiService?.apiClient ??
+        widget.maintenanceApiService?.apiClient;
+    final service =
+        widget.dashboardService ??
+        (client == null ? null : TenantDashboardService(client));
+    _snapshot = service?.load(
+      tenantId: widget.user.id,
+      now: _now,
+      viewings: widget.viewingApiService,
+      applications: widget.rentalApplicationApiService,
+      notifications: widget.notificationApiService,
+      maintenance: widget.maintenanceApiService,
+      properties: widget.propertyApiService,
     );
+    _loadRecommendations();
   }
 
-  void _retry() => setState(_load);
+  void _loadRecommendations() {
+    final service = widget.propertyApiService;
+    _recommendations = service == null
+        ? null
+        : TenantDashboardService.recommendations(service);
+  }
+
+  Future<void> _refresh() async {
+    setState(_load);
+    await Future.wait<Object?>([
+      ?_snapshot,
+      if (_recommendations != null)
+        _recommendations!.then<Object?>((value) => value, onError: (_) => null),
+    ]);
+  }
+
+  Future<void> _openMatching() async {
+    final service = widget.propertyApiService;
+    if (service == null) return;
+    TenantRecommendations? recommendations;
+    try {
+      recommendations = await _recommendations;
+    } catch (_) {
+      /* Matching can still be opened when recommendations fail. */
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => PropertyMatchingScreen(
+          propertyApiService: service,
+          viewingApiService: widget.viewingApiService,
+          rentalApplicationApiService: widget.rentalApplicationApiService,
+          initialResult: recommendations?.matches,
+        ),
+      ),
+    );
+    if (mounted) setState(_loadRecommendations);
+  }
+
+  void _openActivity(TenantActivity item) {
+    if (item.isNotification) {
+      widget.onOpenNotifications();
+    } else if (item.destination == RoleDestinationId.viewings) {
+      widget.onOpenViewings();
+    } else if (item.destination != null) {
+      widget.onDestinationSelected(item.destination!);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final now = (widget.now?.call() ?? DateTime.now()).toUtc().add(
-      const Duration(hours: 5, minutes: 30),
-    );
+    final local = _now.toUtc().add(const Duration(hours: 5, minutes: 30));
     return SafeArea(
       bottom: false,
-      child: AuthenticatedPage(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _TenantHomeHeader(
-              date: _formatHeaderDate(now),
-              greeting: _greetingForHour(now.hour),
-              firstName: _firstName(widget.user.fullName),
-              unreadNotificationCount: widget.unreadNotificationCount,
-              onOpenNotifications: widget.onOpenNotifications,
-            ),
-            const SizedBox(height: 18),
-            _buildJourney(),
-            const SizedBox(height: 22),
-            const _TenantSectionHeader(title: 'What would you like to do?'),
-            const SizedBox(height: 10),
-            _QuickActionGrid(
-              onOpenViewings: widget.onOpenViewings,
-              onOpenLease: widget.onOpenLease,
-              onPayRent: widget.onPayRent,
-              onOpenDocuments: widget.onOpenDocuments,
-            ),
-            _buildRecentActivity(),
-          ],
+      child: RefreshIndicator(
+        onRefresh: _refresh,
+        child: AuthenticatedPage(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _formatHeaderDate(local).toUpperCase(),
+                          style: _style(
+                            AppTypography.label,
+                            FontWeight.w700,
+                            color: AppPalette.olive,
+                            spacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${_greetingForHour(local.hour)}, ${_firstName(widget.user.fullName)}',
+                          style: _style(
+                            AppTypography.pageTitle,
+                            FontWeight.w700,
+                            height: 1.1,
+                            color: AppPalette.darkOlive,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Badge(
+                    isLabelVisible: (widget.unreadNotificationCount ?? 0) > 0,
+                    label: Text(
+                      (widget.unreadNotificationCount ?? 0) > 99
+                          ? '99+'
+                          : '${widget.unreadNotificationCount ?? 0}',
+                    ),
+                    child: IconButton(
+                      tooltip: 'Notifications',
+                      onPressed: widget.onOpenNotifications,
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                        backgroundColor: AppPalette.white,
+                        side: const BorderSide(color: AppPalette.outline),
+                      ),
+                      icon: const Icon(
+                        Icons.notifications_none_rounded,
+                        color: AppPalette.darkOlive,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              FutureBuilder<TenantDashboardSnapshot>(
+                future: _snapshot,
+                builder: (context, result) {
+                  final loading =
+                      _snapshot != null &&
+                      result.connectionState != ConnectionState.done;
+                  final unavailable =
+                      _snapshot == null ||
+                      result.hasError ||
+                      result.data?.journeyUnavailable == true;
+                  final journey = loading ? null : result.data?.journey;
+                  return _JourneyCard(
+                    status: loading
+                        ? 'Checking activity'
+                        : unavailable
+                        ? 'Unable to load'
+                        : journey?.status ?? 'No activity yet',
+                    title: loading
+                        ? 'Loading your journey'
+                        : unavailable
+                        ? 'Journey unavailable'
+                        : journey?.title ?? 'No rental journey yet',
+                    subtitle: loading
+                        ? 'Checking your rental activity.'
+                        : unavailable
+                        ? 'Your journey could not be loaded. Please try again.'
+                        : journey?.subtitle ??
+                              'Real viewing or application progress will appear here once available.',
+                    helper: journey?.helper,
+                    loading: loading,
+                    onRetry: unavailable && _snapshot != null
+                        ? () => setState(_load)
+                        : null,
+                    onTap: journey?.destination == null
+                        ? null
+                        : () {
+                            if (journey!.destination ==
+                                RoleDestinationId.viewings) {
+                              widget.onOpenViewings();
+                            } else {
+                              widget.onDestinationSelected(
+                                journey.destination!,
+                              );
+                            }
+                          },
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              _SectionHeading(
+                title: 'Recommended for You',
+                subtitle: 'Based on your preferences',
+                action: widget.propertyApiService == null
+                    ? null
+                    : _openMatching,
+              ),
+              const SizedBox(height: 12),
+              _buildRecommendations(),
+              const SizedBox(height: 24),
+              const _SectionHeading(title: 'What would you like to do?'),
+              const SizedBox(height: 8),
+              _QuickActionsRow(
+                actions: [
+                  _QuickAction(
+                    'My Viewings',
+                    Icons.calendar_month_outlined,
+                    widget.onOpenViewings,
+                  ),
+                  _QuickAction(
+                    'My Lease',
+                    Icons.article_outlined,
+                    widget.onOpenLease,
+                  ),
+                  _QuickAction(
+                    'Pay Rent',
+                    Icons.credit_card_outlined,
+                    widget.onPayRent,
+                  ),
+                  _QuickAction(
+                    'Documents',
+                    Icons.folder_outlined,
+                    widget.onOpenDocuments,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _buildActivity(),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _journeyCard({required Widget child, VoidCallback? onTap}) =>
-      _DarkJourneyCard(onTap: onTap, child: child);
-
-  VoidCallback? _journeyAction(_TenantHomeSnapshot snapshot) {
-    if (snapshot.currentApplication != null) {
-      return () => widget.onDestinationSelected(RoleDestinationId.applications);
-    }
-    if (snapshot.currentViewing != null) {
-      return () => widget.onDestinationSelected(RoleDestinationId.viewings);
-    }
-    return null;
-  }
-
-  Widget _buildJourney() {
-    if (!_hasActivityIntegration) {
-      return _journeyCard(
-        child: const _JourneyMessage(
-          status: 'Integration pending',
-          title: 'Journey summary unavailable',
-          message:
-              'Property selection has not been integrated yet. Home activity is not connected.',
-        ),
-      );
-    }
-
-    return FutureBuilder<_TenantHomeSnapshot>(
-      future: _snapshot,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return _journeyCard(
-            child: const _JourneyMessage(
-              status: 'Checking activity',
-              title: 'Loading your journey',
-              message: 'Checking your real viewing and application activity.',
-              isLoading: true,
-            ),
-          );
-        }
-        if (snapshot.hasError) {
-          return _journeyCard(
-            child: _JourneyMessage(
-              status: 'Unable to load',
-              title: 'Journey unavailable',
-              message: 'Nothing has been changed. Please try again.',
-              onRetry: _retry,
-            ),
-          );
-        }
-        final data = snapshot.data!;
-        return _journeyCard(
-          onTap: _journeyAction(data),
-          child: _JourneySummary(snapshot: data),
+  Widget _buildRecommendations() => FutureBuilder<TenantRecommendations>(
+    future: _recommendations,
+    builder: (context, result) {
+      if (_recommendations == null) {
+        return const _PanelMessage(
+          'Recommendations unavailable',
+          'Property recommendations are currently unavailable.',
         );
-      },
-    );
-  }
-
-  Widget _buildRecentActivity() {
-    if (!_hasActivityIntegration) return const SizedBox.shrink();
-    return FutureBuilder<_TenantHomeSnapshot>(
-      future: _snapshot,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.activity.isEmpty) {
-          return const SizedBox.shrink();
-        }
-        final activities = snapshot.data!.activity;
-        final visibleActivities = activities.take(3).toList(growable: false);
-        return Padding(
-          padding: const EdgeInsets.only(top: 22),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _TenantSectionHeader(
-                title: 'Recent activity',
-                trailing: activities.length > 3
-                    ? TextButton(
-                        onPressed: () => _showAllActivities(activities),
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(44, 44),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          foregroundColor: AppPalette.olive,
-                          textStyle: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+      }
+      if (result.connectionState != ConnectionState.done) {
+        return Semantics(
+          label: 'Loading recommendations',
+          child: SizedBox(
+            height: 240,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: 2,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (_, _) => Container(
+                width: 220,
+                decoration: BoxDecoration(
+                  color: AppPalette.softCream,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: ColoredBox(color: AppPalette.sage)),
+                    Padding(
+                      padding: EdgeInsets.all(16),
+                      child: LinearProgressIndicator(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+      if (result.hasError) {
+        return _PanelMessage(
+          'Recommendations unavailable',
+          'We could not load your matches. Please try again.',
+          action: () => setState(_loadRecommendations),
+          actionLabel: 'Retry recommendations',
+        );
+      }
+      final data = result.data!;
+      if (!data.configured) {
+        return _PanelMessage(
+          'Make yourself at home',
+          'Set your preferences to get smarter recommendations.',
+          action: _openMatching,
+          actionLabel: 'Find my matches',
+        );
+      }
+      if (data.items.isEmpty) {
+        return _PanelMessage(
+          data.partialFailure
+              ? 'Recommendations unavailable'
+              : 'No available matches yet',
+          data.partialFailure
+              ? 'Some property details could not be loaded. Please try again.'
+              : 'No available properties match your saved preferences right now.',
+          action: data.partialFailure
+              ? () => setState(_loadRecommendations)
+              : _openMatching,
+          actionLabel: data.partialFailure
+              ? 'Retry recommendations'
+              : 'Explore matches',
+        );
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = (constraints.maxWidth * 0.73).clamp(220.0, 300.0);
+              final height = data.items
+                  .map(
+                    (item) =>
+                        _RecommendationCard.heightFor(context, item, width),
+                  )
+                  .reduce((a, b) => a > b ? a : b);
+              return SizedBox(
+                height: height,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: data.items.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 12),
+                  itemBuilder: (_, index) => SizedBox(
+                    width: width,
+                    child: _RecommendationCard(
+                      item: data.items[index],
+                      service: widget.propertyApiService!,
+                      onTap: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => PropertyDetailsScreen(
+                            property: data.items[index].property,
+                            propertyApiService: widget.propertyApiService!,
+                            viewingApiService: widget.viewingApiService,
+                            rentalApplicationApiService:
+                                widget.rentalApplicationApiService,
+                            matchScore: data.items[index].match.matchScore,
+                            matchReasons: data.items[index].match.matchReasons,
                           ),
                         ),
-                        child: const Text('See all'),
-                      )
-                    : null,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          if (data.partialFailure)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Some property details could not be loaded.',
+                style: _style(
+                  AppTypography.bodySmall,
+                  FontWeight.w400,
+                  color: AppPalette.secondaryText,
+                ),
               ),
-              const SizedBox(height: 10),
+            ),
+        ],
+      );
+    },
+  );
+  Widget _buildActivity() => FutureBuilder<TenantDashboardSnapshot>(
+    future: _snapshot,
+    builder: (context, result) {
+      final data = result.data;
+      final items = data?.activities ?? <TenantActivity>[];
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SectionHeading(
+            title: 'Recent activity',
+            action: items.length > 3 ? () => _showAllActivities(items) : null,
+          ),
+          const SizedBox(height: 12),
+          if (_snapshot != null &&
+              result.connectionState != ConnectionState.done)
+            const _PanelMessage(
+              'Loading recent activity',
+              'Checking your account updates.',
+              loading: true,
+            )
+          else if (_snapshot == null ||
+              result.hasError ||
+              data?.successfulSources == 0)
+            _PanelMessage(
+              'Activity unavailable',
+              'We could not load your recent activity.',
+              action: _snapshot == null ? null : () => setState(_load),
+              actionLabel: 'Retry activity',
+            )
+          else ...[
+            if (data!.failedSources.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Some activity could not be loaded (${data.failedSources.toSet().join(', ')}).',
+                      style: _style(
+                        AppTypography.bodySmall,
+                        FontWeight.w400,
+                        color: AppPalette.secondaryText,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => setState(_load),
+                      child: const Text('Retry activity'),
+                    ),
+                  ],
+                ),
+              ),
+            if (items.isEmpty)
+              const _PanelMessage(
+                'No recent activity',
+                'Viewing, application, lease, payment and maintenance updates will appear here.',
+              )
+            else
               Column(
                 key: const Key('tenant-home-activity-list'),
                 children: [
-                  for (var index = 0; index < visibleActivities.length; index++)
+                  for (var index = 0; index < items.take(3).length; index++)
                     Padding(
-                      padding: EdgeInsets.only(
-                        bottom: index < visibleActivities.length - 1 ? 8 : 0,
-                      ),
+                      padding: EdgeInsets.only(bottom: index < 2 ? 8 : 0),
                       child: AppCard(
                         key: ValueKey('tenant-home-activity-$index'),
                         padding: EdgeInsets.zero,
                         child: _ActivityTile(
-                          activity: visibleActivities[index],
+                          activity: items[index],
+                          now: _now,
+                          onTap:
+                              items[index].destination != null ||
+                                  items[index].isNotification
+                              ? () => _openActivity(items[index])
+                              : null,
                         ),
                       ),
                     ),
                 ],
               ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showAllActivities(List<_TenantActivity> activities) {
+          ],
+        ],
+      );
+    },
+  );
+  void _showAllActivities(List<TenantActivity> items) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -246,23 +529,33 @@ class _TenantHomeState extends State<TenantHome> {
       showDragHandle: true,
       builder: (context) => SafeArea(
         child: FractionallySizedBox(
-          heightFactor: 0.72,
+          heightFactor: 0.75,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             child: Column(
               key: const Key('tenant-all-activity-sheet'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const _TenantSectionHeader(title: 'All recent activity'),
+                const _SectionHeading(title: 'All recent activity'),
                 const SizedBox(height: 12),
                 Expanded(
                   child: ListView.separated(
-                    itemCount: activities.length,
+                    itemCount: items.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (_, index) => AppCard(
-                      key: ValueKey('tenant-all-activity-$index'),
                       padding: EdgeInsets.zero,
-                      child: _ActivityTile(activity: activities[index]),
+                      child: _ActivityTile(
+                        activity: items[index],
+                        now: _now,
+                        onTap:
+                            items[index].destination != null ||
+                                items[index].isNotification
+                            ? () {
+                                Navigator.of(context).pop();
+                                _openActivity(items[index]);
+                              }
+                            : null,
+                      ),
                     ),
                   ),
                 ),
@@ -275,154 +568,45 @@ class _TenantHomeState extends State<TenantHome> {
   }
 }
 
-class _DarkJourneyCard extends StatelessWidget {
-  const _DarkJourneyCard({required this.child, this.onTap});
+TextStyle _style(
+  TextStyle base,
+  FontWeight weight, {
+  double height = 1.4,
+  Color color = AppPalette.primaryText,
+  double? spacing,
+}) => base.copyWith(
+  fontWeight: weight,
+  height: height,
+  color: color,
+  letterSpacing: spacing,
+);
 
-  final Widget child;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final content = Padding(padding: const EdgeInsets.all(16), child: child);
-    return Container(
-      key: const Key('tenant-journey-card'),
-      decoration: BoxDecoration(
-        color: AppPalette.darkOlive,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppPalette.darkOlive.withValues(alpha: 0.12),
-            blurRadius: 14,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Material(
-        color: Colors.transparent,
-        child: onTap == null ? content : InkWell(onTap: onTap, child: content),
-      ),
-    );
-  }
+double _measuredHeight(
+  BuildContext context,
+  TextSpan span,
+  double width, {
+  int? maxLines,
+}) {
+  final painter = TextPainter(
+    text: TextSpan(
+      text: span.text,
+      children: span.children,
+      style: DefaultTextStyle.of(context).style.merge(span.style),
+    ),
+    textScaler: MediaQuery.textScalerOf(context),
+    textDirection: Directionality.of(context),
+    maxLines: maxLines,
+  )..layout(maxWidth: width);
+  final height = painter.height.ceilToDouble();
+  painter.dispose();
+  return height;
 }
 
-class _JourneyMessage extends StatelessWidget {
-  const _JourneyMessage({
-    required this.status,
-    required this.title,
-    required this.message,
-    this.isLoading = false,
-    this.onRetry,
-  });
-
-  final String status;
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading({required this.title, this.subtitle, this.action});
   final String title;
-  final String message;
-  final bool isLoading;
-  final VoidCallback? onRetry;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: _JourneyStatusPill(
-                label: status,
-                tone: StatusTone.neutral,
-              ),
-            ),
-          ),
-          if (isLoading)
-            const SizedBox.square(
-              dimension: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppPalette.sage,
-              ),
-            ),
-        ],
-      ),
-      const SizedBox(height: 14),
-      Text(
-        title,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          color: AppPalette.white,
-          fontSize: 16,
-          height: 1.18,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      const SizedBox(height: 6),
-      Text(
-        message,
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall?.copyWith(color: AppPalette.sage, height: 1.35),
-      ),
-      if (onRetry != null) ...[
-        const SizedBox(height: 10),
-        TextButton.icon(
-          onPressed: onRetry,
-          style: TextButton.styleFrom(
-            foregroundColor: AppPalette.sage,
-            minimumSize: const Size(44, 44),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-          ),
-          icon: const Icon(Icons.refresh_rounded, size: 16),
-          label: const Text('Try again'),
-        ),
-      ],
-    ],
-  );
-}
-
-class _TenantSectionHeader extends StatelessWidget {
-  const _TenantSectionHeader({required this.title, this.trailing});
-
-  final String title;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Expanded(
-        child: Text(
-          title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: AppPalette.primaryText,
-            fontSize: 16,
-            height: 1.2,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-      if (trailing != null) ...[
-        const SizedBox(width: AppSpacing.sm),
-        trailing!,
-      ],
-    ],
-  );
-}
-
-class _TenantHomeHeader extends StatelessWidget {
-  const _TenantHomeHeader({
-    required this.date,
-    required this.greeting,
-    required this.firstName,
-    required this.onOpenNotifications,
-    this.unreadNotificationCount,
-  });
-
-  final String date;
-  final String greeting;
-  final String firstName;
-  final VoidCallback onOpenNotifications;
-  final int? unreadNotificationCount;
-
+  final String? subtitle;
+  final VoidCallback? action;
   @override
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,529 +616,594 @@ class _TenantHomeHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              date.toUpperCase(),
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: AppPalette.olive,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
+              title,
+              style: _style(
+                AppTypography.sectionTitle,
+                FontWeight.w700,
+                height: 1.2,
               ),
             ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              '$greeting, $firstName',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: AppPalette.darkOlive,
-                fontSize: 26,
-                height: 1.04,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.5,
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                subtitle!,
+                style: _style(
+                  AppTypography.bodySmall,
+                  FontWeight.w400,
+                  color: AppPalette.secondaryText,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
-      const SizedBox(width: AppSpacing.md),
-      Material(
-        color: AppPalette.white,
-        shape: const CircleBorder(side: BorderSide(color: AppPalette.outline)),
-        clipBehavior: Clip.antiAlias,
-        child: Badge(
-          isLabelVisible: unreadNotificationCount != null,
-          label: Text(
-            unreadNotificationCount != null && unreadNotificationCount! > 99
-                ? '99+'
-                : '${unreadNotificationCount ?? ''}',
+      if (action != null)
+        TextButton(
+          onPressed: action,
+          style: TextButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
-          child: IconButton(
-            tooltip: 'Notifications',
-            onPressed: onOpenNotifications,
-            icon: const Icon(
-              Icons.notifications_none_rounded,
-              color: AppPalette.darkOlive,
-            ),
-          ),
+          child: const Text('See all', style: AppTypography.bodySmall),
         ),
-      ),
     ],
   );
 }
 
-class _JourneySummary extends StatelessWidget {
-  const _JourneySummary({required this.snapshot});
-
-  final _TenantHomeSnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    final application = snapshot.currentApplication;
-    if (application != null) {
-      final status = _applicationStatus(application.status);
-      return _ActiveJourney(
-        statusLabel: status.$1,
-        tone: status.$2,
-        title: switch (application.status) {
-          RentalApplicationStatus.draft => 'Your application is in draft',
-          RentalApplicationStatus.submitted => 'Your application is submitted',
-          RentalApplicationStatus.underReview =>
-            'Your application is being reviewed',
-          RentalApplicationStatus.changesRequested =>
-            'Your application needs changes',
-          RentalApplicationStatus.approved => 'Your application is approved',
-          _ => 'Rental application',
-        },
-        reference: 'Property reference: ${application.propertyId}',
-        progress:
-            'Move-in requested for ${_formatDate(application.moveInDate)}',
-      );
-    }
-
-    final viewing = snapshot.currentViewing;
-    if (viewing != null) {
-      final status = _viewingStatus(viewing.status);
-      return _ActiveJourney(
-        statusLabel: status.$1,
-        tone: status.$2,
-        title: viewing.status == ViewingStatus.approved
-            ? 'Your viewing is approved'
-            : 'Your viewing is awaiting approval',
-        reference: 'Property reference: ${viewing.propertyId}',
-        progress: 'Requested for ${_formatDateTime(viewing.requestedDateTime)}',
-      );
-    }
-
-    return const _JourneyMessage(
-      status: 'No activity yet',
-      title: 'No rental journey yet',
-      message:
-          'Real viewing or application progress will appear here once available.',
-    );
-  }
-}
-
-class _ActiveJourney extends StatelessWidget {
-  const _ActiveJourney({
-    required this.statusLabel,
-    required this.tone,
+class _JourneyCard extends StatelessWidget {
+  const _JourneyCard({
+    required this.status,
     required this.title,
-    required this.reference,
-    required this.progress,
+    required this.subtitle,
+    this.helper,
+    this.loading = false,
+    this.onTap,
+    this.onRetry,
   });
-
-  final String statusLabel;
-  final StatusTone tone;
-  final String title;
-  final String reference;
-  final String progress;
-
+  final String status, title, subtitle;
+  final String? helper;
+  final bool loading;
+  final VoidCallback? onTap, onRetry;
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: _JourneyStatusPill(label: statusLabel, tone: tone),
-            ),
+  Widget build(BuildContext context) => Container(
+    key: const Key('tenant-journey-card'),
+    decoration: BoxDecoration(
+      color: AppPalette.darkOlive,
+      borderRadius: BorderRadius.circular(22),
+      boxShadow: [
+        BoxShadow(
+          color: AppPalette.darkOlive.withValues(alpha: 0.12),
+          blurRadius: 18,
+          offset: const Offset(0, 8),
+        ),
+      ],
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppPalette.softCream,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          status.toUpperCase(),
+                          style: _style(
+                            AppTypography.caption,
+                            FontWeight.w700,
+                            spacing: 0.8,
+                            color: AppPalette.darkOlive,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (onTap != null)
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppPalette.sage,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: _style(
+                  AppTypography.sectionTitle,
+                  FontWeight.w700,
+                  height: 1.15,
+                  color: AppPalette.white,
+                ),
+              ),
+              if (subtitle.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  subtitle,
+                  style: _style(
+                    AppTypography.body,
+                    FontWeight.w500,
+                    height: 1.35,
+                    color: AppPalette.sage,
+                  ),
+                ),
+              ],
+              if (helper != null) ...[
+                const SizedBox(height: 18),
+                Container(
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: AppPalette.sage.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  helper!,
+                  style: _style(
+                    AppTypography.label,
+                    FontWeight.w500,
+                    color: AppPalette.sage,
+                  ),
+                ),
+              ],
+              if (loading) ...[
+                const SizedBox(height: 12),
+                const LinearProgressIndicator(color: AppPalette.sage),
+              ],
+              if (onRetry != null)
+                TextButton(
+                  onPressed: onRetry,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppPalette.white,
+                  ),
+                  child: const Text('Try again'),
+                ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Icon(
-            Icons.chevron_right_rounded,
-            size: 20,
-            color: AppPalette.sage.withValues(alpha: 0.72),
-          ),
-        ],
-      ),
-      const SizedBox(height: 14),
-      Text(
-        title,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          color: AppPalette.white,
-          fontSize: 16,
-          height: 1.18,
-          fontWeight: FontWeight.w600,
         ),
       ),
-      const SizedBox(height: 6),
-      Text(
-        reference,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall?.copyWith(color: AppPalette.sage, height: 1.3),
-      ),
-      const SizedBox(height: 14),
-      // A status accent, not a percentage: the API does not report progress.
-      ExcludeSemantics(
-        child: Container(
-          height: 3,
-          decoration: BoxDecoration(
-            color: AppPalette.sage.withValues(alpha: 0.65),
-            borderRadius: BorderRadius.circular(AppRadii.pill),
-          ),
-        ),
-      ),
-      const SizedBox(height: 9),
-      Text(
-        progress,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: AppPalette.sage,
-          fontSize: 11,
-          height: 1.3,
-        ),
-      ),
-    ],
+    ),
   );
 }
 
-class _JourneyStatusPill extends StatelessWidget {
-  const _JourneyStatusPill({required this.label, required this.tone});
-
-  final String label;
-  final StatusTone tone;
-
+class _PanelMessage extends StatelessWidget {
+  const _PanelMessage(
+    this.title,
+    this.subtitle, {
+    this.action,
+    this.actionLabel,
+    this.loading = false,
+  });
+  final String title, subtitle;
+  final VoidCallback? action;
+  final String? actionLabel;
+  final bool loading;
   @override
-  Widget build(BuildContext context) {
-    final background = switch (tone) {
-      StatusTone.progress || StatusTone.success => AppPalette.sage,
-      _ => AppPalette.softCream,
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(AppRadii.pill),
-      ),
-      child: Text(
-        label.toUpperCase(),
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: AppPalette.darkOlive,
-          fontSize: 9,
-          height: 1.2,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.7,
+  Widget build(BuildContext context) => AppCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: _style(AppTypography.cardTitle, FontWeight.w600)),
+        const SizedBox(height: 6),
+        Text(
+          subtitle,
+          style: _style(
+            AppTypography.bodySmall,
+            FontWeight.w400,
+            color: AppPalette.secondaryText,
+          ),
         ),
-      ),
-    );
-  }
+        if (loading) ...[
+          const SizedBox(height: 12),
+          const LinearProgressIndicator(),
+        ],
+        if (action != null)
+          TextButton(
+            onPressed: action,
+            child: Text(actionLabel ?? 'Try again'),
+          ),
+      ],
+    ),
+  );
 }
 
-class _QuickActionGrid extends StatelessWidget {
-  const _QuickActionGrid({
-    required this.onOpenViewings,
-    required this.onOpenLease,
-    required this.onPayRent,
-    required this.onOpenDocuments,
-  });
+class _QuickAction {
+  const _QuickAction(this.label, this.icon, this.onTap);
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+}
 
-  final VoidCallback onOpenViewings;
-  final VoidCallback onOpenLease;
-  final VoidCallback onPayRent;
-  final VoidCallback onOpenDocuments;
+class _QuickActionsRow extends StatelessWidget {
+  const _QuickActionsRow({required this.actions});
+  final List<_QuickAction> actions;
 
   @override
-  Widget build(BuildContext context) {
-    final actions = [
-      _QuickAction(
-        label: 'My Viewings',
-        icon: Icons.calendar_month_outlined,
-        onTap: onOpenViewings,
-      ),
-      _QuickAction(
-        label: 'My Lease',
-        icon: Icons.article_outlined,
-        onTap: onOpenLease,
-      ),
-      _QuickAction(
-        label: 'Pay Rent',
-        icon: Icons.credit_card_outlined,
-        onTap: onPayRent,
-      ),
-      _QuickAction(
-        label: 'Documents',
-        icon: Icons.folder_outlined,
-        onTap: onOpenDocuments,
-      ),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const gap = AppSpacing.md;
-        final width = (constraints.maxWidth - gap) / 2;
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      const gap = 7.0;
+      const visibleCards = 3;
+      const labelStyle = TextStyle(
+        fontSize: AppTypography.labelSize,
+        fontWeight: FontWeight.w600,
+        height: 1.25,
+        color: AppPalette.primaryText,
+      );
+      final scaler = MediaQuery.textScalerOf(context);
+      var minimumWidth = 88.0;
+      // At larger text sizes, allow each word to remain legible in two lines.
+      // The row scrolls when these cards no longer fit the available width.
+      if (scaler.scale(12) > 12) {
+        for (final action in actions) {
+          for (final word in action.label.split(' ')) {
+            final painter = TextPainter(
+              text: TextSpan(
+                text: word,
+                style: DefaultTextStyle.of(context).style.merge(labelStyle),
+              ),
+              textScaler: scaler,
+              textDirection: Directionality.of(context),
+            )..layout();
+            final wordWidth = painter.width.ceilToDouble() + 20;
+            if (wordWidth > minimumWidth) {
+              minimumWidth = wordWidth;
+            }
+            painter.dispose();
+          }
+        }
+      }
+      final fittedWidth =
+          (constraints.maxWidth - gap * (visibleCards - 1)) / visibleCards;
+      final width = fittedWidth < minimumWidth ? minimumWidth : fittedWidth;
+      final labelHeight = scaler.scale(12) * 1.25 * 2;
+      final height = labelHeight + 58;
+      return SingleChildScrollView(
+        key: const Key('tenant-quick-actions-row'),
+        scrollDirection: Axis.horizontal,
+        child: Row(
           children: [
-            for (final action in actions)
+            for (var index = 0; index < actions.length; index++) ...[
+              if (index > 0) const SizedBox(width: gap),
               Semantics(
                 button: true,
-                label: action.label,
-                onTap: action.onTap,
+                enabled: actions[index].onTap != null,
+                label: actions[index].label,
+                onTap: actions[index].onTap,
                 child: ExcludeSemantics(
                   child: SizedBox(
                     width: width,
-                    child: AppCard(
-                      padding: const EdgeInsets.all(13),
-                      onTap: action.onTap,
-                      child: SizedBox(
-                        height:
-                            44 +
-                            (MediaQuery.textScalerOf(context).scale(13) * 1.25)
-                                    .ceilToDouble() *
-                                2,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: AppPalette.softCream,
-                                borderRadius: BorderRadius.circular(10),
+                    height: height,
+                    child: Card(
+                      key: ValueKey('tenant-quick-action-$index'),
+                      margin: EdgeInsets.zero,
+                      elevation: 0,
+                      color: AppPalette.white,
+                      clipBehavior: Clip.antiAlias,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(color: AppPalette.outline),
+                      ),
+                      child: InkWell(
+                        onTap: actions[index].onTap,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: AppPalette.softCream,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  actions[index].icon,
+                                  color: AppPalette.olive,
+                                  size: 19,
+                                ),
                               ),
-                              child: Icon(
-                                action.icon,
-                                size: 19,
-                                color: AppPalette.olive,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                height: labelHeight,
+                                child: Center(
                                   child: Text(
-                                    action.label,
+                                    actions[index].label,
                                     maxLines: 2,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelLarge
-                                        ?.copyWith(
-                                          color: AppPalette.primaryText,
-                                          fontSize: 13,
-                                          height: 1.25,
-                                        ),
+                                    textAlign: TextAlign.center,
+                                    style: labelStyle,
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                const Icon(
-                                  Icons.chevron_right_rounded,
-                                  size: 16,
-                                  color: AppPalette.secondaryText,
-                                ),
-                              ],
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _QuickAction {
-  const _QuickAction({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-}
-
-class _ActivityTile extends StatelessWidget {
-  const _ActivityTile({required this.activity});
-
-  final _TenantActivity activity;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-    child: Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: const BoxDecoration(
-            color: AppPalette.sage,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(activity.icon, size: 17, color: AppPalette.olive),
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                activity.title,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: AppPalette.primaryText,
-                  fontSize: 12,
-                  height: 1.25,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                activity.statusLabel,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppPalette.secondaryText,
-                  fontSize: 11,
-                  height: 1.25,
-                ),
-              ),
             ],
-          ),
+          ],
         ),
-        const SizedBox(width: AppSpacing.sm),
-        Flexible(
-          fit: FlexFit.tight,
-          child: Text(
-            _formatDate(activity.occurredAt),
-            textAlign: TextAlign.right,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppPalette.secondaryText,
-              fontSize: 10,
-              height: 1.3,
-            ),
-          ),
-        ),
-      ],
-    ),
+      );
+    },
   );
 }
 
-class _TenantHomeSnapshot {
-  _TenantHomeSnapshot({
-    required List<Viewing> viewings,
-    required List<RentalApplication> applications,
-  }) : viewings = List.unmodifiable(viewings),
-       applications = List.unmodifiable(applications);
-
-  final List<Viewing> viewings;
-  final List<RentalApplication> applications;
-
-  RentalApplication? get currentApplication {
-    final active = applications.where(
-      (application) =>
-          application.status != RentalApplicationStatus.rejected &&
-          application.status != RentalApplicationStatus.withdrawn,
-    );
-    return _latestApplication(active);
-  }
-
-  Viewing? get currentViewing {
-    final active = viewings.where(
-      (viewing) =>
-          viewing.status == ViewingStatus.pending ||
-          viewing.status == ViewingStatus.approved,
-    );
-    return _latestViewing(active);
-  }
-
-  List<_TenantActivity> get activity {
-    final items = <_TenantActivity>[
-      ...applications.map((application) {
-        final status = _applicationStatus(application.status);
-        return _TenantActivity(
-          title: 'Application updated',
-          occurredAt: application.updatedAt ?? application.createdAt,
-          statusLabel: status.$1,
-          tone: status.$2,
-          icon: Icons.description_outlined,
-        );
-      }),
-      ...viewings.map((viewing) {
-        final status = _viewingStatus(viewing.status);
-        return _TenantActivity(
-          title: 'Viewing updated',
-          occurredAt: viewing.updatedAt ?? viewing.createdAt,
-          statusLabel: status.$1,
-          tone: status.$2,
-          icon: Icons.calendar_month_outlined,
-        );
-      }),
-    ]..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
-    return items;
-  }
-
-  RentalApplication? _latestApplication(Iterable<RentalApplication> values) {
-    RentalApplication? latest;
-    for (final value in values) {
-      if (latest == null ||
-          (value.updatedAt ?? value.createdAt).isAfter(
-            latest.updatedAt ?? latest.createdAt,
-          )) {
-        latest = value;
-      }
-    }
-    return latest;
-  }
-
-  Viewing? _latestViewing(Iterable<Viewing> values) {
-    Viewing? latest;
-    for (final value in values) {
-      if (latest == null ||
-          (value.updatedAt ?? value.createdAt).isAfter(
-            latest.updatedAt ?? latest.createdAt,
-          )) {
-        latest = value;
-      }
-    }
-    return latest;
-  }
-}
-
-class _TenantActivity {
-  const _TenantActivity({
-    required this.title,
-    required this.occurredAt,
-    required this.statusLabel,
-    required this.tone,
-    required this.icon,
+class _RecommendationCard extends StatelessWidget {
+  const _RecommendationCard({
+    required this.item,
+    required this.service,
+    required this.onTap,
   });
+  final TenantRecommendation item;
+  final PropertyApiService service;
+  final VoidCallback onTap;
 
-  final String title;
-  final DateTime occurredAt;
-  final String statusLabel;
-  final StatusTone tone;
-  final IconData icon;
+  static TextSpan rentSpan(TenantRecommendation item) => TextSpan(
+    text: 'Rs. ${dashboardMoney(item.property.monthlyRent)}',
+    style: _style(
+      AppTypography.cardTitle,
+      FontWeight.w700,
+      color: AppPalette.olive,
+    ),
+    children: [
+      TextSpan(
+        text: '/mo',
+        style: _style(
+          AppTypography.bodySmall,
+          FontWeight.w500,
+          color: AppPalette.secondaryText,
+        ),
+      ),
+    ],
+  );
+
+  static String facts(TenantRecommendation item) =>
+      '${item.property.bedrooms == 0 ? 'Studio' : '${item.property.bedrooms} BD'} \u00b7 ${item.property.bathrooms} BA';
+
+  static double heightFor(
+    BuildContext context,
+    TenantRecommendation item,
+    double width,
+  ) {
+    final contentWidth = width - 28;
+    return 142 +
+        28 +
+        24 +
+        _measuredHeight(
+          context,
+          TextSpan(
+            text: item.property.title,
+            style: _style(
+              AppTypography.cardTitle,
+              FontWeight.w700,
+              height: 1.2,
+            ),
+          ),
+          contentWidth,
+          maxLines: 2,
+        ) +
+        _measuredHeight(
+          context,
+          TextSpan(
+            text: item.property.city,
+            style: _style(AppTypography.bodySmall, FontWeight.w400),
+          ),
+          contentWidth,
+          maxLines: 1,
+        ) +
+        _measuredHeight(context, rentSpan(item), contentWidth) +
+        _measuredHeight(
+          context,
+          TextSpan(
+            text: facts(item),
+            style: _style(AppTypography.label, FontWeight.w500),
+          ),
+          contentWidth,
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final property = item.property;
+    final score = item.match.matchScore;
+    return Semantics(
+      button: true,
+      label: 'View ${property.title}',
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(18),
+              ),
+              child: SizedBox(
+                height: 142,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    PropertyPhoto(
+                      propertyId: property.id,
+                      propertyApiService: service,
+                    ),
+                    if (score != null && score >= 0 && score <= 100)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppPalette.sage,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text(
+                            '$score% match',
+                            style: _style(
+                              AppTypography.caption,
+                              FontWeight.w700,
+                              color: AppPalette.darkOlive,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      property.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: _style(
+                        AppTypography.cardTitle,
+                        FontWeight.w700,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      property.city,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _style(
+                        AppTypography.bodySmall,
+                        FontWeight.w400,
+                        color: AppPalette.secondaryText,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text.rich(rentSpan(item)),
+                    const SizedBox(height: 5),
+                    Text(
+                      facts(item),
+                      style: _style(
+                        AppTypography.label,
+                        FontWeight.w500,
+                        color: AppPalette.secondaryText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-(String, StatusTone) _applicationStatus(RentalApplicationStatus status) =>
-    switch (status) {
-      RentalApplicationStatus.draft => ('Draft', StatusTone.neutral),
-      RentalApplicationStatus.submitted => ('Submitted', StatusTone.pending),
-      RentalApplicationStatus.underReview => (
-        'Under review',
-        StatusTone.progress,
+class _ActivityTile extends StatelessWidget {
+  const _ActivityTile({required this.activity, required this.now, this.onTap});
+  final TenantActivity activity;
+  final DateTime now;
+  final VoidCallback? onTap;
+  @override
+  Widget build(BuildContext context) {
+    final local = activity.timestamp.toUtc().add(
+      const Duration(hours: 5, minutes: 30),
+    );
+    final today = now.toUtc().add(const Duration(hours: 5, minutes: 30));
+    final timestamp =
+        local.year == today.year &&
+            local.month == today.month &&
+            local.day == today.day
+        ? 'Today'
+        : dashboardDate(local);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppPalette.sage,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(activity.icon, size: 20, color: AppPalette.olive),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    activity.title,
+                    style: _style(AppTypography.bodyLarge, FontWeight.w600),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    activity.subtitle,
+                    style: _style(
+                      AppTypography.bodySmall,
+                      FontWeight.w400,
+                      color: AppPalette.secondaryText,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    timestamp,
+                    style: _style(
+                      AppTypography.label,
+                      FontWeight.w500,
+                      color: AppPalette.secondaryText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (onTap != null)
+              const Padding(
+                padding: EdgeInsets.only(left: 4),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: AppPalette.secondaryText,
+                ),
+              ),
+          ],
+        ),
       ),
-      RentalApplicationStatus.changesRequested => (
-        'Changes requested',
-        StatusTone.warning,
-      ),
-      RentalApplicationStatus.approved => ('Approved', StatusTone.success),
-      RentalApplicationStatus.rejected => ('Rejected', StatusTone.danger),
-      RentalApplicationStatus.withdrawn => ('Withdrawn', StatusTone.neutral),
-    };
-
-(String, StatusTone) _viewingStatus(ViewingStatus status) => switch (status) {
-  ViewingStatus.pending => ('Pending', StatusTone.pending),
-  ViewingStatus.approved => ('Approved', StatusTone.success),
-  ViewingStatus.rejected => ('Rejected', StatusTone.danger),
-  ViewingStatus.cancelled => ('Cancelled', StatusTone.neutral),
-  ViewingStatus.completed => ('Completed', StatusTone.success),
-};
+    );
+  }
+}
 
 String _firstName(String fullName) {
   final trimmed = fullName.trim();
@@ -994,33 +1243,4 @@ String _formatHeaderDate(DateTime value) {
     'December',
   ];
   return '${weekdays[value.weekday - 1]}, ${value.day} ${months[value.month - 1]}';
-}
-
-String _formatDate(DateTime value) {
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  final local = value.toLocal();
-  return '${months[local.month - 1]} ${local.day}, ${local.year}';
-}
-
-String _formatDateTime(DateTime value) {
-  final local = value.toLocal();
-  final hour = local.hour == 0
-      ? 12
-      : (local.hour > 12 ? local.hour - 12 : local.hour);
-  final minute = local.minute.toString().padLeft(2, '0');
-  final period = local.hour >= 12 ? 'PM' : 'AM';
-  return '${_formatDate(local)} at $hour:$minute $period';
 }

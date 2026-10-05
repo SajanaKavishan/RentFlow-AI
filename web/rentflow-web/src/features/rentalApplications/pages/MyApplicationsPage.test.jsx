@@ -102,6 +102,8 @@ describe('Tenant My Applications', () => {
     fetch.mockImplementation((url) => Promise.resolve(json(
       url.endsWith(`/api/properties/${propertyId}`)
         ? { id: propertyId, title: 'Lake View Apartment', address: '18 Lake Road', city: 'Colombo', isAvailable: false }
+        : url.endsWith('/rental-application-eligibility')
+          ? { canApply: false, hasCompletedViewing: true, existingApplicationId: firstId, existingApplicationStatus: 2 }
         : url.endsWith('/api/rental-applications')
           ? [application(firstId, 2, { submittedAt: '2026-09-12T10:00:00Z' })]
           : { unreadCount: 0 },
@@ -111,7 +113,7 @@ describe('Tenant My Applications', () => {
 
     expect(await screen.findByRole('heading', { name: 'Lake View Apartment' })).toBeInTheDocument()
     expect(screen.getByText('18 Lake Road, Colombo')).toBeInTheDocument()
-    expect(screen.getByText(/currently unavailable.*Existing applications remain available/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Your existing application remains available/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Back to property/ }))
       .toHaveAttribute('href', `/properties/${propertyId}`)
     expect(fetch.mock.calls.some(([url]) => url.endsWith(`/api/properties/${propertyId}`))).toBe(true)

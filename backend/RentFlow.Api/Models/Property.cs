@@ -59,6 +59,10 @@ public class Property
 
     public bool IsAvailable { get; set; } = true;
 
+    // Settings alone do not configure availability: no windows means no slots.
+    public int ViewingSlotDurationMinutes { get; set; } = 60;
+    public string ViewingTimeZoneId { get; set; } = "Asia/Colombo";
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset? UpdatedAt { get; set; }

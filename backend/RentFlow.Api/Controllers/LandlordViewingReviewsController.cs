@@ -1,0 +1,21 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using RentFlow.Api.DTOs.ViewingReviews;
+using RentFlow.Api.Models;
+using RentFlow.Api.Services;
+using RentFlow.Api.Services.Interfaces;
+
+namespace RentFlow.Api.Controllers;
+
+[ApiController]
+[Authorize(Roles = nameof(UserRole.Landlord))]
+[Route("api/landlord/viewing-reviews/summary")]
+public sealed class LandlordViewingReviewsController(ViewingReviewService reviews, ICurrentUserService currentUser) : ControllerBase
+{
+    [HttpGet]
+    public async Task<ActionResult<LandlordViewingReviewSummaryDto>> Get(CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not Guid landlord) return Unauthorized();
+        return Ok(await reviews.GetLandlordSummaryAsync(landlord, cancellationToken));
+    }
+}

@@ -27,6 +27,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<ViewingRequest> ViewingRequests => Set<ViewingRequest>();
 
+    public DbSet<ViewingFollowUp> ViewingFollowUps => Set<ViewingFollowUp>();
+    public DbSet<ViewingReview> ViewingReviews => Set<ViewingReview>();
+
+    public DbSet<PropertyViewingAvailability> PropertyViewingAvailabilities => Set<PropertyViewingAvailability>();
+
     public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
 
     public DbSet<RentalOffer> RentalOffers => Set<RentalOffer>();
@@ -104,6 +109,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(user => user.PasswordHash)
                 .HasMaxLength(512)
                 .IsRequired(false);
+
+            entity.Property(user => user.PublicContactPhone).HasMaxLength(32);
+            entity.Property(user => user.PublicContactEnabled).HasDefaultValue(false);
 
             entity.Property(user => user.Role)
                 .HasConversion<string>()
@@ -582,9 +590,29 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // =========================================================
         // VIEWING REQUESTS
         // =========================================================
+        modelBuilder.Entity<PropertyViewingAvailability>(entity =>
+        {
+            entity.HasKey(w => w.Id);
+            entity.HasOne<Property>().WithMany().HasForeignKey(w => w.PropertyId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(w => new { w.PropertyId, w.DayOfWeek }).IsUnique();
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ViewingWindow_Weekday", "\"DayOfWeek\" BETWEEN 0 AND 6");
+                t.HasCheckConstraint("CK_ViewingWindow_Times", "NOT \"IsEnabled\" OR \"StartTime\" < \"EndTime\"");
+            });
+        });
+        modelBuilder.Entity<Property>().Property(p => p.ViewingTimeZoneId).HasMaxLength(100).HasDefaultValue("Asia/Colombo");
+        modelBuilder.Entity<Property>().Property(p => p.ViewingSlotDurationMinutes).HasDefaultValue(60);
+        modelBuilder.Entity<Property>().ToTable(t => t.HasCheckConstraint("CK_Property_ViewingDuration", "\"ViewingSlotDurationMinutes\" IN (30,45,60,90)"));
         modelBuilder.Entity<ViewingRequest>(entity =>
         {
             entity.HasKey(viewing => viewing.Id);
+            entity.Property(v => v.DurationMinutes).HasDefaultValue(60);
+            entity.HasIndex(v => new { v.PropertyId, v.Status, v.RequestedDateTime });
+            entity.HasIndex(v => v.RequestedDateTime);
+            entity.HasIndex(v => v.Status);
+            entity.HasIndex(v => new { v.TenantId, v.PropertyId, v.RequestedDateTime });
+            entity.ToTable(t => t.HasCheckConstraint("CK_Viewing_Duration", "\"DurationMinutes\" > 0"));
 
             entity.Property(viewing => viewing.TenantId)
                 .IsRequired();
@@ -614,6 +642,32 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // =========================================================
         // RENTAL APPLICATIONS
         // =========================================================
+        modelBuilder.Entity<ViewingFollowUp>(entity =>
+        {
+            entity.HasKey(f => f.Id);
+            entity.HasIndex(f => f.ViewingId).IsUnique();
+            entity.HasIndex(f => new { f.TenantId, f.ClaimedAt });
+            entity.HasOne<ViewingRequest>().WithOne().HasForeignKey<ViewingFollowUp>(f => f.ViewingId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(f => f.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(f => f.Decision).HasConversion<string>().HasMaxLength(16);
+            entity.ToTable(t => t.HasCheckConstraint("CK_ViewingFollowUp_Response",
+                "(\"Decision\" IS NULL AND \"RespondedAt\" IS NULL) OR (\"Decision\" IS NOT NULL AND \"Decision\" IN ('ApplyNow','NotNow') AND \"RespondedAt\" IS NOT NULL)"));
+        });
+
+        modelBuilder.Entity<ViewingReview>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            entity.HasIndex(r => r.ViewingId).IsUnique();
+            entity.HasIndex(r => new { r.PropertyId, r.CreatedAt });
+            entity.HasIndex(r => new { r.LandlordId, r.CreatedAt });
+            entity.HasOne<ViewingRequest>().WithOne().HasForeignKey<ViewingReview>(r => r.ViewingId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Property>().WithMany().HasForeignKey(r => r.PropertyId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(r => r.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(r => r.LandlordId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(r => r.Comment).HasMaxLength(500);
+            entity.ToTable(t => t.HasCheckConstraint("CK_ViewingReview_Ratings", "\"PropertyRating\" BETWEEN 1 AND 5 AND \"LandlordRating\" BETWEEN 1 AND 5"));
+        });
+
         modelBuilder.Entity<RentalApplication>(entity =>
         {
             entity.HasKey(application => application.Id);
@@ -1262,6 +1316,19 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<MaintenanceRequest>(entity =>
         {
             entity.HasKey(request => request.Id);
+
+            entity.Property(request => request.ReferenceCode)
+                .HasMaxLength(19)
+                .HasComputedColumnSql("'MR-' || upper(substr(md5(\"Id\"::text), 1, 16))", stored: true)
+                .IsRequired();
+            entity.HasIndex(request => request.ReferenceCode).IsUnique();
+            entity.Property(request => request.PreferredAccessWindow)
+                .HasConversion<string>()
+                .HasMaxLength(16)
+                .IsRequired(false);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_MaintenanceRequest_PreferredAccessWindow",
+                "\"PreferredAccessWindow\" IS NULL OR \"PreferredAccessWindow\" IN ('Morning', 'Afternoon', 'Evening')"));
 
             entity.Property(request => request.PropertyId)
                 .IsRequired();

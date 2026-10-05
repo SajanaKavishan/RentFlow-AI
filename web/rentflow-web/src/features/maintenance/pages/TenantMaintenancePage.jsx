@@ -27,6 +27,7 @@ const DEFAULT_FORM = {
   category: 'Plumbing',
   priority: 'Normal',
   tenantAccessNotes: '',
+  preferredAccessWindow: '',
 }
 
 const MAINTENANCE_CATEGORIES = Object.keys(MAINTENANCE_CATEGORY.byName)
@@ -240,9 +241,10 @@ function TenantMaintenancePage() {
     if (
       !propertyId ||
       !form.title.trim() ||
-      !form.description.trim()
+      !form.description.trim() ||
+      !form.preferredAccessWindow
     ) {
-      setFormError('Please complete the property, title, and description fields.')
+      setFormError('Please complete the property, title, description, and preferred access time fields.')
       return
     }
 
@@ -263,6 +265,7 @@ function TenantMaintenancePage() {
         category: form.category,
         priority: form.priority,
         tenantAccessNotes: form.tenantAccessNotes.trim() || null,
+        preferredAccessWindow: form.preferredAccessWindow,
       }
 
       const createdRequest = await createMaintenanceRequest(tenantId, payload)
@@ -530,6 +533,16 @@ function TenantMaintenancePage() {
                   </select>
                 </label>
               </div>
+
+              <label>
+                Preferred access time
+                <select name="preferredAccessWindow" value={form.preferredAccessWindow} onChange={handleChange} required>
+                  <option value="">Choose an access time</option>
+                  <option value="Morning">Morning 8-12</option>
+                  <option value="Afternoon">Afternoon 12-5</option>
+                  <option value="Evening">Evening 5-8</option>
+                </select>
+              </label>
 
               <label>
                 Tenant access notes

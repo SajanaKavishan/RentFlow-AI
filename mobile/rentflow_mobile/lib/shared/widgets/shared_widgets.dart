@@ -74,7 +74,7 @@ class PageHeader extends StatelessWidget {
         ],
       ),
       if (subtitle != null) ...[
-        const SizedBox(height: AppSpacing.sm),
+        const SizedBox(height: 6),
         Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium),
       ],
     ],
@@ -162,7 +162,7 @@ class StatusChip extends StatelessWidget {
       StatusTone.neutral => (AppPalette.neutral, AppPalette.softCream),
       StatusTone.pending ||
       StatusTone.warning => (AppPalette.warning, AppPalette.pending),
-      StatusTone.progress => (const Color(0xFF43556A), AppPalette.progress),
+      StatusTone.progress => (AppPalette.darkOlive, AppPalette.progress),
       StatusTone.success => (AppPalette.success, AppPalette.sage),
       StatusTone.danger => (AppPalette.danger, const Color(0xFFF5DDDC)),
     };

@@ -17,8 +17,9 @@ public class ViewingServiceTests
         var service = new ViewingService(context);
         var tenantId = Guid.NewGuid();
         var propertyId = Guid.NewGuid();
-        var requestedDateTime = DateTimeOffset.UtcNow.AddDays(2);
+        var requestedDateTime = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(2).AddHours(3.5));
         context.Properties.Add(CreateProperty(propertyId));
+        AddSchedule(context, propertyId);
         await context.SaveChangesAsync();
 
         var result = await service.CreateAsync(tenantId, new CreateViewingRequestDto
@@ -47,7 +48,7 @@ public class ViewingServiceTests
 
         var exception = await Assert.ThrowsAsync<ViewingServiceException>(() =>
             service.CreateAsync(Guid.NewGuid(), new CreateViewingRequestDto
-            {
+            { TenantMessage = "Please arrange a visit.",
                 PropertyId = Guid.NewGuid(),
                 RequestedDateTime = DateTimeOffset.UtcNow.AddDays(-1)
             }));
@@ -63,11 +64,12 @@ public class ViewingServiceTests
         var service = new ViewingService(context);
         var tenantId = Guid.NewGuid();
         var propertyId = Guid.NewGuid();
-        var requestedDateTime = DateTimeOffset.UtcNow.AddDays(3);
+        var requestedDateTime = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(3).AddHours(3.5));
         context.Properties.Add(CreateProperty(propertyId));
+        AddSchedule(context, propertyId);
         await context.SaveChangesAsync();
         var request = new CreateViewingRequestDto
-        {
+        { TenantMessage = "Please arrange a visit.",
             PropertyId = propertyId,
             RequestedDateTime = requestedDateTime
         };
@@ -88,15 +90,16 @@ public class ViewingServiceTests
         await using var context = CreateContext(saveInterceptor);
         var property = CreateProperty(Guid.NewGuid());
         context.Properties.Add(property);
+        AddSchedule(context, property.Id);
         await context.SaveChangesAsync();
         var service = new ViewingService(context);
         saveInterceptor.ShouldFail = true;
 
         await Assert.ThrowsAsync<DbUpdateException>(() =>
             service.CreateAsync(Guid.NewGuid(), new CreateViewingRequestDto
-            {
+            { TenantMessage = "Please arrange a visit.",
                 PropertyId = property.Id,
-                RequestedDateTime = DateTimeOffset.UtcNow.AddDays(2)
+                RequestedDateTime = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(2).AddHours(3.5))
             }));
 
         saveInterceptor.ShouldFail = false;
@@ -324,6 +327,13 @@ public class ViewingServiceTests
 
         context.ViewingRequests.Add(viewing);
         return viewing;
+    }
+
+    private static void AddSchedule(ApplicationDbContext context, Guid id)
+    {
+        context.PropertyViewingAvailabilities.AddRange(Enumerable.Range(0, 7).Select(day =>
+            new PropertyViewingAvailability { PropertyId = id, DayOfWeek = day, IsEnabled = true,
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0) }));
     }
 
     private static Property CreateProperty(Guid propertyId) => new()

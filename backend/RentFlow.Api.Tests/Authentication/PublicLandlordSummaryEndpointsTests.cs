@@ -11,6 +11,119 @@ namespace RentFlow.Api.Tests.Authentication;
 public sealed class PublicLandlordSummaryEndpointsTests
 {
     [Fact]
+    public async Task ProfileWithImage_ExposesAvailabilityWithoutStorageOrContactFields()
+    {
+        await using var factory = new AuthApiFactory();
+        var propertyId = await SeedPropertyAsync(factory, withImage: true);
+        using var client = factory.CreateHttpsClient();
+        using var response = await client.GetAsync($"/api/properties/{propertyId}/landlord-summary");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.GetProperty("hasProfileImage").GetBoolean());
+        Assert.Equal(new[] { "displayName", "hasProfileImage", "memberSinceYear" },
+            json.RootElement.EnumerateObject().Select(p => p.Name).Order().ToArray());
+        Assert.DoesNotContain("profiles/", json.RootElement.GetRawText());
+        // Image metadata can exist while the image itself is unavailable.
+        using var missing = await client.GetAsync($"/api/properties/{propertyId}/landlord-summary/image");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Fact]
+    public async Task Listings_IncludeOnlyThisLandlordsAvailableTenantBrowseProperties()
+    {
+        await using var factory = new AuthApiFactory();
+        var propertyId = await SeedPropertyAsync(factory);
+        var otherPropertyId = await SeedPropertyAsync(factory);
+        Guid upcomingId;
+        Guid unavailableId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var anchor = await db.Properties.SingleAsync(p => p.Id == propertyId);
+            var upcoming = new Property { Id = Guid.NewGuid(), LandlordId = anchor.LandlordId,
+                Title = "Upcoming home", Description = "Available soon", Address = "2 Lake Road", City = "Colombo",
+                IsAvailable = true, AvailableFrom = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(1)) };
+            var unavailable = new Property { Id = Guid.NewGuid(), LandlordId = anchor.LandlordId,
+                Title = "Unavailable home", Description = "Not currently offered", Address = "3 Lake Road", City = "Colombo",
+                IsAvailable = false };
+            db.Properties.AddRange(upcoming, unavailable);
+            await db.SaveChangesAsync();
+            upcomingId = upcoming.Id;
+            unavailableId = unavailable.Id;
+        }
+        using var client = factory.CreateHttpsClient();
+        using var response = await client.GetAsync($"/api/properties/{propertyId}/landlord-summary/properties");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var items = json.RootElement.EnumerateArray().ToArray();
+        var ids = items.Select(item => item.GetProperty("id").GetGuid()).ToArray();
+        Assert.Equal(2, ids.Length);
+        Assert.Contains(propertyId, ids);
+        Assert.Contains(upcomingId, ids);
+        Assert.DoesNotContain(otherPropertyId, ids);
+        Assert.DoesNotContain(unavailableId, ids);
+        Assert.All(items, item => Assert.True(item.GetProperty("isAvailable").GetBoolean()));
+        using var browse = await client.GetAsync("/api/properties?isAvailable=true");
+        browse.EnsureSuccessStatusCode();
+        using var browseJson = JsonDocument.Parse(await browse.Content.ReadAsStringAsync());
+        var browseIds = browseJson.RootElement.EnumerateArray().Select(p => p.GetProperty("id").GetGuid()).ToArray();
+        Assert.All(ids, id => Assert.Contains(id, browseIds));
+        Assert.Equal(browseJson.RootElement[0].EnumerateObject().Select(p => p.Name).Order(),
+            items[0].EnumerateObject().Select(p => p.Name).Order());
+        foreach (var field in new[] { "phoneNumber", "email", "passwordHash", "tokenVersion", "storageKey", "notificationPreferences" })
+            Assert.DoesNotContain($"\"{field}\"", json.RootElement.GetRawText());
+        Assert.DoesNotContain("landlord@example.test", json.RootElement.GetRawText());
+        Assert.DoesNotContain("+94112223344", json.RootElement.GetRawText());
+    }
+
+    [Theory]
+    [InlineData(false, UserRole.Landlord)]
+    [InlineData(true, UserRole.Tenant)]
+    [InlineData(true, UserRole.Admin)]
+    public async Task InvalidLandlord_ReturnsNotFoundForEveryPublicProfileResource(bool active, UserRole role)
+    {
+        await using var factory = new AuthApiFactory();
+        var propertyId = await SeedPropertyAsync(factory, landlordActive: active, role: role, withImage: true);
+        using var client = factory.CreateHttpsClient();
+        foreach (var suffix in new[] { "", "/image", "/properties" })
+        {
+            using var response = await client.GetAsync($"/api/properties/{propertyId}/landlord-summary{suffix}");
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+            Assert.DoesNotContain("landlord@example.test", await response.Content.ReadAsStringAsync());
+        }
+    }
+
+    [Fact]
+    public async Task UnknownProperty_DoesNotExposeAUserLookup()
+    {
+        await using var factory = new AuthApiFactory();
+        using var client = factory.CreateHttpsClient();
+        foreach (var suffix in new[] { "", "/image", "/properties" })
+        {
+            using var response = await client.GetAsync($"/api/properties/{Guid.NewGuid()}/landlord-summary{suffix}");
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task ProfileWithNoAvailableListings_ReturnsAnEmptyList()
+    {
+        await using var factory = new AuthApiFactory();
+        var propertyId = await SeedPropertyAsync(factory);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            (await db.Properties.SingleAsync(p => p.Id == propertyId)).IsAvailable = false;
+            await db.SaveChangesAsync();
+        }
+        using var client = factory.CreateHttpsClient();
+        using var response = await client.GetAsync($"/api/properties/{propertyId}/landlord-summary/properties");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Empty(json.RootElement.EnumerateArray());
+    }
+
+    [Fact]
     public async Task Summary_ReturnsOnlyApprovedFieldsForPropertyLandlord()
     {
         await using var factory = new AuthApiFactory();

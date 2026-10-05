@@ -12,18 +12,36 @@ public sealed class MaintenanceAttachmentService(
     IFileStorageService fileStorageService,
     ILogger<MaintenanceAttachmentService> logger) : IMaintenanceAttachmentService
 {
-    private const long MaximumFileSizeBytes = 10 * 1024 * 1024;
+    public const long MaximumFileSizeBytes = 10 * 1024 * 1024;
+    public const int MaximumAttachments = 5;
     private static readonly TimeSpan SignedUrlLifetime = TimeSpan.FromMinutes(10);
     private static readonly IReadOnlyDictionary<string, string> AllowedContentTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        ["image/jpeg"] = "jpg", ["image/png"] = "png", ["image/webp"] = "webp"
+        ["image/jpeg"] = "jpg",
+        ["image/png"] = "png",
+        ["image/webp"] = "webp"
     };
 
     public async Task<MaintenanceAttachmentResponseDto> UploadAsync(Guid requestId, Guid tenantId, Stream content, string fileName, string contentType, long fileSize, string? attachmentType, CancellationToken cancellationToken = default)
     {
         ValidateRequestAndTenantIds(requestId, tenantId);
         ValidateUpload(content, contentType, fileSize, attachmentType);
+        // Serialize the count check and insert for this request on PostgreSQL.
+        // In-memory unit tests retain the same validation without relational SQL.
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
+        if (transaction is not null)
+        {
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM \"MaintenanceRequests\" WHERE \"Id\" = {requestId} AND \"TenantId\" = {tenantId} FOR UPDATE",
+                cancellationToken);
+        }
         await GetOwnedRequestAsync(requestId, tenantId, cancellationToken);
+        if (await dbContext.MaintenanceAttachments.CountAsync(
+            item => item.MaintenanceRequestId == requestId, cancellationToken) >= MaximumAttachments)
+        {
+            throw MaintenanceRequestServiceException.Validation("A request can have up to 5 photos. Remove a photo before adding another.");
+        }
 
         var normalizedContentType = contentType.Trim().ToLowerInvariant();
         var attachmentId = Guid.NewGuid();
@@ -32,14 +50,24 @@ public sealed class MaintenanceAttachmentService(
 
         var attachment = new MaintenanceAttachment
         {
-            Id = attachmentId, MaintenanceRequestId = requestId, StorageKey = storageKey,
-            FileName = SanitizeFileName(fileName), ContentType = normalizedContentType,
-            FileSize = fileSize, AttachmentType = NormalizeOptionalText(attachmentType),
-            UploadedByUserId = tenantId, CreatedAt = DateTimeOffset.UtcNow
+            Id = attachmentId,
+            MaintenanceRequestId = requestId,
+            StorageKey = storageKey,
+            FileName = SanitizeFileName(fileName),
+            ContentType = normalizedContentType,
+            FileSize = fileSize,
+            AttachmentType = NormalizeOptionalText(attachmentType),
+            UploadedByUserId = tenantId,
+            CreatedAt = DateTimeOffset.UtcNow
         };
         dbContext.MaintenanceAttachments.Add(attachment);
         try { await dbContext.SaveChangesAsync(cancellationToken); }
         catch { await TryDeleteOrphanedUploadAsync(storageKey); throw; }
+        if (transaction is not null)
+        {
+            try { await transaction.CommitAsync(cancellationToken); }
+            catch { await TryDeleteOrphanedUploadAsync(storageKey); throw; }
+        }
         return Map(attachment);
     }
 

@@ -333,6 +333,7 @@ void main() {
         description: 'Heating unit is making a loud knocking sound.',
         category: MaintenanceCategory.electrical,
         priority: MaintenancePriority.normal,
+        preferredAccessWindow: PreferredAccessWindow.morning,
         tenantAccessNotes: 'Please ring the front bell.',
       );
 

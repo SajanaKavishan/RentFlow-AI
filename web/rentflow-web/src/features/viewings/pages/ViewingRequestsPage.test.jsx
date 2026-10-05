@@ -18,6 +18,7 @@ const property = {
 const pendingViewing = {
   id: 'pending-viewing',
   tenantId,
+  tenant: { displayName: 'Chamodya Sayanjali', phoneNumber: null },
   propertyId,
   requestedDateTime: '2030-01-02T10:00:00Z',
   status: 0,
@@ -31,6 +32,7 @@ const approvedViewing = {
   ...pendingViewing,
   id: 'approved-viewing',
   tenantId: '33333333-3333-3333-3333-333333333333',
+  tenant: { displayName: 'Alex Tenant', phoneNumber: null },
   status: 1,
   tenantMessage: null,
   landlordResponse: 'The storage space will be available to inspect.',
@@ -74,10 +76,66 @@ afterEach(() => {
 })
 
 describe('Landlord viewing requests', () => {
+  it('loads Approved contact through viewing details and removes it after a cancellation refresh', async () => {
+    let cancelled = false
+    const phone = '+94 77 123 4567'
+    const fetchMock = vi.fn().mockImplementation((url) => {
+      if (url.includes(`/api/viewings/property/${propertyId}`)) {
+        return Promise.resolve(jsonResponse([approvedViewing]))
+      }
+      expect(url).toContain(`/api/viewings/${approvedViewing.id}`)
+      return Promise.resolve(jsonResponse({
+        ...approvedViewing,
+        status: cancelled ? 3 : 1,
+        tenant: { displayName: 'Alex Tenant', phoneNumber: cancelled ? null : phone },
+      }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { container } = renderPage()
+    expect(await screen.findByText(phone)).toBeInTheDocument()
+    expect(container.querySelector('a[href^="tel:"]')).toBeNull()
+    expect(screen.queryByRole('button', { name: /call tenant/i })).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    cancelled = true
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await screen.findByRole('article')
+    expect(within(screen.getByRole('article')).getByText('Cancelled')).toBeInTheDocument()
+    expect(screen.queryByText(phone)).not.toBeInTheDocument()
+  })
+
+  it('hides contact if Approved detail access fails, even when the list has stale contact', async () => {
+    const phone = '+94 77 123 4567'
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => Promise.resolve(
+      url.includes('/property/')
+        ? jsonResponse([{ ...approvedViewing, tenant: { ...approvedViewing.tenant, phoneNumber: phone } }])
+        : jsonResponse({}, 404),
+    )))
+    renderPage()
+    await screen.findByRole('article')
+    expect(screen.getByText('Alex Tenant')).toBeInTheDocument()
+    expect(screen.queryByText(phone)).not.toBeInTheDocument()
+  })
+
+  it('shows contact from the authoritative approval response', async () => {
+    const phone = '+94 77 123 4567'
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse([pendingViewing]))
+      .mockResolvedValueOnce(jsonResponse({
+        ...pendingViewing, status: 1,
+        tenant: { ...pendingViewing.tenant, phoneNumber: phone },
+      })))
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve request' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm approval' }))
+    expect(await screen.findByText(phone)).toBeInTheDocument()
+    expect(within(screen.getByRole('article')).getByText('Approved')).toBeInTheDocument()
+  })
+
   it('uses the page title without a redundant workspace eyebrow', () => {
     renderPage(null)
     expect(screen.getByRole('heading', { name: 'Viewing Requests' })).toBeInTheDocument()
     expect(screen.queryByText('Landlord workspace')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Manage viewing availability' })).not.toBeInTheDocument()
   })
 
   it('prioritizes pending requests and shows real references and messages', async () => {
@@ -96,13 +154,16 @@ describe('Landlord viewing requests', () => {
     expect(cards).toHaveLength(2)
     expect(screen.getByRole('link', { name: 'Back to Property' }))
       .toHaveAttribute('href', `/properties/${propertyId}`)
+    expect(screen.getByRole('link', { name: 'Manage viewing availability' }))
+      .toHaveAttribute('href', `/properties/${propertyId}/viewing-availability`)
     expect(screen.getByRole('group', { name: 'Selected property' }))
       .toHaveTextContent('Harbour View Residence18 Marine Drive, Colombo')
     const counts = screen.getByRole('group', { name: 'Viewing request counts' })
     expect(within(counts).getByText('Total').parentElement).toHaveTextContent('2')
     expect(within(counts).getByText('Pending').parentElement).toHaveTextContent('1')
     expect(within(cards[0]).getByText('Pending')).toBeInTheDocument()
-    expect(within(cards[0]).getByText(tenantId)).toBeInTheDocument()
+    expect(within(cards[0]).getByText('Chamodya Sayanjali')).toBeInTheDocument()
+    expect(within(cards[0]).queryByText(tenantId)).not.toBeInTheDocument()
     expect(within(cards[0]).getByText('Harbour View Residence')).toBeInTheDocument()
     expect(within(cards[0]).getByText('18 Marine Drive, Colombo')).toBeInTheDocument()
     expect(within(cards[0]).getByText('Submitted').nextElementSibling)
@@ -308,7 +369,7 @@ describe('Landlord viewing requests', () => {
     expect(screen.getAllByRole('article')).toHaveLength(1)
     expect(screen.getByText('The storage space will be available to inspect.')).toBeInTheDocument()
 
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search viewing requests' }), tenantId)
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search viewing requests' }), 'Chamodya')
     expect(screen.getByText('No matching viewing requests')).toBeInTheDocument()
   })
 

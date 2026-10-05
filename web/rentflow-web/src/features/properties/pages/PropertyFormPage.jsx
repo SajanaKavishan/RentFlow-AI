@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import PropertyImageGallery from '../components/PropertyImageGallery.jsx'
 import PropertyLocationPicker from '../components/PropertyLocationPicker.jsx'
 import {
@@ -285,9 +285,8 @@ export default function PropertyFormPage() {
     return () => { active = false }
   }, [isEditing, loadAttempt, propertyId])
 
-  const isDirty = status === 'ready' && (
-    formSnapshot(form) !== initialSnapshot || files.length > 0
-  )
+  const listingDirty = status === 'ready' && (formSnapshot(form) !== initialSnapshot || files.length > 0)
+  const isDirty = listingDirty
 
   useEffect(() => {
     if (!isDirty) return undefined
@@ -457,7 +456,7 @@ export default function PropertyFormPage() {
       return
     }
 
-    if (isEditing && !isDirty) return
+    if (isEditing && !listingDirty) return
 
     for (const candidateStep of [0, 1, 2]) {
       const errors = validateStep(candidateStep, form, locationMode)
@@ -979,7 +978,7 @@ export default function PropertyFormPage() {
               <button
                 type="submit"
                 className="property-button property-button--primary"
-                disabled={saving || (isEditing && !isDirty)}
+                disabled={saving || (isEditing && !listingDirty)}
               >
                 {saving
                   ? isEditing ? 'Saving changes...' : 'Creating property...'
@@ -989,6 +988,15 @@ export default function PropertyFormPage() {
           </div>
         </form>
       </section>
+      {isEditing && ownedPropertyId && <section className="property-availability-link" aria-labelledby="property-availability-link-title">
+        <div>
+          <h2 id="property-availability-link-title">Viewing availability</h2>
+          <p>Manage tenant viewing times separately.</p>
+        </div>
+        <Link className="property-button property-button--quiet" to={`/properties/${encodeURIComponent(ownedPropertyId)}/viewing-availability`}>
+          Manage viewing availability <Icon name="arrow" size={17} />
+        </Link>
+      </section>}
     </main>
   )
 }

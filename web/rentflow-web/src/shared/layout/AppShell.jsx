@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, matchPath, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/useAuth.js'
 import { navigationForRole } from '../navigation/roleNavigation.js'
 import Icon from '../ui/Icons.jsx'
@@ -27,6 +27,7 @@ function navigationPath(pathname) {
 function iconForItem(label) {
   if (label === 'Dashboard') return 'home'
   if (label === 'Profile') return 'user'
+  if (label === 'Reviews') return 'star'
   if (/Viewing|Viewings/.test(label)) return 'calendar'
   if (/Maintenance/.test(label)) return 'tools'
   if (/Application|AI|System|Lease|Payment/.test(label)) return 'document'
@@ -46,6 +47,10 @@ export default function AppShell() {
   const { user, logout } = useAuth()
   const portalRole = user.role === USER_ROLES.MAINTENANCE_TECHNICIAN ? 'Technician' : user.role
   const location = useLocation()
+  const isLandlordPropertyDetails = user.role === USER_ROLES.LANDLORD
+    && location.pathname !== '/properties/new'
+    && Boolean(matchPath('/properties/:propertyId', location.pathname))
+  const isViewingAvailability = Boolean(matchPath('/properties/:propertyId/viewing-availability', location.pathname))
   const [countResult, setCountResult] = useState(null)
   const unreadCount = countResult?.userId === user.id ? countResult.count : null
   const notificationCountStatus = countResult?.userId !== user.id
@@ -171,7 +176,7 @@ export default function AppShell() {
     }
   }, [accountOpen, location.pathname])
   const items = navigationForRole(user.role)
-  const current = (activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : activePath === '/modules/users' ? 'User Management' : activePath === '/viewing-requests' ? 'Viewings Management' : activePath === '/rental-applications' ? 'Applications Management' : items.find((item) => item.path === activePath)?.label)
+  const current = (isViewingAvailability ? 'Viewing availability' : activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : activePath === '/modules/users' ? 'User Management' : activePath === '/viewing-requests' ? 'Viewings Management' : activePath === '/rental-applications' ? 'Applications Management' : items.find((item) => item.path === activePath)?.label)
     || (location.pathname === '/unauthorized' ? 'Access restricted' : 'RentFlow AI')
   const closeMenu = () => { setMenu({ path: location.pathname, open: false }); if (menuOpen) menuRef.current?.focus() }
   const navLink = (item) => {
@@ -203,7 +208,7 @@ export default function AppShell() {
     <div className="shared-shell__body">
       <header className="shared-topbar">
         <button ref={menuRef} type="button" className="shared-menu-button" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="shared-navigation" onClick={() => setMenu({ path: location.pathname, open: !menuOpen })}><Icon name={menuOpen ? 'close' : 'menu'} size={22} /></button>
-        {activePath !== '/notifications' && <div className="shared-topbar__title"><strong>{current}</strong></div>}
+        {activePath !== '/notifications' && !isLandlordPropertyDetails && <div className="shared-topbar__title"><strong>{current}</strong></div>}
         <NotificationPopover key={user.id} userId={user.id} unreadCount={unreadCount} refreshCount={refreshCount} onOpen={() => { closeMenu(); setAccountMenu({ path: location.pathname, open: false }) }} />
         <button ref={accountButtonRef} className="shared-topbar__account" type="button" title={user.email} aria-label={`Profile for ${user.fullName}`} aria-haspopup="dialog" aria-expanded={accountOpen} onClick={() => { closeMenu(); setAccountMenu({ path: location.pathname, open: !accountOpen }) }}><ProfileAvatar user={user} className="shared-avatar" /><span className="shared-topbar__identity"><span className="shared-topbar__name">{user.fullName}</span></span></button>
         {accountOpen && <section ref={accountPopupRef} className="shared-account-popup" role="dialog" aria-label="Account menu">

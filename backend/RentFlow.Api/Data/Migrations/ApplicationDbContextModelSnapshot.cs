@@ -122,6 +122,15 @@ namespace RentFlow.Api.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<bool>("PublicContactEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("PublicContactPhone")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -468,11 +477,22 @@ namespace RentFlow.Api.Data.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<string>("PreferredAccessWindow")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<int>("Priority")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("PropertyId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ReferenceCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(19)
+                        .HasColumnType("character varying(19)")
+                        .HasComputedColumnSql("'MR-' || upper(substr(md5(\"Id\"::text), 1, 16))", true);
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -503,6 +523,9 @@ namespace RentFlow.Api.Data.Migrations
 
                     b.HasIndex("PropertyId");
 
+                    b.HasIndex("ReferenceCode")
+                        .IsUnique();
+
                     b.HasIndex("Status");
 
                     b.HasIndex("TechnicianId");
@@ -517,7 +540,10 @@ namespace RentFlow.Api.Data.Migrations
 
                     b.HasIndex("TenantId", "CreatedAt");
 
-                    b.ToTable("MaintenanceRequests");
+                    b.ToTable("MaintenanceRequests", t =>
+                        {
+                            t.HasCheckConstraint("CK_MaintenanceRequest_PreferredAccessWindow", "\"PreferredAccessWindow\" IS NULL OR \"PreferredAccessWindow\" IN ('Morning', 'Afternoon', 'Evening')");
+                        });
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.MaintenanceStatusHistory", b =>
@@ -935,6 +961,18 @@ namespace RentFlow.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("ViewingSlotDurationMinutes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(60);
+
+                    b.Property<string>("ViewingTimeZoneId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("Asia/Colombo");
+
                     b.HasKey("Id");
 
                     b.HasIndex("City");
@@ -945,7 +983,10 @@ namespace RentFlow.Api.Data.Migrations
 
                     b.HasIndex("MonthlyRent");
 
-                    b.ToTable("Properties");
+                    b.ToTable("Properties", t =>
+                        {
+                            t.HasCheckConstraint("CK_Property_ViewingDuration", "\"ViewingSlotDurationMinutes\" IN (30,45,60,90)");
+                        });
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.PropertyAmenity", b =>
@@ -1028,6 +1069,40 @@ namespace RentFlow.Api.Data.Migrations
                     b.HasIndex("PropertyId", "SortOrder");
 
                     b.ToTable("PropertyImages");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.PropertyViewingAvailability", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("PropertyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PropertyId", "DayOfWeek")
+                        .IsUnique();
+
+                    b.ToTable("PropertyViewingAvailabilities", t =>
+                        {
+                            t.HasCheckConstraint("CK_ViewingWindow_Times", "NOT \"IsEnabled\" OR \"StartTime\" < \"EndTime\"");
+
+                            t.HasCheckConstraint("CK_ViewingWindow_Weekday", "\"DayOfWeek\" BETWEEN 0 AND 6");
+                        });
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.RentScheduleItem", b =>
@@ -1415,6 +1490,44 @@ namespace RentFlow.Api.Data.Migrations
                     b.ToTable("UserProfileImages");
                 });
 
+            modelBuilder.Entity("RentFlow.Api.Models.ViewingFollowUp", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ClaimExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Decision")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ViewingId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ViewingId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "ClaimedAt");
+
+                    b.ToTable("ViewingFollowUps", t =>
+                        {
+                            t.HasCheckConstraint("CK_ViewingFollowUp_Response", "(\"Decision\" IS NULL AND \"RespondedAt\" IS NULL) OR (\"Decision\" IS NOT NULL AND \"Decision\" IN ('ApplyNow','NotNow') AND \"RespondedAt\" IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("RentFlow.Api.Models.ViewingRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1423,6 +1536,11 @@ namespace RentFlow.Api.Data.Migrations
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DurationMinutes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(60);
 
                     b.Property<string>("LandlordResponse")
                         .HasMaxLength(1000)
@@ -1449,7 +1567,69 @@ namespace RentFlow.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ViewingRequests");
+                    b.HasIndex("RequestedDateTime");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("PropertyId", "Status", "RequestedDateTime");
+
+                    b.HasIndex("TenantId", "PropertyId", "RequestedDateTime");
+
+                    b.ToTable("ViewingRequests", t =>
+                        {
+                            t.HasCheckConstraint("CK_Viewing_Duration", "\"DurationMinutes\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.ViewingReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("LandlordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LandlordRating")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("PropertyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PropertyRating")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ViewingId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("ViewingId")
+                        .IsUnique();
+
+                    b.HasIndex("LandlordId", "CreatedAt");
+
+                    b.HasIndex("PropertyId", "CreatedAt");
+
+                    b.ToTable("ViewingReviews", t =>
+                        {
+                            t.HasCheckConstraint("CK_ViewingReview_Ratings", "\"PropertyRating\" BETWEEN 1 AND 5 AND \"LandlordRating\" BETWEEN 1 AND 5");
+                        });
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.AdminBootstrapRecord", b =>
@@ -1656,6 +1836,15 @@ namespace RentFlow.Api.Data.Migrations
                     b.Navigation("Property");
                 });
 
+            modelBuilder.Entity("RentFlow.Api.Models.PropertyViewingAvailability", b =>
+                {
+                    b.HasOne("RentFlow.Api.Models.Property", null)
+                        .WithMany()
+                        .HasForeignKey("PropertyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("RentFlow.Api.Models.RentScheduleItem", b =>
                 {
                     b.HasOne("RentFlow.Api.Models.LeaseAgreement", "LeaseAgreement")
@@ -1758,6 +1947,48 @@ namespace RentFlow.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.ViewingFollowUp", b =>
+                {
+                    b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("RentFlow.Api.Models.ViewingRequest", null)
+                        .WithOne()
+                        .HasForeignKey("RentFlow.Api.Models.ViewingFollowUp", "ViewingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RentFlow.Api.Models.ViewingReview", b =>
+                {
+                    b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("LandlordId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("RentFlow.Api.Models.Property", null)
+                        .WithMany()
+                        .HasForeignKey("PropertyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("RentFlow.Api.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("RentFlow.Api.Models.ViewingRequest", null)
+                        .WithOne()
+                        .HasForeignKey("RentFlow.Api.Models.ViewingReview", "ViewingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("RentFlow.Api.Models.ApplicationUser", b =>

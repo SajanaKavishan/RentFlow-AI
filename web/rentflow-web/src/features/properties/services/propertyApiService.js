@@ -1,6 +1,13 @@
 import { apiRequest } from '../../../core/api/apiClient.js'
 import { API_BASE_URL } from '../../../core/api/apiConfig.js'
 
+export function getLandlordContact(propertyId) {
+  return apiRequest(`/api/properties/${encodeURIComponent(propertyId)}/landlord-contact`, {
+    cache: 'no-store',
+    errorMessage: 'Landlord contact unavailable.',
+  })
+}
+
 export function getProperties(filters = {}) {
   const params = new URLSearchParams()
 
@@ -123,6 +130,13 @@ export function getPublicLandlordSummary(propertyId) {
 
 export function getPublicLandlordImageUrl(propertyId) {
   return `${API_BASE_URL}/api/properties/${encodeURIComponent(propertyId)}/landlord-summary/image`
+}
+
+export function getPublicLandlordProperties(propertyId) {
+  return apiRequest(`/api/properties/${encodeURIComponent(propertyId)}/landlord-summary/properties`, {
+    authenticated: false,
+    errorMessage: 'This landlord’s properties are unavailable.',
+  })
 }
 
 export function setPrimaryPropertyImage(propertyId, imageId) {

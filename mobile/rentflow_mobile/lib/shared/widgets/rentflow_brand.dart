@@ -27,22 +27,23 @@ class RentFlowBrand extends StatelessWidget {
         ),
       ),
       SizedBox(width: markSize * .18),
-      Text.rich(
-        TextSpan(
-          children: [
-            const TextSpan(text: 'RentFlow '),
-            TextSpan(
-              text: 'AI',
-              style: const TextStyle(color: Color(0xFFD8B65F)),
-            ),
-          ],
-        ),
-        maxLines: 1,
-        style: TextStyle(
-          color: textColor,
-          fontSize: textSize,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -.7,
+      Flexible(
+        child: Text.rich(
+          TextSpan(
+            children: [
+              const TextSpan(text: 'RentFlow '),
+              TextSpan(
+                text: 'AI',
+                style: const TextStyle(color: Color(0xFFD8B65F)),
+              ),
+            ],
+          ),
+          style: TextStyle(
+            color: textColor,
+            fontSize: textSize,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -.7,
+          ),
         ),
       ),
     ],
