@@ -26,6 +26,10 @@ const eligibilityPath =
     '/api/properties/${property.id}/rental-application-eligibility';
 final notNow = find.byKey(const Key('follow-up-not-now'));
 final applyNow = find.byKey(const Key('follow-up-apply-now'));
+final skipReview = find.byKey(const Key('follow-up-skip-review'));
+final submitReview = find.byKey(const Key('follow-up-submit-review'));
+final reviewStep = find.byKey(const Key('follow-up-review-step'));
+final applicationStep = find.byKey(const Key('follow-up-application-step'));
 Map<String, dynamic> prompt({
   String title = 'Real harbour home',
   String address = 'Kureepoththa, Pothuhera',
@@ -53,7 +57,8 @@ class Backend {
   List<Map<String, dynamic>> prompts = [prompt()];
   bool failClaim = false, failResponse = false, canApply = true;
   bool responseConflict = false;
-  bool failReview = false;
+  bool failReview = false, failReviewLoad = false;
+  Completer<void>? reviewGate, reviewSaveGate;
   Map<String, dynamic>? review;
   int? applicationStatus;
   Completer<void>? claimGate, responseGate;
@@ -65,9 +70,15 @@ class Backend {
         return DiscoveryBackend.json({...fixture.profile, 'role': role});
       }
       if (request.url.path.endsWith('/review')) {
+        if (request.method == 'GET') {
+          await reviewGate?.future;
+          if (failReviewLoad) return http.Response('{}', 503);
+        }
         if (request.method == 'PUT') {
+          await reviewSaveGate?.future;
           if (failReview) return http.Response('{}', 503);
           review = {
+            ...?review,
             'id': 'review-1',
             'viewingId': 'viewing-1',
             ...jsonDecode(request.body) as Map<String, dynamic>,
@@ -125,6 +136,12 @@ Future<void> resume(WidgetTester tester) async {
 }
 
 Future<void> choose(WidgetTester tester, Finder finder) async {
+  // Existing application/claim regression cases explicitly skip the optional review.
+  if ((finder == notNow || finder == applyNow) &&
+      reviewStep.evaluate().isNotEmpty) {
+    await choose(tester, skipReview);
+    await tester.pumpAndSettle();
+  }
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);
@@ -168,48 +185,93 @@ Future<GlobalKey<NavigatorState>> pump(
 
 void main() {
   testWidgets(
-    'untouched review skips PUT and comment or partial stars block decision until cleared',
+    'review appears first; explicit Skip opens application without any writes',
     (tester) async {
       final backend = Backend();
       await pump(tester, backend);
-      await tester.ensureVisible(find.byType(TextField));
-      await tester.enterText(find.byType(TextField), 'Keep my comment');
-      await choose(tester, notNow);
+      expect(reviewStep, findsOneWidget);
+      expect(applicationStep, findsNothing);
+      expect(notNow, findsNothing);
+      expect(applyNow, findsNothing);
+      expect(tester.widget<FilledButton>(submitReview).onPressed, isNull);
+      await choose(tester, skipReview);
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('follow-up-error')), findsOneWidget);
-      expect(backend.discovery.calls(respondPath, 'POST'), 0);
-      expect(backend.review, isNull);
-      await tester.ensureVisible(find.text('Clear review'));
-      await tester.tap(find.text('Clear review'));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byKey(const Key('property-rating-5')));
-      await tester.tap(find.byKey(const Key('property-rating-5')));
-      await choose(tester, applyNow);
-      await tester.pumpAndSettle();
-      expect(backend.discovery.calls(respondPath, 'POST'), 0);
-      await tester.ensureVisible(find.text('Clear review'));
-      await tester.tap(find.text('Clear review'));
-      await tester.pumpAndSettle();
-      await choose(tester, notNow);
-      await tester.pumpAndSettle();
+      expect(reviewStep, findsNothing);
+      expect(applicationStep, findsOneWidget);
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+      expect(find.byKey(const Key('property-rating-1')), findsNothing);
       expect(
         backend.discovery.calls('/api/viewings/viewing-1/review', 'PUT'),
         0,
       );
+      expect(backend.discovery.calls(respondPath, 'POST'), 0);
+      expect(backend.discovery.calls('/api/rental-applications', 'POST'), 0);
+      await choose(tester, notNow);
+      await tester.pumpAndSettle();
       expect(backend.discovery.calls(respondPath, 'POST'), 1);
+      expect(backend.review, isNull);
+    },
+  );
+  for (final input in ['property', 'landlord', 'comment']) {
+    testWidgets(
+      '$input only keeps Submit disabled; Skip never saves partial review',
+      (tester) async {
+        final backend = Backend();
+        await pump(tester, backend);
+        if (input == 'comment') {
+          await tester.ensureVisible(find.byType(TextField));
+          await tester.enterText(find.byType(TextField), 'Keep my comment');
+        } else {
+          await choose(tester, find.byKey(Key('$input-rating-5')));
+          await tester.pumpAndSettle();
+        }
+        expect(tester.widget<FilledButton>(submitReview).onPressed, isNull);
+        expect(
+          backend.discovery.calls('/api/viewings/viewing-1/review', 'PUT'),
+          0,
+        );
+        await choose(tester, skipReview);
+        await tester.pumpAndSettle();
+        expect(applicationStep, findsOneWidget);
+        expect(backend.review, isNull);
+        expect(backend.discovery.calls(respondPath, 'POST'), 0);
+      },
+    );
+  }
+  testWidgets(
+    'Clear selections only resets unsaved draft and cannot imply a delete',
+    (tester) async {
+      final backend = Backend();
+      await pump(tester, backend);
+      await choose(tester, find.byKey(const Key('property-rating-4')));
+      await tester.ensureVisible(find.byType(TextField));
+      await tester.enterText(find.byType(TextField), 'Local draft');
+      await choose(tester, find.text('Clear selections'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        isEmpty,
+      );
+      expect(tester.widget<FilledButton>(submitReview).onPressed, isNull);
+      expect(find.text('Clear review'), findsNothing);
+      expect(
+        backend.discovery.calls('/api/viewings/viewing-1/review', 'DELETE'),
+        0,
+      );
+      expect(backend.discovery.calls(respondPath, 'POST'), 0);
     },
   );
   testWidgets(
-    'review PUT precedes decision; review failure keeps input and retry creates one review',
+    'review failure preserves draft; successful retry transitions before any decision',
     (tester) async {
       final backend = Backend()..failReview = true;
       await pump(tester, backend);
-      await tester.ensureVisible(find.byKey(const Key('property-rating-4')));
-      await tester.tap(find.byKey(const Key('property-rating-4')));
-      await tester.ensureVisible(find.byKey(const Key('landlord-rating-5')));
-      await tester.tap(find.byKey(const Key('landlord-rating-5')));
-      await tester.enterText(find.byType(TextField), 'Clear explanation');
-      await choose(tester, notNow);
+      await choose(tester, find.byKey(const Key('property-rating-4')));
+      await choose(tester, find.byKey(const Key('landlord-rating-5')));
+      await tester.ensureVisible(find.byType(TextField));
+      await tester.enterText(find.byType(TextField), '  Clear explanation  ');
+      await choose(tester, submitReview);
       await tester.pumpAndSettle();
       expect(
         find.text('Could not save your review. Please try again.'),
@@ -217,25 +279,34 @@ void main() {
       );
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
-        'Clear explanation',
+        '  Clear explanation  ',
       );
+      expect(tester.widget<FilledButton>(submitReview).onPressed, isNotNull);
+      expect(reviewStep, findsOneWidget);
+      expect(applicationStep, findsNothing);
       expect(backend.discovery.calls(respondPath, 'POST'), 0);
       backend.failReview = false;
-      backend.failResponse = true;
-      await choose(tester, notNow);
+      await choose(tester, submitReview);
       await tester.pumpAndSettle();
       expect(backend.review!['propertyRating'], 4);
       expect(backend.review!['landlordRating'], 5);
-      expect(find.byType(ViewingFollowUpDialog), findsOneWidget);
+      expect(backend.review!['comment'], 'Clear explanation');
+      expect(applicationStep, findsOneWidget);
+      expect(reviewStep, findsNothing);
+      expect(find.text('Review saved'), findsOneWidget);
+      expect(backend.discovery.calls(respondPath, 'POST'), 0);
+      backend.failResponse = true;
+      await choose(tester, notNow);
+      await tester.pumpAndSettle();
+      expect(applicationStep, findsOneWidget);
       backend.failResponse = false;
       await choose(tester, notNow);
       await tester.pumpAndSettle();
       expect(find.byType(ViewingFollowUpDialog), findsNothing);
-      expect(backend.review!['id'], 'review-1');
       expect(
         backend.discovery.calls('/api/viewings/viewing-1/review', 'PUT'),
         2,
-      ); // Failed save plus successful save; decision retry skips unchanged review.
+      );
       final requests = backend.discovery.requests;
       expect(
         requests.indexWhere((r) => r.method == 'PUT'),
@@ -243,38 +314,48 @@ void main() {
       );
     },
   );
-  testWidgets(
-    'existing review is compact and separate; editing keeps one ID with optional comment',
-    (tester) async {
-      final backend = Backend()
-        ..review = {
-          'id': 'review-1',
-          'viewingId': 'viewing-1',
-          'propertyRating': 2,
-          'landlordRating': 3,
-          'comment': null,
-        };
-      await pump(tester, backend);
-      expect(
-        find.text('Your viewing review is already saved.'),
-        findsOneWidget,
-      );
-      await tester.ensureVisible(find.text('Edit review'));
-      await tester.tap(find.text('Edit review'));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byKey(const Key('property-rating-5')));
-      await tester.tap(find.byKey(const Key('property-rating-5')));
-      await choose(tester, applyNow);
-      await tester.pumpAndSettle();
-      expect(backend.review!['id'], 'review-1');
-      expect(backend.review!['propertyRating'], 5);
-      expect(
-        backend.discovery.calls('/api/viewings/viewing-1/review', 'PUT'),
-        1,
-      );
-      expect(find.byType(RentalApplicationFormScreen), findsOneWidget);
-    },
-  );
+  for (final edit in [false, true]) {
+    testWidgets(
+      'existing review is prefilled; ${edit ? 'update uses same row' : 'Continue skips unchanged PUT'}',
+      (tester) async {
+        final backend = Backend()
+          ..review = {
+            'id': 'review-1',
+            'viewingId': 'viewing-1',
+            'propertyRating': 2,
+            'landlordRating': 3,
+            'comment': 'A saved review',
+            'createdAt': '2030-01-01T10:00:00Z',
+          };
+        await pump(tester, backend);
+        expect(find.text('Your review'), findsOneWidget);
+        expect(find.text('Continue'), findsOneWidget);
+        expect(
+          tester.widget<TextField>(find.byType(TextField)).controller!.text,
+          'A saved review',
+        );
+        expect(find.text('Clear selections'), findsNothing);
+        if (edit) {
+          await choose(tester, find.byKey(const Key('property-rating-5')));
+          await tester.pumpAndSettle();
+          expect(find.text('Update review'), findsOneWidget);
+        }
+        await choose(tester, submitReview);
+        await tester.pumpAndSettle();
+        expect(backend.review!['id'], 'review-1');
+        expect(backend.review!['createdAt'], '2030-01-01T10:00:00Z');
+        expect(backend.review!['propertyRating'], edit ? 5 : 2);
+        expect(
+          backend.discovery.calls('/api/viewings/viewing-1/review', 'PUT'),
+          edit ? 1 : 0,
+        );
+        expect(backend.discovery.calls(respondPath, 'POST'), 0);
+        await choose(tester, applyNow);
+        await tester.pumpAndSettle();
+        expect(find.byType(RentalApplicationFormScreen), findsOneWidget);
+      },
+    );
+  }
   testWidgets(
     'killed app has no local recovery state; later resume shows same server claim',
     (tester) async {
@@ -604,7 +685,7 @@ void main() {
     );
     expect(backend.discovery.calls('/api/rental-applications', 'POST'), 0);
   });
-  for (final status in <int?>[null, 0, 3, 1, 2]) {
+  for (final status in <int?>[null, 0, 3, 1, 2, 4]) {
     testWidgets(
       'Apply now refreshes state $status and routes without creating duplicates',
       (tester) async {
@@ -661,18 +742,31 @@ void main() {
       expect(backend.discovery.calls(respondPath, 'POST'), 1);
     },
   );
-  testWidgets('back and barrier cannot silently dismiss the prompt', (
-    tester,
-  ) async {
-    final backend = Backend();
-    final navigator = await pump(tester, backend);
-    await navigator.currentState!.maybePop();
-    await tester.pumpAndSettle();
-    await tester.tapAt(const Offset(3, 3));
-    await tester.pumpAndSettle();
-    expect(find.byType(Dialog), findsOneWidget);
-    expect(backend.discovery.calls(respondPath, 'POST'), 0);
-  });
+  for (final useBack in [false, true]) {
+    testWidgets(
+      'review ${useBack ? 'back' : 'close'} dismissal leaves claim unresolved without immediate reopening',
+      (tester) async {
+        final backend = Backend();
+        final navigator = await pump(tester, backend);
+        if (useBack) {
+          await navigator.currentState!.maybePop();
+        } else {
+          await tester.tap(find.byTooltip('Dismiss review'));
+        }
+        await tester.pumpAndSettle();
+        expect(find.byType(Dialog), findsNothing);
+        expect(backend.discovery.calls(respondPath, 'POST'), 0);
+        expect(backend.discovery.calls(claimPath, 'POST'), 1);
+        expect(
+          backend.discovery.calls('/api/viewings/viewing-1/review', 'PUT'),
+          0,
+        );
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.byType(Dialog), findsNothing);
+        expect(backend.discovery.calls(claimPath, 'POST'), 1);
+      },
+    );
+  }
   testWidgets(
     'protected workflow defers claim until returning, including resumes',
     (tester) async {
@@ -750,7 +844,7 @@ void main() {
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       await tester.pumpAndSettle();
-      await tester.ensureVisible(notNow);
+      await tester.ensureVisible(skipReview);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await choose(tester, notNow);
