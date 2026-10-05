@@ -1,5 +1,23 @@
 # rentflow_mobile
 
+## Tenant maintenance UI preview
+
+Run the real tenant maintenance screens with an in-memory tenant, assigned
+property, and sample requests (no login or backend required):
+
+```powershell
+flutter run -d chrome -t tool/maintenance_preview.dart
+```
+
+Use Chrome DevTools device mode (`Ctrl+Shift+M`) for a phone-sized viewport,
+or replace `chrome` with a connected Android device ID from `flutter devices`.
+The plus button opens property selection and the real request form. Submitting
+adds a request in memory; restarting resets the preview.
+
+For the unassigned-property state, append `--dart-define=PREVIEW_NO_PROPERTY=true`.
+For an empty request list with an assigned property, append
+`--dart-define=PREVIEW_EMPTY=true`.
+
 ## Authentication
 
 Phase 2 stores only the JWT access token through `flutter_secure_storage`.
