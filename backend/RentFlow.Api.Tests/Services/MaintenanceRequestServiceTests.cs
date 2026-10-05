@@ -50,6 +50,24 @@ public class MaintenanceRequestServiceTests
     }
 
     [Fact]
+    public async Task GetByIdAsync_ProjectsTenantAndTechnicianDisplayNames()
+    {
+        await using var context = CreateContext();
+        var tenantId = Guid.NewGuid();
+        var technicianId = Guid.NewGuid();
+        var request = AddRequest(context, tenantId: tenantId, technicianId: technicianId);
+        context.Users.AddRange(
+            CreateUser(tenantId, UserRole.Tenant, true, "Chamodya Sayanjali"),
+            CreateUser(technicianId, UserRole.MaintenanceTechnician, true, "Morgan Technician"));
+        await context.SaveChangesAsync();
+
+        var result = await new MaintenanceRequestService(context).GetByIdAsync(request.Id);
+
+        Assert.Equal("Chamodya Sayanjali", result!.TenantName);
+        Assert.Equal("Morgan Technician", result.AssignedTechnicianName);
+    }
+
+    [Fact]
     public async Task CreateAsync_RejectsEmptyPropertyId()
     {
         await using var context = CreateContext();
@@ -392,6 +410,30 @@ public class MaintenanceRequestServiceTests
             .GetHistoryAsync(maintenanceRequest.Id);
 
         Assert.Equal([firstId, secondId], history.Select(item => item.Id));
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_ProjectsActorDisplayNamesAndRoles()
+    {
+        await using var context = CreateContext();
+        var actorId = Guid.NewGuid();
+        var request = AddRequest(context);
+        context.Users.Add(CreateUser(actorId, UserRole.Landlord, true, "Landlord User"));
+        context.MaintenanceStatusHistories.Add(new MaintenanceStatusHistory
+        {
+            Id = Guid.NewGuid(),
+            MaintenanceRequest = request,
+            ToStatus = MaintenanceRequestStatus.Triaged,
+            ChangedByUserId = actorId,
+            ChangedAt = DateTimeOffset.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var result = await new MaintenanceRequestService(context).GetHistoryAsync(request.Id);
+
+        var entry = Assert.Single(result);
+        Assert.Equal("Landlord User", entry.ChangedByName);
+        Assert.Equal(UserRole.Landlord, entry.ChangedByRole);
     }
 
     [Fact]

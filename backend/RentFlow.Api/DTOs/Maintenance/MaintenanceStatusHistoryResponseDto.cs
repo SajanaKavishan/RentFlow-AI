@@ -15,6 +15,10 @@ public class MaintenanceStatusHistoryResponseDto
 
     public Guid? ChangedByUserId { get; set; }
 
+    public string? ChangedByName { get; set; }
+
+    public UserRole? ChangedByRole { get; set; }
+
     public DateTimeOffset ChangedAt { get; set; }
 
     public string? Notes { get; set; }

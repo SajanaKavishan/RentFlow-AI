@@ -15,4 +15,5 @@ internal static class NotificationEventTypes
         "maintenance_technician.activated";
     public const string AccountPasswordChanged = "account.password_changed";
     public const string AccountPasswordReset = "account.password_reset";
+    public const string MaintenanceRequestAssigned = "maintenance_request.assigned";
 }

@@ -8,6 +8,8 @@ import ProfileAvatar from '../../features/auth/ProfileAvatar.jsx'
 import { USER_ROLES } from '../../features/auth/authModel.js'
 import { propertyIdFromLocation } from '../property/usePropertyContext.js'
 import { getUnreadCount } from '../../features/notifications/notificationsApi.js'
+import { getTechnicianMaintenanceRequests } from '../../features/maintenance/services/maintenanceApiService.js'
+import { technicianAttentionWork } from '../pages/technicianWorkPresentation.js'
 import { NotificationCountContext } from '../../features/notifications/NotificationCountContext.js'
 import NotificationPopover from '../../features/notifications/NotificationPopover.jsx'
 import { PendingViewingsContext } from './PendingViewingsContext.js'
@@ -52,6 +54,7 @@ export default function AppShell() {
     && Boolean(matchPath('/properties/:propertyId', location.pathname))
   const isViewingAvailability = Boolean(matchPath('/properties/:propertyId/viewing-availability', location.pathname))
   const [countResult, setCountResult] = useState(null)
+  const [technicianWorkCount, setTechnicianWorkCount] = useState(null)
   const unreadCount = countResult?.userId === user.id ? countResult.count : null
   const notificationCountStatus = countResult?.userId !== user.id
     ? 'loading'
@@ -70,6 +73,16 @@ export default function AppShell() {
     refreshCount()
     return () => { requestCounter.current++ }
   }, [location.pathname, user.id, refreshCount])
+  useEffect(() => {
+    if (user.role !== USER_ROLES.MAINTENANCE_TECHNICIAN) {
+      return undefined
+    }
+    let active = true
+    getTechnicianMaintenanceRequests(user.id)
+      .then((requests) => { if (active) setTechnicianWorkCount(technicianAttentionWork(requests).length) })
+      .catch(() => { if (active) setTechnicianWorkCount(null) })
+    return () => { active = false }
+  }, [location.pathname, user.id, user.role])
   const propertyId = user.role === USER_ROLES.LANDLORD ? propertyIdFromLocation(location) : null
   const [viewingSummary, setViewingSummary] = useState(null)
   const [applicationSummary, setApplicationSummary] = useState(null)
@@ -180,7 +193,13 @@ export default function AppShell() {
     || (location.pathname === '/unauthorized' ? 'Access restricted' : 'RentFlow AI')
   const closeMenu = () => { setMenu({ path: location.pathname, open: false }); if (menuOpen) menuRef.current?.focus() }
   const navLink = (item) => {
-    const badgeCount = item.id === 'viewing-requests' ? shownViewings : item.id === 'rental-applications' ? shownApplications : 0
+    const badgeCount = item.id === 'viewing-requests'
+      ? shownViewings
+      : item.id === 'rental-applications'
+        ? shownApplications
+        : item.id === 'assigned-work' && Number.isInteger(technicianWorkCount) && technicianWorkCount > 0
+          ? technicianWorkCount
+          : 0
     return <Link key={`${item.label}-${item.path}`} to={scopedPath(item.path)} aria-current={activePath === item.path ? 'page' : undefined} aria-label={badgeCount ? `${item.label}, ${badgeCount} pending` : undefined} onClick={() => {
     if (item.id === 'viewing-requests' && shownViewings) setDismissedViewings({ userId: user.id, propertyId, count: shownViewings })
     if (item.id === 'rental-applications' && shownApplications) setDismissedApplications({ userId: user.id, propertyId, count: shownApplications })

@@ -41,6 +41,7 @@ import SmartAssistancePage from './features/landing/pages/SmartAssistancePage.js
 import AppShell from './shared/layout/AppShell.jsx'
 import DashboardPage from './shared/pages/DashboardPage.jsx'
 import TechnicianAssignedWorkPage from './shared/pages/TechnicianAssignedWorkPage.jsx'
+import TechnicianWorkHistoryPage from './shared/pages/TechnicianWorkHistoryPage.jsx'
 import AdminUsersPage from './shared/pages/AdminUsersPage.jsx'
 import AdminSystemOverviewPage from './shared/pages/AdminSystemOverviewPage.jsx'
 import AdminSupportRequestsPage from './shared/pages/AdminSupportRequestsPage.jsx'
@@ -94,6 +95,7 @@ export default function App() {
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.MAINTENANCE_TECHNICIAN]} />}>
           <Route path="/modules/assigned-work" element={<TechnicianAssignedWorkPage />} />
+          <Route path="/modules/work-history" element={<TechnicianWorkHistoryPage />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} />}>

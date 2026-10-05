@@ -28,27 +28,35 @@ function renderDashboard(role) {
 beforeEach(() => {
   tokenStorage.setToken('staff-token')
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
-  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json({ unreadCount: 3 }))))
+  vi.stubGlobal('fetch', vi.fn((url) => Promise.resolve(json(
+    String(url).includes('/api/maintenance-requests/technician/')
+      ? []
+      : { unreadCount: 3 },
+  ))))
 })
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals() })
 
 describe('Technician and Admin dashboards', () => {
-  it('renders a dedicated Technician workspace with real shared actions and an honest maintenance dependency', async () => {
+  it('renders the technician dashboard with a real assigned-work preview', async () => {
     renderDashboard('MaintenanceTechnician')
     const main = screen.getByRole('main')
     expect(within(main).getByRole('heading', { name: 'Welcome, Sam Perera' })).toBeInTheDocument()
-    expect(within(main).getByText('Technician workspace')).toBeInTheDocument()
+    expect(within(main).queryByText('Technician workspace')).not.toBeInTheDocument()
+    const summary = within(main).getByRole('region', { name: 'Work summary' })
+    expect(await within(summary).findAllByText('0')).toHaveLength(3)
+    expect(summary).toHaveTextContent("0Today's jobs0In progress0Completed this week")
 
     const assignedWork = within(main).getByRole('region', { name: 'Assigned Work' })
-    expect(assignedWork).toHaveTextContent('Connected')
-    expect(assignedWork).toHaveTextContent('Assigned work ready')
-    expect(within(assignedWork).getByRole('link', { name: /View assigned work/ })).toHaveAttribute('href', '/modules/assigned-work')
+    expect(assignedWork).toHaveTextContent('No active assigned work.')
+    expect(assignedWork).not.toHaveTextContent('Connected')
+    expect(assignedWork).not.toHaveTextContent('Assigned work ready')
+    expect(within(assignedWork).getByRole('link', { name: /View all/ })).toHaveAttribute('href', '/modules/assigned-work')
 
-    expect(await within(main).findByRole('heading', { name: '3 unread notifications' })).toBeInTheDocument()
-    expect(within(main).getAllByRole('link', { name: /Notifications|Open notifications/ }).every((link) => link.getAttribute('href') === '/notifications')).toBe(true)
-    expect(within(main).getAllByRole('link', { name: /Profile|View profile/ }).every((link) => link.getAttribute('href') === '/profile')).toBe(true)
-    expect(fetch).toHaveBeenCalledTimes(1)
-    expect(new URL(fetch.mock.calls[0][0], 'http://localhost').pathname).toBe('/api/notifications/unread-count')
+    expect(within(main).queryByRole('heading', { name: '3 unread notifications' })).not.toBeInTheDocument()
+    expect(within(main).queryByRole('link', { name: 'Open notification inbox' })).not.toBeInTheDocument()
+    expect(within(main).queryByRole('heading', { name: 'Your profile' })).not.toBeInTheDocument()
+    expect(fetch).toHaveBeenCalled()
+    expect(fetch.mock.calls.some(([url]) => String(url).includes('/api/maintenance-requests/technician/'))).toBe(true)
     expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer staff-token')
 
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
@@ -118,7 +126,7 @@ describe('Technician and Admin dashboards', () => {
   })
 
   it.each([
-    ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work', /View assigned work/],
+    ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work', /View (all|assigned work)/],
     ['Admin', 'AI Workflows', 'AI / System Monitoring Platform', /View integration details/],
   ])('opens the explicit workspace for %s %s', async (role, label, pageTitle, linkName) => {
     renderDashboard(role)
@@ -153,12 +161,7 @@ describe('Technician and Admin dashboards', () => {
     expect(screen.getByText('Directory available')).toBeInTheDocument()
   })
 
-  it('keeps Notifications and Profile reachable from both dedicated dashboards', async () => {
-    const view = renderDashboard('MaintenanceTechnician')
-    await userEvent.click(within(screen.getByRole('main')).getByRole('link', { name: 'View profile' }))
-    expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument()
-
-    view.unmount()
+  it('keeps Notifications reachable from the Admin dashboard', async () => {
     fetch.mockImplementation((url) => Promise.resolve(json(url.includes('unread-count')
       ? { unreadCount: 0 }
       : { items: [], pagination: { page: 1, totalPages: 1, totalCount: 0, hasNextPage: false, hasPreviousPage: false } })))

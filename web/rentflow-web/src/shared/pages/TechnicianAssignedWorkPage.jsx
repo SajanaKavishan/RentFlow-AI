@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { AuthContext } from '../../features/auth/useAuth.js'
 import {
   completeWork,
@@ -40,14 +40,19 @@ const DEFAULT_ESTIMATE_FORM = {
   notes: '',
 }
 
+const accessLabel = (value) => ({
+  Morning: 'Morning (8-12)',
+  Afternoon: 'Afternoon (12-5)',
+  Evening: 'Evening (5-8)',
+}[value] || 'Not provided')
+
 function formatMoney(value) {
   const amount = Number(value)
   if (!Number.isFinite(amount)) return '—'
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
+  return `Rs. ${new Intl.NumberFormat('en-LK', {
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount)
+  }).format(amount)}`
 }
 
 export function AssignedWorkState({
@@ -59,6 +64,7 @@ export function AssignedWorkState({
   estimate = null,
   estimateForm = DEFAULT_ESTIMATE_FORM,
   estimatePending = false,
+  estimateErrors = {},
   onEstimateChange,
   onCreateEstimate,
   onSubmitEstimate,
@@ -94,16 +100,20 @@ export function AssignedWorkState({
         <article key={request.id} className="assigned-work-item shared-card">
           <div className="assigned-work-item__header">
             <div>
-              <p className="assigned-work-page__eyebrow">{request.referenceCode ? `Request #${request.referenceCode}` : 'Reference unavailable'}</p>
+              <p className="assigned-work-page__eyebrow">{request.referenceCode || 'Reference unavailable'}</p>
               <h3>{request.title}</h3>
             </div>
-            <StatusBadge tone={statusToneMap[request.status] ?? 'warning'}>{maintenanceEnumLabel(request.status, MAINTENANCE_STATUS)}</StatusBadge>
+            <div className="assigned-work-item__badges">
+              <StatusBadge tone={statusToneMap[request.status] ?? 'warning'}>{maintenanceEnumLabel(request.status, MAINTENANCE_STATUS)}</StatusBadge>
+              <StatusBadge tone={request.priority === 'Emergency' ? 'danger' : 'info'}>{maintenanceEnumLabel(request.priority, MAINTENANCE_PRIORITY)}</StatusBadge>
+            </div>
           </div>
-          <p>{request.description}</p>
           <dl className="assigned-work-item__meta">
-              <div><dt>Priority</dt><dd>{maintenanceEnumLabel(request.priority, MAINTENANCE_PRIORITY)}</dd></div>
-              <div><dt>Category</dt><dd>{maintenanceEnumLabel(request.category, MAINTENANCE_CATEGORY)}</dd></div>
+            <div><dt>Property</dt><dd>{request.propertyTitle || 'Property unavailable'}</dd></div>
+            <div><dt>Category</dt><dd>{maintenanceEnumLabel(request.category, MAINTENANCE_CATEGORY)}</dd></div>
+            <div><dt>Preferred access</dt><dd>{accessLabel(request.preferredAccessWindow)}</dd></div>
           </dl>
+          <p className="assigned-work-item__description">{request.description || 'No description provided.'}</p>
           <div className="assigned-work-item__actions">
               <button type="button" className="shared-button shared-button--outline" onClick={request.onToggleDetails} aria-expanded={request.selected}>
                 {request.selected ? 'Hide details' : 'View details'}
@@ -120,12 +130,25 @@ export function AssignedWorkState({
               )}
           </div>
           {request.selected && (
-            <>
-              <dl className="assigned-work-item__details">
-                <div><dt>Request</dt><dd>{request.referenceCode || 'Reference unavailable'}</dd></div>
-                <div><dt>Access notes</dt><dd>{request.tenantAccessNotes || 'None provided'}</dd></div>
-                <div><dt>Assignment notes</dt><dd>{request.assignmentNotes || 'None provided'}</dd></div>
-              </dl>
+            <div className="assigned-work-item__expanded">
+              <section className="assigned-work-item__section" aria-labelledby={`request-details-${request.id}`}>
+                <h4 id={`request-details-${request.id}`}>Request details</h4>
+                <dl className="assigned-work-item__details">
+                  <div><dt>Reference</dt><dd>{request.referenceCode || 'Reference unavailable'}</dd></div>
+                  <div><dt>Property</dt><dd>{request.propertyTitle || 'Property unavailable'}</dd></div>
+                  <div><dt>Description</dt><dd>{request.description || 'No description provided.'}</dd></div>
+                  <div><dt>Category</dt><dd>{maintenanceEnumLabel(request.category, MAINTENANCE_CATEGORY)}</dd></div>
+                  <div><dt>Priority</dt><dd>{maintenanceEnumLabel(request.priority, MAINTENANCE_PRIORITY)}</dd></div>
+                  <div><dt>Preferred access</dt><dd>{accessLabel(request.preferredAccessWindow)}</dd></div>
+                </dl>
+              </section>
+              <section className="assigned-work-item__section" aria-labelledby={`assignment-${request.id}`}>
+                <h4 id={`assignment-${request.id}`}>Assignment</h4>
+                <dl className="assigned-work-item__details">
+                  <div><dt>Assignment notes</dt><dd>{request.assignmentNotes || 'None provided'}</dd></div>
+                  <div><dt>Tenant access notes</dt><dd>{request.tenantAccessNotes || 'None provided'}</dd></div>
+                </dl>
+              </section>
               <section className="assigned-work-item__estimate" aria-label="Repair estimate">
                 <h4>Repair estimate</h4>
                 {estimateState === 'loading' && <p role="status">Loading estimate…</p>}
@@ -144,16 +167,20 @@ export function AssignedWorkState({
                   <form className="assigned-work-estimate-form" onSubmit={onCreateEstimate}>
                     <label>
                       Labor cost
-                      <input type="number" name="laborCost" min="0" step="0.01" value={estimateForm.laborCost} onChange={onEstimateChange} required />
+                      <input type="number" name="laborCost" min="0" step="0.01" value={estimateForm.laborCost} onChange={onEstimateChange} aria-invalid={Boolean(estimateErrors.laborCost)} required />
+                      {estimateErrors.laborCost && <span className="assigned-work-estimate-form__error">{estimateErrors.laborCost}</span>}
                     </label>
                     <label>
                       Parts cost
-                      <input type="number" name="partsCost" min="0" step="0.01" value={estimateForm.partsCost} onChange={onEstimateChange} required />
+                      <input type="number" name="partsCost" min="0" step="0.01" value={estimateForm.partsCost} onChange={onEstimateChange} aria-invalid={Boolean(estimateErrors.partsCost)} required />
+                      {estimateErrors.partsCost && <span className="assigned-work-estimate-form__error">{estimateErrors.partsCost}</span>}
                     </label>
                     <label>
                       Additional cost
-                      <input type="number" name="additionalCost" min="0" step="0.01" value={estimateForm.additionalCost} onChange={onEstimateChange} required />
+                      <input type="number" name="additionalCost" min="0" step="0.01" value={estimateForm.additionalCost} onChange={onEstimateChange} aria-invalid={Boolean(estimateErrors.additionalCost)} required />
+                      {estimateErrors.additionalCost && <span className="assigned-work-estimate-form__error">{estimateErrors.additionalCost}</span>}
                     </label>
+                    <div className="assigned-work-estimate-form__total"><span>Total</span><strong>{formatMoney(['laborCost', 'partsCost', 'additionalCost'].reduce((total, key) => total + (Number(estimateForm[key]) || 0), 0))}</strong></div>
                     <label>
                       Estimate notes
                       <textarea name="notes" value={estimateForm.notes} onChange={onEstimateChange} rows={3} />
@@ -169,7 +196,7 @@ export function AssignedWorkState({
                   </button>
                 )}
               </section>
-            </>
+            </div>
           )}
         </article>
       ))}
@@ -198,6 +225,8 @@ export default function TechnicianAssignedWorkPage() {
   const [estimateState, setEstimateState] = useState('idle')
   const [estimatePending, setEstimatePending] = useState(false)
   const [estimateForm, setEstimateForm] = useState(DEFAULT_ESTIMATE_FORM)
+  const [estimateErrors, setEstimateErrors] = useState({})
+  const [searchParams] = useSearchParams()
 
   const loadAssignedWork = useCallback(async () => {
     if (!userId) {
@@ -212,7 +241,10 @@ export default function TechnicianAssignedWorkPage() {
     setNotice('')
 
     try {
-      const items = await getTechnicianMaintenanceRequests(userId)
+      const items = (await getTechnicianMaintenanceRequests(userId))
+        .filter((item) => !['Completed', 'Rejected', 'Cancelled'].includes(
+          maintenanceEnumLabel(item.status, MAINTENANCE_STATUS),
+        ))
       setRequests(items)
       setSelectedRequestId((current) =>
         items.some((item) => item.id === current) ? current : null,
@@ -264,9 +296,11 @@ export default function TechnicianAssignedWorkPage() {
       setEstimateState('idle')
       return
     }
+
     setSelectedRequestId(request.id)
     setSelectedEstimate(null)
     setEstimateForm(DEFAULT_ESTIMATE_FORM)
+    setEstimateErrors({})
     setEstimateState('loading')
     try {
       const estimate = await getLatestEstimate(request.id)
@@ -281,22 +315,38 @@ export default function TechnicianAssignedWorkPage() {
         setEstimateState('error')
       }
     }
+
   }
+
+  useEffect(() => {
+    const requestId = searchParams.get('requestId')
+    const request = requests.find((item) => item.id === requestId)
+    if (status === 'ready' && request && selectedRequestId !== request.id) {
+      const openTimer = window.setTimeout(() => { void handleToggleDetails(request) }, 0)
+      return () => window.clearTimeout(openTimer)
+    }
+    return undefined
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests, searchParams, selectedRequestId, status])
 
   const handleEstimateChange = (event) => {
     const { name, value } = event.target
     setEstimateForm((current) => ({ ...current, [name]: value }))
+    setEstimateErrors((current) => ({ ...current, [name]: '' }))
   }
 
   const handleCreateEstimate = async (event) => {
     event.preventDefault()
     const request = requests.find((item) => item.id === selectedRequestId)
     if (!request || estimatePending) return
-    const costs = ['laborCost', 'partsCost', 'additionalCost'].map((key) => Number(estimateForm[key]))
-    if (costs.some((cost) => !Number.isFinite(cost) || cost < 0)) {
-      setError('Enter valid, non-negative costs for all estimate fields.')
+    const errors = Object.fromEntries(['laborCost', 'partsCost', 'additionalCost']
+      .filter((key) => !Number.isFinite(Number(estimateForm[key])) || Number(estimateForm[key]) < 0)
+      .map((key) => [key, 'Enter a non-negative amount.']))
+    if (Object.keys(errors).length) {
+      setEstimateErrors(errors)
       return
     }
+    setEstimateErrors({})
     setEstimatePending(true)
     setError('')
     setNotice('')
@@ -342,13 +392,8 @@ export default function TechnicianAssignedWorkPage() {
   return <main className="shared-page assigned-work-page">
     <header className="assigned-work-page__header">
       <div>
-        <p className="assigned-work-page__eyebrow">Technician workspace</p>
         <h1>Assigned Work</h1>
         <p>Review assigned maintenance requests and update work as it progresses.</p>
-      </div>
-      <div className="assigned-work-page__header-actions" aria-label="Assigned Work navigation">
-        <Link className="shared-button shared-button--outline" to="/dashboard"><Icon name="home" size={18} />Back to dashboard</Link>
-        <Link className="shared-button" to="/notifications" aria-label="Open notification inbox"><Icon name="bell" size={18} />Notifications</Link>
       </div>
     </header>
 
@@ -357,11 +402,6 @@ export default function TechnicianAssignedWorkPage() {
         <div className="assigned-work-area__heading">
           <div><p className="assigned-work-page__eyebrow">Work area</p><h2 id="assigned-work-queue-title">Your work queue</h2></div>
           <span className="assigned-work-area__scope"><Icon name="user" size={17} />Authenticated Technician scope</span>
-        </div>
-        <div className="assigned-work-area__controls">
-          <button className="shared-button shared-button--outline" type="button" onClick={loadAssignedWork} disabled={status === 'loading'}>
-            {status === 'loading' ? 'Refreshing...' : 'Refresh queue'}
-          </button>
         </div>
         {notice && <p role="status" className="assigned-work-page__notice">{notice}</p>}
         {error && status !== 'error' && <p role="alert">{error}</p>}
@@ -374,28 +414,12 @@ export default function TechnicianAssignedWorkPage() {
           estimate={selectedEstimate}
           estimateForm={estimateForm}
           estimatePending={estimatePending}
+          estimateErrors={estimateErrors}
           onEstimateChange={handleEstimateChange}
           onCreateEstimate={handleCreateEstimate}
           onSubmitEstimate={handleSubmitEstimate}
         />
       </section>
-
-      <aside className="assigned-work-page__side" aria-label="Assigned Work integration details">
-        <section className="shared-card assigned-work-availability" aria-labelledby="assigned-work-availability-title">
-          <div className="assigned-work-availability__heading"><span className="assigned-work-state__icon assigned-work-state__icon--small"><Icon name="info" size={21} /></span><div><p className="assigned-work-page__eyebrow">Availability</p><h2 id="assigned-work-availability-title">Workflow status</h2></div></div>
-          <dl>
-            <div><dt>Assigned-work list</dt><dd><StatusBadge tone={status === 'ready' ? 'success' : 'info'}>{status === 'ready' ? 'Connected' : 'Live contract'}</StatusBadge></dd></div>
-            <div><dt>Record details</dt><dd>{status === 'ready' ? 'Available for the current technician queue' : status === 'empty' ? 'No requests are currently assigned' : 'Loaded when assigned work is available'}</dd></div>
-            <div><dt>Work actions</dt><dd>Start and complete actions are enabled only for requests in the matching backend status.</dd></div>
-          </dl>
-        </section>
-
-        <section className="shared-card assigned-work-tools" aria-labelledby="assigned-work-tools-title">
-          <div><p className="assigned-work-page__eyebrow">Shared tools</p><h2 id="assigned-work-tools-title">Account access</h2></div>
-          <Link to="/notifications" aria-label="Open notifications from Assigned Work"><span className="assigned-work-state__icon assigned-work-state__icon--small"><Icon name="bell" size={20} /></span><span><strong>Notifications</strong><small>Review updates for your account</small></span><Icon name="arrow" size={17} /></Link>
-          <Link to="/profile"><span className="assigned-work-state__icon assigned-work-state__icon--small"><Icon name="user" size={20} /></span><span><strong>Profile</strong><small>View account details and sign out</small></span><Icon name="arrow" size={17} /></Link>
-        </section>
-      </aside>
     </div>
   </main>
 }

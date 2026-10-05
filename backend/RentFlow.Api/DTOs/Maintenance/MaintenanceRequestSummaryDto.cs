@@ -29,6 +29,8 @@ public class MaintenanceRequestSummaryDto
 
     public MaintenanceRequestStatus Status { get; set; }
 
+    public DateTimeOffset? CompletedAt { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset? UpdatedAt { get; set; }

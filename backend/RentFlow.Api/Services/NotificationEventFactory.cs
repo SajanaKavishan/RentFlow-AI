@@ -56,6 +56,27 @@ internal static class NotificationEventFactory
         };
     }
 
+    public static Notification ForMaintenanceRequestAssigned(
+        MaintenanceRequest request,
+        Guid technicianId,
+        DateTimeOffset assignedAt)
+    {
+        var reference = string.IsNullOrWhiteSpace(request.ReferenceCode)
+            ? MaintenanceReferenceCode.FromId(request.Id)
+            : request.ReferenceCode;
+        return new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientId = technicianId,
+            EventType = NotificationEventTypes.MaintenanceRequestAssigned,
+            RelatedResourceType = "MaintenanceRequest",
+            RelatedResourceId = request.Id,
+            Title = "New maintenance job assigned",
+            Message = $"{request.Title} ({reference}) has been assigned to you.",
+            CreatedAt = assignedAt
+        };
+    }
+
     public static Notification ForViewingCreated(
         ViewingRequest viewing,
         Guid landlordId)

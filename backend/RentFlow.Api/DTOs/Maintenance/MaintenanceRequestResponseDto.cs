@@ -19,6 +19,8 @@ public class MaintenanceRequestResponseDto
 
     public Guid TenantId { get; set; }
 
+    public string? TenantName { get; set; }
+
     public Guid? TechnicianId { get; set; }
 
     public string? AssignedTechnicianName { get; set; }

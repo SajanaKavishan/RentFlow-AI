@@ -62,6 +62,16 @@ function formatLabel(value, labels = {}) {
     .trim()
 }
 
+function historyActorLabel(entry) {
+  if (entry.changedByName) {
+    const role = entry.changedByRole === 'MaintenanceTechnician'
+      ? 'Technician'
+      : formatLabel(entry.changedByRole)
+    return entry.changedByRole ? `${role} · ${entry.changedByName}` : entry.changedByName
+  }
+  return entry.changedByRole ? formatLabel(entry.changedByRole) : 'System'
+}
+
 function toBadgeClass(value) {
   return String(value ?? 'unknown')
     .replace(/([a-z])([A-Z])/g, '$1-$2')
@@ -708,12 +718,12 @@ export default function LandlordMaintenancePage() {
                     <dd>{maintenanceEnumLabel(selectedRequest.priority, MAINTENANCE_PRIORITY)}</dd>
                   </div>
                   <div>
-                    <dt>Tenant ID</dt>
-                    <dd>{selectedRequest.tenantId}</dd>
+                    <dt>Tenant</dt>
+                    <dd>{selectedRequest.tenantName || 'Tenant'}</dd>
                   </div>
                   <div>
-                    <dt>Technician ID</dt>
-                    <dd>{selectedRequest.technicianId ?? 'Unassigned'}</dd>
+                    <dt>Technician</dt>
+                    <dd>{selectedRequest.assignedTechnicianName || 'Unassigned'}</dd>
                   </div>
                   <div>
                     <dt>Created</dt>
@@ -829,7 +839,7 @@ export default function LandlordMaintenancePage() {
                         <option value="">Choose a technician</option>
                         {technicians.map((technician) => (
                           <option key={technician.id} value={technician.id}>
-                            {technician.name || technician.fullName || technician.id}
+                            {technician.name || technician.fullName || 'Technician'}
                           </option>
                         ))}
                       </select>
@@ -909,7 +919,7 @@ export default function LandlordMaintenancePage() {
                       </span>
                     </div>
                     <div className="maintenance-request-card__meta">
-                      <span>Changed by {entry.changedByUserId ?? 'System'}</span>
+                      <span>Changed by {historyActorLabel(entry)}</span>
                       <span>{formatDate(entry.changedAt)}</span>
                     </div>
                     {entry.notes && <small>{entry.notes}</small>}
@@ -953,7 +963,7 @@ export default function LandlordMaintenancePage() {
                 <p><strong>Parts:</strong> {money(latestEstimate.partsCost)}</p>
                 <p><strong>Additional:</strong> {money(latestEstimate.additionalCost)}</p>
                 {latestEstimate.notes && <p><strong>Notes:</strong> {latestEstimate.notes}</p>}
-                <p><strong>Technician ID:</strong> {latestEstimate.technicianId}</p>
+                <p><strong>Technician:</strong> {selectedRequest.assignedTechnicianName || 'Unassigned'}</p>
                 <p><strong>Submitted:</strong> {formatDate(latestEstimate.submittedAt || latestEstimate.createdAt)}</p>
                 {selectedRequest?.status === 'AwaitingLandlordApproval' &&
                   (latestEstimate.status === 1 || latestEstimate.status === 'Submitted') && (

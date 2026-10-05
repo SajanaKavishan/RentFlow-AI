@@ -223,6 +223,45 @@
   gap: 14px;
 }
 
+.maintenance-page--landlord .maintenance-form > .button,
+.maintenance-page--landlord .maintenance-review-actions .button {
+  min-height: 44px;
+  padding: 11px 16px;
+  border-radius: 12px;
+  white-space: normal;
+}
+
+.maintenance-page--landlord .maintenance-form > .button {
+  align-self: flex-start;
+}
+
+.maintenance-page--landlord .maintenance-form > .button:disabled,
+.maintenance-page--landlord .maintenance-review-actions .button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.maintenance-page--landlord .maintenance-review-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 560px) {
+  .maintenance-page--landlord .maintenance-form > .button,
+  .maintenance-page--landlord .maintenance-review-actions .button {
+    width: 100%;
+  }
+
+  .maintenance-page--landlord .maintenance-form > .button {
+    align-self: stretch;
+  }
+
+  .maintenance-page--landlord .maintenance-review-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 .maintenance-detail {
   display: flex;
   flex-direction: column;

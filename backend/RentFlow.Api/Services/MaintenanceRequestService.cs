@@ -12,6 +12,8 @@ namespace RentFlow.Api.Services;
 /// </summary>
 public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMaintenanceRequestService
 {
+    private sealed record UserDisplayIdentity(string FullName, UserRole Role);
+
     public async Task<MaintenanceRequestResponseDto> CreateAsync(
         Guid tenantId,
         CreateMaintenanceRequestDto request,
@@ -186,7 +188,19 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .ThenBy(item => item.Id)
             .ToListAsync(cancellationToken);
 
-        return history.Select(MapToHistoryResponse).ToList();
+        var actorIds = history
+            .Where(item => item.ChangedByUserId.HasValue)
+            .Select(item => item.ChangedByUserId!.Value)
+            .Distinct()
+            .ToArray();
+        var actors = await dbContext.Users.AsNoTracking()
+            .Where(user => actorIds.Contains(user.Id))
+            .ToDictionaryAsync(
+                user => user.Id,
+                user => new UserDisplayIdentity(user.FullName, user.Role),
+                cancellationToken);
+
+        return history.Select(item => MapToHistoryResponse(item, actors.GetValueOrDefault(item.ChangedByUserId ?? Guid.Empty))).ToList();
     }
 
     public async Task<MaintenanceRequestResponseDto> UpdateTenantRequestAsync(
@@ -278,6 +292,20 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         maintenanceRequest.AssignmentNotes = NormalizeOptionalText(request.AssignmentNotes);
         maintenanceRequest.Status = MaintenanceRequestStatus.Assigned;
         maintenanceRequest.UpdatedAt = DateTimeOffset.UtcNow;
+        var assignedAt = maintenanceRequest.UpdatedAt;
+        var assignmentNotificationExists = await dbContext.Notifications.AnyAsync(notification =>
+            notification.RecipientId == request.TechnicianId
+            && notification.EventType == NotificationEventTypes.MaintenanceRequestAssigned
+            && notification.RelatedResourceType == "MaintenanceRequest"
+            && notification.RelatedResourceId == maintenanceRequest.Id,
+            cancellationToken);
+        if (!assignmentNotificationExists)
+        {
+            dbContext.Notifications.Add(NotificationEventFactory.ForMaintenanceRequestAssigned(
+                maintenanceRequest,
+                request.TechnicianId,
+                assignedAt ?? DateTimeOffset.UtcNow));
+        }
         AddHistory(
             maintenanceRequest,
             fromStatus: MaintenanceRequestStatus.Triaged,
@@ -827,6 +855,10 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         response.PropertyTitle = await dbContext.Properties.AsNoTracking()
             .Where(property => property.Id == request.PropertyId)
             .Select(property => property.Title).SingleOrDefaultAsync(cancellationToken);
+        response.TenantName = await dbContext.Users.AsNoTracking()
+            .Where(user => user.Id == request.TenantId && user.Role == UserRole.Tenant)
+            .Select(user => user.FullName)
+            .SingleOrDefaultAsync(cancellationToken);
         if (request.TechnicianId is { } technicianId)
         {
             // Project display identity only; account contact and profile data stay private.
@@ -904,13 +936,15 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             Category = request.Category,
             Priority = request.Priority,
             Status = request.Status,
+            CompletedAt = request.CompletedAt,
             CreatedAt = request.CreatedAt,
             UpdatedAt = request.UpdatedAt
         };
     }
 
     private static MaintenanceStatusHistoryResponseDto MapToHistoryResponse(
-        MaintenanceStatusHistory history)
+        MaintenanceStatusHistory history,
+        UserDisplayIdentity? actor)
     {
         return new MaintenanceStatusHistoryResponseDto
         {
@@ -918,6 +952,8 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             FromStatus = history.FromStatus,
             ToStatus = history.ToStatus,
             ChangedByUserId = history.ChangedByUserId,
+            ChangedByName = actor?.FullName,
+            ChangedByRole = actor?.Role,
             ChangedAt = history.ChangedAt,
             Notes = history.Notes
         };
