@@ -131,7 +131,8 @@ public sealed class ViewingPostgresTests
             RequestedDateTime = slot.RequestedDateTime, DurationMinutes = 45 };
         var finished = new ViewingRequest { TenantId = tenant.Id, PropertyId = property.Id, Status = ViewingStatus.Completed,
             RequestedDateTime = slot.RequestedDateTime.AddDays(-1), DurationMinutes = 45 };
-        db.AddRange(tenant, unresolved, finished); await db.SaveChangesAsync();
+        await InsertLegacyUserAsync(db, tenant);
+        db.AddRange(unresolved, finished); await db.SaveChangesAsync();
         var unresolvedId = Guid.NewGuid(); var finishedId = Guid.NewGuid(); var claimedAt = slot.RequestedDateTime.AddHours(2);
         await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"ViewingFollowUps\" (\"Id\",\"ViewingId\",\"TenantId\",\"ClaimedAt\") VALUES ({unresolvedId},{unresolved.Id},{tenant.Id},{claimedAt})");
         await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"ViewingFollowUps\" (\"Id\",\"ViewingId\",\"TenantId\",\"ClaimedAt\",\"Decision\",\"RespondedAt\") VALUES ({finishedId},{finished.Id},{tenant.Id},{claimedAt},{"NotNow"},{claimedAt})");
@@ -244,12 +245,29 @@ public sealed class ViewingPostgresTests
         var landlord = new ApplicationUser { Id = Guid.NewGuid(), FullName = "Viewing test landlord", Email = $"{Guid.NewGuid():N}@example.test",
             NormalizedEmail = Guid.NewGuid().ToString("N"), PhoneNumber = "0000000000", PasswordHash = "test-only", Role = UserRole.Landlord };
         var property = new Property { LandlordId = landlord.Id, Title = "Viewing home", Description = "Test", Address = "Test", City = "Colombo", MonthlyRent = 100000, Bedrooms = 1, Bathrooms = 1 };
-        db.Add(landlord); db.Add(property); await db.SaveChangesAsync();
+        if (migrationTarget is null)
+            db.Add(landlord);
+        else
+            await InsertLegacyUserAsync(db, landlord);
+        db.Add(property); await db.SaveChangesAsync();
         var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2));
         var service = new ViewingAvailabilityService(db);
         await service.SaveAsync(property.Id, landlord.Id, new ViewingAvailabilityDto { Windows = [new()
             { DayOfWeek = (int)date.DayOfWeek, IsEnabled = true, StartTime = new(9, 0), EndTime = new(17, 0) }] });
         return (property, (await service.GetSlotsAsync(property.Id, date)).Slots[0]);
+    }
+
+    private static Task InsertLegacyUserAsync(ApplicationDbContext db, ApplicationUser user)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Users"
+                ("Id", "FullName", "Email", "NormalizedEmail", "PhoneNumber", "PasswordHash", "Role",
+                 "IsActive", "TokenVersion", "CreatedAt", "UpdatedAt", "PublicContactEnabled")
+            VALUES
+                ({user.Id}, {user.FullName}, {user.Email}, {user.NormalizedEmail}, {user.PhoneNumber}, {user.PasswordHash},
+                 {user.Role.ToString()}, {user.IsActive}, {user.TokenVersion}, {now}, {now}, {user.PublicContactEnabled})
+            """);
     }
 
     [PostgreSqlFact]
