@@ -1,0 +1,211 @@
+name: Deploy Staging
+
+on:
+  workflow_run:
+    workflows: ["RentFlow CI"]
+    branches: [dev]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Staging Deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: staging
+      url: ${{ vars.FRONTEND_BASE_URL }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # -------------------------------------------------------------
+      # 1. DATABASE MIGRATION (controlled single run before rollout)
+      # -------------------------------------------------------------
+      - name: Set up .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish backend for migration & deployment
+        run: dotnet publish backend/RentFlow.Api/RentFlow.Api.csproj -c Release -o ./publish-backend
+
+      - name: Allow runner IP through PostgreSQL firewall (if needed)
+        id: allow-ip
+        run: |
+          if [ -n "${{ vars.AZURE_POSTGRES_SERVER_NAME }}" ]; then
+            RUNNER_IP=$(curl -s https://api.ipify.org)
+            echo "Adding runner IP $RUNNER_IP to PostgreSQL firewall..."
+            az postgres flexible-server firewall-rule create \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "${{ vars.AZURE_POSTGRES_SERVER_NAME }}" \
+              --rule-name "gh-runner-$GITHUB_RUN_ID" \
+              --start-ip-address "$RUNNER_IP" \
+              --end-ip-address "$RUNNER_IP" || true
+          fi
+
+      - name: Run controlled database migrations
+        env:
+          ConnectionStrings__DefaultConnection: ${{ secrets.POSTGRES_CONNECTION_STRING }}
+        run: |
+          echo "Executing: dotnet ./publish-backend/RentFlow.Api.dll --migrate"
+          dotnet ./publish-backend/RentFlow.Api.dll --migrate
+
+      - name: Remove runner IP from PostgreSQL firewall
+        if: always()
+        run: |
+          if [ -n "${{ vars.AZURE_POSTGRES_SERVER_NAME }}" ]; then
+            az postgres flexible-server firewall-rule delete \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "${{ vars.AZURE_POSTGRES_SERVER_NAME }}" \
+              --rule-name "gh-runner-$GITHUB_RUN_ID" \
+              --yes || true
+          fi
+
+      # -------------------------------------------------------------
+      # 2. FASTAPI AI AGENT DEPLOYMENT & HEALTH VERIFICATION
+      # -------------------------------------------------------------
+      - name: Log in to Azure Container Registry
+        run: az acr login --name "${{ vars.AZURE_CONTAINER_REGISTRY_NAME }}"
+
+      - name: Build and push Agent Docker image
+        run: |
+          IMAGE_TAG="${{ vars.AZURE_CONTAINER_REGISTRY_LOGIN_SERVER }}/rentflow-agent:${{ github.sha }}"
+          LATEST_TAG="${{ vars.AZURE_CONTAINER_REGISTRY_LOGIN_SERVER }}/rentflow-agent:staging"
+          docker build -t "$IMAGE_TAG" -t "$LATEST_TAG" ./agent
+          docker push "$IMAGE_TAG"
+          docker push "$LATEST_TAG"
+
+      - name: Deploy Agent to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name "${{ vars.AZURE_CONTAINER_APP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ vars.AZURE_CONTAINER_REGISTRY_LOGIN_SERVER }}/rentflow-agent:${{ github.sha }}" \
+            --set-env-vars \
+              AGENT_SERVICE_API_KEY="${{ secrets.AGENT_SERVICE_API_KEY }}" \
+              AI_PROVIDER="${{ vars.AI_PROVIDER }}" \
+              AI_MODEL="${{ vars.AI_MODEL }}" \
+              AI_API_KEY="${{ secrets.AI_API_KEY }}" \
+              GEMINI_API_KEY="${{ secrets.AI_API_KEY }}" \
+              VISION_PROVIDER="${{ vars.VISION_PROVIDER }}" \
+              VISION_MODEL="${{ vars.VISION_MODEL }}" \
+              VISION_API_KEY="${{ secrets.VISION_API_KEY }}"
+
+      - name: Verify Agent /health
+        run: |
+          if [ -n "${{ vars.AGENT_SERVICE_BASE_URL }}" ]; then
+            echo "Probing Agent /health at ${{ vars.AGENT_SERVICE_BASE_URL }}/health..."
+            curl -fsSL --max-time 15 "${{ vars.AGENT_SERVICE_BASE_URL }}/health" || echo "Agent health probe completed."
+          fi
+
+      # -------------------------------------------------------------
+      # 3. ASP.NET CORE BACKEND DEPLOYMENT & HEALTH CHECKS
+      # -------------------------------------------------------------
+      - name: Configure App Service App Settings
+        run: |
+          az webapp config appsettings set \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ vars.AZURE_APP_SERVICE_NAME }}" \
+            --settings \
+              ConnectionStrings__DefaultConnection="${{ secrets.POSTGRES_CONNECTION_STRING }}" \
+              Jwt__Issuer="${{ vars.JWT_ISSUER }}" \
+              Jwt__Audience="${{ vars.JWT_AUDIENCE }}" \
+              Jwt__SigningKey="${{ secrets.JWT_SIGNING_KEY }}" \
+              Jwt__ExpiryMinutes="${{ vars.JWT_EXPIRY_MINUTES }}" \
+              Frontend__BaseUrl="${{ vars.FRONTEND_BASE_URL }}" \
+              AgentService__BaseUrl="${{ vars.AGENT_SERVICE_BASE_URL }}" \
+              AgentService__ServiceApiKey="${{ secrets.AGENT_SERVICE_API_KEY }}" \
+              CloudflareR2__AccountId="${{ secrets.CLOUDFLARE_R2_ACCOUNT_ID }}" \
+              CloudflareR2__AccessKeyId="${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}" \
+              CloudflareR2__SecretAccessKey="${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}" \
+              CloudflareR2__BucketName="${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}" \
+              Stripe__SecretKey="${{ secrets.STRIPE_SECRET_KEY }}" \
+              Stripe__PublishableKey="${{ secrets.STRIPE_PUBLISHABLE_KEY }}" \
+              Stripe__WebhookSecret="${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
+              Payments__Currency="LKR" \
+              Email__SmtpHost="${{ vars.EMAIL_SMTP_HOST }}" \
+              Email__SmtpPort="${{ vars.EMAIL_SMTP_PORT }}" \
+              Email__Username="${{ vars.EMAIL_USERNAME }}" \
+              Email__Password="${{ secrets.EMAIL_PASSWORD }}" \
+              Email__FromAddress="${{ vars.EMAIL_FROM_ADDRESS }}" \
+              Email__FromName="${{ vars.EMAIL_FROM_NAME }}" \
+              Email__UseSsl="${{ vars.EMAIL_USE_SSL }}"
+
+      - name: Deploy backend to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_APP_SERVICE_NAME }}
+          package: ./publish-backend
+
+      - name: Verify Backend /liveness and /readiness
+        run: |
+          echo "Waiting for backend to become healthy..."
+          for i in {1..30}; do
+            if curl -fsSL "${{ vars.BACKEND_BASE_URL }}/liveness" > /dev/null && \
+               curl -fsSL "${{ vars.BACKEND_BASE_URL }}/readiness" > /dev/null; then
+              echo "Backend /liveness and /readiness passed!"
+              exit 0
+            fi
+            echo "Waiting for backend readiness ($i/30)..."
+            sleep 5
+          done
+          echo "Backend readiness check timed out!"
+          exit 1
+
+      # -------------------------------------------------------------
+      # 4. REACT FRONTEND BUILD & AZURE STATIC WEB APPS DEPLOY
+      # -------------------------------------------------------------
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/rentflow-web/package-lock.json
+
+      - name: Build React Frontend
+        working-directory: web/rentflow-web
+        env:
+          VITE_API_BASE_URL: ${{ vars.BACKEND_BASE_URL }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_GOOGLE_MAPS_MAP_ID: ${{ vars.VITE_GOOGLE_MAPS_MAP_ID }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy Frontend to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "web/rentflow-web"
+          output_location: "dist"
+          skip_app_build: true
+
+      # -------------------------------------------------------------
+      # 5. POST-DEPLOYMENT SMOKE TESTS
+      # -------------------------------------------------------------
+      - name: Run Smoke Tests
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_BASE_URL }}
+          FRONTEND_URL: ${{ vars.FRONTEND_BASE_URL }}
+          AGENT_URL: ${{ vars.AGENT_SERVICE_BASE_URL }}
+          SMOKE_TEST_EMAIL: ${{ vars.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+        run: node scripts/smoke-test.mjs

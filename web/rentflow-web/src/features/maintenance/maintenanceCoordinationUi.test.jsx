@@ -155,7 +155,6 @@ describe('landlord AI Coordination', () => {
     const mock = mockApi({ onStart: () => new Promise((resolve) => { finish = resolve }) })
     renderPage()
     await userEvent.click(await screen.findByRole('button', { name: 'Analyze request' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
     await waitFor(() => expect(within(aiCard()).getByRole('status')).toHaveTextContent('Analyzing maintenance request'))
     expect(within(aiCard()).queryByRole('button', { name: 'Analyze request' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Triage request' })).toBeEnabled()

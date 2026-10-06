@@ -51,7 +51,7 @@ export default function AppShell() {
   const { user, logout } = useAuth()
   const portalRole = user.role === USER_ROLES.MAINTENANCE_TECHNICIAN ? 'Technician' : user.role
   const location = useLocation()
-  const landlordActions = useLandlordActionSummary(user, location.key)
+  const landlordActions = useLandlordActionSummary(user, location.pathname)
   const refreshLandlordActions = landlordActions.refresh
   const isLandlordPropertyDetails = user.role === USER_ROLES.LANDLORD
     && location.pathname !== '/properties/new'
@@ -85,6 +85,9 @@ export default function AppShell() {
   }, [user.role, refreshLandlordActions, refreshCount])
   useEffect(() => {
     if (user.role !== USER_ROLES.MAINTENANCE_TECHNICIAN) {
+      return undefined
+    }
+    if (location.pathname === '/modules/assigned-work' || location.pathname === '/modules/work-history') {
       return undefined
     }
     let active = true

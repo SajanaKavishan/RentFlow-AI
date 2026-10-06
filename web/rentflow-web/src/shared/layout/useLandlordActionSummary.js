@@ -21,13 +21,13 @@ export default function useLandlordActionSummary(user, routeKey) {
     setAttempt((value) => value + 1)
   }, [])
   useEffect(() => {
-    if (user.role !== 'Landlord') return undefined
+    if (user.role !== 'Landlord' || /^\/properties\/(?:new|[^/]+\/edit)\/?$/.test(routeKey)) return undefined
     const request = new AbortController()
     controller.current = request
     getLandlordActionSummary(request.signal).then((data) => {
       if (!request.signal.aborted) setState({ key, status: 'ready', data })
     }).catch(() => { if (!request.signal.aborted) setState({ key, status: 'error', data: null }) })
     return () => request.abort()
-  }, [key, user.role])
+  }, [key, routeKey, user.role])
   return { ...(state?.key === key && user.role === 'Landlord' ? state : { status: 'loading', data: null }), refresh }
 }

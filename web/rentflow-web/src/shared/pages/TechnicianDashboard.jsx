@@ -60,18 +60,18 @@ export default function TechnicianDashboard({ user }) {
     </header>
 
     <section className="technician-summary" aria-label="Work summary">
-      <article className="technician-summary__card">
-        <strong>{summary?.today ?? '—'}</strong>
+      <section className="technician-summary__card" aria-label="Today's jobs">
+        <strong>{summary?.today != null ? summary.today : 'Unavailable'}</strong>
         <span>Today's jobs</span>
-      </article>
-      <article className="technician-summary__card technician-summary__card--progress">
-        <strong>{summary?.progress ?? '—'}</strong>
+      </section>
+      <section className="technician-summary__card technician-summary__card--progress" aria-label="In progress">
+        <strong>{summary?.progress != null ? summary.progress : 'Unavailable'}</strong>
         <span>In progress</span>
-      </article>
-      <article className="technician-summary__card technician-summary__card--completed">
-        <strong>{summary?.completed ?? '—'}</strong>
+      </section>
+      <section className="technician-summary__card technician-summary__card--completed" aria-label="Completed this week">
+        <strong>{summary?.completed != null ? summary.completed : 'Unavailable'}</strong>
         <span>Completed this week</span>
-      </article>
+      </section>
     </section>
 
     <div className="technician-dashboard__workspace">

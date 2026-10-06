@@ -6,12 +6,34 @@ using RentFlow.DevTools;
 
 if (args.Contains("--help") || args.Length == 0)
 {
-    Console.WriteLine("Local maintenance AI test fixtures (no migrations/provider calls). Run from repository root:");
+    Console.WriteLine("RentFlow deployment and local maintenance commands. Run from repository root:");
+    Console.WriteLine("dotnet run --project backend/RentFlow.DevTools -- --migrate");
     Console.WriteLine("dotnet run --project backend/RentFlow.DevTools -- --development --landlord-email YOUR_EMAIL [--dry-run]");
     return 0;
 }
 try
 {
+    if (args.Contains("--migrate"))
+    {
+        var migrationApiDirectory = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "backend", "RentFlow.Api"));
+        if (!File.Exists(Path.Combine(migrationApiDirectory, "RentFlow.Api.csproj")))
+            throw new MaintenanceDemoSetupException("Run this command from the RentFlow-AI repository root.");
+
+        var migrationConfiguration = new ConfigurationBuilder().SetBasePath(migrationApiDirectory)
+            .AddJsonFile("appsettings.json", optional: false)
+            .AddJsonFile("appsettings.Development.json", optional: true)
+            .AddUserSecrets(typeof(ApplicationDbContext).Assembly, optional: true)
+            .AddEnvironmentVariables().Build();
+        var migrationConnection = migrationConfiguration.GetConnectionString("DefaultConnection")
+            ?? throw new MaintenanceDemoSetupException("The database connection string is not configured.");
+        var migrationBuilder = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseNpgsql(migrationConnection);
+        await using var migrationDb = new ApplicationDbContext(migrationBuilder.Options);
+        await migrationDb.Database.MigrateAsync();
+        Console.WriteLine("Database migrations applied successfully.");
+        return 0;
+    }
+
     if (!args.Contains("--development")) throw new MaintenanceDemoSetupException("Explicit --development is required.");
     var emailIndex = Array.IndexOf(args, "--landlord-email");
     if (emailIndex < 0 || emailIndex + 1 >= args.Length) throw new MaintenanceDemoSetupException("Provide --landlord-email.");

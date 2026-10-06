@@ -28,11 +28,26 @@ function renderDashboard(role) {
 beforeEach(() => {
   tokenStorage.setToken('staff-token')
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
-  vi.stubGlobal('fetch', vi.fn((url) => Promise.resolve(json(
-    String(url).includes('/api/maintenance-requests/technician/')
-      ? []
-      : { unreadCount: 3 },
-  ))))
+  vi.stubGlobal('fetch', vi.fn((url) => {
+    const path = new URL(url, 'http://localhost').pathname
+    if (path.includes('/api/maintenance-requests/technician/')) return Promise.resolve(json([]))
+    if (path === '/api/notifications/unread-count') return Promise.resolve(json({ unreadCount: 3 }))
+    if (path === '/api/admin/dashboard/summary') {
+      return Promise.resolve(json({ propertyCount: 15, activeApplicationCount: 6, monthlyVolume: 450000, month: '2026-10' }))
+    }
+    if (path === '/api/admin/dashboard/activity') return Promise.resolve(json([]))
+    if (path === '/api/admin/dashboard/workflows') {
+      return Promise.resolve(json([
+        { name: 'Application validation', total: 0, pending: 0, running: 0, awaitingReview: 0, completed: 0, failed: 0 },
+        { name: 'Identity verification', total: 0, pending: 0, running: 0, awaitingReview: 0, completed: 0, failed: 0 },
+        { name: 'Maintenance dispatch', total: 0, pending: 0, running: 0, awaitingReview: 0, completed: 0, failed: 0 },
+      ]))
+    }
+    if (path === '/api/admin/dashboard/health') {
+      return Promise.resolve(json({ checkedAt: '2026-10-06T10:00:00Z', services: [{ name: 'Database', status: 'available', detail: 'OK' }] }))
+    }
+    return Promise.resolve(json({ unreadCount: 3 }))
+  }))
 })
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals() })
 
@@ -80,20 +95,23 @@ describe('Technician and Admin dashboards', () => {
     expect(totalUsers).not.toHaveTextContent('Integration pending')
     for (const title of ['Properties', 'Active Applications', 'Monthly Volume']) {
       const card = within(summary).getByRole('region', { name: title })
-      expect(card).toHaveTextContent('Integration pending')
-      expect(card).toHaveTextContent('Admin')
+      expect(card).not.toHaveTextContent('Integration pending')
     }
+    expect(await within(within(summary).getByRole('region', { name: 'Properties' })).findByText('15')).toBeInTheDocument()
+    expect(within(summary).getByRole('region', { name: 'Active Applications' })).toHaveTextContent('6')
+    expect(within(summary).getByRole('region', { name: 'Monthly Volume' })).toHaveTextContent('Rs. 450,000')
 
     const activity = within(main).getByRole('region', { name: 'Platform Activity' })
     const distribution = within(main).getByRole('region', { name: 'User Distribution' })
     const workflows = within(main).getByRole('region', { name: 'AI Workflows' })
     const health = within(main).getByRole('region', { name: 'System Health' })
-    expect(activity).toHaveTextContent('Admin activity-feed contract')
+    expect(activity).toHaveTextContent('Latest listings, applications, maintenance requests and completed payments.')
     expect(distribution).toHaveTextContent('Counts include active and inactive accounts')
     expect(distribution).toHaveTextContent('Technicians7')
-    expect(workflows).toHaveTextContent('Admin AI reporting aggregate')
-    expect(health).toHaveTextContent('Admin service-health contract')
-    expect([activity, workflows, health].every((panel) => panel.textContent.includes('Integration pending'))).toBe(true)
+    expect(workflows).toHaveTextContent('Recorded workflow runs across the platform, including retries.')
+    expect(health).toHaveTextContent('Live API, database and agent connectivity checks.')
+    expect(within(workflows).getByRole('link', { name: /Open workflow monitor/ })).toHaveAttribute('href', '/modules/ai-system-overview')
+    expect([activity, workflows, health].every((panel) => !panel.textContent.includes('Integration pending'))).toBe(true)
     expect(distribution).not.toHaveTextContent('Integration pending')
 
     const quickAccess = within(main).getByRole('navigation', { name: 'Admin quick access' })
@@ -106,8 +124,8 @@ describe('Technician and Admin dashboards', () => {
     expect(quickAccess).not.toHaveTextContent(/full directory is pending|sign out/i)
     expect(within(quickAccess).getByRole('link', { name: 'AI / System Overview' })).toHaveAttribute('href', '/modules/ai-system-overview')
     expect(await within(quickAccess).findByText('3 unread notifications')).toBeInTheDocument()
-    expect(fetch).toHaveBeenCalledTimes(1)
-    expect(new URL(fetch.mock.calls[0][0], 'http://localhost').pathname).toBe('/api/notifications/unread-count')
+    expect(fetch.mock.calls.some(([url]) => new URL(url, 'http://localhost').pathname === '/api/notifications/unread-count')).toBe(true)
+    expect(fetch.mock.calls.some(([url]) => new URL(url, 'http://localhost').pathname === '/api/admin/dashboard/summary')).toBe(true)
     expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer staff-token')
     expect(main).not.toHaveTextContent(/all systems operational|uptime|recent sign-up|AI requests|maintenance jobs/i)
 
@@ -127,18 +145,14 @@ describe('Technician and Admin dashboards', () => {
 
   it.each([
     ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work', /View (all|assigned work)/],
-    ['Admin', 'AI Workflows', 'AI / System Monitoring Platform', /View integration details/],
+    ['Admin', 'AI Workflows', 'AI / System Monitoring Platform', /Open workflow monitor/],
   ])('opens the explicit workspace for %s %s', async (role, label, pageTitle, linkName) => {
     renderDashboard(role)
     const main = screen.getByRole('main')
     const region = within(main).getByRole('region', { name: label })
     await userEvent.click(within(region).getByRole('link', { name: linkName }))
     expect(screen.getByRole('heading', { name: pageTitle })).toBeInTheDocument()
-    if (role === 'MaintenanceTechnician') {
-      expect(screen.queryByText('Integration pending')).not.toBeInTheDocument()
-    } else {
-      expect(screen.getAllByText('Integration pending').length).toBeGreaterThan(0)
-    }
+    expect(screen.queryByText('Integration pending')).not.toBeInTheDocument()
   })
 
   it('opens the working Technician provisioning page from Admin Quick Access', async () => {

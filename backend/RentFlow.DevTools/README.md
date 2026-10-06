@@ -1,5 +1,19 @@
 # Local maintenance AI test data
 
+## Deployment migrations
+
+Apply the committed EF Core migrations as a dedicated deployment step, before starting or
+restarting API replicas:
+
+```powershell
+dotnet run --project backend/RentFlow.DevTools --configuration Release -- --migrate
+```
+
+The command uses the same backend configuration sources as the API, applies pending migrations
+once, and exits with a non-zero status on failure. The API does not run migrations during startup,
+so this command should be executed by the deployment job with database credentials available only
+to that job. Existing migration files remain the source of truth.
+
 This standalone development tool creates an owned sample property and two submitted maintenance
 requests for an existing active Landlord. It also creates a synthetic Tenant, approved application,
 accepted rental offer and current active lease so the existing Tenant creation/photo-upload flows

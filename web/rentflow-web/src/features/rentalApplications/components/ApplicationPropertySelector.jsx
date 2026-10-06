@@ -19,6 +19,7 @@ function PropertyCards({ properties, selectedPropertyId, refreshKey }) {
       <span>Application review counts are unavailable. You can still open a property.</span>
       <button type="button" className="button button--quiet" onClick={counts.retry}>Retry counts</button>
     </div>}
+    {counts.status === 'ready' && <button type="button" className="button button--quiet" onClick={counts.retry}>Refresh</button>}
     <div className="workspace-property-selector__grid">
       {properties.map((property) => {
         const count = counts.status === 'ready' ? counts.values.get(property.id.toLowerCase()) ?? 0 : null

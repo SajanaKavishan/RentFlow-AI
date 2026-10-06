@@ -21,6 +21,7 @@ using RentFlow.Api.Services.Interfaces;
 var builder = WebApplication.CreateBuilder(args);
 
 const string DevelopmentCorsPolicy = "DevelopmentCors";
+const string FrontendCorsPolicy = "FrontendCors";
 
 // =========================================================
 // DATABASE
@@ -558,12 +559,12 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // =========================================================
-// DEVELOPMENT CORS
+// CORS
 // =========================================================
 
-if (builder.Environment.IsDevelopment())
+builder.Services.AddCors(options =>
 {
-    builder.Services.AddCors(options =>
+    if (builder.Environment.IsDevelopment())
     {
         options.AddPolicy(
             DevelopmentCorsPolicy,
@@ -589,14 +590,38 @@ if (builder.Environment.IsDevelopment())
                     .AllowAnyHeader()
                     .AllowAnyMethod();
             });
-    });
-}
+    }
+    else
+    {
+        var configuredOrigin = builder.Configuration[FrontendOptions.BaseUrlKey]
+            ?? throw new InvalidOperationException(
+                "Frontend:BaseUrl must be configured outside Development.");
+
+        var normalizedOrigin = configuredOrigin.TrimEnd('/');
+
+        options.AddPolicy(
+            FrontendCorsPolicy,
+            policy => policy
+                .WithOrigins(normalizedOrigin)
+                .AllowAnyHeader()
+                .AllowAnyMethod());
+    }
+});
 
 // =========================================================
 // APP
 // =========================================================
 
 var app = builder.Build();
+
+if (args.Contains("--migrate"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await db.Database.MigrateAsync();
+    Console.WriteLine("Database migrations applied successfully.");
+    return;
+}
 
 if (AdminBootstrapCommand.IsRequested(args))
 {
@@ -622,6 +647,10 @@ if (app.Environment.IsDevelopment())
     app.UseCors(
         DevelopmentCorsPolicy);
 }
+else
+{
+    app.UseCors(FrontendCorsPolicy);
+}
 
 app.UseHttpsRedirection();
 
@@ -630,6 +659,60 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseRateLimiter();
+
+app.MapGet("/liveness", () => Results.Ok(new { status = "ok" }))
+    .AllowAnonymous();
+
+app.MapGet("/readiness", async (
+    ApplicationDbContext db,
+    IConfiguration configuration,
+    IHostEnvironment environment,
+    CancellationToken cancellationToken) =>
+{
+    var missingConfiguration = new List<string>();
+    if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("DefaultConnection")))
+        missingConfiguration.Add("ConnectionStrings:DefaultConnection");
+    if (!environment.IsDevelopment())
+    {
+        if (!Uri.TryCreate(configuration[FrontendOptions.BaseUrlKey], UriKind.Absolute, out var frontendUri)
+            || frontendUri.Scheme is not ("http" or "https"))
+            missingConfiguration.Add(FrontendOptions.BaseUrlKey);
+
+        var signingKey = configuration[JwtOptions.SigningKeyKey];
+        if (Encoding.UTF8.GetByteCount(signingKey ?? string.Empty) < 32)
+            missingConfiguration.Add(JwtOptions.SigningKeyKey);
+    }
+
+    if (missingConfiguration.Count > 0)
+    {
+        return Results.Json(new
+        {
+            status = "not_ready",
+            reason = "required_configuration_missing",
+            configuration = missingConfiguration
+        }, statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    try
+    {
+        if (!await db.Database.CanConnectAsync(cancellationToken))
+        {
+            return Results.Json(new { status = "not_ready", reason = "database_unavailable" },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+        throw;
+    }
+    catch
+    {
+        return Results.Json(new { status = "not_ready", reason = "database_unavailable" },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    return Results.Ok(new { status = "ready" });
+}).AllowAnonymous();
 
 app.MapControllers();
 

@@ -10,6 +10,8 @@
 *.userosscache
 *.sln.docstates
 *.env
+# Keep the agent's local provider credentials out of the worktree index.
+agent/.env
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
