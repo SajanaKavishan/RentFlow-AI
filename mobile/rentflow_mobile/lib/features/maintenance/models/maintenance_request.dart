@@ -137,6 +137,7 @@ class MaintenanceRequest {
     required this.createdAt,
     required this.updatedAt,
     this.referenceCode,
+    this.propertyTitle,
     this.preferredAccessWindow,
     this.assignedTechnicianName,
     this.assignedTechnicianContactPhone,
@@ -144,6 +145,7 @@ class MaintenanceRequest {
 
   final String id;
   final String? referenceCode;
+  final String? propertyTitle;
   final PreferredAccessWindow? preferredAccessWindow;
   final String? assignedTechnicianName;
   final String? assignedTechnicianContactPhone;
@@ -176,6 +178,7 @@ class MaintenanceRequest {
     return MaintenanceRequest(
       id: _requiredString(json, 'id'),
       referenceCode: _referenceCode(json['referenceCode']),
+      propertyTitle: _nullableString(json, 'propertyTitle'),
       preferredAccessWindow: PreferredAccessWindow.fromJson(
         json['preferredAccessWindow'],
       ),

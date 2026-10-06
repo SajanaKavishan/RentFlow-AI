@@ -8,6 +8,7 @@ import '../models/maintenance_status_history.dart';
 import '../models/maintenance_request.dart';
 import '../models/repair_estimate.dart';
 import '../services/maintenance_api_service.dart';
+import '../services/maintenance_photo_picker.dart';
 import '../widgets/tenant_maintenance_ui.dart';
 
 class AssignedWorkScreen extends StatefulWidget {
@@ -17,12 +18,14 @@ class AssignedWorkScreen extends StatefulWidget {
     this.request,
     this.requestId,
     this.technicianId,
+    this.photoPicker,
   });
 
   final MaintenanceApiService? maintenanceApiService;
   final MaintenanceRequest? request;
   final String? requestId;
   final String? technicianId;
+  final MaintenancePhotoPicker? photoPicker;
 
   @override
   State<AssignedWorkScreen> createState() => _AssignedWorkScreenState();
@@ -31,6 +34,7 @@ class AssignedWorkScreen extends StatefulWidget {
 class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
   ApiClient? _ownedApiClient;
   late final MaintenanceApiService _apiService;
+  late final MaintenancePhotoPicker _photoPicker;
   MaintenanceRequest? _request;
   List<MaintenanceRequest> _assignedWork = const [];
   List<RepairEstimate> _estimates = const [];
@@ -57,6 +61,7 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
       _ownedApiClient = ApiClient();
       _apiService = MaintenanceApiService(_ownedApiClient!);
     }
+    _photoPicker = widget.photoPicker ?? PlatformMaintenancePhotoPicker();
     _requestFuture = _loadRequest();
   }
 
@@ -139,9 +144,9 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
           'Your technician account could not be identified.',
         );
       }
-      final assignedWork = await _apiService.getAssignedWork(
+      final assignedWork = (await _apiService.getAssignedWork(
         technicianId: technicianId,
-      );
+      )).where(_isActiveJob).toList(growable: false);
       final selectedSummary = assignedWork.isEmpty ? null : assignedWork.first;
       if (mounted) {
         setState(() {
@@ -216,9 +221,9 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
       return;
     }
     try {
-      final nextWork = await _apiService.getAssignedWork(
+      final nextWork = (await _apiService.getAssignedWork(
         technicianId: technicianId,
-      );
+      )).where(_isActiveJob).toList(growable: false);
       if (!mounted) return;
       final selectedId = _request?.id;
       MaintenanceRequest? selected;
@@ -455,62 +460,29 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
         !_isAssignedToCurrentTechnician(request)) {
       return;
     }
-    final confirmed = await _confirmWorkAction(
-      title: 'Complete work?',
-      message: 'Confirm that the maintenance work has been completed.',
-      confirmLabel: 'Complete work',
-      confirmKey: const ValueKey('confirm-complete-maintenance-work'),
-    );
-    if (!confirmed || !mounted || _activeRequest?.id != request.id) return;
-
     setState(() {
       _isCompletingWork = true;
       _errorMessage = null;
     });
-
     try {
-      if (!await _workActionStillAllowed(request, starting: false)) {
-        await _refreshQueue();
-        if (mounted) {
-          const message =
-              'This request is no longer in progress or assigned to your technician account.';
-          setState(() => _errorMessage = message);
-          AppSnackbars.show(context, message: message, tone: SnackTone.error);
-        }
-        return;
-      }
-      final updated = await _apiService.completeWork(id: request.id);
-      if (!mounted) return;
-      setState(() {
-        _request = updated;
-        _errorMessage = null;
-      });
-      await _refreshQueue();
-      if (!mounted) return;
-      AppSnackbars.show(
-        context,
-        message: 'Work completed for ${updated.title}.',
-        tone: SnackTone.success,
+      final completed = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: AppPalette.warmCream,
+        builder: (_) => _CompletionSheet(
+          request: request,
+          apiService: _apiService,
+          photoPicker: _photoPicker,
+        ),
       );
-    } on MaintenanceApiException catch (error) {
-      if (mounted) {
-        setState(() => _errorMessage = error.message);
+      if (completed == true && mounted) {
+        await _refreshQueue();
+        if (!mounted) return;
         AppSnackbars.show(
           context,
-          message: error.message,
-          tone: SnackTone.error,
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => _errorMessage =
-              'Unable to complete this maintenance request right now.',
-        );
-        AppSnackbars.show(
-          context,
-          message: 'Unable to complete this maintenance request right now.',
-          tone: SnackTone.error,
+          message: 'Work completed for ${request.title}.',
+          tone: SnackTone.success,
         );
       }
     } finally {
@@ -695,375 +667,374 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
       backgroundColor: AppPalette.background,
       appBar: AppBar(
         title: const Text('Assigned Work'),
-        actions: [
-          if (widget.technicianId != null)
-            IconButton(
-              tooltip: 'Refresh assigned work',
-              onPressed:
-                  _isStartingWork || _isCompletingWork || _isSubmittingEstimate
-                  ? null
-                  : _refreshQueue,
-              icon: const Icon(Icons.refresh),
-            ),
-        ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1),
         ),
       ),
-      body: FutureBuilder<MaintenanceRequest?>(
-        future: _requestFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppPalette.olive),
-            );
-          }
+      body: RefreshIndicator(
+        color: AppPalette.olive,
+        onRefresh: _refreshQueue,
+        child: FutureBuilder<MaintenanceRequest?>(
+          future: _requestFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(color: AppPalette.olive),
+              );
+            }
 
-          if (snapshot.hasError) {
-            final message = snapshot.error is MaintenanceApiException
-                ? (snapshot.error as MaintenanceApiException).message
-                : 'Unable to load the assigned maintenance work.';
+            if (snapshot.hasError) {
+              final message = snapshot.error is MaintenanceApiException
+                  ? (snapshot.error as MaintenanceApiException).message
+                  : 'Unable to load the assigned maintenance work.';
+              return AuthenticatedPage(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: SharedState(
+                  title: 'Could not load work order',
+                  message: message,
+                  icon: Icons.error_outline,
+                  actionLabel: 'Retry',
+                  onAction: _retryLoad,
+                ),
+              );
+            }
+
+            final request = _request ?? snapshot.data;
+            final hasAssignedWork =
+                _assignedWork.isNotEmpty ||
+                (request != null && _hasActionableRequest);
+            if (!hasAssignedWork) {
+              return AuthenticatedPage(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: SharedState(
+                  title: 'No assigned work found',
+                  message:
+                      'This technician workspace will show active maintenance tasks once a request is assigned.',
+                  icon: Icons.handyman_outlined,
+                ),
+              );
+            }
+
+            final activeRequest = request ?? _assignedWork.first;
             return AuthenticatedPage(
-              child: SharedState(
-                title: 'Could not load work order',
-                message: message,
-                icon: Icons.error_outline,
-                actionLabel: 'Retry',
-                onAction: _retryLoad,
-              ),
-            );
-          }
-
-          final request = _request ?? snapshot.data;
-          final hasAssignedWork =
-              _assignedWork.isNotEmpty ||
-              (request != null && _hasActionableRequest);
-          if (!hasAssignedWork) {
-            return AuthenticatedPage(
-              child: SharedState(
-                title: 'No assigned work found',
-                message:
-                    'This technician workspace will show active maintenance tasks once a request is assigned.',
-                icon: Icons.handyman_outlined,
-              ),
-            );
-          }
-
-          final activeRequest = request ?? _assignedWork.first;
-          return AuthenticatedPage(
-            maxWidth: 620,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (widget.technicianId != null &&
-                    _assignedWork.length > 1) ...[
-                  const SectionHeader(title: 'Your assigned requests'),
-                  const SizedBox(height: AppSpacing.sm),
-                  ..._assignedWork.map(
-                    (item) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                      child: OutlinedButton(
-                        onPressed: () => _selectRequest(item),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+              maxWidth: 620,
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (widget.technicianId != null &&
+                      _assignedWork.length > 1) ...[
+                    const SectionHeader(title: 'Your assigned requests'),
+                    const SizedBox(height: AppSpacing.sm),
+                    ..._assignedWork.map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: OutlinedButton(
+                          onPressed: () => _selectRequest(item),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${item.title} · ${_statusLabel(item.status)}',
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${maintenanceLabel(item.category)} · ${item.referenceCode ?? 'Reference unavailable'}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppPalette.secondaryText,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          activeRequest.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppPalette.primaryText,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          '${maintenanceLabel(activeRequest.category)} · ${activeRequest.referenceCode ?? 'Reference unavailable'}',
+                          key: const ValueKey('technician-request-reference'),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppPalette.secondaryText,
+                          ),
+                        ),
+                        const SizedBox(height: 9),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            MaintenanceBadge.status(activeRequest.status),
+                            MaintenanceBadge.priority(activeRequest.priority),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Text(
+                          activeRequest.description,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_isLoadingRequestDetails) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    const AppCard(
+                      child: Row(
+                        children: [
+                          SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppPalette.olive,
+                            ),
+                          ),
+                          SizedBox(width: AppSpacing.sm),
+                          Text('Loading request details…'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.lg),
+                  const SectionHeader(title: 'Attachments'),
+                  const SizedBox(height: AppSpacing.md),
+                  const AppCard(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.attach_file, color: AppPalette.olive),
+                        SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'Attachments are currently available to tenants only.',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  const SectionHeader(title: 'Status history'),
+                  const SizedBox(height: AppSpacing.md),
+                  FutureBuilder<List<MaintenanceStatusHistory>>(
+                    future: _historyFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const AppCard(
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: AppPalette.olive,
+                            ),
+                          ),
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        final message =
+                            snapshot.error is MaintenanceApiException
+                            ? (snapshot.error as MaintenanceApiException)
+                                  .message
+                            : 'Unable to load status history.';
+                        return _ActionError(message: message);
+                      }
+                      final history =
+                          snapshot.data ?? const <MaintenanceStatusHistory>[];
+                      if (history.isEmpty) {
+                        return const AppCard(
+                          child: Text('No status history yet.'),
+                        );
+                      }
+                      return AppCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: history
+                              .map(
+                                (entry) => Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: AppSpacing.sm,
+                                  ),
+                                  child: Text(
+                                    '${entry.fromStatus == null ? 'Created' : _statusLabel(entry.fromStatus!)}'
+                                    ' → ${_statusLabel(entry.toStatus)}\n'
+                                    '${MaterialLocalizations.of(context).formatMediumDate(entry.changedAt.toLocal())}'
+                                    '${entry.notes == null ? '' : '\n${entry.notes}'}',
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  const SectionHeader(title: 'Work details'),
+                  const SizedBox(height: AppSpacing.md),
+                  AppCard(
+                    child: Column(
+                      children: [
+                        _InfoRow(
+                          label: 'Priority',
+                          value: _capitalise(activeRequest.priority.name),
+                        ),
+                        const Divider(height: AppSpacing.lg),
+                        _InfoRow(
+                          label: 'Category',
+                          value: _capitalise(activeRequest.category.name),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  const SectionHeader(title: 'Repair estimates'),
+                  const SizedBox(height: AppSpacing.md),
+                  if (_estimateErrorMessage != null) ...[
+                    _ActionError(message: _estimateErrorMessage!),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
+                  if (_revisionWasRequested) ...[
+                    AppCard(
+                      color: AppPalette.softCream,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Text(
-                                '${item.title} · ${_statusLabel(item.status)}',
+                              const Icon(
+                                Icons.rate_review_outlined,
+                                color: AppPalette.olive,
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${maintenanceLabel(item.category)} · ${item.referenceCode ?? 'Reference unavailable'}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppPalette.secondaryText,
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Text(
+                                  'Revision requested by landlord',
+                                  style: Theme.of(context).textTheme.titleSmall,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-                AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        activeRequest.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppPalette.primaryText,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        '${maintenanceLabel(activeRequest.category)} · ${activeRequest.referenceCode ?? 'Reference unavailable'}',
-                        key: const ValueKey('technician-request-reference'),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppPalette.secondaryText,
-                        ),
-                      ),
-                      const SizedBox(height: 9),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          MaintenanceBadge.status(activeRequest.status),
-                          MaintenanceBadge.priority(activeRequest.priority),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        activeRequest.description,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                    ],
-                  ),
-                ),
-                if (_isLoadingRequestDetails) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  const AppCard(
-                    child: Row(
-                      children: [
-                        SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppPalette.olive,
-                          ),
-                        ),
-                        SizedBox(width: AppSpacing.sm),
-                        Text('Loading request details…'),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: AppSpacing.lg),
-                const SectionHeader(title: 'Attachments'),
-                const SizedBox(height: AppSpacing.md),
-                const AppCard(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.attach_file, color: AppPalette.olive),
-                      SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          'Attachments are currently available to tenants only.',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                const SectionHeader(title: 'Status history'),
-                const SizedBox(height: AppSpacing.md),
-                FutureBuilder<List<MaintenanceStatusHistory>>(
-                  future: _historyFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const AppCard(
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: AppPalette.olive,
-                          ),
-                        ),
-                      );
-                    }
-                    if (snapshot.hasError) {
-                      final message = snapshot.error is MaintenanceApiException
-                          ? (snapshot.error as MaintenanceApiException).message
-                          : 'Unable to load status history.';
-                      return _ActionError(message: message);
-                    }
-                    final history =
-                        snapshot.data ?? const <MaintenanceStatusHistory>[];
-                    if (history.isEmpty) {
-                      return const AppCard(
-                        child: Text('No status history yet.'),
-                      );
-                    }
-                    return AppCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: history
-                            .map(
-                              (entry) => Padding(
-                                padding: const EdgeInsets.only(
-                                  bottom: AppSpacing.sm,
-                                ),
-                                child: Text(
-                                  '${entry.fromStatus == null ? 'Created' : _statusLabel(entry.fromStatus!)}'
-                                  ' → ${_statusLabel(entry.toStatus)}\n'
-                                  '${MaterialLocalizations.of(context).formatMediumDate(entry.changedAt.toLocal())}'
-                                  '${entry.notes == null ? '' : '\n${entry.notes}'}',
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                const SectionHeader(title: 'Work details'),
-                const SizedBox(height: AppSpacing.md),
-                AppCard(
-                  child: Column(
-                    children: [
-                      _InfoRow(
-                        label: 'Priority',
-                        value: _capitalise(activeRequest.priority.name),
-                      ),
-                      const Divider(height: AppSpacing.lg),
-                      _InfoRow(
-                        label: 'Category',
-                        value: _capitalise(activeRequest.category.name),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                const SectionHeader(title: 'Repair estimates'),
-                const SizedBox(height: AppSpacing.md),
-                if (_estimateErrorMessage != null) ...[
-                  _ActionError(message: _estimateErrorMessage!),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
-                if (_revisionWasRequested) ...[
-                  AppCard(
-                    color: AppPalette.softCream,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.rate_review_outlined,
-                              color: AppPalette.olive,
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: Text(
-                                'Revision requested by landlord',
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                            ),
+                          if (_latestEstimate?.reviewNotes
+                              case final reviewNotes?
+                              when reviewNotes.trim().isNotEmpty) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            Text('Requested changes: $reviewNotes'),
                           ],
-                        ),
-                        if (_latestEstimate?.reviewNotes case final reviewNotes?
-                            when reviewNotes.trim().isNotEmpty) ...[
-                          const SizedBox(height: AppSpacing.sm),
-                          Text('Requested changes: $reviewNotes'),
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
-                if (!_areEstimatesLoaded)
-                  AppCard(
-                    child: Text(
-                      _estimateErrorMessage == null
-                          ? 'Loading repair estimates...'
-                          : 'Estimate history is unavailable until refreshed.',
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
+                  if (!_areEstimatesLoaded)
+                    AppCard(
+                      child: Text(
+                        _estimateErrorMessage == null
+                            ? 'Loading repair estimates...'
+                            : 'Estimate history is unavailable until refreshed.',
+                      ),
+                    )
+                  else if (_estimates.isEmpty)
+                    const AppCard(
+                      child: Text('No repair estimate has been submitted yet.'),
+                    )
+                  else
+                    ..._estimates.map(
+                      (estimate) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: _EstimateCard(estimate: estimate),
+                      ),
                     ),
-                  )
-                else if (_estimates.isEmpty)
-                  const AppCard(
-                    child: Text('No repair estimate has been submitted yet.'),
-                  )
-                else
-                  ..._estimates.map(
-                    (estimate) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                      child: _EstimateCard(estimate: estimate),
-                    ),
-                  ),
-                if (_errorMessage != null) ...[
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    _ActionError(message: _errorMessage!),
+                  ],
                   const SizedBox(height: AppSpacing.lg),
-                  _ActionError(message: _errorMessage!),
+                  if (_canCreateEstimate) ...[
+                    FilledButton.icon(
+                      key: const ValueKey('create-maintenance-estimate'),
+                      onPressed: _isSubmittingEstimate
+                          ? null
+                          : () => _createEstimate(activeRequest),
+                      icon: _isSubmittingEstimate
+                          ? const _ButtonProgress(color: AppPalette.olive)
+                          : const Icon(Icons.request_quote_outlined),
+                      label: Text(
+                        _isSubmittingEstimate
+                            ? 'Submitting estimate...'
+                            : _revisionWasRequested
+                            ? 'Submit revised estimate'
+                            : 'Submit Estimate',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
+                  if (_canSubmitEstimateForReview) ...[
+                    OutlinedButton.icon(
+                      key: const ValueKey(
+                        'submit-maintenance-estimate-for-review',
+                      ),
+                      onPressed: _isSubmittingEstimate
+                          ? null
+                          : () => _submitEstimateForReview(activeRequest),
+                      icon: const Icon(Icons.send_outlined),
+                      label: const Text('Submit estimate for review'),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
+                  if (_canStartWork) ...[
+                    FilledButton.icon(
+                      key: const ValueKey('start-maintenance-work'),
+                      onPressed: _isStartingWork || _isCompletingWork
+                          ? null
+                          : () => _startWork(activeRequest),
+                      icon: _isStartingWork
+                          ? const _ButtonProgress()
+                          : const Icon(Icons.play_arrow_outlined),
+                      label: Text(
+                        _isStartingWork ? 'Starting work...' : 'Start work',
+                      ),
+                    ),
+                  ] else if (_canCompleteWork) ...[
+                    FilledButton.icon(
+                      key: const ValueKey('complete-maintenance-work'),
+                      onPressed: _isStartingWork || _isCompletingWork
+                          ? null
+                          : () => _completeWork(activeRequest),
+                      icon: _isCompletingWork
+                          ? const _ButtonProgress()
+                          : const Icon(Icons.check_circle_outline),
+                      label: Text(
+                        _isCompletingWork
+                            ? 'Completing work...'
+                            : 'Mark Complete',
+                      ),
+                    ),
+                  ] else ...[
+                    AppCard(
+                      color: AppPalette.softCream,
+                      child: Text(
+                        'This request is currently ${_statusLabel(activeRequest.status).toLowerCase()} and is waiting for the next maintenance stage.',
+                      ),
+                    ),
+                  ],
                 ],
-                const SizedBox(height: AppSpacing.lg),
-                if (_canCreateEstimate) ...[
-                  FilledButton.icon(
-                    key: const ValueKey('create-maintenance-estimate'),
-                    onPressed: _isSubmittingEstimate
-                        ? null
-                        : () => _createEstimate(activeRequest),
-                    icon: _isSubmittingEstimate
-                        ? const _ButtonProgress(color: AppPalette.olive)
-                        : const Icon(Icons.request_quote_outlined),
-                    label: Text(
-                      _isSubmittingEstimate
-                          ? 'Submitting estimate...'
-                          : _revisionWasRequested
-                          ? 'Submit revised estimate'
-                          : 'Submit Estimate',
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
-                if (_canSubmitEstimateForReview) ...[
-                  OutlinedButton.icon(
-                    key: const ValueKey(
-                      'submit-maintenance-estimate-for-review',
-                    ),
-                    onPressed: _isSubmittingEstimate
-                        ? null
-                        : () => _submitEstimateForReview(activeRequest),
-                    icon: const Icon(Icons.send_outlined),
-                    label: const Text('Submit estimate for review'),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
-                if (_canStartWork) ...[
-                  FilledButton.icon(
-                    key: const ValueKey('start-maintenance-work'),
-                    onPressed: _isStartingWork || _isCompletingWork
-                        ? null
-                        : () => _startWork(activeRequest),
-                    icon: _isStartingWork
-                        ? const _ButtonProgress()
-                        : const Icon(Icons.play_arrow_outlined),
-                    label: Text(
-                      _isStartingWork ? 'Starting work...' : 'Start work',
-                    ),
-                  ),
-                ] else if (_canCompleteWork) ...[
-                  FilledButton.icon(
-                    key: const ValueKey('complete-maintenance-work'),
-                    onPressed: _isStartingWork || _isCompletingWork
-                        ? null
-                        : () => _completeWork(activeRequest),
-                    icon: _isCompletingWork
-                        ? const _ButtonProgress()
-                        : const Icon(Icons.check_circle_outline),
-                    label: Text(
-                      _isCompletingWork
-                          ? 'Completing work...'
-                          : 'Complete work',
-                    ),
-                  ),
-                ] else ...[
-                  AppCard(
-                    color: AppPalette.softCream,
-                    child: Text(
-                      'This request is currently ${_statusLabel(activeRequest.status).toLowerCase()} and is waiting for the next maintenance stage.',
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          );
-        },
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -1086,6 +1057,319 @@ class _AssignedWorkScreenState extends State<AssignedWorkScreen> {
         )
         .join(' ');
   }
+}
+
+bool _isActiveJob(MaintenanceRequest request) =>
+    request.status != MaintenanceRequestStatus.completed &&
+    request.status != MaintenanceRequestStatus.rejected &&
+    request.status != MaintenanceRequestStatus.cancelled;
+
+class _CompletionSheet extends StatefulWidget {
+  const _CompletionSheet({
+    required this.request,
+    required this.apiService,
+    required this.photoPicker,
+  });
+
+  final MaintenanceRequest request;
+  final MaintenanceApiService apiService;
+  final MaintenancePhotoPicker photoPicker;
+
+  @override
+  State<_CompletionSheet> createState() => _CompletionSheetState();
+}
+
+class _CompletionSheetState extends State<_CompletionSheet> {
+  static const _maximumPhotos = 3;
+  final List<_CompletionPhoto> _photos = [];
+  bool _submitting = false;
+  bool _showSettings = false;
+  int _uploadNumber = 0;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _recoverLostPhotos();
+  }
+
+  Future<void> _recoverLostPhotos() async {
+    try {
+      final recovered = await widget.photoPicker.recoverLostPhotos();
+      if (!mounted || recovered.isEmpty) return;
+      setState(() {
+        _photos.addAll(
+          recovered.take(_maximumPhotos).map(_CompletionPhoto.new),
+        );
+      });
+    } on MaintenancePhotoPickerException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    }
+  }
+
+  Future<void> _pick(MaintenancePhotoSource source) async {
+    if (_submitting) return;
+    if (_photos.length >= _maximumPhotos) {
+      setState(() => _error = 'You can add up to 3 completion photos.');
+      return;
+    }
+    try {
+      final selected = await widget.photoPicker.pick(source);
+      if (!mounted || selected.isEmpty) return;
+      final remaining = _maximumPhotos - _photos.length;
+      setState(() {
+        _photos.addAll(selected.take(remaining).map(_CompletionPhoto.new));
+        _error = selected.length > remaining
+            ? 'Only the first $remaining photo${remaining == 1 ? '' : 's'} were added. The maximum is 3.'
+            : null;
+        _showSettings = false;
+      });
+    } on MaintenancePhotoPickerException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.message;
+        _showSettings = widget.photoPicker.canOpenSettings;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Unable to select a photo. Please try again.');
+      }
+    }
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    if (_photos.isEmpty) {
+      setState(() => _error = 'Add at least one completion photo.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+      _showSettings = false;
+    });
+    try {
+      for (var index = 0; index < _photos.length; index++) {
+        final item = _photos[index];
+        if (item.uploaded) continue;
+        setState(() => _uploadNumber = index + 1);
+        await widget.apiService.uploadCompletionPhoto(
+          maintenanceRequestId: widget.request.id,
+          fileName: item.photo.fileName,
+          contentType: item.photo.contentType,
+          bytes: item.photo.bytes,
+        );
+        if (!mounted) return;
+        setState(() => item.uploaded = true);
+      }
+      setState(() => _uploadNumber = 0);
+      await widget.apiService.completeWork(id: widget.request.id);
+      if (mounted) Navigator.of(context).pop(true);
+    } on MaintenanceApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Unable to finish this job right now. Your uploaded photos have been kept; retry when ready.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _uploadNumber = 0;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + bottomInset),
+        child: SingleChildScrollView(
+          controller: scrollController,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppPalette.outline,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.base),
+              Text(
+                'Complete this job',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Add 1–3 photos showing the completed work. The job is marked completed only after the evidence is uploaded.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: AppSpacing.base),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('take-completion-photo'),
+                      onPressed: _submitting || _photos.length >= _maximumPhotos
+                          ? null
+                          : () => _pick(MaintenancePhotoSource.camera),
+                      icon: const Icon(Icons.photo_camera_outlined),
+                      label: const Text('Take photo'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('choose-completion-photos'),
+                      onPressed: _submitting || _photos.length >= _maximumPhotos
+                          ? null
+                          : () => _pick(MaintenancePhotoSource.gallery),
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Choose from gallery'),
+                    ),
+                  ),
+                ],
+              ),
+              if (_photos.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.base),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    for (var index = 0; index < _photos.length; index++)
+                      _CompletionThumbnail(
+                        item: _photos[index],
+                        index: index,
+                        canRemove: !_submitting && !_photos[index].uploaded,
+                        onRemove: () => setState(() => _photos.removeAt(index)),
+                      ),
+                  ],
+                ),
+              ],
+              if (_submitting) ...[
+                const SizedBox(height: AppSpacing.base),
+                const LinearProgressIndicator(color: AppPalette.olive),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  _uploadNumber > 0
+                      ? 'Uploading photo $_uploadNumber of ${_photos.length}…'
+                      : 'Confirming completion…',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: AppSpacing.base),
+                _ActionError(message: _error!),
+                if (_showSettings)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: widget.photoPicker.openSettings,
+                      child: const Text('Open settings'),
+                    ),
+                  ),
+              ],
+              const SizedBox(height: AppSpacing.lg),
+              FilledButton.icon(
+                key: const ValueKey('submit-maintenance-completion'),
+                onPressed: _submitting ? null : _submit,
+                icon: _submitting
+                    ? const _ButtonProgress()
+                    : const Icon(Icons.check_circle_outline),
+                label: Text(_error == null ? 'Complete job' : 'Retry'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextButton(
+                onPressed: _submitting
+                    ? null
+                    : () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompletionPhoto {
+  _CompletionPhoto(this.photo);
+  final MaintenancePhoto photo;
+  bool uploaded = false;
+}
+
+class _CompletionThumbnail extends StatelessWidget {
+  const _CompletionThumbnail({
+    required this.item,
+    required this.index,
+    required this.canRemove,
+    required this.onRemove,
+  });
+
+  final _CompletionPhoto item;
+  final int index;
+  final bool canRemove;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Completion photo ${index + 1}${item.uploaded ? ', uploaded' : ''}',
+    child: Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadii.medium),
+          child: Image.memory(
+            item.photo.bytes,
+            width: 92,
+            height: 92,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => Container(
+              width: 92,
+              height: 92,
+              color: AppPalette.softCream,
+              child: const Icon(Icons.image_outlined),
+            ),
+          ),
+        ),
+        if (item.uploaded)
+          const Positioned(
+            left: 6,
+            bottom: 6,
+            child: Icon(Icons.check_circle, color: AppPalette.success),
+          ),
+        if (canRemove)
+          Positioned(
+            right: 2,
+            top: 2,
+            child: IconButton.filled(
+              key: ValueKey('remove-completion-photo-$index'),
+              tooltip: 'Remove photo ${index + 1}',
+              visualDensity: VisualDensity.compact,
+              onPressed: onRemove,
+              icon: const Icon(Icons.close, size: 17),
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 class _InfoRow extends StatelessWidget {

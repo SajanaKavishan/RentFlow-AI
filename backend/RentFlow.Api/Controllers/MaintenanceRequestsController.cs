@@ -799,6 +799,29 @@ public class MaintenanceRequestsController(
             result => CreatedAtAction(nameof(DownloadAttachment), new { id, attachmentId = result.Id, tenantId = currentUserId }, result));
     }
 
+    [HttpPost("{id:guid}/completion-attachments")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<MaintenanceAttachmentResponseDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceAttachmentResponseDto>> UploadCompletionAttachment(
+        Guid id,
+        [FromForm] UploadMaintenanceAttachmentDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.MaintenanceTechnician], out var currentUserId, out var authResult))
+            return authResult;
+
+        await using var content = request.File.OpenReadStream();
+        return await ExecuteAsync(
+            () => maintenanceAttachmentService.UploadCompletionAsync(id, currentUserId, content, request.File.FileName,
+                request.File.ContentType, request.File.Length, cancellationToken),
+            result => StatusCode(StatusCodes.Status201Created, result));
+    }
+
     [HttpGet("{id:guid}/attachments")]
     [ProducesResponseType<IReadOnlyList<MaintenanceAttachmentResponseDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

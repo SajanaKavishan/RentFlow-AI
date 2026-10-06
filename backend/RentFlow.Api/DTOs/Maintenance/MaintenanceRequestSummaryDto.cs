@@ -16,6 +16,9 @@ public class MaintenanceRequestSummaryDto
     public Guid PropertyId { get; set; }
 
     public string? PropertyTitle { get; set; }
+    public string? PropertyAddress { get; set; }
+    public string? PropertyCity { get; set; }
+    public string? RequesterName { get; set; }
 
     public Guid TenantId { get; set; }
 

@@ -509,6 +509,28 @@ class MaintenanceApiService {
     );
   }
 
+  Future<MaintenanceAttachment> uploadCompletionPhoto({
+    required String maintenanceRequestId,
+    required String fileName,
+    required String contentType,
+    required Uint8List bytes,
+  }) async {
+    final uri = apiClient.buildUri(
+      '/api/maintenance-requests/$maintenanceRequestId/completion-attachments',
+    );
+    final multipart = http.MultipartRequest('POST', uri)
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: fileName,
+          contentType: MediaType.parse(contentType),
+        ),
+      );
+    final response = await _sendStreamed(() => apiClient.send(multipart));
+    return _parseAttachment(response.body);
+  }
+
   Future<http.Response> _send(
     Future<http.Response> Function() request, {
     void Function(http.Response)? onResponse,

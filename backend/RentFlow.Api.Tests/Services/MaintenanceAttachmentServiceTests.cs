@@ -145,6 +145,58 @@ public class MaintenanceAttachmentServiceTests
     }
 
     [Fact]
+    public async Task UploadCompletionAsync_AllowsAssignedTechnicianDuringInProgressWork()
+    {
+        await using var context = CreateContext();
+        var request = await AddRequestAsync(context);
+        var technicianId = Guid.NewGuid();
+        request.TechnicianId = technicianId;
+        request.Status = MaintenanceRequestStatus.InProgress;
+        await context.SaveChangesAsync();
+
+        var result = await CreateService(context, new FakeFileStorageService())
+            .UploadCompletionAsync(request.Id, technicianId, new MemoryStream([1]), "done.jpg", "image/jpeg", 1);
+
+        Assert.Equal(MaintenanceAttachmentService.TechnicianCompletionAttachmentType, result.AttachmentType);
+        Assert.Equal(technicianId, result.UploadedByUserId);
+    }
+
+    [Fact]
+    public async Task UploadCompletionAsync_ForbidsAnotherTechnician()
+    {
+        await using var context = CreateContext();
+        var request = await AddRequestAsync(context);
+        request.TechnicianId = Guid.NewGuid();
+        request.Status = MaintenanceRequestStatus.InProgress;
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            CreateService(context, new FakeFileStorageService()).UploadCompletionAsync(
+                request.Id, Guid.NewGuid(), new MemoryStream([1]), "done.jpg", "image/jpeg", 1));
+
+        Assert.Equal(MaintenanceRequestServiceError.Forbidden, exception.Error);
+        Assert.Empty(context.MaintenanceAttachments);
+    }
+
+    [Fact]
+    public async Task UploadCompletionAsync_RejectsWorkOutsideInProgressStatus()
+    {
+        await using var context = CreateContext();
+        var request = await AddRequestAsync(context);
+        var technicianId = Guid.NewGuid();
+        request.TechnicianId = technicianId;
+        request.Status = MaintenanceRequestStatus.Approved;
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            CreateService(context, new FakeFileStorageService()).UploadCompletionAsync(
+                request.Id, technicianId, new MemoryStream([1]), "done.jpg", "image/jpeg", 1));
+
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
+        Assert.Empty(context.MaintenanceAttachments);
+    }
+
+    [Fact]
     public async Task GetByRequestAsync_ReturnsSafeMetadata()
     {
         await using var context = CreateContext();

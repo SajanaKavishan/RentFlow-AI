@@ -375,17 +375,26 @@ function RecommendedSection({ userId }) {
 }
 
 function RecentActivity({ activity }) {
+  const [showAll, setShowAll] = useState(false)
+  const hasMoreActivity = activity.status === 'ready' && activity.data.length > 3
+  const visibleActivity = activity.status === 'ready' && !showAll
+    ? activity.data.slice(0, 3)
+    : activity.data
+
   return <section className="tenant-dashboard__section" aria-labelledby="tenant-activity-title">
     <div className="tenant-section-heading">
       <h2 id="tenant-activity-title">Recent Activity</h2>
+      {hasMoreActivity && <button type="button" aria-expanded={showAll} aria-controls="tenant-activity-list" onClick={() => setShowAll((current) => !current)}>
+        {showAll ? 'Show less' : 'View all'} <Icon name="arrow" size={16} />
+      </button>}
     </div>
     <div className="tenant-activity-card" aria-busy={activity.status === 'loading'}>
       {activity.status === 'loading' && <div className="tenant-panel-state" role="status"><span className="shared-spinner" aria-hidden="true" />Loading recent activity&hellip;</div>}
       {activity.status === 'error' && <div className="tenant-panel-state" role="alert"><strong>Activity could not be loaded</strong><p>{activity.message}</p><button className="tenant-retry" type="button" onClick={activity.retry}>Retry activity</button></div>}
       {activity.status === 'ready' && activity.warning && <div className="tenant-activity-warning" role="status"><Icon name="alert" size={15} /><span>{activity.warning}</span><button type="button" onClick={activity.retry}>Retry</button></div>}
       {activity.status === 'ready' && activity.data.length === 0 && <div className="tenant-panel-state"><span className="tenant-panel-state__icon"><Icon name="bell" size={24} /></span><strong>No recent activity</strong><p>Viewing, application, lease, payment, maintenance and account updates will appear here.</p></div>}
-      {activity.status === 'ready' && activity.data.length > 0 && <ol className="tenant-activity-list">
-        {activity.data.map((item) => <li key={item.id}>
+      {activity.status === 'ready' && activity.data.length > 0 && <ol id="tenant-activity-list" className="tenant-activity-list">
+        {visibleActivity.map((item) => <li key={item.id}>
           <span className={`tenant-activity__icon tenant-activity__icon--${item.tone}`}><Icon name={item.icon} size={18} /></span>
           <div className="tenant-activity__content"><span className="tenant-activity__source">{item.source}</span><strong>{item.title}</strong><p>{item.description}</p></div>
           <div className="tenant-activity__meta">{validDate(item.timestamp) ? <time dateTime={item.timestamp}>{activityTime(item.timestamp)}</time> : <span>Date unavailable</span>}{item.unread && <span className="tenant-activity__unread" aria-label="Unread" />}</div>

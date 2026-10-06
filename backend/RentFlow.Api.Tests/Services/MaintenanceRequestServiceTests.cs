@@ -679,6 +679,7 @@ public class MaintenanceRequestServiceTests
         await using var context = CreateContext();
         var technicianId = Guid.NewGuid();
         var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        AddCompletionEvidence(context, maintenanceRequest, technicianId);
         await context.SaveChangesAsync();
 
         var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
@@ -693,6 +694,7 @@ public class MaintenanceRequestServiceTests
         await using var context = CreateContext();
         var technicianId = Guid.NewGuid();
         var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        AddCompletionEvidence(context, maintenanceRequest, technicianId);
         await context.SaveChangesAsync();
 
         var result = await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
@@ -708,6 +710,7 @@ public class MaintenanceRequestServiceTests
         await using var context = CreateContext();
         var technicianId = Guid.NewGuid();
         var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        AddCompletionEvidence(context, maintenanceRequest, technicianId);
         await context.SaveChangesAsync();
 
         var result = await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
@@ -721,6 +724,7 @@ public class MaintenanceRequestServiceTests
         await using var context = CreateContext();
         var technicianId = Guid.NewGuid();
         var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        AddCompletionEvidence(context, maintenanceRequest, technicianId);
         await context.SaveChangesAsync();
 
         var result = await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
@@ -734,6 +738,7 @@ public class MaintenanceRequestServiceTests
         await using var context = CreateContext();
         var technicianId = Guid.NewGuid();
         var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        AddCompletionEvidence(context, maintenanceRequest, technicianId);
         await context.SaveChangesAsync();
 
         await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
@@ -768,6 +773,45 @@ public class MaintenanceRequestServiceTests
 
         var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
             new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, Guid.NewGuid()));
+
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
+    }
+
+    [Fact]
+    public async Task CompleteWorkAsync_RequiresTechnicianCompletionEvidence()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId));
+
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
+        Assert.Equal(MaintenanceRequestStatus.InProgress, maintenanceRequest.Status);
+    }
+
+    [Fact]
+    public async Task CompleteWorkAsync_TenantIssuePhotoDoesNotSatisfyCompletionEvidence()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        context.MaintenanceAttachments.Add(new MaintenanceAttachment
+        {
+            MaintenanceRequestId = maintenanceRequest.Id,
+            StorageKey = "private-tenant-photo",
+            FileName = "issue.jpg",
+            ContentType = "image/jpeg",
+            FileSize = 1,
+            AttachmentType = "issue",
+            UploadedByUserId = maintenanceRequest.TenantId
+        });
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId));
 
         Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
     }
@@ -897,4 +941,18 @@ public class MaintenanceRequestServiceTests
         context.MaintenanceRequests.Add(maintenanceRequest);
         return maintenanceRequest;
     }
+
+    private static void AddCompletionEvidence(
+        ApplicationDbContext context,
+        MaintenanceRequest request,
+        Guid technicianId) => context.MaintenanceAttachments.Add(new MaintenanceAttachment
+        {
+            MaintenanceRequestId = request.Id,
+            StorageKey = $"completion/{Guid.NewGuid():N}",
+            FileName = "completed.jpg",
+            ContentType = "image/jpeg",
+            FileSize = 1,
+            AttachmentType = MaintenanceAttachmentService.TechnicianCompletionAttachmentType,
+            UploadedByUserId = technicianId
+        });
 }

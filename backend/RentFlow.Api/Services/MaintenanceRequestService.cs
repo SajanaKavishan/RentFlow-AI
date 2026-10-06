@@ -132,8 +132,26 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .Where(item => item.PropertyId == propertyId)
             .OrderByDescending(item => item.CreatedAt)
             .ToListAsync(cancellationToken);
-
-        return requests.Select(MapToSummary).ToList();
+        var propertyIds = requests.Select(request => request.PropertyId).Distinct().ToArray();
+        var properties = await dbContext.Properties.AsNoTracking()
+            .Where(property => propertyIds.Contains(property.Id))
+            .ToDictionaryAsync(property => property.Id, cancellationToken);
+        var tenantIds = requests.Select(request => request.TenantId).Distinct().ToArray();
+        var requesterNames = await dbContext.Users.AsNoTracking()
+            .Where(user => tenantIds.Contains(user.Id) && user.Role == UserRole.Tenant)
+            .ToDictionaryAsync(user => user.Id, user => user.FullName, cancellationToken);
+        return requests.Select(request =>
+        {
+            var summary = MapToSummary(request);
+            if (properties.GetValueOrDefault(request.PropertyId) is { } property)
+            {
+                summary.PropertyTitle = property.Title;
+                summary.PropertyAddress = property.Address;
+                summary.PropertyCity = property.City;
+            }
+            summary.RequesterName = NormalizeOptionalText(requesterNames.GetValueOrDefault(request.TenantId));
+            return summary;
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<MaintenanceRequestSummaryDto>> GetByTechnicianAsync(
@@ -147,8 +165,26 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .Where(item => item.TechnicianId == technicianId)
             .OrderByDescending(item => item.CreatedAt)
             .ToListAsync(cancellationToken);
-
-        return requests.Select(MapToSummary).ToList();
+        var propertyIds = requests.Select(request => request.PropertyId).Distinct().ToArray();
+        var properties = await dbContext.Properties.AsNoTracking()
+            .Where(property => propertyIds.Contains(property.Id))
+            .ToDictionaryAsync(property => property.Id, cancellationToken);
+        var tenantIds = requests.Select(request => request.TenantId).Distinct().ToArray();
+        var requesterNames = await dbContext.Users.AsNoTracking()
+            .Where(user => tenantIds.Contains(user.Id) && user.Role == UserRole.Tenant)
+            .ToDictionaryAsync(user => user.Id, user => user.FullName, cancellationToken);
+        return requests.Select(request =>
+        {
+            var summary = MapToSummary(request);
+            if (properties.GetValueOrDefault(request.PropertyId) is { } property)
+            {
+                summary.PropertyTitle = property.Title;
+                summary.PropertyAddress = property.Address;
+                summary.PropertyCity = property.City;
+            }
+            summary.RequesterName = NormalizeOptionalText(requesterNames.GetValueOrDefault(request.TenantId));
+            return summary;
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<MaintenanceTechnicianChoiceDto>> GetTechnicianChoicesAsync(
@@ -528,6 +564,17 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
                 "Only the assigned technician can complete work on this maintenance request.");
         }
 
+        var hasCompletionEvidence = await dbContext.MaintenanceAttachments
+            .AsNoTracking()
+            .AnyAsync(attachment =>
+                attachment.MaintenanceRequestId == requestId
+                && attachment.UploadedByUserId == technicianId
+                && attachment.AttachmentType == MaintenanceAttachmentService.TechnicianCompletionAttachmentType,
+                cancellationToken);
+        if (!hasCompletionEvidence)
+            throw MaintenanceRequestServiceException.Conflict(
+                "At least one technician completion photo is required before completing work.");
+
         var now = DateTimeOffset.UtcNow;
         maintenanceRequest.Status = MaintenanceRequestStatus.Completed;
         maintenanceRequest.CompletedAt = now;
@@ -863,13 +910,18 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         bool includeContact = false)
     {
         var response = MapToResponse(request);
-        response.PropertyTitle = await dbContext.Properties.AsNoTracking()
+        var propertyDisplay = await dbContext.Properties.AsNoTracking()
             .Where(property => property.Id == request.PropertyId)
-            .Select(property => property.Title).SingleOrDefaultAsync(cancellationToken);
+            .Select(property => new { property.Title, property.Address, property.City })
+            .SingleOrDefaultAsync(cancellationToken);
+        response.PropertyTitle = propertyDisplay?.Title;
+        response.PropertyAddress = propertyDisplay?.Address;
+        response.PropertyCity = propertyDisplay?.City;
         response.TenantName = await dbContext.Users.AsNoTracking()
             .Where(user => user.Id == request.TenantId && user.Role == UserRole.Tenant)
             .Select(user => user.FullName)
             .SingleOrDefaultAsync(cancellationToken);
+        response.RequesterName = NormalizeOptionalText(response.TenantName);
         if (request.TechnicianId is { } technicianId)
         {
             // Project display identity only; account contact and profile data stay private.
