@@ -27,6 +27,16 @@ subprojects {
         tasks.withType<KotlinJvmCompile>().configureEach {
             compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
         }
+
+        // flutter_stripe 14.1.0 declares the optional issuing SDK both with and
+        // without transitives. TapAndPay is not published in Google's Maven
+        // repository, so keep the issuing SDK's intended non-transitive setup.
+        configurations.configureEach {
+            exclude(
+                group = "com.google.android.gms",
+                module = "play-services-tapandpay",
+            )
+        }
     }
 }
 
