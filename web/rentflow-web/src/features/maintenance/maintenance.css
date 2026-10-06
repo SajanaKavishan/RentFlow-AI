@@ -901,3 +901,7 @@
   .tenant-maintenance-card__reference { display: block; margin: 5px 0 0; }
   .tenant-maintenance-card__facts { gap: 16px; }
 }
+.maintenance-property-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; list-style: none; padding: 0; margin: 12px 0 0; }
+.maintenance-property-action { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--cream-50); color: var(--ink); font: inherit; font-size: .8rem; cursor: pointer; text-align: left; }
+.maintenance-property-action[aria-pressed="true"] { border-color: var(--olive-700); background: var(--olive-100); }
+.maintenance-property-action .shared-nav-link__pending { flex: none; }

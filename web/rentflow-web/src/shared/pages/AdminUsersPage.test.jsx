@@ -67,7 +67,7 @@ function directoryPage(items = [adminUser, tenantUser], overrides = {}) {
   }
 }
 
-function installApi({ directory, provision = json(provisionResponse, 201) } = {}) {
+function installApi({ directory, details, deactivate, provision = json(provisionResponse, 201) } = {}) {
   fetch.mockImplementation((input, options = {}) => {
     const url = new URL(input, 'http://localhost')
     if (url.pathname === '/api/admin/users') {
@@ -78,6 +78,13 @@ function installApi({ directory, provision = json(provisionResponse, 201) } = {}
     }
     if (url.pathname === '/api/admin/maintenance-technicians' && options.method === 'POST') {
       return Promise.resolve(provision)
+    }
+    if (/\/api\/admin\/users\/[^/]+\/deactivate$/.test(url.pathname)) {
+      return deactivate ? deactivate(url, options) : Promise.resolve(json({ ...adminUser, phoneNumber: '+94770000000', isActive: false }))
+    }
+    if (/\/api\/admin\/users\/[^/]+$/.test(url.pathname)) {
+      const selected = [adminUser, tenantUser, provisionedUser].find((item) => url.pathname.endsWith(item.id))
+      return details ? details(url, options) : Promise.resolve(json({ ...selected, phoneNumber: '+94770000000' }))
     }
     throw new Error(`Unexpected request: ${options.method || 'GET'} ${url.pathname}`)
   })
@@ -133,6 +140,50 @@ afterEach(() => {
 })
 
 describe('Admin Users directory', () => {
+  it('opens the real user profile, hides raw IDs and closes with Escape while restoring focus', async () => {
+    renderRoute()
+    const eye = await screen.findByRole('button', { name: 'View Nimali Tenant' })
+    await userEvent.click(eye)
+    const dialog = await screen.findByRole('dialog', { name: 'User Profile' })
+    expect(await within(dialog).findByText('nimali@example.com')).toBeInTheDocument()
+    expect(within(dialog).getByText('+94770000000')).toBeInTheDocument()
+    expect(within(dialog).getByText('Inactive')).toBeInTheDocument()
+    expect(within(dialog).queryByText(tenantUser.id)).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Deactivate Account' })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'User Profile' })).not.toBeInTheDocument()
+    expect(eye).toHaveFocus()
+  })
+
+  it('confirms deactivation and updates the profile and directory to Inactive', async () => {
+    let target = { ...tenantUser, isActive: true, phoneNumber: '+94770000000' }
+    installApi({
+      directory: (url) => Promise.resolve(json(directoryPage([target], { page: Number(url.searchParams.get('page')), pageSize: Number(url.searchParams.get('pageSize')) }))),
+      details: () => Promise.resolve(json(target)),
+      deactivate: (url, options) => { expect(options.method).toBe('PATCH'); target = { ...target, isActive: false }; return Promise.resolve(json(target)) },
+    })
+    renderRoute()
+    await userEvent.click(await screen.findByRole('button', { name: 'Deactivate Nimali Tenant' }))
+    const dialog = screen.getByRole('dialog', { name: 'User Profile' })
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Confirm deactivation' }))
+    expect(await within(dialog).findByText('Inactive')).toBeInTheDocument()
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Account deactivated')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close user profile' }))
+    expect(await within(screen.getByRole('table')).findByText('Inactive')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Deactivate Nimali Tenant' })).not.toBeInTheDocument()
+  })
+
+  it('keeps an active account unchanged when deactivation fails', async () => {
+    installApi({ deactivate: () => Promise.resolve(json({ detail: 'Unable to deactivate this account.' }, 500)) })
+    renderRoute()
+    await userEvent.click(await screen.findByRole('button', { name: 'View Sam Perera' }))
+    const dialog = screen.getByRole('dialog', { name: 'User Profile' })
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Deactivate Account' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm deactivation' }))
+    expect(await within(dialog).findByRole('alert')).toBeInTheDocument()
+    expect(within(dialog).getByText('Active')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Confirm deactivation' })).toBeEnabled()
+  })
   it('labels the Users workspace as User Management in the top bar', () => {
     renderRoute()
     const topbar = document.querySelector('.shared-topbar')
@@ -142,7 +193,7 @@ describe('Admin Users directory', () => {
     expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Users' })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('renders only real API fields and the filtered total without unsupported actions', async () => {
+  it('renders real API fields with profile and deactivation actions', async () => {
     renderRoute()
     const main = screen.getByRole('main')
     expect(within(main).getByRole('heading', { name: 'Users', level: 1 })).toBeInTheDocument()
@@ -155,7 +206,9 @@ describe('Admin Users directory', () => {
     expect(main).toHaveTextContent('Nimali Tenant')
     expect(main).toHaveTextContent('Inactive')
     expect(within(main).queryByText(setupToken)).not.toBeInTheDocument()
-    expect(within(main).queryByRole('button', { name: /view|deactivate|edit role|delete/i })).not.toBeInTheDocument()
+    expect(within(main).getByRole('button', { name: 'View Nimali Tenant' })).toBeInTheDocument()
+    expect(within(main).queryByRole('button', { name: 'Deactivate Nimali Tenant' })).not.toBeInTheDocument()
+    expect(within(main).queryByRole('button', { name: /edit role|delete/i })).not.toBeInTheDocument()
 
     const [url, options] = directoryCalls()[0]
     const query = new URL(url, 'http://localhost').searchParams
@@ -388,6 +441,6 @@ describe('Admin Users access and shell', () => {
     renderRoute(role)
     expect(screen.getByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add Technician' })).not.toBeInTheDocument()
-    expect(fetch).not.toHaveBeenCalled()
+    expect(fetch.mock.calls.some(([input]) => new URL(input, 'http://localhost').pathname.startsWith('/api/admin/'))).toBe(false)
   })
 })

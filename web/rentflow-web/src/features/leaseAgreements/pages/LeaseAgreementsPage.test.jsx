@@ -45,6 +45,10 @@ function setupApi({ leases = [], offers = [], leaseListStatus = 200, entry = '/m
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); tokenStorage.clearToken() })
 
 describe('landlord lease agreements', () => {
+  it('selects the accepted offer referenced by a lease-creation notification', async () => {
+    setupApi({ offers: [offer()], entry: `/modules/pricing-lease/leases?rentalOfferId=${offerId}` })
+    expect(await screen.findByLabelText('Accepted rental offer')).toHaveValue(offerId)
+  })
   it('opens the lease selected by a dashboard renewal link', async () => {
     const fetchMock = setupApi({ leases: [lease()], entry: `/modules/pricing-lease/leases?leaseId=${leaseId}` })
     expect(await screen.findByRole('heading', { name: 'Lease details' })).toBeInTheDocument()

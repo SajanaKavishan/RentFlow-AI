@@ -202,11 +202,11 @@ export default function AdminDashboard({ user }) {
     <div className="admin-overview__workspace">
       <div className="admin-overview__main">
         <AdminReportingPanel kind="activity" identityKey={identityKey} />
-        <UserDistributionPanel state={distribution} totalUsers={totalUsers} retry={retryDistribution} />
         <AdminReportingPanel kind="workflows" identityKey={identityKey} monitorLink />
       </div>
 
       <aside className="admin-overview__rail" aria-label="System status and quick access">
+        <UserDistributionPanel state={distribution} totalUsers={totalUsers} retry={retryDistribution} />
         <AdminReportingPanel kind="health" identityKey={identityKey} />
 
         <section className="shared-card admin-quick-access" aria-labelledby="admin-quick-access-title">

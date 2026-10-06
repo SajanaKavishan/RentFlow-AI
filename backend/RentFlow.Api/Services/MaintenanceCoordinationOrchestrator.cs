@@ -149,6 +149,8 @@ public sealed class MaintenanceCoordinationOrchestrator(
             workflow.CurrentStep = 3;
             workflow.RequiresHumanApproval = true;
             workflow.ApprovalStatus = MaintenanceCoordinationApprovalStatus.Pending;
+            await NotificationDeliveryPolicy.QueueLandlordActionAsync(dbContext, request.PropertyId, NotificationEventTypes.MaintenanceCoordinationReview,
+                "MaintenanceRequest", request.Id, workflow.Id, "Maintenance AI review required", "A maintenance coordination plan is ready for your review.", cancellationToken);
             workflow.ExecutionSummary = $"Completed deterministic validation and agent advisory review. Awaiting human approval. Steps executed: {string.Join(", ", workflow.Steps.OrderBy(step => step.StepOrder).Select(step => step.StepName))}.";
 
             await dbContext.SaveChangesAsync(cancellationToken);

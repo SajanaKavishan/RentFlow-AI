@@ -5,6 +5,8 @@ import {
   getAdminUserRoleTotals,
   getAdminUsers,
   getAdminUserTotal,
+  getAdminUserDetails,
+  deactivateAdminUser,
 } from './adminUsersApi.js'
 
 const user = {
@@ -24,6 +26,24 @@ const page = {
 }
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { 'Content-Type': 'application/json' },
+})
+
+it('loads only display fields from the authenticated profile endpoint', async () => {
+  fetch.mockResolvedValue(json({ ...user, phoneNumber: '+94770000000', passwordHash: 'must-not-leak', tokenVersion: 5 }))
+  const details = await getAdminUserDetails(user.id)
+  expect(details.phoneNumber).toBe('+94770000000')
+  expect(details).not.toHaveProperty('passwordHash')
+  expect(details).not.toHaveProperty('tokenVersion')
+  expect(fetch.mock.calls[0][0]).toContain(`/api/admin/users/${user.id}`)
+  expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer admin-token')
+})
+
+it('requires the deactivation response to identify the target and report Inactive', async () => {
+  fetch.mockResolvedValueOnce(json({ ...user, phoneNumber: '', isActive: false }))
+  expect((await deactivateAdminUser(user.id)).isActive).toBe(false)
+  expect(fetch.mock.calls[0][1].method).toBe('PATCH')
+  fetch.mockResolvedValueOnce(json({ ...user, phoneNumber: '', isActive: true }))
+  await expect(deactivateAdminUser(user.id)).rejects.toThrow('invalid user directory response')
 })
 
 beforeEach(() => {

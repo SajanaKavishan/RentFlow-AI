@@ -1,4 +1,12 @@
 export const SUPPORTED_NOTIFICATION_TYPES = Object.freeze([
+  { value: 'maintenance_request.submitted', label: 'Maintenance triage required' },
+  { value: 'maintenance_request.triaged', label: 'Technician assignment required' },
+  { value: 'maintenance_request.estimate_preparation', label: 'Estimate preparation required' },
+  { value: 'maintenance_request.estimate_review', label: 'Repair estimate review' },
+  { value: 'maintenance_request.coordination_review', label: 'Maintenance AI review' },
+  { value: 'rental_offer.accepted', label: 'Lease creation required' },
+  { value: 'lease.activation_required', label: 'Lease activation required' },
+  { value: 'payment.manual_review', label: 'Manual payment review' },
   { value: 'viewing.created', label: 'Viewing request created' },
   { value: 'viewing.approved', label: 'Viewing approved' },
   { value: 'viewing.rejected', label: 'Viewing rejected' },

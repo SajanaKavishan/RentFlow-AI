@@ -18,7 +18,7 @@ function response(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
-function setupApi({ payments = [payment()], listStatus = 200, detailStatus = 200, actionStatus = 200 } = {}) {
+function setupApi({ payments = [payment()], listStatus = 200, detailStatus = 200, actionStatus = 200, entry = '/modules/payments' } = {}) {
   let records = payments
   const fetchMock = vi.fn((url, options = {}) => {
     if (url.endsWith('/api/payments/landlord')) return Promise.resolve(response(listStatus === 200 ? records : { detail: 'Database stack trace' }, listStatus))
@@ -34,13 +34,19 @@ function setupApi({ payments = [payment()], listStatus = 200, detailStatus = 200
   })
   vi.stubGlobal('fetch', fetchMock)
   tokenStorage.setToken('landlord-token')
-  render(<MemoryRouter initialEntries={['/modules/payments']}><PaymentsPage /></MemoryRouter>)
+  render(<MemoryRouter initialEntries={[entry]}><PaymentsPage /></MemoryRouter>)
   return fetchMock
 }
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); tokenStorage.clearToken() })
 
 describe('landlord payments', () => {
+  it('opens the payment referenced by a notification and excludes Stripe manual actions', async () => {
+    setupApi({ payments: [payment({ provider: 1 })], entry: `/modules/payments?paymentId=${pendingId}` })
+    expect(await screen.findByRole('heading', { name: 'Payment details' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Complete payment' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Fail payment' })).not.toBeInTheDocument()
+  })
   it('renders the landlord payment list', async () => {
     const fetchMock = setupApi()
     expect(await screen.findByText('BankTransfer')).toBeInTheDocument()

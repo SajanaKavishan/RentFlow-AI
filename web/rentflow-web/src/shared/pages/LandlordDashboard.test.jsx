@@ -5,6 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App.jsx'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 
+// This suite isolates dashboard record loading. The shared action-summary request
+// and its sidebar badges are covered by LandlordActions.test.jsx.
+vi.mock('../layout/useLandlordActionSummary.js', () => {
+  const result = { status: 'ready', data: { maintenanceCount: 0, maintenanceByProperty: [], leaseCount: 0, paymentCount: 0 }, refresh: vi.fn() }
+  return { default: () => result }
+})
+
 vi.mock('../../features/notifications/notificationsApi.js', async (importOriginal) => ({
   ...(await importOriginal()), getUnreadCount: vi.fn().mockResolvedValue(0),
 }))

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useLandlordActions } from '../../../shared/layout/LandlordActionsContext.js'
+import { useNotificationCount } from '../../notifications/NotificationCountContext.js'
 import { ApiError } from '../../../core/api/apiClient.js'
 import { getMyProperties } from '../../properties/services/propertyApiService.js'
 import { getLandlordOffers } from '../../rentalOffers/services/rentalOfferApiService.js'
@@ -55,6 +57,8 @@ function LeaseDetails({ lease, propertyName, acting, onAction }) {
 }
 
 export default function LeaseAgreementsPage() {
+  const actionSummary = useLandlordActions()
+  const notificationCount = useNotificationCount()
   const [searchParams] = useSearchParams()
   const requestedLeaseId = searchParams.get('leaseId')
   const [leasesState, setLeasesState] = useState({ status: 'loading', items: [], error: '' })
@@ -62,7 +66,7 @@ export default function LeaseAgreementsPage() {
   const [properties, setProperties] = useState([])
   const [leaseReload, setLeaseReload] = useState(0)
   const [offerReload, setOfferReload] = useState(0)
-  const [rentalOfferId, setRentalOfferId] = useState('')
+  const [rentalOfferId, setRentalOfferId] = useState(() => searchParams.get('rentalOfferId') || '')
   const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
   const [creating, setCreating] = useState(false)
@@ -109,6 +113,8 @@ export default function LeaseAgreementsPage() {
   }, [])
 
   function refreshLeases() {
+    actionSummary?.refresh()
+    notificationCount?.refreshCount?.()
     setLeasesState((current) => ({ ...current, status: 'loading' }))
     setLeaseReload((value) => value + 1)
   }

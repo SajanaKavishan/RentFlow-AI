@@ -19,6 +19,7 @@ public class PaymentResponseDto
     public string? TransactionReference { get; set; }
 
     public PaymentStatus Status { get; set; }
+    public PaymentProvider Provider { get; set; }
 
     public DateTimeOffset? PaidAt { get; set; }
 

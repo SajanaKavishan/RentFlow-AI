@@ -80,9 +80,9 @@
 .admin-overview__icon--small { width: 38px; height: 38px; border-radius: 11px; }
 .admin-overview__icon--notification { color: #6550d9; background: #eef0ff; }
 .admin-overview__workspace { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, .72fr); gap: 22px; align-items: start; }
-.admin-overview__main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.admin-overview__main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
 .admin-overview__main > .admin-overview-panel:first-child { grid-column: 1 / -1; }
-.admin-overview__rail { display: grid; gap: 18px; }
+.admin-overview__rail { min-width: 0; display: grid; gap: 18px; }
 .admin-overview-panel { min-width: 0; padding: 22px; }
 .admin-overview-panel__heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; }
 .admin-overview-panel__heading h2 { margin: 3px 0 0; font-size: 1.02rem; line-height: 1.3; letter-spacing: -.025em; }
@@ -127,6 +127,7 @@
   .technician-dashboard__side { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto; }
   .admin-overview__summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-overview__rail { grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); }
+  .admin-overview__rail > .admin-quick-access { grid-column: 1 / -1; }
 }
 @media (max-width: 700px) {
   .role-dashboard { width: calc(100% - 32px); padding-top: 28px; }

@@ -138,3 +138,25 @@
   .admin-users-directory__pagination > div { width: 100%; justify-content: space-between; gap: 8px; }
   .admin-users-directory__note { padding: 14px 16px; }
 }
+.admin-users-directory__actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; white-space: nowrap; }
+.admin-user-view { display: grid; place-items: center; min-width: 42px; min-height: 32px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--olive-700); background: var(--surface, white); cursor: pointer; }
+.admin-user-deactivate { padding: 8px 12px; border: 1px solid #fecaca; border-radius: 10px; color: #dc2626; background: white; font: inherit; font-size: .78rem; cursor: pointer; }
+.admin-user-deactivate:hover { background: #fff1f2; }
+.admin-user-deactivate:disabled { opacity: .6; cursor: wait; }
+.admin-user-view:focus-visible, .admin-user-deactivate:focus-visible { outline: 2px solid var(--olive-700); outline-offset: 3px; }
+.admin-users-directory__role--landlord { color: #4f46e5; background: #eef2ff; border-color: #c7d2fe; }
+.admin-user-profile { width: min(100%, 420px); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 22px; }
+.admin-user-profile > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.admin-user-profile h2 { margin: 0; font-size: 1.15rem; }
+.admin-user-profile__identity { display: flex; align-items: center; flex-direction: column; margin: 24px 0; text-align: center; }
+.admin-user-profile__identity > span:first-child { display: grid; place-items: center; width: 80px; height: 80px; border-radius: 50%; color: var(--olive-100); background: var(--olive-900); font-size: 2rem; font-weight: 700; }
+.admin-user-profile h3 { margin: 14px 0 8px; font-size: 1.15rem; }
+.admin-user-profile dl { margin: 0; }
+.admin-user-profile dl > div { display: flex; justify-content: space-between; gap: 20px; padding: 17px 0; border-bottom: 1px solid var(--border); font-size: .82rem; }
+.admin-user-profile dt { color: var(--muted); }
+.admin-user-profile dd { margin: 0; text-align: right; overflow-wrap: anywhere; min-width: 0; font-weight: 600; }
+.admin-user-profile__deactivate { width: 100%; margin-top: 24px; min-height: 46px; }
+.admin-user-profile__confirm { margin-top: 20px; font-size: .82rem; line-height: 1.5; }
+.admin-user-profile__confirm > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.admin-user-profile__success { color: var(--olive-700); font-size: .82rem; line-height: 1.5; }
+.admin-user-profile__note { color: var(--muted); font-size: .78rem; }

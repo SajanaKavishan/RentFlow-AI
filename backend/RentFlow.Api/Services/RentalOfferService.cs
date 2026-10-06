@@ -223,6 +223,9 @@ public class RentalOfferService : IRentalOfferService
         rentalOffer.Status = RentalOfferStatus.Accepted;
         rentalOffer.UpdatedAt = now;
 
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(_dbContext, rentalOffer.PropertyId, NotificationEventTypes.LeaseCreationRequired,
+            "RentalOffer", rentalOffer.Id, rentalOffer.Id, "Lease creation required", "A tenant accepted your rental offer. Create the lease agreement.", cancellationToken);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return MapToResponseDto(rentalOffer);

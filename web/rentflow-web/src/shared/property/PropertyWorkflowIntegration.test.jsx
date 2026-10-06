@@ -394,7 +394,7 @@ describe('owned property landlord workflow integration', () => {
     expect(screen.getByRole('link', { name: 'Manage properties' }))
       .toHaveAttribute('href', '/modules/manage-properties')
     expect(fetch.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname))
-      .toEqual(['/api/properties/mine'])
+      .toEqual(['/api/properties/mine', '/api/landlord/actions/summary'])
   })
 
   it('retries an owned-property API error and then offers the real selection', async () => {

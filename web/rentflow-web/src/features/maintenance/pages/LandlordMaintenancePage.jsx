@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useLandlordActions } from '../../../shared/layout/LandlordActionsContext.js'
+import { useNotificationCount } from '../../notifications/NotificationCountContext.js'
 import { useAuth } from '../../auth/useAuth.js'
 import { USER_ROLES } from '../../auth/authModel.js'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
@@ -90,6 +92,9 @@ function money(value) {
 }
 
 export default function LandlordMaintenancePage() {
+  const actionSummary = useLandlordActions()
+  const notificationCount = useNotificationCount()
+  function refreshActionCounts() { actionSummary?.refresh(); notificationCount?.refreshCount?.() }
   const [searchParams] = useSearchParams()
   const requestedRequestId = searchParams.get('requestId')
   const { propertyId } = usePropertyContext()
@@ -421,6 +426,7 @@ export default function LandlordMaintenancePage() {
     coordinationRequestsRef.current.set(requestId, { promise: operationPromise, analyzing: false })
     try {
       const nextWorkflow = await operationPromise
+      refreshActionCounts()
       if (!isCurrent()) return
       setWorkflow(nextWorkflow)
       setWorkflowState('success')
@@ -456,6 +462,7 @@ export default function LandlordMaintenancePage() {
       const nextWorkflow = await operationPromise
       if (!isCurrent()) return
       setWorkflow(nextWorkflow ?? null)
+      if (analyze) refreshActionCounts()
       setWorkflowState(nextWorkflow ? 'success' : 'none')
     } catch {
       if (isCurrent()) {
@@ -506,6 +513,7 @@ export default function LandlordMaintenancePage() {
         await markMaintenanceEstimatePending(selectedRequest.id)
       }
       await loadRequests()
+      refreshActionCounts()
       setRequestActionNotice(
         action === 'triage' ? 'Request triaged.' :
           action === 'assign' ? 'Technician assigned.' : 'Estimate requested from the technician.',
@@ -526,6 +534,7 @@ export default function LandlordMaintenancePage() {
     setRequestActionNotice('')
     try {
       await reviewRepairEstimate(selectedRequest.id, latestEstimate.id, action, estimateReviewNotes)
+      refreshActionCounts()
       await loadRequests()
       setRequestActionNotice(
         action === 'approve' ? 'Repair estimate approved.' :
@@ -598,11 +607,19 @@ export default function LandlordMaintenancePage() {
               <option value="">Choose a property</option>
               {properties.map((property) => (
                 <option key={property.id} value={property.id}>
-                  {[property.title, property.address, property.city].filter(Boolean).join(' — ')}
+                  {[property.title, property.address, property.city].filter(Boolean).join(' — ')}{actionSummary?.status === 'ready' && actionSummary.data.maintenanceByProperty.find((item) => item.propertyId.toLowerCase() === property.id.toLowerCase())?.count > 0 ? ` [${actionSummary.data.maintenanceByProperty.find((item) => item.propertyId.toLowerCase() === property.id.toLowerCase()).count}]` : ''}
                 </option>
               ))}
             </select>
           </label>
+          {actionSummary?.status === 'ready' && <ul className="maintenance-property-actions" aria-label="Property maintenance actions">
+            {properties.map((property) => {
+              const count = actionSummary.data.maintenanceByProperty.find((item) => item.propertyId.toLowerCase() === property.id.toLowerCase())?.count || 0
+              return <li key={property.id}><button type="button" className="maintenance-property-action" aria-pressed={selectedPropertyId === property.id} onClick={() => setSelectedPropertyId(property.id)}>
+                <span>{property.title}</span>{count > 0 && <span className="shared-nav-link__pending" aria-label={`${count} actions required`}>{count}</span>}
+              </button></li>
+            })}
+          </ul>}
         </section>
       )}
 

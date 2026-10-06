@@ -131,7 +131,7 @@ describe('Technician Assigned Work page', () => {
     renderRoute(role)
     expect(screen.getByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Assigned Work' })).not.toBeInTheDocument()
-    expect(fetch).not.toHaveBeenCalled()
+    expect(fetch.mock.calls.filter(([url]) => !url.includes('/api/landlord/actions/summary'))).toHaveLength(0)
   })
 
   it('provides accessible loading and empty presentations for the future collection workflow', () => {

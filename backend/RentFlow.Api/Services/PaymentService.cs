@@ -89,6 +89,9 @@ public class PaymentService : IPaymentService
 
         _dbContext.Payments.Add(payment);
 
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(_dbContext, rentScheduleItem.LeaseAgreement.PropertyId, NotificationEventTypes.ManualPaymentReview,
+            "Payment", payment.Id, payment.Id, "Payment review required", "A tenant submitted a manual rent payment. Review and complete or fail the payment.", cancellationToken);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return MapToResponseDto(payment);
@@ -303,6 +306,7 @@ public class PaymentService : IPaymentService
             PaymentMethod = payment.PaymentMethod,
             TransactionReference = payment.TransactionReference,
             Status = payment.Status,
+            Provider = payment.Provider,
             PaidAt = payment.PaidAt,
             CreatedAt = payment.CreatedAt,
             UpdatedAt = payment.UpdatedAt

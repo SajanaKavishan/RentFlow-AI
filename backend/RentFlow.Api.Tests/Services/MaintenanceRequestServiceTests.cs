@@ -28,6 +28,10 @@ public class MaintenanceRequestServiceTests
         Assert.Equal(TimeSpan.Zero, result.CreatedAt.Offset);
         Assert.Null(result.UpdatedAt);
         Assert.Equal(result.Id, (await context.MaintenanceRequests.SingleAsync()).Id);
+        var notice = Assert.Single(await context.Notifications.Where(n => n.EventType == NotificationEventTypes.MaintenanceSubmitted).ToListAsync());
+        Assert.Equal((await context.Properties.SingleAsync(p => p.Id == request.PropertyId)).LandlordId, notice.RecipientId);
+        Assert.Equal(result.Id, notice.RelatedResourceId);
+        Assert.DoesNotContain(result.Id.ToString(), notice.Message);
     }
 
     [Fact]

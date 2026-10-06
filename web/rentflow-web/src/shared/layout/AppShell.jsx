@@ -14,6 +14,8 @@ import { NotificationCountContext } from '../../features/notifications/Notificat
 import NotificationPopover from '../../features/notifications/NotificationPopover.jsx'
 import { PendingViewingsContext } from './PendingViewingsContext.js'
 import { PendingApplicationsContext } from './PendingApplicationsContext.js'
+import { LandlordActionsContext } from './LandlordActionsContext.js'
+import useLandlordActionSummary from './useLandlordActionSummary.js'
 import { getViewingsByProperty, VIEWING_STATUS } from '../../features/viewings/services/viewingApiService.js'
 import { getApplicationsByProperty, RENTAL_APPLICATION_STATUS } from '../../features/rentalApplications/services/rentalApplicationApiService.js'
 import './shell.css'
@@ -49,6 +51,8 @@ export default function AppShell() {
   const { user, logout } = useAuth()
   const portalRole = user.role === USER_ROLES.MAINTENANCE_TECHNICIAN ? 'Technician' : user.role
   const location = useLocation()
+  const landlordActions = useLandlordActionSummary(user, location.key)
+  const refreshLandlordActions = landlordActions.refresh
   const isLandlordPropertyDetails = user.role === USER_ROLES.LANDLORD
     && location.pathname !== '/properties/new'
     && Boolean(matchPath('/properties/:propertyId', location.pathname))
@@ -73,6 +77,12 @@ export default function AppShell() {
     refreshCount()
     return () => { requestCounter.current++ }
   }, [location.pathname, user.id, refreshCount])
+  useEffect(() => {
+    if (user.role !== USER_ROLES.LANDLORD) return undefined
+    const onFocus = () => { refreshLandlordActions(); refreshCount() }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [user.role, refreshLandlordActions, refreshCount])
   useEffect(() => {
     if (user.role !== USER_ROLES.MAINTENANCE_TECHNICIAN) {
       return undefined
@@ -197,6 +207,8 @@ export default function AppShell() {
       ? shownViewings
       : item.id === 'rental-applications'
         ? shownApplications
+        : user.role === USER_ROLES.LANDLORD && landlordActions.status === 'ready' && ['maintenance', 'pricing-lease', 'payments'].includes(item.id)
+          ? landlordActions.data[{ maintenance: 'maintenanceCount', 'pricing-lease': 'leaseCount', payments: 'paymentCount' }[item.id]]
         : item.id === 'assigned-work' && Number.isInteger(technicianWorkCount) && technicianWorkCount > 0
           ? technicianWorkCount
           : 0
@@ -241,7 +253,7 @@ export default function AppShell() {
           </div>
         </section>}
       </header>
-      <NotificationCountContext.Provider value={{ refreshCount, unreadCount, countStatus: notificationCountStatus }}><PendingViewingsContext.Provider value={publishPendingViewings}><PendingApplicationsContext.Provider value={publishPendingApplications}><div className="shared-shell__content"><Outlet key={user.id} /></div></PendingApplicationsContext.Provider></PendingViewingsContext.Provider></NotificationCountContext.Provider>
+      <NotificationCountContext.Provider value={{ refreshCount, unreadCount, countStatus: notificationCountStatus }}><PendingViewingsContext.Provider value={publishPendingViewings}><PendingApplicationsContext.Provider value={publishPendingApplications}><LandlordActionsContext.Provider value={landlordActions}><div className="shared-shell__content"><Outlet key={user.id} /></div></LandlordActionsContext.Provider></PendingApplicationsContext.Provider></PendingViewingsContext.Provider></NotificationCountContext.Provider>
     </div>
   </div>
 }

@@ -524,17 +524,6 @@ export default function TenantDashboard({ user }) {
         <strong className="tenant-summary__value">{openMaintenance.length}</strong>
         <p>{openMaintenance.length === 0 ? 'No open maintenance requests' : `${openMaintenance.length} ${openMaintenance.length === 1 ? 'request' : 'requests'} need attention`}</p>
       </SummaryCard>
-      <section className="shared-card tenant-summary tenant-summary--green" aria-label="Lease & Payments">
-        <span className="tenant-dashboard__icon"><Icon name="document" size={24} /></span>
-        <h2>Lease & Payments</h2>
-        <p>Review your offers, leases, rent schedules and payments.</p>
-        <Link className="tenant-text-link" to="/modules/lease-payments">Open Lease & Payments <Icon name="arrow" size={18} /></Link>
-      </section>
-      <Link className="shared-card tenant-summary tenant-summary--amber" to="/modules/maintenance" aria-label="Maintenance">
-        <span className="tenant-dashboard__icon"><Icon name="tools" size={24} /></span>
-        <h2>Maintenance</h2>
-        <p>Request repairs and track their progress.</p>
-      </Link>
     </div>
 
     <div className="tenant-dashboard__middle">

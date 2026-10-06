@@ -64,6 +64,8 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             toStatus: MaintenanceRequestStatus.Submitted,
             changedByUserId: tenantId,
             notes: "Maintenance request submitted.");
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(dbContext, maintenanceRequest.PropertyId, NotificationEventTypes.MaintenanceSubmitted,
+            "MaintenanceRequest", maintenanceRequest.Id, maintenanceRequest.Id, "Maintenance triage required", "A tenant submitted a maintenance request for your property.", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return await MapToResponseAsync(maintenanceRequest, cancellationToken);
@@ -261,6 +263,9 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             changedByUserId: null,
             notes: maintenanceRequest.TriageNotes);
 
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(dbContext, maintenanceRequest.PropertyId, NotificationEventTypes.MaintenanceTriaged,
+            "MaintenanceRequest", maintenanceRequest.Id, maintenanceRequest.Id, "Technician assignment required", "A triaged maintenance request needs a technician assignment.", cancellationToken);
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return await MapToResponseAsync(maintenanceRequest, cancellationToken);
@@ -312,6 +317,9 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             toStatus: MaintenanceRequestStatus.Assigned,
             changedByUserId: null,
             notes: maintenanceRequest.AssignmentNotes);
+
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(dbContext, maintenanceRequest.PropertyId, NotificationEventTypes.MaintenanceEstimatePreparation,
+            "MaintenanceRequest", maintenanceRequest.Id, maintenanceRequest.Id, "Estimate preparation required", "A technician is assigned. Prepare this maintenance request for an estimate.", cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -416,6 +424,9 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             MaintenanceRequestStatus.AwaitingLandlordApproval,
             estimate.TechnicianId,
             "Repair estimate submitted for landlord approval.");
+
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(dbContext, maintenanceRequest.PropertyId, NotificationEventTypes.MaintenanceEstimateReview,
+            "MaintenanceRequest", maintenanceRequest.Id, estimate.Id, "Repair estimate review required", "A technician submitted a repair estimate for your approval.", cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return await MapToResponseAsync(maintenanceRequest, cancellationToken);
