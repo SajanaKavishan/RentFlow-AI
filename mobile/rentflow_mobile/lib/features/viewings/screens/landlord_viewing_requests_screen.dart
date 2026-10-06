@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../properties/services/property_api_service.dart';
+import '../../../shared/home/landlord_workspace_service.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../shared/theme/app_theme.dart';
@@ -12,10 +14,12 @@ class LandlordViewingRequestsScreen extends StatefulWidget {
   const LandlordViewingRequestsScreen({
     super.key,
     this.propertyId,
+    this.propertyApiService,
     this.viewingApiService,
   });
 
   final String? propertyId;
+  final PropertyApiService? propertyApiService;
   final ViewingApiService? viewingApiService;
 
   @override
@@ -30,7 +34,8 @@ class _LandlordViewingRequestsScreenState
   Future<List<Viewing>>? _requests;
 
   bool get _hasPropertyReference =>
-      widget.propertyId != null && widget.propertyId!.trim().isNotEmpty;
+      widget.propertyApiService != null ||
+      (widget.propertyId != null && widget.propertyId!.trim().isNotEmpty);
 
   @override
   void initState() {
@@ -50,17 +55,19 @@ class _LandlordViewingRequestsScreenState
     super.dispose();
   }
 
+  Future<List<Viewing>> _fetch() => widget.propertyApiService != null
+      ? LandlordWorkspaceService(
+          widget.propertyApiService!,
+        ).viewings(_apiService)
+      : _apiService.getViewingsByProperty(widget.propertyId!.trim());
+
   void _load() {
-    _requests = _hasPropertyReference
-        ? _apiService.getViewingsByProperty(widget.propertyId!.trim())
-        : null;
+    _requests = _hasPropertyReference ? _fetch() : null;
   }
 
   Future<void> _refresh() async {
     if (!_hasPropertyReference) return;
-    final request = _apiService.getViewingsByProperty(
-      widget.propertyId!.trim(),
-    );
+    final request = _fetch();
     setState(() {
       _requests = request;
     });
@@ -225,9 +232,15 @@ class _ViewingRequestCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(date, style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      viewing.propertyTitle ?? 'Viewing request',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                     const SizedBox(height: AppSpacing.xs),
-                    Text(time, style: Theme.of(context).textTheme.bodyMedium),
+                    Text(
+                      '$date, $time',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ],
                 ),
               ),
@@ -240,8 +253,8 @@ class _ViewingRequestCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.base),
           _QueueReference(
-            label: 'Property reference',
-            value: viewing.propertyId,
+            label: 'Property',
+            value: viewing.propertyTitle ?? 'Property details unavailable',
           ),
           const SizedBox(height: AppSpacing.sm),
           _QueueReference(label: 'Tenant', value: viewing.tenant.displayName),

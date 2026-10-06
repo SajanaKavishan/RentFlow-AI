@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,7 @@ import 'package:rentflow_mobile/features/maintenance/screens/create_maintenance_
 import 'package:rentflow_mobile/features/maintenance/screens/landlord_maintenance_screen.dart';
 import 'package:rentflow_mobile/features/maintenance/screens/my_maintenance_requests_screen.dart';
 import 'package:rentflow_mobile/features/maintenance/services/maintenance_api_service.dart';
+import 'package:rentflow_mobile/features/maintenance/services/maintenance_photo_picker.dart';
 import 'package:rentflow_mobile/features/properties/services/property_api_service.dart';
 import 'package:rentflow_mobile/shared/shell/shared_app_shell.dart';
 
@@ -46,6 +48,7 @@ void main() {
         ),
       ];
       final queuePaths = <String>[];
+      var completionUploads = 0;
       final apiClient = ApiClient(
         baseUrl: 'http://test',
         tokenStorage: storage,
@@ -83,6 +86,22 @@ void main() {
             requests[1] = {...requests[1], 'status': 8};
             return http.Response(jsonEncode(requests[1]), 200);
           }
+          if (request.url.path.endsWith('/completion-attachments')) {
+            completionUploads++;
+            return http.Response(
+              jsonEncode({
+                'id': 'completion-photo',
+                'maintenanceRequestId': 'request-2',
+                'fileName': 'completed.png',
+                'contentType': 'image/png',
+                'fileSize': 8,
+                'attachmentType': 'technician-completion',
+                'uploadedByUserId': '11111111-1111-1111-1111-111111111112',
+                'createdAt': '2026-09-19T14:00:00Z',
+              }),
+              201,
+            );
+          }
           if (request.url.path.endsWith('/complete-work')) {
             requests[1] = {
               ...requests[1],
@@ -105,6 +124,7 @@ void main() {
                 fixtures.userJson(UserRole.maintenanceTechnician),
               ),
               maintenanceApiService: MaintenanceApiService(apiClient),
+              maintenancePhotoPicker: _FakePhotoPicker(),
             ),
           ),
         ),
@@ -147,15 +167,28 @@ void main() {
       );
       await tester.ensureVisible(completeWorkButton);
       await tester.tap(completeWorkButton);
-      await tester.pumpAndSettle();
-      expect(find.text('Complete work?'), findsOneWidget);
-      await tester.tap(
-        find.byKey(const ValueKey('confirm-complete-maintenance-work')),
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Complete this job'), findsOneWidget);
+      await _invokeButton(
+        tester,
+        find.byKey(const ValueKey('submit-maintenance-completion')),
       );
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Add at least one completion photo.'), findsOneWidget);
+      await _invokeButton(
+        tester,
+        find.byKey(const ValueKey('take-completion-photo')),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await _invokeButton(
+        tester,
+        find.byKey(const ValueKey('submit-maintenance-completion')),
+      );
+      await tester.pump(const Duration(seconds: 1));
 
-      expect(find.text('Approved request · completed'), findsOneWidget);
-      expect(queuePaths, hasLength(3));
+      expect(find.text('Approved request · completed'), findsNothing);
+      expect(completionUploads, 1);
+      expect(queuePaths, hasLength(4));
       expect(
         queuePaths.every(
           (path) =>
@@ -391,7 +424,7 @@ void main() {
       expect(find.text('Leaking kitchen tap'), findsOneWidget);
       expect(find.byType(CreateMaintenanceRequestScreen), findsNothing);
       expect(find.text('A clear issue description.'), findsOneWidget);
-      expect(find.text('DESCRIPTION'), findsOneWidget);
+      expect(find.text('DESCRIPTION'), findsNothing);
       expect(find.text('UPDATES'), findsNothing);
       expect(tester.takeException(), isNull);
     },
@@ -580,7 +613,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(reviewSubmissionCount, 1);
-      expect(find.text('awaiting Landlord Approval'), findsOneWidget);
+      expect(find.text('Awaiting Landlord Approval'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -743,7 +776,7 @@ void main() {
       await tester.tap(submitButton);
       await tester.pumpAndSettle();
       expect(reviewSubmissionCount, 1);
-      expect(find.text('awaiting Landlord Approval'), findsOneWidget);
+      expect(find.text('Awaiting Landlord Approval'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('submit-maintenance-estimate-for-review')),
         findsNothing,
@@ -823,16 +856,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Rejected'), findsOneWidget);
+    expect(find.text('No assigned work found'), findsOneWidget);
+    expect(find.text('Rejected'), findsNothing);
     expect(
       find.text('Review notes: Please use the approved supplier.'),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('create-maintenance-estimate')),
       findsNothing,
     );
-    expect(find.byKey(const ValueKey('start-maintenance-work')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -913,8 +942,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('UPDATES'), findsOneWidget);
-    expect(find.textContaining('Submitted → Triaged'), findsOneWidget);
-    expect(find.textContaining('Request triaged.'), findsOneWidget);
+    expect(find.text('Request reviewed'), findsOneWidget);
+    expect(find.textContaining('Request triaged.'), findsNothing);
     expect(find.text('leak-photo.jpg'), findsOneWidget);
     expect(find.textContaining('image/jpeg'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -1639,6 +1668,29 @@ void main() {
     expect(historyLoads, 3);
     expect(tester.takeException(), isNull);
   });
+}
+
+Future<void> _invokeButton(WidgetTester tester, Finder finder) async {
+  final widget = tester.widget(finder);
+  if (widget is ButtonStyleButton) {
+    widget.onPressed?.call();
+  } else if (widget is IconButton) {
+    widget.onPressed?.call();
+  } else {
+    throw StateError('Expected a tappable button.');
+  }
+  await tester.pump();
+}
+
+class _FakePhotoPicker extends MaintenancePhotoPicker {
+  @override
+  Future<List<MaintenancePhoto>> pick(MaintenancePhotoSource source) async => [
+    MaintenancePhoto(
+      fileName: 'completed.png',
+      bytes: Uint8List.fromList([137, 80, 78, 71, 13, 10, 26, 10]),
+      contentType: 'image/png',
+    ),
+  ];
 }
 
 Map<String, dynamic> _maintenanceRequest({

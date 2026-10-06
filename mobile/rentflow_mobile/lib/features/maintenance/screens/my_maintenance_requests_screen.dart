@@ -14,6 +14,8 @@ import '../models/maintenance_request.dart';
 import '../services/maintenance_api_service.dart';
 import '../services/maintenance_photo_picker.dart';
 import '../widgets/tenant_maintenance_ui.dart';
+import '../widgets/maintenance_timeline.dart';
+import '../widgets/assigned_technician_card.dart';
 import 'create_maintenance_request_screen.dart';
 
 class MyMaintenanceRequestsScreen extends StatefulWidget {
@@ -749,7 +751,7 @@ class _MaintenanceRequestDetailsState
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
       child: FutureBuilder<MaintenanceRequest>(
         future: _detail,
         builder: (context, snapshot) {
@@ -779,36 +781,26 @@ class _MaintenanceRequestDetailsState
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _sectionTitle(context, 'DESCRIPTION', top: 0),
               Text(
                 detail.description,
                 style: const TextStyle(
-                  fontSize: 13,
+                  fontSize: 14,
                   height: 1.45,
-                  color: AppPalette.secondaryText,
+                  color: AppPalette.primaryText,
                 ),
               ),
-              if (detail.preferredAccessWindow case final access?) ...[
-                _sectionTitle(context, 'PREFERRED ACCESS'),
-                Text(
-                  access.label,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppPalette.primaryText,
-                  ),
+              if (detail.preferredAccessWindow != null ||
+                  (detail.tenantAccessNotes?.trim().isNotEmpty ?? false))
+                _PreferredAccessRow(
+                  window: detail.preferredAccessWindow,
+                  notes: detail.tenantAccessNotes,
                 ),
-              ],
-              if (detail.tenantAccessNotes != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  'Access notes: ${detail.tenantAccessNotes}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    height: 1.4,
-                    color: AppPalette.primaryText,
-                  ),
+              if (detail.technicianId != null &&
+                  (detail.assignedTechnicianName?.trim().isNotEmpty ?? false))
+                AssignedTechnicianCard(
+                  name: detail.assignedTechnicianName!.trim(),
+                  contactPhone: detail.assignedTechnicianContactPhone,
                 ),
-              ],
               FutureBuilder<List<MaintenanceStatusHistory>>(
                 future: _history,
                 builder: (context, snapshot) {
@@ -842,71 +834,27 @@ class _MaintenanceRequestDetailsState
                   }
                   final history =
                       snapshot.data ?? const <MaintenanceStatusHistory>[];
-                  if (history.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
+                  if (history.isEmpty) return const SizedBox.shrink();
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _sectionTitle(context, 'UPDATES'),
-                      ...history.map(
-                        (entry) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Padding(
-                                padding: EdgeInsets.only(top: 4, right: 10),
-                                child: Icon(
-                                  Icons.circle,
-                                  size: 8,
-                                  color: AppPalette.olive,
-                                ),
-                              ),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${entry.fromStatus == null ? 'Created' : maintenanceLabel(entry.fromStatus!)}'
-                                      ' → ${maintenanceLabel(entry.toStatus)}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        height: 1.35,
-                                        color: AppPalette.primaryText,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${MaterialLocalizations.of(context).formatMediumDate(entry.changedAt.toLocal())}'
-                                      ' · ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(entry.changedAt.toLocal()))}'
-                                      '${entry.notes == null ? '' : '\n${entry.notes}'}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        height: 1.35,
-                                        color: AppPalette.secondaryText,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      MaintenanceTimeline(history: history),
                     ],
                   );
                 },
               ),
-              Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              _sectionTitle(context, 'ATTACHMENTS'),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Text(
-                    'Photos and supporting files',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppPalette.secondaryText,
+                  Expanded(
+                    child: const Text(
+                      'Photos and supporting files',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppPalette.primaryText,
+                      ),
                     ),
                   ),
                   TextButton.icon(
@@ -919,7 +867,10 @@ class _MaintenanceRequestDetailsState
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.attach_file),
-                    label: const Text('Add'),
+                    label: const Text(
+                      'Add',
+                      semanticsLabel: 'Add maintenance attachment',
+                    ),
                   ),
                 ],
               ),
@@ -952,17 +903,33 @@ class _MaintenanceRequestDetailsState
                   final attachments =
                       snapshot.data ?? const <MaintenanceAttachment>[];
                   if (attachments.isEmpty) {
-                    return const SizedBox.shrink();
+                    return const Text(
+                      'No attachments yet.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppPalette.secondaryText,
+                      ),
+                    );
                   }
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _sectionTitle(context, 'ATTACHMENTS'),
                       ...attachments.map(
                         (attachment) => ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.insert_drive_file),
-                          title: Text(attachment.fileName),
+                          leading: Icon(
+                            attachment.contentType.startsWith('image/')
+                                ? Icons.image_outlined
+                                : Icons.insert_drive_file_outlined,
+                            color: AppPalette.olive,
+                          ),
+                          title: Text(
+                            attachment.fileName,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppPalette.primaryText,
+                            ),
+                          ),
                           subtitle: Text(
                             '${attachment.contentType} · '
                             '${_formatFileSize(attachment.fileSize)}',
@@ -1001,12 +968,71 @@ class _MaintenanceRequestDetailsState
       child: Text(
         title,
         style: AppTypography.eyebrow.copyWith(
+          fontSize: 11,
           color: AppPalette.primaryText,
           letterSpacing: .7,
         ),
       ),
     );
   }
+}
+
+class _PreferredAccessRow extends StatelessWidget {
+  const _PreferredAccessRow({this.window, this.notes});
+  final PreferredAccessWindow? window;
+  final String? notes;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.schedule_outlined, size: 17, color: AppPalette.olive),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 3,
+                children: [
+                  Text(
+                    window == null ? 'Access notes' : 'Preferred access',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppPalette.secondaryText,
+                    ),
+                  ),
+                  if (window case final access?)
+                    Text(
+                      access.label,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppPalette.primaryText,
+                      ),
+                    ),
+                ],
+              ),
+              if (notes?.trim().isNotEmpty ?? false) ...[
+                const SizedBox(height: 3),
+                Text(
+                  notes!.trim(),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: AppPalette.secondaryText,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 String _safeErrorMessage(Object? error) {
@@ -1089,7 +1115,7 @@ class _MaintenanceRequestCard extends StatelessWidget {
                             Text(
                               request.title,
                               style: AppTypography.cardTitle.copyWith(
-                                fontSize: 14,
+                                fontSize: 15,
                                 color: AppPalette.primaryText,
                                 height: 1.2,
                               ),
@@ -1121,7 +1147,7 @@ class _MaintenanceRequestCard extends StatelessWidget {
                                 final date = Text(
                                   MaterialLocalizations.of(
                                     context,
-                                  ).formatMediumDate(
+                                  ).formatShortMonthDay(
                                     request.createdAt.toLocal(),
                                   ),
                                   style: const TextStyle(

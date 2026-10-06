@@ -6,6 +6,15 @@ import { ApiError } from '../../core/api/apiClient.js'
 import { getAdminUserRoleTotals, getAdminUserTotal } from '../../features/adminUsers/adminUsersApi.js'
 import { NotificationCountContext } from '../../features/notifications/NotificationCountContext.js'
 import AdminDashboard from './AdminDashboard.jsx'
+import { getAdminActivityPage, getAdminReport } from './adminReportingApi.js'
+vi.mock('./adminReportingApi.js', () => ({ getAdminReport: vi.fn(), getAdminActivityPage: vi.fn() }))
+
+const reports = {
+  summary: { propertyCount: 9, activeApplicationCount: 4, monthlyVolume: 250000, month: '2026-10' },
+  activity: [{ kind: 'Property listed', description: 'Garden home', occurredAt: '2026-10-06T10:00:00Z' }],
+  workflows: [{ name: 'Application validation', total: 5, pending: 1, running: 0, awaitingReview: 1, completed: 2, failed: 1 }],
+  health: { checkedAt: '2026-10-06T10:00:00Z', services: [{ name: 'Database', status: 'available', detail: 'Connectivity checked' }, { name: 'AI agent', status: 'unavailable', detail: 'Endpoint unreachable' }] },
+}
 
 vi.mock('../../features/adminUsers/adminUsersApi.js', () => ({
   ADMIN_USER_DISTRIBUTION_ROLES: ['Tenant', 'Landlord', 'MaintenanceTechnician', 'Admin'],
@@ -41,6 +50,8 @@ function renderDashboard(user = admin()) {
 }
 
 beforeEach(() => {
+  getAdminActivityPage.mockReset().mockResolvedValue([])
+  getAdminReport.mockReset().mockImplementation(async (kind) => reports[kind])
   getAdminUserTotal.mockReset().mockResolvedValue(22)
   getAdminUserRoleTotals.mockReset().mockResolvedValue(roleTotals)
 })
@@ -48,7 +59,7 @@ beforeEach(() => {
 afterEach(() => cleanup())
 
 describe('Admin dashboard user total', () => {
-  it('shows the authorized directory total while leaving unsupported metrics unavailable', async () => {
+  it('shows authorized directory totals and live platform metrics', async () => {
     getAdminUserTotal.mockResolvedValue(1432)
 
     renderDashboard()
@@ -60,10 +71,10 @@ describe('Admin dashboard user total', () => {
     expect(totalUsers).not.toHaveTextContent('Integration pending')
     expect(getAdminUserTotal).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) })
 
-    for (const title of ['Properties', 'Active Applications', 'Monthly Volume']) {
-      expect(within(summary).getByRole('region', { name: title })).toHaveTextContent('Integration pending')
-    }
-    expect(within(summary).getAllByText('Integration pending')).toHaveLength(3)
+    expect(await within(within(summary).getByRole('region', { name: 'Properties' })).findByText('9')).toBeInTheDocument()
+    expect(within(summary).getByRole('region', { name: 'Active Applications' })).toHaveTextContent('4')
+    expect(within(summary).getByRole('region', { name: 'Monthly Volume' })).toHaveTextContent('Rs. 250,000')
+    expect(screen.queryByText('Integration pending')).not.toBeInTheDocument()
   })
 
   it('shows a loading state without presenting a fabricated count', () => {
@@ -113,6 +124,80 @@ describe('Admin dashboard user total', () => {
 })
 
 describe('Admin dashboard user distribution', () => {
+  it('previews the newest seven activity entries and expands the selected feed with Show less', async () => {
+    const activity = Array.from({ length: 15 }, (_, index) => ({ ...reports.activity[0], description: `Activity ${index + 1}` }))
+    getAdminReport.mockImplementation(async (kind) => kind === 'activity' ? activity.slice(0, 10) : reports[kind])
+    getAdminActivityPage.mockResolvedValue(activity)
+    renderDashboard()
+    const panel = screen.getByRole('region', { name: 'Platform Activity' })
+    expect(await within(panel).findByText('Activity 7')).toBeInTheDocument()
+    expect(within(panel).getAllByRole('listitem')).toHaveLength(7)
+    expect(within(panel).queryByText('Activity 8')).not.toBeInTheDocument()
+    expect(getAdminActivityPage).not.toHaveBeenCalled()
+    await userEvent.click(within(panel).getByRole('button', { name: 'See all' }))
+    expect(await within(panel).findByText('Activity 15')).toBeInTheDocument()
+    expect(within(panel).getByRole('region', { name: 'All platform activity' })).toBeInTheDocument()
+    expect(getAdminActivityPage).toHaveBeenCalledWith(1, expect.any(AbortSignal))
+    await userEvent.click(within(panel).getByRole('button', { name: 'Show less' }))
+    expect(within(panel).getAllByRole('listitem')).toHaveLength(7)
+    expect(within(panel).queryByText('Activity 8')).not.toBeInTheDocument()
+  })
+
+  it('loads more activity beyond the first expanded page', async () => {
+    const activity = Array.from({ length: 50 }, (_, index) => ({ ...reports.activity[0], description: `Activity ${index + 1}` }))
+    getAdminReport.mockImplementation(async (kind) => kind === 'activity' ? activity.slice(0, 10) : reports[kind])
+    getAdminActivityPage.mockResolvedValueOnce(activity).mockResolvedValueOnce([{ ...activity[0], description: 'Older activity' }])
+    renderDashboard()
+    const panel = screen.getByRole('region', { name: 'Platform Activity' })
+    await userEvent.click(await within(panel).findByRole('button', { name: 'See all' }))
+    await userEvent.click(await within(panel).findByRole('button', { name: 'Load more' }))
+    expect(await within(panel).findByText('Older activity')).toBeInTheDocument()
+    expect(within(panel).getAllByRole('listitem')).toHaveLength(51)
+    expect(within(panel).queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
+  })
+
+  it('omits See all when the preview includes the whole feed', async () => {
+    renderDashboard()
+    const panel = screen.getByRole('region', { name: 'Platform Activity' })
+    await within(panel).findByText('Garden home')
+    expect(within(panel).queryByRole('button', { name: 'See all' })).not.toBeInTheDocument()
+  })
+  it('shows actual activity, workflow outcomes and unavailable service health', async () => {
+    renderDashboard()
+    expect(await screen.findByText('Garden home')).toBeInTheDocument()
+    const workflows = screen.getByRole('region', { name: 'AI Workflows' })
+    expect(await within(workflows).findByRole('rowheader', { name: 'Application validation' })).toBeInTheDocument()
+    const health = screen.getByRole('region', { name: 'System Health' })
+    expect(await within(health).findByText('Unavailable')).toBeInTheDocument()
+    expect(within(health).getByText('Endpoint unreachable')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open workflow monitor' })).toHaveAttribute('href', '/modules/ai-system-overview')
+  })
+
+  it('retries a failed report independently without showing fabricated zero metrics', async () => {
+    let attempts = 0
+    getAdminReport.mockImplementation(async (kind) => {
+      if (kind === 'summary' && attempts++ === 0) throw new Error('Unavailable')
+      return reports[kind]
+    })
+    renderDashboard()
+    const properties = screen.getByRole('region', { name: 'Properties' })
+    expect(await within(properties).findByRole('alert')).toBeInTheDocument()
+    expect(within(properties).queryByText('0')).not.toBeInTheDocument()
+    await userEvent.click(within(properties).getByRole('button', { name: 'Try again' }))
+    expect(await within(properties).findByText('9')).toBeInTheDocument()
+  })
+
+  it('discards old reporting responses when the Admin identity changes', async () => {
+    const old = deferred()
+    let calls = 0
+    getAdminReport.mockImplementation((kind) => kind === 'summary' && calls++ === 0 ? old.promise : Promise.resolve(reports[kind]))
+    const view = renderDashboard(admin('old-admin'))
+    view.rerender(dashboard(admin('new-admin')))
+    const properties = screen.getByRole('region', { name: 'Properties' })
+    expect(await within(properties).findByText('9')).toBeInTheDocument()
+    await act(async () => old.resolve({ ...reports.summary, propertyCount: 999 }))
+    expect(within(properties).queryByText('999')).not.toBeInTheDocument()
+  })
   it('renders validated role counts and proportions against the real total', async () => {
     getAdminUserTotal.mockResolvedValue(20)
     getAdminUserRoleTotals.mockResolvedValue({

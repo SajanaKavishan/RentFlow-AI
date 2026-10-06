@@ -1,0 +1,104 @@
+name: Flutter Mobile Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_target:
+        description: "Build target"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - "both"
+          - "apk"
+          - "appbundle"
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build Flutter Mobile Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile/rentflow_mobile
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter 3.44.9
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          channel: stable
+          cache: true
+
+      - name: Cache Pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-flutter-pub-release-${{ hashFiles('mobile/rentflow_mobile/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-pub-release-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze code
+        run: flutter analyze
+
+      - name: Run unit tests
+        run: flutter test
+
+      # -------------------------------------------------------------
+      # BUILD ANDROID ARTIFACTS
+      # -------------------------------------------------------------
+      - name: Build Android APK
+        if: ${{ github.event_name == 'push' || github.event.inputs.build_target == 'apk' || github.event.inputs.build_target == 'both' }}
+        run: flutter build apk --release
+
+      - name: Build Android App Bundle (AAB)
+        if: ${{ github.event_name == 'push' || github.event.inputs.build_target == 'appbundle' || github.event.inputs.build_target == 'both' }}
+        run: flutter build appbundle --release
+
+      - name: Upload Release APK
+        if: ${{ github.event_name == 'push' || github.event.inputs.build_target == 'apk' || github.event.inputs.build_target == 'both' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rentflow-mobile-release-apk
+          path: mobile/rentflow_mobile/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Release App Bundle
+        if: ${{ github.event_name == 'push' || github.event.inputs.build_target == 'appbundle' || github.event.inputs.build_target == 'both' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rentflow-mobile-release-aab
+          path: mobile/rentflow_mobile/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      # -------------------------------------------------------------
+      # GITHUB RELEASE (if triggered by version tag)
+      # -------------------------------------------------------------
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            mobile/rentflow_mobile/build/app/outputs/flutter-apk/app-release.apk
+            mobile/rentflow_mobile/build/app/outputs/bundle/release/app-release.aab
+          generate_release_notes: true

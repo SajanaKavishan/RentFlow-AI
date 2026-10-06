@@ -112,6 +112,41 @@ public sealed class ViewingReviewEndpointsTests
         using var check = factory.Services.CreateScope(); var stored = await check.ServiceProvider.GetRequiredService<ApplicationDbContext>().ViewingReviews.SingleAsync();
         Assert.Equal(tenant, stored.TenantId); Assert.Equal(property.Id, stored.PropertyId); Assert.Equal(landlord, stored.LandlordId);
     }
+    [Fact]
+    public async Task FullPropertyFeedbackIsOwnerOnlyAndReturnsAllReviewsWithoutIdentity()
+    {
+        using var factory = new AuthApiFactory(); var landlord = Guid.NewGuid();
+        using var owner = Client(factory, landlord, UserRole.Landlord);
+        using var stranger = Client(factory, Guid.NewGuid(), UserRole.Landlord);
+        using var tenant = Client(factory, Guid.NewGuid(), UserRole.Tenant);
+        using var anonymous = factory.CreateHttpsClient();
+        var property = new Property { LandlordId = landlord, Title = "Owned home" };
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(); db.Add(property);
+            for (var index = 0; index < 7; index++)
+            {
+                var viewing = new ViewingRequest { TenantId = Guid.NewGuid(), PropertyId = property.Id, Status = ViewingStatus.Completed };
+                db.Add(viewing);
+                db.Add(new ViewingReview { ViewingId = viewing.Id, TenantId = viewing.TenantId, PropertyId = property.Id,
+                    LandlordId = landlord, PropertyRating = 4, LandlordRating = 5, Comment = index == 0 ? null : $"Feedback {index}",
+                    CreatedAt = DateTimeOffset.UtcNow.AddDays(-index), UpdatedAt = DateTimeOffset.UtcNow });
+            }
+            await db.SaveChangesAsync();
+        }
+        var path = $"/api/landlord/viewing-reviews/properties/{property.Id}";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await tenant.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await stranger.GetAsync(path)).StatusCode);
+        var response = await owner.GetAsync(path); Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(7, document.RootElement.GetProperty("reviewCount").GetInt32());
+        var reviews = document.RootElement.GetProperty("reviews"); Assert.Equal(7, reviews.GetArrayLength());
+        Assert.Equal("", reviews[0].GetProperty("comment").GetString());
+        foreach (var review in reviews.EnumerateArray())
+            Assert.Equal(new[] { "rating", "comment", "reviewMonth" }, review.EnumerateObject().Select(p => p.Name));
+    }
+
     private static HttpClient Client(AuthApiFactory factory, Guid id, UserRole role)
     {
         factory.EnsureActiveUser(id, role); var client = factory.CreateHttpsClient();

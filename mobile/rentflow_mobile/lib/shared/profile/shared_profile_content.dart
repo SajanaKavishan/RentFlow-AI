@@ -109,6 +109,27 @@ class SharedProfileContent extends StatelessWidget {
                       );
                     },
                   ),
+                if (currentUser.role == UserRole.maintenanceTechnician)
+                  _ProfileTile(
+                    icon: Icons.phone_outlined,
+                    title: 'Work contact',
+                    subtitle:
+                        'Manage contact for assigned maintenance requests',
+                    onTap: () {
+                      final auth = AuthScope.of(context);
+                      showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        useSafeArea: true,
+                        showDragHandle: true,
+                        builder: (_) => PublicContactEditor(
+                          maintenance: true,
+                          loadUser: auth.authService.getCurrentUser,
+                          save: auth.updateMaintenanceContact,
+                        ),
+                      );
+                    },
+                  ),
                 if (currentUser.role == UserRole.tenant)
                   _ProfileTile(
                     icon: Icons.folder_outlined,

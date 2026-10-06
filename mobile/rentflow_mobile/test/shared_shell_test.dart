@@ -640,11 +640,11 @@ void main() {
     (tester) async {
       await pumpShell(tester, UserRole.landlord);
       expect(find.byType(NavigationBar), findsOneWidget);
-      expect(find.text('Hello, Larry'), findsOneWidget);
+      expect(find.textContaining(', Larry'), findsOneWidget);
       expect(find.text('Viewing Requests'), findsWidgets);
-      expect(find.text('Rental Applications'), findsOneWidget);
+      expect(find.text('Rental applications'), findsOneWidget);
       expect(find.byTooltip('Notifications'), findsOneWidget);
-      expect(find.byTooltip('Open profile'), findsOneWidget);
+      expect(find.byTooltip('Open profile'), findsNothing);
       expect(find.text('Recent activity'), findsNothing);
       expect(
         find.text(

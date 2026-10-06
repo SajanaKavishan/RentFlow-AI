@@ -8,10 +8,14 @@ import ProfileAvatar from '../../features/auth/ProfileAvatar.jsx'
 import { USER_ROLES } from '../../features/auth/authModel.js'
 import { propertyIdFromLocation } from '../property/usePropertyContext.js'
 import { getUnreadCount } from '../../features/notifications/notificationsApi.js'
+import { getTechnicianMaintenanceRequests } from '../../features/maintenance/services/maintenanceApiService.js'
+import { technicianAttentionWork } from '../pages/technicianWorkPresentation.js'
 import { NotificationCountContext } from '../../features/notifications/NotificationCountContext.js'
 import NotificationPopover from '../../features/notifications/NotificationPopover.jsx'
 import { PendingViewingsContext } from './PendingViewingsContext.js'
 import { PendingApplicationsContext } from './PendingApplicationsContext.js'
+import { LandlordActionsContext } from './LandlordActionsContext.js'
+import useLandlordActionSummary from './useLandlordActionSummary.js'
 import { getViewingsByProperty, VIEWING_STATUS } from '../../features/viewings/services/viewingApiService.js'
 import { getApplicationsByProperty, RENTAL_APPLICATION_STATUS } from '../../features/rentalApplications/services/rentalApplicationApiService.js'
 import './shell.css'
@@ -47,11 +51,14 @@ export default function AppShell() {
   const { user, logout } = useAuth()
   const portalRole = user.role === USER_ROLES.MAINTENANCE_TECHNICIAN ? 'Technician' : user.role
   const location = useLocation()
+  const landlordActions = useLandlordActionSummary(user, location.pathname)
+  const refreshLandlordActions = landlordActions.refresh
   const isLandlordPropertyDetails = user.role === USER_ROLES.LANDLORD
     && location.pathname !== '/properties/new'
     && Boolean(matchPath('/properties/:propertyId', location.pathname))
   const isViewingAvailability = Boolean(matchPath('/properties/:propertyId/viewing-availability', location.pathname))
   const [countResult, setCountResult] = useState(null)
+  const [technicianWorkCount, setTechnicianWorkCount] = useState(null)
   const unreadCount = countResult?.userId === user.id ? countResult.count : null
   const notificationCountStatus = countResult?.userId !== user.id
     ? 'loading'
@@ -70,6 +77,25 @@ export default function AppShell() {
     refreshCount()
     return () => { requestCounter.current++ }
   }, [location.pathname, user.id, refreshCount])
+  useEffect(() => {
+    if (user.role !== USER_ROLES.LANDLORD) return undefined
+    const onFocus = () => { refreshLandlordActions(); refreshCount() }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [user.role, refreshLandlordActions, refreshCount])
+  useEffect(() => {
+    if (user.role !== USER_ROLES.MAINTENANCE_TECHNICIAN) {
+      return undefined
+    }
+    if (location.pathname === '/modules/assigned-work' || location.pathname === '/modules/work-history') {
+      return undefined
+    }
+    let active = true
+    getTechnicianMaintenanceRequests(user.id)
+      .then((requests) => { if (active) setTechnicianWorkCount(technicianAttentionWork(requests).length) })
+      .catch(() => { if (active) setTechnicianWorkCount(null) })
+    return () => { active = false }
+  }, [location.pathname, user.id, user.role])
   const propertyId = user.role === USER_ROLES.LANDLORD ? propertyIdFromLocation(location) : null
   const [viewingSummary, setViewingSummary] = useState(null)
   const [applicationSummary, setApplicationSummary] = useState(null)
@@ -176,11 +202,19 @@ export default function AppShell() {
     }
   }, [accountOpen, location.pathname])
   const items = navigationForRole(user.role)
-  const current = (isViewingAvailability ? 'Viewing availability' : activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : activePath === '/modules/users' ? 'User Management' : activePath === '/viewing-requests' ? 'Viewings Management' : activePath === '/rental-applications' ? 'Applications Management' : items.find((item) => item.path === activePath)?.label)
+  const current = (isViewingAvailability ? 'Viewing availability' : activePath === '/dashboard' ? `${portalRole} Portal` : activePath === '/notifications' ? 'Notifications' : activePath === '/modules/users' ? 'User Management' : activePath === '/viewing-requests' ? 'Viewings Management' : activePath === '/rental-applications' ? 'Applications Management' : activePath === '/modules/my-applications' ? 'Application management' : items.find((item) => item.path === activePath)?.label)
     || (location.pathname === '/unauthorized' ? 'Access restricted' : 'RentFlow AI')
   const closeMenu = () => { setMenu({ path: location.pathname, open: false }); if (menuOpen) menuRef.current?.focus() }
   const navLink = (item) => {
-    const badgeCount = item.id === 'viewing-requests' ? shownViewings : item.id === 'rental-applications' ? shownApplications : 0
+    const badgeCount = item.id === 'viewing-requests'
+      ? shownViewings
+      : item.id === 'rental-applications'
+        ? shownApplications
+        : user.role === USER_ROLES.LANDLORD && landlordActions.status === 'ready' && ['maintenance', 'pricing-lease', 'payments'].includes(item.id)
+          ? landlordActions.data[{ maintenance: 'maintenanceCount', 'pricing-lease': 'leaseCount', payments: 'paymentCount' }[item.id]]
+        : item.id === 'assigned-work' && Number.isInteger(technicianWorkCount) && technicianWorkCount > 0
+          ? technicianWorkCount
+          : 0
     return <Link key={`${item.label}-${item.path}`} to={scopedPath(item.path)} aria-current={activePath === item.path ? 'page' : undefined} aria-label={badgeCount ? `${item.label}, ${badgeCount} pending` : undefined} onClick={() => {
     if (item.id === 'viewing-requests' && shownViewings) setDismissedViewings({ userId: user.id, propertyId, count: shownViewings })
     if (item.id === 'rental-applications' && shownApplications) setDismissedApplications({ userId: user.id, propertyId, count: shownApplications })
@@ -222,7 +256,7 @@ export default function AppShell() {
           </div>
         </section>}
       </header>
-      <NotificationCountContext.Provider value={{ refreshCount, unreadCount, countStatus: notificationCountStatus }}><PendingViewingsContext.Provider value={publishPendingViewings}><PendingApplicationsContext.Provider value={publishPendingApplications}><div className="shared-shell__content"><Outlet key={user.id} /></div></PendingApplicationsContext.Provider></PendingViewingsContext.Provider></NotificationCountContext.Provider>
+      <NotificationCountContext.Provider value={{ refreshCount, unreadCount, countStatus: notificationCountStatus }}><PendingViewingsContext.Provider value={publishPendingViewings}><PendingApplicationsContext.Provider value={publishPendingApplications}><LandlordActionsContext.Provider value={landlordActions}><div className="shared-shell__content"><Outlet key={user.id} /></div></LandlordActionsContext.Provider></PendingApplicationsContext.Provider></PendingViewingsContext.Provider></NotificationCountContext.Provider>
     </div>
   </div>
 }

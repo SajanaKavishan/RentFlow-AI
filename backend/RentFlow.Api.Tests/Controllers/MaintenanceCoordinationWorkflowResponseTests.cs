@@ -1,3 +1,4 @@
+using RentFlow.Api.Tests.Services;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -27,8 +28,8 @@ public sealed class MaintenanceCoordinationWorkflowResponseTests
         };
         using var client = factory.CreateHttpsClient();
         var maintenanceRequestId = Guid.NewGuid();
-        await SeedMaintenanceRequestAsync(factory, maintenanceRequestId);
-        await AuthenticateAsLandlordAsync(client);
+        var landlordId = await AuthenticateAsLandlordAsync(client);
+        await SeedMaintenanceRequestAsync(factory, maintenanceRequestId, landlordId);
 
         using var response = await client.PostAsync(
             $"/api/maintenance-requests/{maintenanceRequestId}/coordination-workflows",
@@ -84,15 +85,17 @@ public sealed class MaintenanceCoordinationWorkflowResponseTests
 
     private static async Task SeedMaintenanceRequestAsync(
         AuthApiFactory factory,
-        Guid requestId)
+        Guid requestId, Guid landlordId)
     {
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var property = new Property { LandlordId = landlordId, Title = "Owned property", Address = "Test", City = "Test" };
+        dbContext.Properties.Add(property);
         dbContext.MaintenanceRequests.Add(new MaintenanceRequest
         {
             Id = requestId,
             TenantId = Guid.NewGuid(),
-            PropertyId = Guid.NewGuid(),
+            PropertyId = property.Id,
             Title = "Bathroom exhaust fan stopped working",
             Description = "The bathroom exhaust fan has stopped working and needs inspection.",
             Category = MaintenanceCategory.Electrical,
@@ -103,7 +106,7 @@ public sealed class MaintenanceCoordinationWorkflowResponseTests
         await dbContext.SaveChangesAsync();
     }
 
-    private static async Task AuthenticateAsLandlordAsync(HttpClient client)
+    private static async Task<Guid> AuthenticateAsLandlordAsync(HttpClient client)
     {
         using var response = await client.PostAsJsonAsync("/api/auth/register", new
         {
@@ -119,6 +122,7 @@ public sealed class MaintenanceCoordinationWorkflowResponseTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             document.RootElement.GetProperty("accessToken").GetString());
+        return document.RootElement.GetProperty("user").GetProperty("id").GetGuid();
     }
 
     private sealed class StubMaintenanceCoordinationAgentClient : IMaintenanceCoordinationAgentClient
@@ -135,17 +139,10 @@ public sealed class MaintenanceCoordinationWorkflowResponseTests
             return Task.FromResult(new MaintenanceCoordinationAgentResponse
             {
                 MaintenanceRequestId = request.MaintenanceRequestId,
-                Result = new MaintenanceCoordinationResult
-                {
-                    RecommendedCategory = "Electrical",
-                    RecommendedPriority = "High",
-                    NextAction = "Inspect the fan and its electrical connection.",
-                    Reasoning = "The fan has stopped working and requires inspection.",
-                    AgentVersion = "test-agent"
-                },
+                Result = MaintenanceCoordinationTestData.Result(request),
                 ExecutionMetadata = new MaintenanceCoordinationExecutionMetadata
                 {
-                    ExecutedSteps = ["classify", "prioritize", "recommend"]
+                    ExecutedSteps = ["plan", "classify_assess_issue", "assess_urgency", "review_maintenance_information", "produce_coordination_recommendation", "summarize"]
                 }
             });
         }

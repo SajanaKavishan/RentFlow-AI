@@ -5,9 +5,11 @@ import '../../features/application_documents/screens/tenant_documents_screen.dar
 import '../../features/tenant_lease_payments/screens/tenant_lease_payments_screen.dart';
 import '../../features/tenant_lease_payments/services/tenant_lease_payments_api_service.dart';
 import '../../features/maintenance/screens/assigned_work_screen.dart';
+import '../../features/maintenance/models/maintenance_request.dart';
 import '../../features/maintenance/screens/landlord_maintenance_screen.dart';
 import '../../features/maintenance/screens/my_maintenance_requests_screen.dart';
 import '../../features/maintenance/services/maintenance_api_service.dart';
+import '../../features/maintenance/services/maintenance_photo_picker.dart';
 import '../../features/lease_agreements/screens/my_leases_screen.dart';
 import '../../features/lease_agreements/services/lease_agreement_api_service.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
@@ -28,6 +30,7 @@ import '../../features/viewing_reviews/screens/landlord_reviews_screen.dart';
 import '../../features/viewing_reviews/services/viewing_review_api_service.dart';
 import '../home/landlord_home.dart';
 import '../home/tenant_home.dart';
+import '../home/technician_home.dart';
 import '../navigation/role_navigation.dart';
 import '../navigation/tenant_navigation_icon.dart';
 import '../profile/shared_profile_content.dart';
@@ -49,6 +52,7 @@ class SharedAppShell extends StatefulWidget {
     this.paymentApiService,
     this.notificationApiService,
     this.maintenanceApiService,
+    this.maintenancePhotoPicker,
     this.landlordPropertyId,
   });
 
@@ -66,6 +70,7 @@ class SharedAppShell extends StatefulWidget {
   final PaymentApiService? paymentApiService;
   final NotificationApiService? notificationApiService;
   final MaintenanceApiService? maintenanceApiService;
+  final MaintenancePhotoPicker? maintenancePhotoPicker;
   final String? landlordPropertyId;
   final PropertyApiService? propertyApiService;
 
@@ -77,6 +82,7 @@ class _SharedAppShellState extends State<SharedAppShell>
     with WidgetsBindingObserver {
   int _selectedIndex = 0;
   int? _unreadCount;
+  MaintenanceRequest? _selectedTechnicianJob;
 
   @override
   void initState() {
@@ -236,7 +242,8 @@ class _SharedAppShellState extends State<SharedAppShell>
     final contentOwnsAppBar =
         selected.experience == DestinationExperience.feature ||
         (selected.id == RoleDestinationId.home &&
-            widget.user.role == UserRole.tenant);
+            (widget.user.role == UserRole.tenant ||
+                widget.user.role == UserRole.landlord));
 
     return Scaffold(
       appBar: contentOwnsAppBar ? null : _appBar(selected),
@@ -326,12 +333,6 @@ class _SharedAppShellState extends State<SharedAppShell>
           onPressed: _openNotifications,
           icon: _NotificationBell(unreadCount: _unreadCount),
         ),
-        if (widget.user.role != UserRole.tenant)
-          IconButton(
-            tooltip: 'Open profile',
-            onPressed: () => _selectDestination(RoleDestinationId.profile),
-            icon: const Icon(Icons.account_circle_outlined),
-          ),
         const SizedBox(width: AppSpacing.sm),
       ],
       _ => null,
@@ -404,6 +405,7 @@ class _SharedAppShellState extends State<SharedAppShell>
       widget.viewingsContent ??
           LandlordViewingRequestsScreen(
             propertyId: widget.landlordPropertyId,
+            propertyApiService: widget.propertyApiService,
             viewingApiService: widget.viewingApiService,
           ),
 
@@ -412,6 +414,7 @@ class _SharedAppShellState extends State<SharedAppShell>
           (widget.user.role == UserRole.landlord
               ? LandlordRentalApplicationsScreen(
                   propertyId: widget.landlordPropertyId,
+                  propertyApiService: widget.propertyApiService,
                   rentalApplicationApiService:
                       widget.rentalApplicationApiService,
                 )
@@ -433,6 +436,8 @@ class _SharedAppShellState extends State<SharedAppShell>
     RoleDestinationId.assignedWork => AssignedWorkScreen(
       maintenanceApiService: widget.maintenanceApiService,
       technicianId: widget.user.id,
+      request: _selectedTechnicianJob,
+      photoPicker: widget.maintenancePhotoPicker,
     ),
 
     _ => const SizedBox.shrink(),
@@ -461,6 +466,20 @@ class _SharedAppShellState extends State<SharedAppShell>
       return LandlordHome(
         user: widget.user,
         onDestinationSelected: _selectDestination,
+        onOpenNotifications: _openNotifications,
+        notificationApiService: widget.notificationApiService,
+        unreadNotificationCount: _unreadCount,
+      );
+    }
+
+    if (widget.user.role == UserRole.maintenanceTechnician) {
+      return TechnicianHome(
+        user: widget.user,
+        maintenanceApiService: widget.maintenanceApiService,
+        onOpenJob: (job) {
+          setState(() => _selectedTechnicianJob = job);
+          _selectDestination(RoleDestinationId.assignedWork);
+        },
       );
     }
 

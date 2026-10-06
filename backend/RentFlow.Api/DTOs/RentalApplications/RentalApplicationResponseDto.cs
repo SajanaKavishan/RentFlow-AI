@@ -13,6 +13,10 @@ public class RentalApplicationResponseDto
 
     public Guid PropertyId { get; set; }
 
+    public string? PropertyTitle { get; set; }
+
+    public string? ApplicantName { get; set; }
+
     public DateOnly MoveInDate { get; set; }
 
     public decimal MonthlyIncome { get; set; }

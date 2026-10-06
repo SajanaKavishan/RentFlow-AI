@@ -104,6 +104,8 @@ public sealed class TenantMaintenanceWorkflowTests
         request.Description = "  The   kitchen\n tap is leaking. " + new string('x', 2500);
         request.TenantAccessNotes = " Please knock. ";
         await MaintenanceTenancyFixture.SeedAsync(context, tenant, request.PropertyId);
+        context.Properties.Local.Single(property => property.Id == request.PropertyId).Title = "Port city residence";
+        await context.SaveChangesAsync();
         var service = new MaintenanceRequestService(context);
         var result = await service.CreateAsync(tenant, request);
         Assert.Equal("The kitchen tap is leaking", result.Title);
@@ -113,6 +115,9 @@ public sealed class TenantMaintenanceWorkflowTests
         Assert.DoesNotContain(result.Id.ToString(), result.ReferenceCode);
         Assert.Equal(result.ReferenceCode, (await service.GetByIdAsync(result.Id))!.ReferenceCode);
         Assert.Equal(result.ReferenceCode, (await service.GetByTenantAsync(tenant)).Single().ReferenceCode);
+        Assert.Equal("Port city residence", result.PropertyTitle);
+        Assert.Equal(result.PropertyTitle, (await service.GetByIdAsync(result.Id))!.PropertyTitle);
+        Assert.Equal(result.PropertyTitle, (await service.GetByTenantAsync(tenant)).Single().PropertyTitle);
     }
 
     [Fact]

@@ -16,6 +16,10 @@ public sealed class ApplicationUser
 
     public bool PublicContactEnabled { get; set; }
 
+    public string? MaintenanceContactPhone { get; set; }
+
+    public bool MaintenanceContactEnabled { get; set; }
+
     public string? PasswordHash { get; set; }
 
     public UserRole Role { get; set; }

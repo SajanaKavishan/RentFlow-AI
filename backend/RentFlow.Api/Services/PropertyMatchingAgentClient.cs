@@ -51,11 +51,11 @@ public sealed class PropertyMatchingAgentClient(
 
         try
         {
-            response = await httpClient.PostAsJsonAsync(
+            response = await AgentServiceRequest.PostAsync(httpClient,
                 endpoint,
                 request,
                 JsonOptions,
-                timeoutSource.Token);
+                serviceOptions.ServiceApiKey, timeoutSource.Token);
         }
         catch (OperationCanceledException)
             when (!cancellationToken.IsCancellationRequested)

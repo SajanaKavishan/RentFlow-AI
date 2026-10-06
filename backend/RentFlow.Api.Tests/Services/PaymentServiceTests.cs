@@ -10,6 +10,30 @@ namespace RentFlow.Api.Tests.Services;
 public class PaymentServiceTests
 {
     [Fact]
+    public async Task GetByLandlordAsync_ReturnsLeasePropertyIdAndExcludesOtherLandlords()
+    {
+        await using var dbContext = CreateDbContext();
+        var landlordId = Guid.NewGuid();
+        var schedule = await CreateRentScheduleItemAsync(dbContext, Guid.NewGuid());
+        var otherSchedule = await CreateRentScheduleItemAsync(dbContext, Guid.NewGuid());
+        var lease = await dbContext.LeaseAgreements.FindAsync(schedule.LeaseAgreementId);
+        var otherLease = await dbContext.LeaseAgreements.FindAsync(otherSchedule.LeaseAgreementId);
+        dbContext.Properties.AddRange(
+            new Property { Id = lease!.PropertyId, LandlordId = landlordId },
+            new Property { Id = otherLease!.PropertyId, LandlordId = Guid.NewGuid() });
+        dbContext.Payments.AddRange(CreatePayment(schedule, lease.TenantId), CreatePayment(otherSchedule, otherLease.TenantId));
+        await dbContext.SaveChangesAsync();
+        var expectedPropertyId = lease.PropertyId;
+        dbContext.ChangeTracker.Clear();
+
+        var payments = await new PaymentService(dbContext).GetByLandlordAsync(landlordId);
+
+        var payment = Assert.Single(payments);
+        Assert.Equal(expectedPropertyId, payment.PropertyId);
+        Assert.Equal(schedule.Id, payment.RentScheduleItemId);
+    }
+
+    [Fact]
     public async Task CreateAsync_WithValidRentScheduleItem_CreatesPendingPayment()
     {
         await using var dbContext = CreateDbContext();

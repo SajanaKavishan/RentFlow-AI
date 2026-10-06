@@ -164,6 +164,15 @@ export const NAV_ITEMS = Object.freeze([
     owner: 'Maintenance',
     description: 'Review assigned maintenance requests and update work status.',
   },
+  {
+    id: 'work-history',
+    label: 'Work History',
+    path: '/modules/work-history',
+    roles: [M],
+    available: true,
+    owner: 'Maintenance',
+    description: 'Review completed maintenance work.',
+  },
 
   // =========================================================
   // ADMIN

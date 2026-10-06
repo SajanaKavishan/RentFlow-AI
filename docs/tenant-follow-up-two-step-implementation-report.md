@@ -1,0 +1,42 @@
+# Tenant post-viewing follow-up: two steps
+
+Completed and validated on 2026-10-05 on `feature/full-app-polish`. No branches were created/switched/deleted; no commit, push, or PR was made.
+
+1. **Final flow.** Existing server claim → Review step → successful Submit/Update, unchanged Continue, or explicit Skip → Application step → existing ApplyNow/NotNow response. Both steps use one dialog route. The Review surface is replaced by the smaller Application surface; no stacked modal routes or overlapping animations are introduced. The existing host remains responsible for claiming and navigating to an application destination.
+
+2. **Review UI.** Cream dialog with a 23px announced title, real property image/fallback at 160px, 18px property title, 14px address, and the existing review editor. It has labelled property/landlord rating groups, whole 1–5 stars with 48px targets and selected-rating semantics, a labelled multiline comment field, and Skip review / Submit review actions. Inputs use readable dark text with olive stars and actions. The footer remains visible when space allows; short keyboard-constrained viewports allow the whole surface to scroll. At 200% text the actions stack vertically. Clear selections is shown only for an unsaved draft and resets only local inputs; it does not delete a persisted review.
+
+3. **Submit/Skip.** Submit is enabled only after the existing review has loaded and both integer ratings are 1–5, with a comment of at most 500 characters. Comments are trimmed before the existing PUT. Saving blocks duplicate taps, Skip, and dismissal while in flight. API-confirmed save advances directly to the Application step and shows a small Review saved message. Review save alone never responds to the follow-up or creates an application. Skip advances without any review mutation, including when partial review input is present.
+
+4. **Existing review.** The follow-up Review step prefills saved ratings/comment and displays Your review. Changed data uses Update review through the same PUT endpoint. Unchanged data uses Continue without rewriting it, including changes reverted to the original values or surrounding comment whitespace. Skip preserves the original saved review. Backend same-row, CreatedAt, and UpdatedAt behavior is unchanged. The separately accessible Viewing Details review sheet retains its existing saved-review summary and editing journey through the same shared editor.
+
+5. **Review failure.** Save errors keep the Review step open with ratings/comment intact, show a safe live-region error, and allow retry. They never open the Application step or respond to the follow-up. An initial GET failure disables submission and offers Retry review or explicit Skip, preventing an unconfirmed existing review from being overwritten.
+
+6. **Application UI.** A smaller cream dialog titled Would you like to apply?, with property title, concise application question, and You can still apply later from My Applications. Actions are Not now and Apply now; review controls, comment field, and image are absent. Loading/error states are explicit. A saved-choice navigation error offers Try again and Close; a cross-device response conflict offers Close.
+
+7. **Apply now.** Uses the existing response endpoint to persist ApplyNow first, then the existing applicationDestination helper to refetch authoritative eligibility. Eligible new journeys use the canonical wizard; Draft/ChangesRequested continue the existing application; Submitted/UnderReview/Approved open existing application details. No application is created by the follow-up dialogs. If eligibility changes or navigation fails after persistence, the saved decision remains ApplyNow and retry refetches navigation state without responding again. An uncertain response acknowledgment retries only the same selected decision, preserving existing idempotency behavior.
+
+8. **Not now.** Persists NotNow through the existing response endpoint and closes the flow. It performs no review mutation, creates no application, and does not remove later application eligibility. The existing My Applications journey remains available.
+
+9. **Interrupted flow.** Saving a review leaves the follow-up unresolved until an application decision is answered. If the app closes in between, the backend lease controls later reclamation. A recovered same-ID claim loads the existing review and offers Continue without another PUT. Back or Dismiss review closes the Review step without a decision or review write. The host does not immediately reopen it; subsequent claims follow its existing startup/resume behavior. Barrier taps remain disabled to avoid accidental dismissal.
+
+10. **Claim/lease preservation.** No host, service, DTO, table, migration, or backend eligibility change was required. Completed viewing, scheduled end plus existing delay, server authority, ten-minute claim lease, expired unresolved reclamation, same row/ID, one concurrent claim winner, responded-row exclusion, response after lease expiry, identical decision idempotency, and conflicting decision 409 remain the existing backend behavior. No local time/identity was added to requests. Tenant device notifications and the recently implemented Landlord completion reminder were untouched.
+
+11. **Files changed.**
+    - `mobile/rentflow_mobile/lib/features/viewing_follow_ups/widgets/viewing_follow_up_dialog.dart`: separate Review/Application surfaces, explicit review actions, unchanged response/navigation behavior, responsive dialog/footer.
+    - `mobile/rentflow_mobile/lib/features/viewing_reviews/widgets/viewing_review_editor.dart`: optional prefilled presentation, draft readiness/change detection, trimmed saving, safe load failure, local Clear selections, accessible stars.
+    - `mobile/rentflow_mobile/test/viewing_follow_up_test.dart`: updated two-step tests and preserved host/claim/application regressions, including Approved application routing.
+    - `mobile/rentflow_mobile/test/tenant_follow_up_steps_test.dart`: asynchronous save gating, skip/unchanged/update behavior, interrupted flow, eligibility recovery, later eligibility, accessibility, and viewport/keyboard/comment coverage.
+    - This report: `docs/tenant-follow-up-two-step-implementation-report.md`.
+
+12. **Focused validation.** Flutter: 246 passed, exit code 0. Files: viewing_follow_up_test, tenant_follow_up_steps_test, tenant_viewing_details_screen_test, viewing_reviews_public_test, application_eligibility_test, tenant_application_journey_test, rental_application_wizard_test. Coverage includes no-input/partial/comment-only validation; both ratings; 500-character limit/trim; review save/failure/retry; existing same-row update/unchanged Continue; dismissal; one surface/claim at a time; response failure/double taps/409; expired claim handling; interruption; fresh eligibility and existing lifecycle routing; no duplicate application; and saved ApplyNow retry. Layout tests cover 320 logical pixels, 720×1560 at 2× density, 1080×2340 at 3× density, each at 100% and 200% text, long title/address, keyboard inset, and a 500-character comment. No overflow was reported.
+
+    Backend regression confidence: 79 passed, 3 PostgreSQL-dependent tests skipped, 0 failed, exit code 0. Relevant ViewingFollowUp, ViewingReview, and RentalApplicationService tests were run. No backend files changed, so a full backend suite was not required for this task.
+
+13. **Full Flutter suite.** 1,332 passed, exit code 0.
+
+14. **Analyze/APK/diff.** Flutter analyze: no issues, exit code 0. Debug APK build: passed, exit code 0, artifact at `mobile/rentflow_mobile/build/app/outputs/flutter-apk/app-debug.apk`. `git diff --check`: exit code 0; implementation scope check also passed. The whole-repository command emitted access warnings for pre-existing pytest temporary artifacts; those artifacts were not changed by this task. Backend and Landlord reminder/host files were checked for unintended changes and have no diff.
+
+15. **Remaining limitations.** Keyboard, display sizes, and semantics were exercised in Flutter widget tests. Physical-device TalkBack/VoiceOver, native keyboard behavior, and an iOS build were not exercised here. The three PostgreSQL concurrency/migration tests require the repository's configured test database. The split uses an immediate surface replacement within the existing dialog route, deliberately avoiding two simultaneous modal surfaces.
+
+Logs and backend TRX results: `.tmp/tenant-follow-up-validation/`.

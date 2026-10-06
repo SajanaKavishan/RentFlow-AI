@@ -10,6 +10,7 @@ import {
 import { createMaintenanceTechnician } from '../../features/staffProvisioning/staffProvisioningApi.js'
 import { StatusBadge } from '../ui/States.jsx'
 import Icon from '../ui/Icons.jsx'
+import AdminUserProfileDialog from '../../features/adminUsers/AdminUserProfileDialog.jsx'
 import './admin-users.css'
 
 const initialForm = { fullName: '', email: '', phoneNumber: '' }
@@ -70,6 +71,7 @@ export default function AdminUsersPage() {
   const [directoryQuery, setDirectoryQuery] = useState({ search: '', role: '', active: '' })
   const [directoryPage, setDirectoryPage] = useState(1)
   const [directoryRefresh, setDirectoryRefresh] = useState(0)
+  const [profile, setProfile] = useState(null)
   const [directoryState, setDirectoryState] = useState({ requestKey: '', status: 'loading', data: null, error: null })
   const addButtonRef = useRef(null)
   const dialogRef = useRef(null)
@@ -438,12 +440,16 @@ export default function AdminUsersPage() {
         <div className="admin-users-directory__table-wrap">
           <table className="admin-users-directory__table">
             <caption className="admin-users-visually-hidden">Admin-authorized RentFlow user directory</caption>
-            <thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Joined</th><th scope="col">Status</th></tr></thead>
+            <thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Joined</th><th scope="col">Status</th><th scope="col"><span className="admin-users-visually-hidden">Actions</span></th></tr></thead>
             <tbody>{visibleDirectoryState.data.items.map((directoryUser) => <tr key={directoryUser.id}>
               <td data-label="User"><div className="admin-users-directory__identity"><span aria-hidden="true">{directoryUser.fullName.trim().charAt(0).toUpperCase()}</span><div><strong>{directoryUser.fullName}</strong><small>{directoryUser.email}</small></div></div></td>
               <td data-label="Role"><span className={`admin-users-directory__role admin-users-directory__role--${directoryUser.role.toLowerCase()}`}>{roleLabel(directoryUser.role)}</span></td>
               <td data-label="Joined"><time dateTime={directoryUser.createdAt}>{joinedDate(directoryUser.createdAt)}</time></td>
               <td data-label="Status"><span className={`admin-users-directory__status admin-users-directory__status--${directoryUser.isActive ? 'active' : 'inactive'}`}><span aria-hidden="true" />{directoryUser.isActive ? 'Active' : 'Inactive'}</span></td>
+              <td data-label="Actions"><div className="admin-users-directory__actions">
+                <button type="button" className="admin-user-view" aria-label={`View ${directoryUser.fullName}`} onClick={() => setProfile({ id: directoryUser.id, actor: user.id, confirming: false })}><Icon name="eye" size={16} /></button>
+                {directoryUser.isActive && directoryUser.id.toLowerCase() !== user.id.toLowerCase() && <button type="button" className="admin-user-deactivate" aria-label={`Deactivate ${directoryUser.fullName}`} onClick={() => setProfile({ id: directoryUser.id, actor: user.id, confirming: true })}>Deactivate</button>}
+              </div></td>
             </tr>)}</tbody>
           </table>
         </div>
@@ -457,7 +463,12 @@ export default function AdminUsersPage() {
         </nav>
       </>}
 
-      <div className="admin-users-directory__note"><Icon name="info" size={18} /><span>User directory access and Technician provisioning are available. Deactivation, role editing, deletion, and other account-changing operations are not supported.</span></div>
+      <div className="admin-users-directory__note"><Icon name="info" size={18} /><span>View user profiles and deactivate accounts to block sign-in and existing sessions.</span></div>
     </section>
+    {profile?.actor === user.id && <AdminUserProfileDialog key={`${user.id}:${profile.id}`} id={profile.id} currentUserId={user.id}
+      confirmInitially={profile.confirming} returnFocusRef={addButtonRef} onClose={() => setProfile(null)} onUpdated={() => {
+        if (directoryQuery.active === 'true' && visibleDirectoryState.data?.items.length === 1 && directoryPage > 1) setDirectoryPage((page) => page - 1)
+        setDirectoryRefresh((value) => value + 1)
+      }} />}
   </main>
 }

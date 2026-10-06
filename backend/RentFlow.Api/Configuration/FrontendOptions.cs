@@ -5,6 +5,7 @@ namespace RentFlow.Api.Configuration;
 public sealed class FrontendOptions : IValidatableObject
 {
     public const string SectionName = "Frontend";
+    public const string BaseUrlKey = SectionName + ":BaseUrl";
 
     [Required]
     public string BaseUrl { get; init; } = string.Empty;

@@ -5,6 +5,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import OwnedPropertiesContext from '../../../shared/property/OwnedPropertiesContext.js'
 import RentalApplicationsPage from './RentalApplicationsPage.jsx'
 
+vi.mock('../../properties/services/propertyApiService.js', () => ({
+  getPropertyImages: vi.fn().mockResolvedValue([]),
+  getPropertyImageUrl: vi.fn(),
+}))
+vi.mock('../services/rentalApplicationApiService.js', async (importOriginal) => ({
+  ...await importOriginal(),
+  getOwnedPropertyApplicationActionCounts: vi.fn().mockResolvedValue([]),
+}))
+
 const propertyId = '22222222-2222-2222-2222-222222222222'
 const tenantId = '11111111-1111-1111-1111-111111111111'
 const property = {
@@ -270,17 +279,14 @@ describe('Landlord rental applications', () => {
     expect(within(screen.getByRole('group', { name: 'Rental application counts' })).getByText('Total').parentElement).toHaveTextContent('3')
   })
 
-  it('refreshes the scoped list and removes stale cards', async () => {
+  it('does not render a manual refresh control', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse([application()]))
-      .mockResolvedValueOnce(jsonResponse([]))
     vi.stubGlobal('fetch', fetchMock)
     renderPage()
     expect(await screen.findByRole('region', { name: 'Rental applications' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-    expect(await screen.findByRole('heading', { name: 'No rental applications yet' })).toBeInTheDocument()
-    expect(screen.queryByRole('article')).not.toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     for (const [url] of fetchMock.mock.calls) expect(url).toContain(`/api/rental-applications/property/${propertyId}`)
   })
 

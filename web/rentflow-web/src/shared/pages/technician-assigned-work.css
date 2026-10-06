@@ -1,13 +1,12 @@
-.assigned-work-page { width: min(100% - 64px, 1240px); padding-top: 34px; }
+.assigned-work-page { width: min(100% - 64px, 1240px); padding-top: 28px; }
 .assigned-work-page .shared-card { box-shadow: 0 2px 7px rgb(48 60 31 / 8%); }
 .assigned-work-page__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-bottom: 32px; }
 .assigned-work-page__header > div:first-child { min-width: 0; max-width: 700px; }
 .assigned-work-page__header h1 { margin: 6px 0 9px; color: var(--ink); font-size: clamp(1.9rem, 3vw, 2.55rem); line-height: 1.2; letter-spacing: -.045em; }
 .assigned-work-page__header p:not(.assigned-work-page__eyebrow) { margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.7; }
 .assigned-work-page__eyebrow { margin: 0; color: var(--olive-700); font-size: .7rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-.assigned-work-page__header-actions { flex: none; display: flex; gap: 10px; }
-.assigned-work-page__layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, .72fr); gap: 22px; align-items: start; }
-.assigned-work-area { min-height: 550px; padding: 30px; }
+.assigned-work-page__layout { display: block; }
+.assigned-work-area { min-height: 550px; padding: 28px; }
 .assigned-work-area__heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-bottom: 22px; border-bottom: 1px solid var(--border); }
 .assigned-work-area__heading h2 { margin: 5px 0 0; font-size: 1.22rem; letter-spacing: -.03em; }
 .assigned-work-area__scope { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 999px; color: var(--olive-700); background: var(--olive-50); font-size: .7rem; font-weight: 800; }
@@ -18,55 +17,88 @@
 .assigned-work-state p { max-width: 540px; margin: 0; color: var(--muted); font-size: .84rem; line-height: 1.7; }
 .assigned-work-state--error .assigned-work-state__icon { color: var(--danger); background: var(--danger-bg); }
 .assigned-work-state--error .shared-button { margin-top: 8px; }
-.assigned-work-area__controls { display: flex; justify-content: flex-end; padding-top: 16px; }
 .assigned-work-page__notice { color: var(--olive-700); font-weight: 700; }
+.assigned-work-item__description { margin: 14px 0 0; color: var(--muted); font-size: .84rem; line-height: 1.6; }
+.assigned-work-item__badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.assigned-work-item__meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 18px 0 0; }
+.assigned-work-item__meta > div { min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--cream); }
+.assigned-work-item__meta dt, .assigned-work-item__details dt { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.assigned-work-item__meta dd { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--ink); font-size: .82rem; font-weight: 700; }
 .assigned-work-item__actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
-.assigned-work-item__details { display: grid; gap: 9px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
-.assigned-work-item__details > div { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(0, 1.3fr); gap: 10px; }
-.assigned-work-item__details dt { font-weight: 800; }
-.assigned-work-item__details dd { margin: 0; overflow-wrap: anywhere; color: var(--muted); }
-.assigned-work-item__estimate { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
-.assigned-work-item__estimate h4 { margin: 0 0 12px; color: var(--ink); }
-.assigned-work-estimate-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
-.assigned-work-estimate-form label { display: grid; gap: 6px; color: var(--ink); font-size: .78rem; font-weight: 800; }
-.assigned-work-estimate-form input, .assigned-work-estimate-form textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font: inherit; color: var(--ink); background: #fff; }
+.assigned-work-item__expanded { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.assigned-work-item__section, .assigned-work-item__estimate { min-width: 0; }
+.assigned-work-item__section h4, .assigned-work-item__estimate h4 { margin: 0 0 12px; color: var(--ink); font-size: .94rem; }
+.assigned-work-item__details { display: grid; gap: 10px; margin: 0; }
+.assigned-work-item__details > div { display: grid; grid-template-columns: minmax(112px, .75fr) minmax(0, 1.25fr); gap: 10px; padding-bottom: 9px; border-bottom: 1px solid rgb(206 207 193 / 60%); }
+.assigned-work-item__details dd { margin: 0; overflow-wrap: anywhere; color: var(--ink); font-size: .8rem; line-height: 1.5; }
+.assigned-work-item__estimate { grid-column: 1 / -1; padding-top: 18px; border-top: 1px solid var(--border); }
+.assigned-work-estimate-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; max-width: 760px; margin-top: 14px; }
+.assigned-work-estimate-form label { display: grid; align-content: start; gap: 6px; color: var(--ink); font-size: .78rem; font-weight: 800; }
+.assigned-work-estimate-form input, .assigned-work-estimate-form textarea { width: 100%; min-height: 42px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; font: inherit; color: var(--ink); background: #fff; }
+.assigned-work-estimate-form input[aria-invalid="true"] { border-color: var(--danger); }
+.assigned-work-estimate-form textarea { min-height: 86px; resize: vertical; }
 .assigned-work-estimate-form label:nth-of-type(4), .assigned-work-estimate-form button { grid-column: 1 / -1; }
-.assigned-work-estimate-form textarea { resize: vertical; }
-.assigned-work-page__side { display: grid; gap: 20px; }
-.assigned-work-availability { padding: 22px; }
-.assigned-work-availability__heading { display: flex; align-items: center; gap: 12px; }
-.assigned-work-availability__heading h2, .assigned-work-tools h2 { margin: 5px 0 0; font-size: 1.04rem; letter-spacing: -.025em; }
-.assigned-work-availability dl { margin: 20px 0 0; }
-.assigned-work-availability dl > div { display: grid; gap: 7px; padding: 15px 0; border-top: 1px solid var(--border); }
-.assigned-work-availability dt { color: var(--ink); font-size: .79rem; font-weight: 800; }
-.assigned-work-availability dd { margin: 0; color: var(--muted); font-size: .74rem; line-height: 1.55; }
-.assigned-work-availability .shared-status { white-space: normal; }
-.assigned-work-tools { padding: 0; overflow: hidden; }
-.assigned-work-tools > div { padding: 22px; }
-.assigned-work-tools > a { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-top: 1px solid var(--border); color: var(--ink); text-decoration: none; }
-.assigned-work-tools > a > span:nth-child(2) { flex: 1; min-width: 0; }
-.assigned-work-tools > a > svg { flex: none; color: var(--olive-700); }
-.assigned-work-tools strong, .assigned-work-tools small { display: block; }
-.assigned-work-tools strong { font-size: .84rem; }
-.assigned-work-tools small { margin-top: 4px; color: var(--muted); font-size: .71rem; line-height: 1.5; }
-.assigned-work-tools > a:hover { background: var(--cream-50); }
+.assigned-work-estimate-form button { justify-self: start; }
+.assigned-work-estimate-form__total { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 12px; border: 1px solid var(--olive-200); border-radius: 10px; color: var(--olive-700); background: var(--olive-50); }
+.assigned-work-estimate-form__total span { font-size: .76rem; font-weight: 800; }
+.assigned-work-estimate-form__total strong { color: var(--ink); }
+.assigned-work-estimate-form__error { color: var(--danger); font-size: .7rem; font-weight: 700; }
+.technician-page { width: min(100% - 64px, 880px); padding-top: 28px; }
+.technician-page .technician-page__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 28px; }
+.technician-page__header h1 { margin: 0 0 7px; color: var(--ink); font-size: clamp(1.9rem, 3vw, 2.45rem); line-height: 1.15; letter-spacing: -.045em; }
+.technician-page__header p { margin: 0; color: var(--muted); font-size: .95rem; }
+.technician-page__header .shared-button { flex: none; }
+.technician-page .assigned-work-list { display: grid; gap: 18px; }
+.technician-job { min-width: 0; padding: 26px; border: 1px solid var(--border); border-radius: 20px; background: #fff; box-shadow: 0 2px 8px rgb(48 60 31 / 9%); }
+.technician-job__header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 14px; }
+.technician-job__icon { width: 50px; height: 50px; display: grid; place-items: center; flex: none; border-radius: 15px; color: var(--olive-700); background: var(--olive-50); }
+.technician-job__icon--complete { color: #00a94f; background: #effcf4; }
+.technician-job__identity { min-width: 0; }
+.technician-job__identity h3 { margin: 3px 0 7px; overflow-wrap: anywhere; color: var(--ink); font-size: 1.15rem; line-height: 1.3; letter-spacing: -.025em; }
+.technician-job__location, .technician-job__reference, .technician-job__requester { display: flex; align-items: center; gap: 5px; margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.5; overflow-wrap: anywhere; }
+.technician-job__reference { margin-top: 5px; color: var(--olive-700); font-size: .72rem; font-weight: 800; letter-spacing: .04em; }
+.technician-job__requester { margin-top: 2px; font-size: .75rem; }
+.technician-job__badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; max-width: 170px; }
+.technician-badge { display: inline-flex; min-height: 26px; align-items: center; justify-content: center; padding: 4px 12px; border: 1px solid transparent; border-radius: 999px; color: var(--ink); background: var(--cream); font-size: .72rem; font-weight: 800; white-space: nowrap; }
+.technician-badge--Completed { color: #008c42; border-color: #a7efc6; background: #f1fff6; }
+.technician-badge--Emergency { color: #a33e00; background: #fff1e8; }
+.technician-job__meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 22px 0 0; padding: 16px; border-radius: 15px; background: #f6f3ed; }
+.technician-job__meta > div { min-width: 0; }
+.technician-job__meta dt { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: .72rem; line-height: 1.4; }
+.technician-job__meta dd { margin: 3px 0 0; overflow-wrap: anywhere; color: var(--ink); font-size: .82rem; font-weight: 700; }
+.technician-job__description { margin: 16px 0 0; color: var(--muted); font-size: .84rem; line-height: 1.6; }
+.technician-job__note { margin: 16px 0 0; padding: 14px; border-radius: 14px; color: var(--ink); background: #f5faf1; font-size: .82rem; line-height: 1.55; }
+.technician-job__note span { color: var(--olive-700); font-weight: 800; }
 @media (max-width: 1000px) {
   .assigned-work-page { width: calc(100% - 48px); }
-  .assigned-work-page__layout { grid-template-columns: minmax(0, 1fr); }
-  .assigned-work-page__side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .technician-page { width: calc(100% - 32px); padding-top: 24px; }
+  .technician-page .technician-page__header { align-items: flex-start; flex-direction: column; gap: 14px; margin-bottom: 22px; }
+  .technician-page__header .shared-button { align-self: flex-start; }
+  .technician-job { padding: 20px; border-radius: 16px; }
+  .technician-job__header { grid-template-columns: auto minmax(0, 1fr); }
+  .technician-job__badges { grid-column: 1 / -1; justify-content: flex-start; max-width: none; }
+  .technician-job__meta { gap: 12px; margin-top: 18px; padding: 13px; }
+}
+@media (max-width: 410px) {
+  .technician-job__header { gap: 10px; }
+  .technician-job__icon { width: 42px; height: 42px; border-radius: 12px; }
+  .technician-job__identity h3 { font-size: 1rem; }
+  .technician-job__meta { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 680px) {
   .assigned-work-page { width: calc(100% - 32px); padding-top: 28px; }
   .assigned-work-page__header { flex-direction: column; }
-  .assigned-work-page__header-actions { width: 100%; flex-wrap: wrap; }
-  .assigned-work-page__header-actions .shared-button { flex: 1; }
   .assigned-work-area { min-height: 0; padding: 20px; }
   .assigned-work-area__heading { align-items: flex-start; flex-direction: column; }
   .assigned-work-state { min-height: 360px; padding-inline: 0; }
-  .assigned-work-page__side { grid-template-columns: minmax(0, 1fr); }
+  .assigned-work-item__expanded { grid-template-columns: minmax(0, 1fr); }
+  .assigned-work-item__estimate { grid-column: auto; }
+  .assigned-work-item__meta { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 410px) {
-  .assigned-work-page__header-actions .shared-button { flex-basis: 100%; }
   .assigned-work-area__scope { align-items: flex-start; border-radius: var(--radius-sm); white-space: normal; }
   .assigned-work-estimate-form { grid-template-columns: minmax(0, 1fr); }
+  .assigned-work-estimate-form button { width: 100%; }
 }

@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useLandlordActions } from '../../../shared/layout/LandlordActionsContext.js'
+import { useNotificationCount } from '../../notifications/NotificationCountContext.js'
 import { ApiError } from '../../../core/api/apiClient.js'
 import { getMyProperties } from '../../properties/services/propertyApiService.js'
 import { getLandlordOffers } from '../../rentalOffers/services/rentalOfferApiService.js'
@@ -54,18 +57,34 @@ function LeaseDetails({ lease, propertyName, acting, onAction }) {
 }
 
 export default function LeaseAgreementsPage() {
+  const actionSummary = useLandlordActions()
+  const notificationCount = useNotificationCount()
+  const [searchParams] = useSearchParams()
+  const requestedLeaseId = searchParams.get('leaseId')
   const [leasesState, setLeasesState] = useState({ status: 'loading', items: [], error: '' })
   const [offersState, setOffersState] = useState({ status: 'loading', items: [], error: '' })
   const [properties, setProperties] = useState([])
   const [leaseReload, setLeaseReload] = useState(0)
   const [offerReload, setOfferReload] = useState(0)
-  const [rentalOfferId, setRentalOfferId] = useState('')
+  const [rentalOfferId, setRentalOfferId] = useState(() => searchParams.get('rentalOfferId') || '')
   const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
   const [creating, setCreating] = useState(false)
   const [acting, setActing] = useState('')
   const [detailState, setDetailState] = useState({ status: 'idle', lease: null, error: '' })
   const detailRequest = useRef(0)
+
+  useEffect(() => {
+    if (!requestedLeaseId) return undefined
+    let active = true
+    const request = ++detailRequest.current
+    getLeaseAgreement(requestedLeaseId).then((lease) => {
+      if (active && request === detailRequest.current) setDetailState({ status: 'ready', lease, error: '' })
+    }).catch((error) => {
+      if (active && request === detailRequest.current) setDetailState({ status: 'error', lease: null, error: safeError(error, 'Unable to load the lease agreement.') })
+    })
+    return () => { active = false }
+  }, [requestedLeaseId])
 
   useEffect(() => {
     let active = true
@@ -94,6 +113,8 @@ export default function LeaseAgreementsPage() {
   }, [])
 
   function refreshLeases() {
+    actionSummary?.refresh()
+    notificationCount?.refreshCount?.()
     setLeasesState((current) => ({ ...current, status: 'loading' }))
     setLeaseReload((value) => value + 1)
   }

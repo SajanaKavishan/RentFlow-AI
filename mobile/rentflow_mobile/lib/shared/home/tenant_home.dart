@@ -13,6 +13,7 @@ import '../navigation/role_navigation.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
 import 'tenant_dashboard_data.dart';
+import 'home_greeting.dart';
 
 class TenantHome extends StatefulWidget {
   const TenantHome({
@@ -177,7 +178,7 @@ class _TenantHomeState extends State<TenantHome> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '${_greetingForHour(local.hour)}, ${_firstName(widget.user.fullName)}',
+                          '${homeGreeting(_now)}, ${_firstName(widget.user.fullName)}',
                           style: _style(
                             AppTypography.pageTitle,
                             FontWeight.w700,
@@ -1209,13 +1210,6 @@ String _firstName(String fullName) {
   final trimmed = fullName.trim();
   if (trimmed.isEmpty) return 'there';
   return trimmed.split(RegExp(r'\s+')).first;
-}
-
-String _greetingForHour(int hour) {
-  if (hour >= 5 && hour < 12) return 'Good morning';
-  if (hour >= 12 && hour < 17) return 'Good afternoon';
-  if (hour >= 17 && hour < 21) return 'Good evening';
-  return 'Good night';
 }
 
 String _formatHeaderDate(DateTime value) {

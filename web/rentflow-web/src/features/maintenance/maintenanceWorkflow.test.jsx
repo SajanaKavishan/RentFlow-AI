@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 import { AuthContext } from '../auth/useAuth.js'
 import LandlordMaintenancePage from './pages/LandlordMaintenancePage.jsx'
-import TenantMaintenancePage from './pages/TenantMaintenancePage.jsx'
 
 const propertyId = '88888888-8888-8888-8888-888888888888'
 const requestId = '99999999-9999-4999-8999-999999999999'
@@ -64,33 +63,27 @@ afterEach(() => {
 })
 
 describe('maintenance workflows', () => {
-  it('keeps legacy title/notes while sending the required access window and new HVAC category', async () => {
-    let created = null
-    fetch.mockImplementation(async (url, options = {}) => {
+  it('opens the maintenance request selected by a dashboard attention link', async () => {
+    const otherRequest = { ...maintenanceRequest(), id: '77777777-7777-4777-8777-777777777777', title: 'Older request' }
+    fetch.mockImplementation(async (url) => {
       const path = String(url)
-      if (path.includes('/api/properties/tenant/mine')) return response([{ id: propertyId, title: 'Riverside Flat', city: 'Colombo' }])
-      if (options.method === 'POST' && path.includes('/api/maintenance-requests?')) {
-        created = JSON.parse(options.body)
-        return response({ ...maintenanceRequest(), ...created, referenceCode: 'MR-C8070B6D94F6A810' }, 201)
-      }
-      if (path.includes(`/api/maintenance-requests/tenant/${tenantId}`)) return response([])
-      return response([])
+      if (path.endsWith('/api/properties/mine')) return response([{ id: propertyId, title: 'Riverside Flat', city: 'Colombo' }])
+      if (path.includes(`/api/maintenance-requests/property/${propertyId}`)) return response([otherRequest, maintenanceRequest()])
+      if (path.endsWith('/history') || path.endsWith('/technicians')) return response([])
+      if (path.endsWith('/coordination-workflows/latest')) return response(undefined, 204)
+      if (path.endsWith('/estimates/latest')) return response({}, 404)
+      if (path.endsWith(`/api/maintenance-requests/${requestId}`)) return response(maintenanceRequest())
+      return response({}, 404)
     })
-    renderWithUser('Tenant', tenantId, <TenantMaintenancePage />)
-    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Associated property' }), propertyId)
-    await userEvent.type(screen.getByLabelText('Title'), 'A/C rattling')
-    await userEvent.type(screen.getByLabelText('Description'), 'The bedroom air conditioner is rattling.')
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Category' }), 'Hvac')
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Preferred access time' }), 'Evening')
-    await userEvent.type(screen.getByLabelText('Tenant access notes'), 'Please knock.')
-    await userEvent.click(screen.getByRole('button', { name: 'Submit request' }))
-    await waitFor(() => expect(created).toMatchObject({ propertyId, title: 'A/C rattling', category: 7, preferredAccessWindow: 'Evening', tenantAccessNotes: 'Please knock.' }))
+    renderWithUser('Landlord', landlordId, <LandlordMaintenancePage />, `/properties/${propertyId}/maintenance?propertyId=${propertyId}&requestId=${requestId}`)
+    expect(await screen.findByRole('heading', { name: 'Leaking kitchen sink' })).toBeInTheDocument()
+    expect(fetch.mock.calls.some(([url]) => String(url).endsWith(`/api/maintenance-requests/${otherRequest.id}`))).toBe(false)
   })
-
   it('triages a submitted request and assigns a selected active technician', async () => {
     let currentRequest = maintenanceRequest()
     fetch.mockImplementation(async (url, options = {}) => {
       const path = String(url)
+      if (path.endsWith('/coordination-workflows/latest')) return response(undefined, 204)
       if (path.includes('/api/properties/mine')) {
         return response([{ id: propertyId, title: 'Riverside Flat', city: 'Colombo' }])
       }
@@ -151,73 +144,6 @@ describe('maintenance workflows', () => {
     expect(fetch.mock.calls.some(([url]) => String(url).endsWith('/api/maintenance-requests/technicians'))).toBe(true)
   })
 
-  it('selects an associated tenant property and uploads/removes authorized attachments', async () => {
-    const initialRequest = maintenanceRequest()
-    const attachment = {
-      id: 'attachment-1',
-      fileName: 'sink-photo.png',
-      attachmentType: 'Photo',
-      fileSize: 1024,
-    }
-    let attachments = []
-    fetch.mockImplementation(async (url, options = {}) => {
-      const path = String(url)
-      if (path.endsWith('/api/properties/tenant/mine')) {
-        return response([{ id: propertyId, title: 'Riverside Flat', city: 'Colombo' }])
-      }
-      if (path.endsWith(`/api/maintenance-requests/tenant/${tenantId}`)) return response([initialRequest])
-      if (path.endsWith(`/api/maintenance-requests/${requestId}/attachments?tenantId=${tenantId}`) &&
-          options.method === 'POST') {
-        attachments = [attachment]
-        return response(attachment, 201)
-      }
-      if (path.endsWith(`/api/maintenance-requests/${requestId}/attachments?tenantId=${tenantId}`)) {
-        return response(attachments)
-      }
-      if (path.endsWith(`/api/maintenance-requests/${requestId}/attachments/attachment-1?tenantId=${tenantId}`) &&
-          options.method === 'DELETE') {
-        attachments = []
-        return response(undefined, 204)
-      }
-      if (path.endsWith(`/api/maintenance-requests/${requestId}`)) return response(initialRequest)
-      return response({ detail: 'Not found.' }, 404)
-    })
-
-    renderWithUser(
-      'Tenant',
-      tenantId,
-      <TenantMaintenancePage />,
-      `/modules/maintenance?propertyId=${propertyId}`,
-    )
-    expect(await screen.findByLabelText('Associated property')).toHaveValue(propertyId)
-    expect(screen.queryByLabelText('Property ID')).not.toBeInTheDocument()
-    expect(await screen.findByText('No attachments have been added to this request.')).toBeInTheDocument()
-
-    const photo = new File(['image content'], 'sink-photo.png', { type: 'image/png' })
-    await userEvent.upload(screen.getByLabelText('File'), photo)
-    expect(screen.getByLabelText('File').files).toHaveLength(1)
-    await userEvent.selectOptions(screen.getByLabelText('Attachment type'), 'Photo')
-    expect(screen.getByRole('button', { name: 'Upload attachment' }).closest('form').checkValidity()).toBe(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Upload attachment' }))
-    await waitFor(() => {
-      expect(fetch.mock.calls.some(([url, options]) =>
-        String(url).includes(`/api/maintenance-requests/${requestId}/attachments`) &&
-        options.method === 'POST')).toBe(true)
-    })
-    expect(await screen.findByText('sink-photo.png')).toBeInTheDocument()
-    const uploadCall = fetch.mock.calls.find(([url, options]) =>
-      String(url).includes('/api/maintenance-requests/') && options.method === 'POST')
-    expect(uploadCall[1].body).toBeInstanceOf(FormData)
-    expect(uploadCall[1].body.get('file')).toBeInstanceOf(File)
-    expect(uploadCall[1].body.get('attachmentType')).toBe('Photo')
-
-    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
-    await waitFor(() => expect(screen.getByText('No attachments have been added to this request.')).toBeInTheDocument())
-    expect(fetch.mock.calls.some(([url, options]) =>
-      String(url).endsWith(`/api/maintenance-requests/${requestId}/attachments/attachment-1?tenantId=${tenantId}`) &&
-      options.method === 'DELETE')).toBe(true)
-  })
-
   it.each([
     ['Approve estimate', 'approve', 3, 6],
     ['Reject estimate', 'reject', 4, 7],
@@ -235,6 +161,7 @@ describe('maintenance workflows', () => {
     }
     fetch.mockImplementation(async (url) => {
       const path = String(url)
+      if (path.endsWith('/coordination-workflows/latest')) return response(undefined, 204)
       if (path.includes('/api/properties/mine')) {
         return response([{ id: propertyId, title: 'Riverside Flat' }])
       }
@@ -271,13 +198,22 @@ describe('maintenance workflows', () => {
   it('starts, reads, persists, and human-approves a coordination workflow', async () => {
     let workflow = {
       id: 'workflow-1',
+      maintenanceRequestId: requestId,
       status: 2,
       approvalStatus: 1,
       requiresHumanApproval: true,
-      planSummary: 'Replace the leaking sink trap.',
+      finalResultJson: JSON.stringify({
+        suggestedCategory: 'Plumbing', categoryConfidence: 'High',
+        suggestedPriority: 'High', priorityConfidence: 'Medium',
+        recommendedTechnicianCategory: 'Plumbing', nextAction: 'triage',
+        validationFlags: [], rationale: 'Replace the leaking sink trap.',
+        requiresHumanReview: true, agentVersion: 'test',
+      }),
     }
+    let saved = false
     fetch.mockImplementation(async (url, options = {}) => {
       const path = String(url)
+      if (path.endsWith('/coordination-workflows/latest')) return saved ? response(workflow) : response(undefined, 204)
       if (path.includes('/api/properties/mine')) {
         return response([{ id: propertyId, title: 'Riverside Flat' }])
       }
@@ -287,7 +223,7 @@ describe('maintenance workflows', () => {
         return response({ detail: 'No estimate found.' }, 404)
       }
       if (path.endsWith(`/api/maintenance-requests/${requestId}/coordination-workflows`) &&
-          options.method === 'POST') return response(workflow, 201)
+          options.method === 'POST') { saved = true; return response(workflow, 201) }
       if (path.endsWith(`/api/maintenance-requests/${requestId}/coordination-workflows/workflow-1/approve`)) {
         workflow = { ...workflow, status: 3, approvalStatus: 2 }
         return response(workflow)
@@ -299,18 +235,18 @@ describe('maintenance workflows', () => {
 
     const view = renderWithUser('Landlord', landlordId, <LandlordMaintenancePage />)
     await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Property' }), propertyId)
-    await userEvent.click(await screen.findByRole('button', { name: 'Start AI coordination' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Analyze request' }))
     expect(await screen.findByText('Replace the leaking sink trap.')).toBeInTheDocument()
-    expect(window.localStorage.getItem(`rentflow.maintenance.workflow.${requestId}`)).toBe('workflow-1')
-    await userEvent.type(screen.getByLabelText('Decision notes'), 'Approved after review.')
-    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
-    expect(await screen.findByText(/AI\/workflow review approved/)).toBeInTheDocument()
+    expect(window.localStorage.getItem(`rentflow.maintenance.workflow.${requestId}`)).toBeNull()
+    await userEvent.type(screen.getByLabelText('Review notes (optional)'), 'Approved after review.')
+    await userEvent.click(screen.getByRole('button', { name: 'Accept recommendation' }))
+    expect(await screen.findByText('Recommendation accepted')).toBeInTheDocument()
 
     expect(fetch.mock.calls.some(([url, options]) =>
       String(url).endsWith(`/api/maintenance-requests/${requestId}/coordination-workflows`) &&
       options.method === 'POST')).toBe(true)
     expect(fetch.mock.calls.some(([url]) =>
-      String(url).endsWith(`/api/maintenance-requests/${requestId}/coordination-workflows/workflow-1`))).toBe(true)
+      String(url).endsWith(`/api/maintenance-requests/${requestId}/coordination-workflows/latest`))).toBe(true)
     const approveCall = fetch.mock.calls.find(([url, options]) =>
       String(url).endsWith(`/api/maintenance-requests/${requestId}/coordination-workflows/workflow-1/approve`) &&
       options.method === 'PATCH')

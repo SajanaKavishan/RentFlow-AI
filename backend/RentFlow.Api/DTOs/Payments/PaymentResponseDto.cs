@@ -8,6 +8,8 @@ public class PaymentResponseDto
 
     public Guid RentScheduleItemId { get; set; }
 
+    public Guid? PropertyId { get; set; }
+
     public Guid TenantId { get; set; }
 
     public decimal Amount { get; set; }
@@ -17,6 +19,7 @@ public class PaymentResponseDto
     public string? TransactionReference { get; set; }
 
     public PaymentStatus Status { get; set; }
+    public PaymentProvider Provider { get; set; }
 
     public DateTimeOffset? PaidAt { get; set; }
 

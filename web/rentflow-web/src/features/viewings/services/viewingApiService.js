@@ -33,6 +33,10 @@ export function getViewingsByProperty(propertyId) {
   return request(`/api/viewings/property/${encodeURIComponent(propertyId)}`)
 }
 
+export function getOwnedPropertyPendingViewingCounts() {
+  return request('/api/viewings/mine/pending-counts', { cache: 'no-store' })
+}
+
 export function getMyViewings() {
   return request('/api/viewings')
 }

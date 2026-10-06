@@ -38,7 +38,7 @@ public class MaintenanceCoordinationOrchestratorTests
             .SingleAsync();
         Assert.Equal(workflow.Id, stored.Id);
         Assert.Equal(3, stored.Steps.Count);
-        Assert.Equal("plumbing", JsonDocument.Parse(stored.FinalResultJson!).RootElement.GetProperty("recommendedCategory").GetString());
+        Assert.Equal("Plumbing", JsonDocument.Parse(stored.FinalResultJson!).RootElement.GetProperty("suggestedCategory").GetString());
     }
 
     [Fact]
@@ -87,11 +87,11 @@ public class MaintenanceCoordinationOrchestratorTests
         Assert.NotNull(stepTwo.ValidationSummary);
         Assert.NotNull(stepThree.ValidationSummary);
         Assert.NotNull(workflow.FinalResultJson);
-        Assert.Contains("recommendedCategory", workflow.FinalResultJson);
+        Assert.Contains("suggestedCategory", workflow.FinalResultJson);
     }
 
     [Fact]
-    public async Task StartAnalysisAsync_SendsAttachmentMetadataAndLkrInPythonContractShape()
+    public async Task StartAnalysisAsync_SendsSafeMetadataAndEstimateInCanonicalContractShape()
     {
         await using var context = CreateContext();
         var request = CreateRequest();
@@ -124,18 +124,18 @@ public class MaintenanceCoordinationOrchestratorTests
         var agentRequest = Assert.IsType<MaintenanceCoordinationAgentRequest>(agent.Request);
         var attachment = Assert.Single(agentRequest.Attachments);
         Assert.Equal(attachmentId, attachment.AttachmentId);
-        Assert.Equal("leak.jpg", attachment.FileName);
+        Assert.True(attachment.FileSize > 0);
         Assert.Equal("image/jpeg", attachment.ContentType);
-        Assert.Equal("LKR", agentRequest.RepairEstimate!.Currency);
+        Assert.Equal(250m, agentRequest.RepairEstimate!.TotalCost);
 
         var payload = JsonSerializer.SerializeToElement(agentRequest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.Equal(
-            ["maintenanceRequestId", "title", "description", "category", "priority", "currentStatus", "assignedTechnicianId", "repairEstimate", "attachments"],
+            ["maintenanceRequestId", "title", "description", "category", "priority", "currentStatus", "preferredAccessWindow", "hasAssignedTechnician", "repairEstimate", "attachments", "evidencePhotos", "photoLimitations"],
             payload.EnumerateObject().Select(property => property.Name).ToArray());
         Assert.Equal(
-            ["attachmentId", "fileName", "contentType"],
+            ["attachmentId", "contentType", "fileSize"],
             payload.GetProperty("attachments")[0].EnumerateObject().Select(property => property.Name).ToArray());
-        Assert.Equal("LKR", payload.GetProperty("repairEstimate").GetProperty("currency").GetString());
+        Assert.False(payload.GetProperty("repairEstimate").TryGetProperty("currency", out _));
         Assert.DoesNotContain("storageKey", payload.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -260,7 +260,7 @@ public class MaintenanceCoordinationOrchestratorTests
         Assert.Single(ruleTool.CallOrder);
         Assert.All(workflow.Steps, step => Assert.Equal(MaintenanceCoordinationStepStatus.Completed, step.Status));
         Assert.NotNull(workflow.FinalResultJson);
-        Assert.Contains("Schedule technician review", workflow.FinalResultJson);
+        Assert.Contains("triage", workflow.FinalResultJson);
     }
 
     [Fact]
@@ -275,7 +275,7 @@ public class MaintenanceCoordinationOrchestratorTests
         var workflow = await orchestrator.StartAnalysisAsync(request.Id);
 
         Assert.Equal(MaintenanceCoordinationWorkflowStatus.Failed, workflow.Status);
-        Assert.Equal(MaintenanceCoordinationApprovalStatus.Pending, workflow.ApprovalStatus);
+        Assert.Equal(MaintenanceCoordinationApprovalStatus.NotRequired, workflow.ApprovalStatus);
         Assert.Equal("The maintenance coordination step failed unexpectedly.", workflow.ErrorMessage);
         Assert.Equal(MaintenanceRequestStatus.Submitted, await context.MaintenanceRequests.Select(item => item.Status).SingleAsync());
     }
@@ -296,7 +296,7 @@ public class MaintenanceCoordinationOrchestratorTests
         Assert.Equal(MaintenanceCoordinationApprovalStatus.Pending, workflow.ApprovalStatus);
         Assert.Equal(MaintenanceRequestStatus.Submitted, request.Status);
         Assert.NotNull(workflow.FinalResultJson);
-        Assert.Contains("Schedule technician review", workflow.FinalResultJson);
+        Assert.Contains("triage", workflow.FinalResultJson);
         Assert.DoesNotContain("Approved", workflow.FinalResultJson, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Rejected", workflow.FinalResultJson, StringComparison.OrdinalIgnoreCase);
     }
@@ -335,6 +335,90 @@ public class MaintenanceCoordinationOrchestratorTests
         Assert.Equal(MaintenanceCoordinationWorkflowStatus.Failed, rejected.Status);
         Assert.Equal(MaintenanceCoordinationApprovalStatus.Rejected, rejected.ApprovalStatus);
         Assert.Equal("Request additional evidence.", JsonDocument.Parse(rejected.FinalResultJson!).RootElement.GetProperty("decisionDetails").GetProperty("decisionNotes").GetString());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Abort_CleansRunningAnalysisWithoutChangingMaintenance(bool callerCancelled)
+    {
+        await using var context = CreateContext();
+        var request = CreateRequest();
+        context.MaintenanceRequests.Add(request);
+        await context.SaveChangesAsync();
+        using var source = new CancellationTokenSource();
+        var agent = new CancellingAgent(callerCancelled ? source : null);
+        var orchestrator = new MaintenanceCoordinationOrchestrator(context, new MaintenanceRequestDataValidationTool(),
+            new MaintenanceCoordinationRuleTool(), agent, TimeProvider.System,
+            NullLogger<MaintenanceCoordinationOrchestrator>.Instance,
+            Microsoft.Extensions.Options.Options.Create(new RentFlow.Api.Configuration.AgentServiceOptions { TimeoutSeconds = 1 }));
+        if (callerCancelled)
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => orchestrator.StartAnalysisAsync(request.Id, source.Token));
+        else
+            Assert.Equal(MaintenanceCoordinationWorkflowStatus.Failed, (await orchestrator.StartAnalysisAsync(request.Id)).Status);
+        var stored = await context.MaintenanceCoordinationWorkflows.Include(item => item.Steps).SingleAsync();
+        Assert.Equal(MaintenanceCoordinationWorkflowStatus.Failed, stored.Status);
+        Assert.Equal(MaintenanceCoordinationApprovalStatus.NotRequired, stored.ApprovalStatus);
+        Assert.DoesNotContain(stored.Steps, step => step.Status == MaintenanceCoordinationStepStatus.Running);
+        Assert.Null(stored.FinalResultJson);
+        Assert.Equal(MaintenanceRequestStatus.Submitted, request.Status);
+        Assert.Equal(MaintenanceCategory.Plumbing, request.Category);
+        Assert.Equal(MaintenancePriority.High, request.Priority);
+    }
+
+    [Fact]
+    public async Task FailedAnalysis_DoesNotPreventHumanTriage()
+    {
+        await using var context = CreateContext();
+        var request = CreateRequest();
+        context.MaintenanceRequests.Add(request);
+        await context.SaveChangesAsync();
+        var workflow = await CreateOrchestrator(context, new FakeAgentClient { ThrowOnAnalyze = true }).StartAnalysisAsync(request.Id);
+        Assert.Equal(MaintenanceCoordinationWorkflowStatus.Failed, workflow.Status);
+        var triaged = await new MaintenanceRequestService(context).TriageAsync(request.Id, new TriageMaintenanceRequestDto
+            { Category = MaintenanceCategory.Plumbing, Priority = MaintenancePriority.High });
+        Assert.Equal(MaintenanceRequestStatus.Triaged, triaged.Status);
+    }
+
+    private sealed class CancellingAgent(CancellationTokenSource? source) : IMaintenanceCoordinationAgentClient
+    {
+        public async Task<MaintenanceCoordinationAgentResponse> AnalyzeAsync(MaintenanceCoordinationAgentRequest request, CancellationToken cancellationToken = default)
+        {
+            source?.Cancel();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException();
+        }
+    }
+
+    [Fact]
+    public async Task TotalDeadline_IncludesMediaPreparationAndKeepsBusinessStateIntact()
+    {
+        await using var context = CreateContext();
+        var request = CreateRequest();
+        var originalTechnician = request.TechnicianId;
+        context.MaintenanceRequests.Add(request);
+        await context.SaveChangesAsync();
+        var agent = new FakeAgentClient();
+        var orchestrator = new MaintenanceCoordinationOrchestrator(context, new FakeValidationTool(), new FakeRuleTool(),
+            agent, TimeProvider.System, NullLogger<MaintenanceCoordinationOrchestrator>.Instance,
+            Microsoft.Extensions.Options.Options.Create(new RentFlow.Api.Configuration.AgentServiceOptions { TimeoutSeconds = 1 }),
+            new SlowPhotoEvidence());
+        var workflow = await orchestrator.StartAnalysisAsync(request.Id);
+        Assert.Equal(MaintenanceCoordinationWorkflowStatus.Failed, workflow.Status);
+        Assert.Equal(MaintenanceCoordinationStepStatus.Failed, workflow.Steps.Single(step => step.StepOrder == 3).Status);
+        Assert.Null(workflow.FinalResultJson);
+        Assert.Empty(agent.CallOrder);
+        Assert.Equal(originalTechnician, request.TechnicianId);
+        Assert.Equal(MaintenanceRequestStatus.Submitted, request.Status);
+        Assert.Equal(MaintenanceCategory.Plumbing, request.Category);
+        Assert.Equal(MaintenancePriority.High, request.Priority);
+        Assert.Empty(context.MaintenanceStatusHistories);
+    }
+
+    private sealed class SlowPhotoEvidence : IMaintenancePhotoEvidenceService
+    {
+        public Task PrepareAsync(MaintenanceRequest request, IReadOnlyCollection<MaintenanceAttachment> attachments,
+            MaintenanceCoordinationAgentRequest payload, CancellationToken token) => Task.Delay(Timeout.Infinite, token);
     }
 
     private static ApplicationDbContext CreateContext() => new(new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -441,15 +525,7 @@ public class MaintenanceCoordinationOrchestratorTests
             return Task.FromResult(new MaintenanceCoordinationAgentResponse
             {
                 MaintenanceRequestId = request.MaintenanceRequestId,
-                Result = new MaintenanceCoordinationResult
-                {
-                    RecommendedCategory = "plumbing",
-                    RecommendedPriority = "high",
-                    NextAction = "Schedule technician review",
-                    Reasoning = "The leak should be reviewed by a technician.",
-                    Warnings = ["No estimate was supplied."],
-                    AgentVersion = "test-agent-1.0"
-                },
+                Result = MaintenanceCoordinationTestData.Result(request),
                 ExecutionMetadata = new MaintenanceCoordinationExecutionMetadata
                 {
                     ExecutedSteps = ["plan", "classify_assess_issue", "assess_urgency", "review_maintenance_information", "produce_coordination_recommendation", "summarize"]

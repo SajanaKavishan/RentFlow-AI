@@ -10,16 +10,16 @@ export function CompactViewingRating({ summary, onClick }) {
     : <span className="compact-viewing-rating" aria-label={label}>{content}</span>
 }
 
-export function ViewingReviewSummary({ summary, title = 'Viewing experience', showEmpty = false, sectionRef }) {
+export function ViewingReviewSummary({ summary, title = 'Viewing experience', showEmpty = false, sectionRef, reviewLimit = 5, showUnwritten = false }) {
   if (!summary || (!summary.reviewCount && !showEmpty)) return null
   return <section ref={sectionRef} tabIndex={-1} className="viewing-reviews" aria-label={title}>
     <h2>{title}</h2>
     {summary.reviewCount === 0 ? <p>No verified viewing feedback yet.</p> : <>
       <p className="viewing-reviews__average" aria-label={`${summary.averageRating.toFixed(1)} out of 5`}>{summary.averageRating.toFixed(1)} <span aria-hidden="true">★</span></p>
       <p className="viewing-reviews__count">{summary.reviewCount} verified {summary.reviewCount === 1 ? 'viewing' : 'viewings'}</p>
-      {summary.reviews.filter((review) => review.comment.trim()).slice(0, 5).map((review, index) => <article key={`${review.reviewMonth}:${index}`}>
+      {summary.reviews.filter((review) => showUnwritten || review.comment.trim()).slice(0, reviewLimit).map((review, index) => <article key={`${review.reviewMonth}:${index}`}>
         <p className="viewing-reviews__stars" aria-label={`${review.rating} out of 5`}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</p>
-        <p>{review.comment}</p>
+        <p>{review.comment.trim() || 'No written comment.'}</p>
         <small>Verified viewing · {formatMonth(review.reviewMonth)}</small>
       </article>)}
     </>}

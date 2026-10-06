@@ -16,6 +16,10 @@ public interface IMaintenanceCoordinationOrchestrator
         Guid workflowId,
         CancellationToken cancellationToken = default);
 
+    Task<MaintenanceCoordinationWorkflow?> GetLatestByRequestAsync(
+        Guid maintenanceRequestId,
+        CancellationToken cancellationToken = default);
+
     Task<MaintenanceCoordinationWorkflow> ApproveAsync(
         Guid workflowId,
         Guid reviewerUserId,

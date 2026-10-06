@@ -85,6 +85,18 @@ public sealed class ViewingReviewService(ApplicationDbContext db, TimeProvider c
             p.Recent.Select(r => new PublicViewingReviewDto(r.PropertyRating, r.Comment!, r.CreatedAt.ToString("yyyy-MM", CultureInfo.InvariantCulture))).ToList())).ToList());
     }
 
+    public async Task<ViewingReviewSummaryDto> GetLandlordPropertyReviewsAsync(Guid landlordId, Guid propertyId, CancellationToken ct = default)
+    {
+        if (!await db.Properties.AsNoTracking().AnyAsync(p => p.Id == propertyId && p.LandlordId == landlordId, ct))
+            throw ViewingServiceException.NotFound("The property was not found.");
+        var reviews = await db.ViewingReviews.AsNoTracking().Where(r => r.PropertyId == propertyId)
+            .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id)
+            .Select(r => new { r.PropertyRating, r.Comment, r.CreatedAt }).ToListAsync(ct);
+        return new(reviews.Count == 0 ? null : Math.Round(reviews.Average(r => (double)r.PropertyRating), 1, MidpointRounding.AwayFromZero),
+            reviews.Count, reviews.Select(r => new PublicViewingReviewDto(r.PropertyRating, r.Comment ?? "",
+                r.CreatedAt.ToString("yyyy-MM", CultureInfo.InvariantCulture))).ToList());
+    }
+
     private static async Task<ViewingReviewSummaryDto> SummarizeAsync(IQueryable<ViewingReview> query, bool landlord, CancellationToken ct)
     {
         var count = await query.CountAsync(ct);

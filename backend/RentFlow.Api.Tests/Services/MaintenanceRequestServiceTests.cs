@@ -28,6 +28,10 @@ public class MaintenanceRequestServiceTests
         Assert.Equal(TimeSpan.Zero, result.CreatedAt.Offset);
         Assert.Null(result.UpdatedAt);
         Assert.Equal(result.Id, (await context.MaintenanceRequests.SingleAsync()).Id);
+        var notice = Assert.Single(await context.Notifications.Where(n => n.EventType == NotificationEventTypes.MaintenanceSubmitted).ToListAsync());
+        Assert.Equal((await context.Properties.SingleAsync(p => p.Id == request.PropertyId)).LandlordId, notice.RecipientId);
+        Assert.Equal(result.Id, notice.RelatedResourceId);
+        Assert.DoesNotContain(result.Id.ToString(), notice.Message);
     }
 
     [Fact]
@@ -47,6 +51,24 @@ public class MaintenanceRequestServiceTests
         var choice = Assert.Single(choices);
         Assert.Equal(activeTechnicianId, choice.Id);
         Assert.Equal("Active Tech", choice.Name);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ProjectsTenantAndTechnicianDisplayNames()
+    {
+        await using var context = CreateContext();
+        var tenantId = Guid.NewGuid();
+        var technicianId = Guid.NewGuid();
+        var request = AddRequest(context, tenantId: tenantId, technicianId: technicianId);
+        context.Users.AddRange(
+            CreateUser(tenantId, UserRole.Tenant, true, "Chamodya Sayanjali"),
+            CreateUser(technicianId, UserRole.MaintenanceTechnician, true, "Morgan Technician"));
+        await context.SaveChangesAsync();
+
+        var result = await new MaintenanceRequestService(context).GetByIdAsync(request.Id);
+
+        Assert.Equal("Chamodya Sayanjali", result!.TenantName);
+        Assert.Equal("Morgan Technician", result.AssignedTechnicianName);
     }
 
     [Fact]
@@ -224,6 +246,8 @@ public class MaintenanceRequestServiceTests
         var maintenanceRequest = AddRequest(context, status: MaintenanceRequestStatus.Triaged);
         await context.SaveChangesAsync();
         var technicianId = Guid.NewGuid();
+        context.Users.Add(new ApplicationUser { Id = technicianId, FullName = "Technician", Role = UserRole.MaintenanceTechnician, IsActive = true });
+        await context.SaveChangesAsync();
 
         var result = await new MaintenanceRequestService(context).AssignTechnicianAsync(
             maintenanceRequest.Id,
@@ -320,11 +344,14 @@ public class MaintenanceRequestServiceTests
         var maintenanceRequest = AddRequest(context, status: MaintenanceRequestStatus.Triaged);
         await context.SaveChangesAsync();
 
+        var technicianId = Guid.NewGuid();
+        context.Users.Add(new ApplicationUser { Id = technicianId, FullName = "Technician", Role = UserRole.MaintenanceTechnician, IsActive = true });
+        await context.SaveChangesAsync();
         await new MaintenanceRequestService(context).AssignTechnicianAsync(
             maintenanceRequest.Id,
             new AssignTechnicianDto
             {
-                TechnicianId = Guid.NewGuid(),
+                TechnicianId = technicianId,
                 AssignmentNotes = "Take replacement washers."
             });
 
@@ -387,6 +414,30 @@ public class MaintenanceRequestServiceTests
             .GetHistoryAsync(maintenanceRequest.Id);
 
         Assert.Equal([firstId, secondId], history.Select(item => item.Id));
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_ProjectsActorDisplayNamesAndRoles()
+    {
+        await using var context = CreateContext();
+        var actorId = Guid.NewGuid();
+        var request = AddRequest(context);
+        context.Users.Add(CreateUser(actorId, UserRole.Landlord, true, "Landlord User"));
+        context.MaintenanceStatusHistories.Add(new MaintenanceStatusHistory
+        {
+            Id = Guid.NewGuid(),
+            MaintenanceRequest = request,
+            ToStatus = MaintenanceRequestStatus.Triaged,
+            ChangedByUserId = actorId,
+            ChangedAt = DateTimeOffset.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var result = await new MaintenanceRequestService(context).GetHistoryAsync(request.Id);
+
+        var entry = Assert.Single(result);
+        Assert.Equal("Landlord User", entry.ChangedByName);
+        Assert.Equal(UserRole.Landlord, entry.ChangedByRole);
     }
 
     [Fact]
@@ -628,6 +679,7 @@ public class MaintenanceRequestServiceTests
         await using var context = CreateContext();
         var technicianId = Guid.NewGuid();
         var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        AddCompletionEvidence(context, maintenanceRequest, technicianId);
         await context.SaveChangesAsync();
 
         var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
@@ -642,6 +694,7 @@ public class MaintenanceRequestServiceTests
         await using var context = CreateContext();
         var technicianId = Guid.NewGuid();
         var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        AddCompletionEvidence(context, maintenanceRequest, technicianId);
         await context.SaveChangesAsync();
 
         var result = await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
@@ -657,6 +710,7 @@ public class MaintenanceRequestServiceTests
         await using var context = CreateContext();
         var technicianId = Guid.NewGuid();
         var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        AddCompletionEvidence(context, maintenanceRequest, technicianId);
         await context.SaveChangesAsync();
 
         var result = await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
@@ -670,6 +724,7 @@ public class MaintenanceRequestServiceTests
         await using var context = CreateContext();
         var technicianId = Guid.NewGuid();
         var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        AddCompletionEvidence(context, maintenanceRequest, technicianId);
         await context.SaveChangesAsync();
 
         var result = await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
@@ -683,6 +738,7 @@ public class MaintenanceRequestServiceTests
         await using var context = CreateContext();
         var technicianId = Guid.NewGuid();
         var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        AddCompletionEvidence(context, maintenanceRequest, technicianId);
         await context.SaveChangesAsync();
 
         await new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId);
@@ -721,6 +777,45 @@ public class MaintenanceRequestServiceTests
         Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
     }
 
+    [Fact]
+    public async Task CompleteWorkAsync_RequiresTechnicianCompletionEvidence()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId));
+
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
+        Assert.Equal(MaintenanceRequestStatus.InProgress, maintenanceRequest.Status);
+    }
+
+    [Fact]
+    public async Task CompleteWorkAsync_TenantIssuePhotoDoesNotSatisfyCompletionEvidence()
+    {
+        await using var context = CreateContext();
+        var technicianId = Guid.NewGuid();
+        var maintenanceRequest = AddRequest(context, technicianId: technicianId, status: MaintenanceRequestStatus.InProgress);
+        context.MaintenanceAttachments.Add(new MaintenanceAttachment
+        {
+            MaintenanceRequestId = maintenanceRequest.Id,
+            StorageKey = "private-tenant-photo",
+            FileName = "issue.jpg",
+            ContentType = "image/jpeg",
+            FileSize = 1,
+            AttachmentType = "issue",
+            UploadedByUserId = maintenanceRequest.TenantId
+        });
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            new MaintenanceRequestService(context).CompleteWorkAsync(maintenanceRequest.Id, technicianId));
+
+        Assert.Equal(MaintenanceRequestServiceError.Conflict, exception.Error);
+    }
+
     private static SubmitRepairEstimateDto CreateEstimate() =>
         new() { LaborCost = 100m, PartsCost = 25m, AdditionalCost = 5m, Notes = "Replace worn fittings." };
 
@@ -747,6 +842,27 @@ public class MaintenanceRequestServiceTests
         await service.SubmitEstimateForReviewAsync(maintenanceRequest.Id, estimateResponse.Id);
         var estimate = await context.RepairEstimates.SingleAsync(item => item.Id == estimateResponse.Id);
         return (service, maintenanceRequest, estimate);
+    }
+
+    [Theory]
+    [InlineData(UserRole.MaintenanceTechnician, false, true)]
+    [InlineData(UserRole.Tenant, true, true)]
+    [InlineData(UserRole.Landlord, true, true)]
+    [InlineData(UserRole.Admin, true, true)]
+    [InlineData(UserRole.MaintenanceTechnician, true, false)]
+    public async Task Assignment_RejectsIneligibleIdentity(UserRole role, bool active, bool exists)
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, status: MaintenanceRequestStatus.Triaged);
+        var technicianId = Guid.NewGuid();
+        if (exists) context.Users.Add(new ApplicationUser { Id = technicianId, FullName = "Candidate", Role = role, IsActive = active });
+        await context.SaveChangesAsync();
+        var error = await Assert.ThrowsAsync<MaintenanceRequestServiceException>(() =>
+            new MaintenanceRequestService(context).AssignTechnicianAsync(request.Id, new AssignTechnicianDto { TechnicianId = technicianId }));
+        Assert.Equal(MaintenanceRequestServiceError.Validation, error.Error);
+        Assert.Null(request.TechnicianId);
+        Assert.Equal(MaintenanceRequestStatus.Triaged, request.Status);
+        Assert.Empty(context.MaintenanceStatusHistories);
     }
 
     private static ApplicationDbContext CreateContext()
@@ -825,4 +941,18 @@ public class MaintenanceRequestServiceTests
         context.MaintenanceRequests.Add(maintenanceRequest);
         return maintenanceRequest;
     }
+
+    private static void AddCompletionEvidence(
+        ApplicationDbContext context,
+        MaintenanceRequest request,
+        Guid technicianId) => context.MaintenanceAttachments.Add(new MaintenanceAttachment
+        {
+            MaintenanceRequestId = request.Id,
+            StorageKey = $"completion/{Guid.NewGuid():N}",
+            FileName = "completed.jpg",
+            ContentType = "image/jpeg",
+            FileSize = 1,
+            AttachmentType = MaintenanceAttachmentService.TechnicianCompletionAttachmentType,
+            UploadedByUserId = technicianId
+        });
 }

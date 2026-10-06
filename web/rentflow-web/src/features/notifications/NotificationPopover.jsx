@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/useAuth.js'
 import Icon from '../../shared/ui/Icons.jsx'
 import { getNotifications, markNotificationRead } from './notificationsApi.js'
 import { notificationTime } from './notificationFormat.js'
 import { notificationTypeLabel } from './notificationTypes.js'
+import { notificationDestination } from './notificationNavigation.js'
 import './notifications.css'
 
 const PREVIEW_SIZE = 5
 
 export default function NotificationPopover({ userId, unreadCount, refreshCount, onOpen }) {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { user } = useAuth()
   const [popover, setPopover] = useState({ userId, path: location.pathname, open: false })
   const [result, setResult] = useState({ userId, items: [], status: 'idle', error: '' })
   const [markingId, setMarkingId] = useState(null)
@@ -80,7 +84,7 @@ export default function NotificationPopover({ userId, unreadCount, refreshCount,
   }
 
   const markRead = async (item) => {
-    if (item.isRead || markingId) return
+    if (item.isRead || markingId) return true
     const requestedUserId = userId
     setMarkingId(item.id)
     setMarkError(null)
@@ -92,10 +96,27 @@ export default function NotificationPopover({ userId, unreadCount, refreshCount,
         items: current.items.map((entry) => entry.id === item.id ? updated : entry),
       })
       refreshCount()
+      return true
     } catch (failure) {
       if (mounted.current) setMarkError({ id: item.id, message: failure.message })
+      return false
     } finally {
       if (mounted.current) setMarkingId(null)
+    }
+
+  }
+
+  const openNotification = async (item) => {
+    setMarkError(null)
+    try {
+      if (!item.isRead && !await markRead(item)) return
+      const destination = await notificationDestination(item, user.role)
+      if (destination) {
+        close(false)
+        navigate(destination)
+      }
+    } catch (failure) {
+      if (mounted.current) setMarkError({ id: item.id, message: failure.message })
     }
   }
 
@@ -134,13 +155,13 @@ export default function NotificationPopover({ userId, unreadCount, refreshCount,
         {status === 'error' && <div className="notification-popover__feedback" role="alert"><strong>Notifications could not be loaded.</strong><span>{error}</span><button className="shared-button shared-button--outline" type="button" onClick={() => { setResult({ userId, items: [], status: 'loading', error: '' }); setReload((value) => value + 1) }}>Try again</button></div>}
         {status === 'ready' && items.length === 0 && <div className="notification-popover__feedback"><Icon name="bell" size={22} /><strong>No notifications yet</strong><span>Updates for your account will appear here.</span></div>}
         {status === 'ready' && items.length > 0 && <div className="notification-popover__list" aria-label="Recent notification list">
-          {items.map((item) => <article key={item.id} className={`notification-preview-item${item.isRead ? '' : ' notification-preview-item--unread'}`}>
+          {items.map((item) => <article key={item.id} className={`notification-preview-item${item.isRead ? '' : ' notification-preview-item--unread'}`} role="button" tabIndex="0" onClick={() => openNotification(item)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') openNotification(item) }}>
             <div className="notification-preview-item__heading"><strong>{item.title}</strong><span>{item.isRead ? 'Read' : 'Unread'}</span></div>
             <span className="notification-type">{notificationTypeLabel(item.eventType)}</span>
             <p>{item.message}</p>
             <div className="notification-preview-item__footer">
               <time dateTime={item.createdAt}>{notificationTime(item.createdAt)}</time>
-              {!item.isRead && <button type="button" disabled={markingId === item.id} onClick={() => markRead(item)}>{markingId === item.id ? 'Marking…' : 'Mark as read'}</button>}
+              {!item.isRead && <button type="button" disabled={markingId === item.id} onClick={(event) => { event.stopPropagation(); markRead(item) }}>{markingId === item.id ? 'Marking…' : 'Mark as read'}</button>}
             </div>
             {markError?.id === item.id && <div className="notification-preview-item__error" role="alert">{markError.message}</div>}
           </article>)}

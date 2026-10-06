@@ -5,10 +5,13 @@ name: RentFlow CI
     branches:
       - dev
       - main
+      - 'feature/*'
+      - 'feature/**'
   pull_request:
     branches:
       - dev
       - main
+
 
 permissions:
   contents: read
@@ -66,10 +69,31 @@ jobs:
         run: >-
           dotnet test backend/RentFlow.Api.Tests/RentFlow.Api.Tests.csproj
           --configuration Release
-          --no-restore
-          --verbosity normal
+          --logger "console;verbosity=detailed"
           --logger "trx;LogFileName=backend-tests.trx"
           --results-directory TestResults
+
+      - name: Print failed backend test names
+        if: failure()
+        shell: pwsh
+        run: |
+          $trxPath = "TestResults/backend-tests.trx"
+          if (-not (Test-Path -LiteralPath $trxPath)) {
+            Write-Warning "Backend TRX report was not created."
+            exit 0
+          }
+
+          [xml]$trx = Get-Content -LiteralPath $trxPath -Raw
+          $failedResults = @($trx.SelectNodes("//*[local-name()='UnitTestResult' and @outcome='Failed']"))
+          if ($failedResults.Count -eq 0) {
+            Write-Warning "No failed test results were found in $trxPath."
+            exit 0
+          }
+
+          Write-Host "Failed backend tests ($($failedResults.Count)):"
+          foreach ($result in $failedResults) {
+            Write-Host "- $($result.testName)"
+          }
 
       - name: Upload backend test report
         if: always()

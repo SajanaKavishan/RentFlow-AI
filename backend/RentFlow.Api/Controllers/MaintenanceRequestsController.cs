@@ -19,6 +19,7 @@ public class MaintenanceRequestsController(
     IMaintenanceCoordinationService maintenanceCoordinationService,
     IMaintenanceCoordinationOrchestrator maintenanceCoordinationOrchestrator,
     ICurrentUserService currentUserService,
+    IPropertyAccessGuard propertyAccessGuard,
     ILogger<MaintenanceRequestsController> logger) : ControllerBase
 {
     [HttpPost]
@@ -64,7 +65,15 @@ public class MaintenanceRequestsController(
         }
 
         return await ExecuteAsync(
-            () => GetAuthorizedRequestAsync(id, currentUserId, cancellationToken),
+            async () =>
+            {
+                var detail = await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                // Work contact is disclosed through owning-Tenant detail only.
+                if (currentUserService.Role != UserRole.Tenant)
+                    detail.AssignedTechnicianContactPhone = null;
+                Response.Headers.CacheControl = "private, no-store";
+                return detail;
+            },
             result => Ok(result));
     }
 
@@ -140,6 +149,30 @@ public class MaintenanceRequestsController(
                 result));
     }
 
+    [HttpGet("{id:guid}/coordination-workflows/latest")]
+    [ProducesResponseType<MaintenanceCoordinationWorkflowResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MaintenanceCoordinationWorkflowResponseDto?>> GetLatestCoordinationWorkflow(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.Landlord, UserRole.Admin], out var currentUserId, out var authResult))
+            return authResult;
+
+        Response.Headers.CacheControl = "private, no-store";
+        return await ExecuteAsync(
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                var workflow = await maintenanceCoordinationOrchestrator.GetLatestByRequestAsync(id, cancellationToken);
+                return workflow is null ? null : MaintenanceCoordinationWorkflowResponseDto.FromWorkflow(workflow);
+            },
+            result => result is null ? NoContent() : Ok(result));
+    }
+
     [HttpGet("{id:guid}/coordination-workflows/{workflowId:guid}")]
     [ProducesResponseType<MaintenanceCoordinationWorkflowResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -173,13 +206,13 @@ public class MaintenanceRequestsController(
     }
 
     [HttpPatch("{id:guid}/coordination-workflows/{workflowId:guid}/approve")]
-    [ProducesResponseType<MaintenanceCoordinationWorkflow>(StatusCodes.Status200OK)]
+    [ProducesResponseType<MaintenanceCoordinationWorkflowResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<MaintenanceCoordinationWorkflow>> ApproveCoordinationWorkflow(
+    public async Task<ActionResult<MaintenanceCoordinationWorkflowResponseDto>> ApproveCoordinationWorkflow(
         Guid id,
         Guid workflowId,
         [FromBody] MaintenanceCoordinationDecisionDto request,
@@ -202,19 +235,20 @@ public class MaintenanceRequestsController(
                     throw MaintenanceRequestServiceException.NotFound($"Maintenance coordination workflow '{workflowId}' was not found.");
                 }
 
-                return await maintenanceCoordinationOrchestrator.ApproveAsync(workflowId, currentUserId, request.DecisionNotes, cancellationToken);
+                var result = await maintenanceCoordinationOrchestrator.ApproveAsync(workflowId, currentUserId, request.DecisionNotes, cancellationToken);
+                return MaintenanceCoordinationWorkflowResponseDto.FromWorkflow(result);
             },
             result => Ok(result));
     }
 
     [HttpPatch("{id:guid}/coordination-workflows/{workflowId:guid}/reject")]
-    [ProducesResponseType<MaintenanceCoordinationWorkflow>(StatusCodes.Status200OK)]
+    [ProducesResponseType<MaintenanceCoordinationWorkflowResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<MaintenanceCoordinationWorkflow>> RejectCoordinationWorkflow(
+    public async Task<ActionResult<MaintenanceCoordinationWorkflowResponseDto>> RejectCoordinationWorkflow(
         Guid id,
         Guid workflowId,
         [FromBody] MaintenanceCoordinationDecisionDto request,
@@ -237,7 +271,8 @@ public class MaintenanceRequestsController(
                     throw MaintenanceRequestServiceException.NotFound($"Maintenance coordination workflow '{workflowId}' was not found.");
                 }
 
-                return await maintenanceCoordinationOrchestrator.RejectAsync(workflowId, currentUserId, request.DecisionNotes, cancellationToken);
+                var result = await maintenanceCoordinationOrchestrator.RejectAsync(workflowId, currentUserId, request.DecisionNotes, cancellationToken);
+                return MaintenanceCoordinationWorkflowResponseDto.FromWorkflow(result);
             },
             result => Ok(result));
     }
@@ -305,7 +340,11 @@ public class MaintenanceRequestsController(
         }
 
         return await ExecuteAsync(
-            () => maintenanceRequestService.GetByPropertyAsync(propertyId, cancellationToken),
+            async () =>
+            {
+                await EnsurePropertyAccessAsync(propertyId, currentUserService.UserId!.Value, cancellationToken);
+                return await maintenanceRequestService.GetByPropertyAsync(propertyId, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -330,7 +369,11 @@ public class MaintenanceRequestsController(
             async () =>
             {
                 await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
-                return await maintenanceRequestService.GetHistoryAsync(id, cancellationToken);
+                var history = await maintenanceRequestService.GetHistoryAsync(id, cancellationToken);
+                // Staff triage, assignment and review notes have no Tenant-safe visibility marker.
+                if (currentUserService.Role == UserRole.Tenant)
+                    foreach (var entry in history) entry.Notes = null;
+                return history;
             },
             result => Ok(result));
     }
@@ -385,7 +428,11 @@ public class MaintenanceRequestsController(
         }
 
         return await ExecuteAsync(
-            () => maintenanceRequestService.TriageAsync(id, request, cancellationToken),
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserService.UserId!.Value, cancellationToken);
+                return await maintenanceRequestService.TriageAsync(id, request, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -407,7 +454,11 @@ public class MaintenanceRequestsController(
         }
 
         return await ExecuteAsync(
-            () => maintenanceRequestService.AssignTechnicianAsync(id, request, cancellationToken),
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserService.UserId!.Value, cancellationToken);
+                return await maintenanceRequestService.AssignTechnicianAsync(id, request, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -427,7 +478,11 @@ public class MaintenanceRequestsController(
         }
 
         return await ExecuteAsync(
-            () => maintenanceRequestService.MarkEstimatePendingAsync(id, cancellationToken),
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserService.UserId!.Value, cancellationToken);
+                return await maintenanceRequestService.MarkEstimatePendingAsync(id, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -522,12 +577,12 @@ public class MaintenanceRequestsController(
         }
 
         return await ExecuteAsync(
-            () => maintenanceRequestService.ApproveEstimateAsync(
-                id,
-                estimateId,
-                currentUserId,
-                request,
-                cancellationToken),
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                return await maintenanceRequestService.ApproveEstimateAsync(
+                    id, estimateId, currentUserId, request, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -556,12 +611,12 @@ public class MaintenanceRequestsController(
         }
 
         return await ExecuteAsync(
-            () => maintenanceRequestService.RejectEstimateAsync(
-                id,
-                estimateId,
-                currentUserId,
-                request,
-                cancellationToken),
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                return await maintenanceRequestService.RejectEstimateAsync(
+                    id, estimateId, currentUserId, request, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -590,12 +645,12 @@ public class MaintenanceRequestsController(
         }
 
         return await ExecuteAsync(
-            () => maintenanceRequestService.RequestEstimateRevisionAsync(
-                id,
-                estimateId,
-                currentUserId,
-                request,
-                cancellationToken),
+            async () =>
+            {
+                await GetAuthorizedRequestAsync(id, currentUserId, cancellationToken);
+                return await maintenanceRequestService.RequestEstimateRevisionAsync(
+                    id, estimateId, currentUserId, request, cancellationToken);
+            },
             result => Ok(result));
     }
 
@@ -744,6 +799,29 @@ public class MaintenanceRequestsController(
             result => CreatedAtAction(nameof(DownloadAttachment), new { id, attachmentId = result.Id, tenantId = currentUserId }, result));
     }
 
+    [HttpPost("{id:guid}/completion-attachments")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<MaintenanceAttachmentResponseDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MaintenanceAttachmentResponseDto>> UploadCompletionAttachment(
+        Guid id,
+        [FromForm] UploadMaintenanceAttachmentDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthorizedUserId([UserRole.MaintenanceTechnician], out var currentUserId, out var authResult))
+            return authResult;
+
+        await using var content = request.File.OpenReadStream();
+        return await ExecuteAsync(
+            () => maintenanceAttachmentService.UploadCompletionAsync(id, currentUserId, content, request.File.FileName,
+                request.File.ContentType, request.File.Length, cancellationToken),
+            result => StatusCode(StatusCodes.Status201Created, result));
+    }
+
     [HttpGet("{id:guid}/attachments")]
     [ProducesResponseType<IReadOnlyList<MaintenanceAttachmentResponseDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -853,6 +931,7 @@ public class MaintenanceRequestsController(
         CancellationToken cancellationToken)
     {
         var maintenanceRequest = await GetRequiredRequestAsync(id, cancellationToken);
+        await EnsurePropertyAccessAsync(maintenanceRequest.PropertyId, currentUserId, cancellationToken);
 
         if (currentUserService.Role == UserRole.Tenant
             && maintenanceRequest.TenantId != currentUserId)
@@ -869,6 +948,13 @@ public class MaintenanceRequestsController(
         }
 
         return maintenanceRequest;
+    }
+
+    private async Task EnsurePropertyAccessAsync(Guid propertyId, Guid userId, CancellationToken cancellationToken)
+    {
+        if (currentUserService.Role == UserRole.Landlord
+            && !await propertyAccessGuard.CanAccessPropertyAsync(userId, propertyId, cancellationToken))
+            throw MaintenanceRequestServiceException.Forbidden("You cannot access maintenance for this property.");
     }
 
     private async Task<MaintenanceRequestResponseDto> GetRequiredRequestAsync(

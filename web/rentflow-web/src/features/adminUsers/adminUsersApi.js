@@ -86,6 +86,26 @@ export async function getAdminUserTotal({ signal } = {}) {
   return pagination.totalCount
 }
 
+function parseDetails(response, id) {
+  const user = parseUser(response)
+  if (user.id.toLowerCase() !== id.toLowerCase() || typeof response.phoneNumber !== 'string') invalidResponse()
+  return { ...user, phoneNumber: response.phoneNumber }
+}
+
+export async function getAdminUserDetails(id, signal) {
+  return parseDetails(await apiRequest(`/api/admin/users/${encodeURIComponent(id)}`, {
+    signal, cache: 'no-store', errorMessage: 'User details could not be loaded.',
+  }), id)
+}
+
+export async function deactivateAdminUser(id, signal) {
+  const user = parseDetails(await apiRequest(`/api/admin/users/${encodeURIComponent(id)}/deactivate`, {
+    method: 'PATCH', signal, errorMessage: 'The account could not be deactivated.',
+  }), id)
+  if (user.isActive) invalidResponse()
+  return user
+}
+
 export async function getAdminUserRoleTotals({ signal } = {}) {
   const totals = await Promise.all(ADMIN_USER_DISTRIBUTION_ROLES.map(async (role) => {
     const { pagination } = await getAdminUsers({ page: 1, pageSize: 1, role, signal })

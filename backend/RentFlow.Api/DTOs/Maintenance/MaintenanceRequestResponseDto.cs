@@ -15,9 +15,19 @@ public class MaintenanceRequestResponseDto
 
     public Guid PropertyId { get; set; }
 
+    public string? PropertyTitle { get; set; }
+    public string? PropertyAddress { get; set; }
+    public string? PropertyCity { get; set; }
+    public string? RequesterName { get; set; }
+
     public Guid TenantId { get; set; }
 
+    public string? TenantName { get; set; }
+
     public Guid? TechnicianId { get; set; }
+
+    public string? AssignedTechnicianName { get; set; }
+    public string? AssignedTechnicianContactPhone { get; set; }
 
     public string Title { get; set; } = string.Empty;
 

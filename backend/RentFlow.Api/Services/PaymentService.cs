@@ -89,6 +89,9 @@ public class PaymentService : IPaymentService
 
         _dbContext.Payments.Add(payment);
 
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(_dbContext, rentScheduleItem.LeaseAgreement.PropertyId, NotificationEventTypes.ManualPaymentReview,
+            "Payment", payment.Id, payment.Id, "Payment review required", "A tenant submitted a manual rent payment. Review and complete or fail the payment.", cancellationToken);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return MapToResponseDto(payment);
@@ -133,6 +136,8 @@ public class PaymentService : IPaymentService
     {
         var payments = await _dbContext.Payments
             .AsNoTracking()
+            .Include(payment => payment.RentScheduleItem)
+            .ThenInclude(item => item.LeaseAgreement)
             .Where(payment => _dbContext.Properties.Any(property =>
                 property.Id == payment.RentScheduleItem.LeaseAgreement.PropertyId
                 && property.LandlordId == landlordId))
@@ -295,11 +300,13 @@ public class PaymentService : IPaymentService
         {
             Id = payment.Id,
             RentScheduleItemId = payment.RentScheduleItemId,
+            PropertyId = payment.RentScheduleItem?.LeaseAgreement?.PropertyId,
             TenantId = payment.TenantId,
             Amount = payment.Amount,
             PaymentMethod = payment.PaymentMethod,
             TransactionReference = payment.TransactionReference,
             Status = payment.Status,
+            Provider = payment.Provider,
             PaidAt = payment.PaidAt,
             CreatedAt = payment.CreatedAt,
             UpdatedAt = payment.UpdatedAt

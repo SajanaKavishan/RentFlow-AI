@@ -166,6 +166,11 @@ export function getCoordinationWorkflow(id, workflowId) {
     .then(normalizeMaintenanceCoordinationWorkflow)
 }
 
+export function getLatestCoordinationWorkflow(id) {
+  return request(maintenanceRequestPath(id, 'coordination-workflows/latest'))
+    .then(normalizeMaintenanceCoordinationWorkflow)
+}
+
 export function approveCoordinationWorkflow(id, workflowId, decisionNotes = '') {
   return request(coordinationWorkflowPath(id, workflowId, 'approve'), {
     method: 'PATCH',

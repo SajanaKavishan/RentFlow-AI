@@ -79,6 +79,9 @@ public class LeaseAgreementService : ILeaseAgreementService
 
         _dbContext.LeaseAgreements.Add(leaseAgreement);
 
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(_dbContext, leaseAgreement.PropertyId, NotificationEventTypes.LeaseActivationRequired,
+            "LeaseAgreement", leaseAgreement.Id, leaseAgreement.Id, "Lease activation required", "Your pending lease agreement is ready for activation.", cancellationToken);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return MapToResponseDto(leaseAgreement);

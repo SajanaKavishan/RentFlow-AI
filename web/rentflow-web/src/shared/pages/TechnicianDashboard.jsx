@@ -1,55 +1,117 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { getTechnicianMaintenanceRequests } from '../../features/maintenance/services/maintenanceApiService.js'
+import { MAINTENANCE_CATEGORY, MAINTENANCE_PRIORITY, MAINTENANCE_STATUS, maintenanceEnumLabel } from '../../features/maintenance/services/maintenanceEnums.js'
 import { StatusBadge } from '../ui/States.jsx'
 import Icon from '../ui/Icons.jsx'
-import DashboardNotificationCard from './DashboardNotificationCard.jsx'
+import { activeTechnicianWork, technicianSummary } from './technicianWorkPresentation.js'
 import './role-dashboard.css'
 
+const statusToneMap = {
+  Submitted: 'warning',
+  Triaged: 'warning',
+  Assigned: 'warning',
+  EstimatePending: 'warning',
+  EstimateSubmitted: 'warning',
+  AwaitingLandlordApproval: 'warning',
+  Approved: 'success',
+  InProgress: 'neutral',
+}
+
+const accessLabel = (value) => ({
+  Morning: 'Morning (8-12)',
+  Afternoon: 'Afternoon (12-5)',
+  Evening: 'Evening (5-8)',
+}[value] || null)
+
 export default function TechnicianDashboard({ user }) {
+  const [summary, setSummary] = useState(null)
+  const [workRequests, setWorkRequests] = useState(null)
+  const [workError, setWorkError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    getTechnicianMaintenanceRequests(user.id)
+      .then((requests) => {
+        if (active) {
+          setSummary(technicianSummary(requests))
+          setWorkRequests(requests)
+          setWorkError('')
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setSummary({})
+          setWorkRequests([])
+          setWorkError(error.message || 'Unable to load assigned work.')
+        }
+      })
+    return () => { active = false }
+  }, [user.id])
+
+  const activeWork = activeTechnicianWork(workRequests || []).slice(0, 3)
+
   return <main className="shared-page role-dashboard technician-dashboard">
     <header className="role-dashboard__header">
       <div>
-        <p className="role-dashboard__eyebrow">Technician workspace</p>
         <h1>Welcome, {user.fullName.trim() || 'there'}</h1>
         <p>Use your shared account tools now. Assigned maintenance work is connected to your authenticated technician queue.</p>
       </div>
-      <div className="role-dashboard__header-actions" aria-label="Technician account actions">
-        <Link className="shared-button" to="/notifications" aria-label="Open notification inbox"><Icon name="bell" size={18} />Notifications</Link>
-        <Link className="shared-button shared-button--outline" to="/profile"><Icon name="user" size={18} />Profile</Link>
-      </div>
     </header>
+
+    <section className="technician-summary" aria-label="Work summary">
+      <section className="technician-summary__card" aria-label="Today's jobs">
+        <strong>{summary?.today != null ? summary.today : 'Unavailable'}</strong>
+        <span>Today's jobs</span>
+      </section>
+      <section className="technician-summary__card technician-summary__card--progress" aria-label="In progress">
+        <strong>{summary?.progress != null ? summary.progress : 'Unavailable'}</strong>
+        <span>In progress</span>
+      </section>
+      <section className="technician-summary__card technician-summary__card--completed" aria-label="Completed this week">
+        <strong>{summary?.completed != null ? summary.completed : 'Unavailable'}</strong>
+        <span>Completed this week</span>
+      </section>
+    </section>
 
     <div className="technician-dashboard__workspace">
       <section className="shared-card technician-work" aria-labelledby="technician-work-title">
-        <div className="role-dashboard__section-heading">
-          <span className="role-dashboard__icon role-dashboard__icon--work"><Icon name="tools" size={25} /></span>
-          <div><p className="role-dashboard__eyebrow">Maintenance workspace</p><h2 id="technician-work-title">Assigned Work</h2></div>
-          <StatusBadge tone="success">Connected</StatusBadge>
+        <div className="role-dashboard__section-title">
+          <div><p className="role-dashboard__eyebrow">Technician queue</p><h2 id="technician-work-title">Assigned Work</h2></div>
+          <Link className="role-dashboard__text-link" to="/modules/assigned-work">View all <Icon name="arrow" size={16} /></Link>
         </div>
-        <p className="technician-work__intro">Your authorized work queue is available through the live Maintenance API.</p>
-        <div className="technician-work__dependency">
-          <Icon name="info" size={20} />
-          <div><strong>Assigned work ready</strong><p>Live maintenance tasks for your account are now available in the technician queue view.</p></div>
-        </div>
-        <Link className="shared-button shared-button--outline technician-work__status" to="/modules/assigned-work">View assigned work <Icon name="arrow" size={17} /></Link>
+        {workError && <p className="technician-work__error" role="alert">{workError}</p>}
+        {workRequests === null && <p className="technician-work__empty">Loading assigned work...</p>}
+        {workRequests !== null && !workError && activeWork.length === 0 && (
+          <p className="technician-work__empty">No active assigned work.</p>
+        )}
+        {activeWork.length > 0 && (
+          <div className="technician-work__list">
+            {activeWork.map((request) => {
+              const access = accessLabel(request.preferredAccessWindow)
+              return <article className="technician-work__job" key={request.id}>
+                <div className="technician-work__job-header">
+                  <div>
+                    <p className="technician-work__reference">{request.referenceCode || 'Reference unavailable'}</p>
+                    <h3>{request.title}</h3>
+                  </div>
+                  <div className="technician-work__badges">
+                    <StatusBadge tone={statusToneMap[request.status] ?? 'warning'}>{maintenanceEnumLabel(request.status, MAINTENANCE_STATUS)}</StatusBadge>
+                    <StatusBadge tone={request.priority === 'Emergency' ? 'danger' : 'info'}>{maintenanceEnumLabel(request.priority, MAINTENANCE_PRIORITY)}</StatusBadge>
+                  </div>
+                </div>
+                <dl className="technician-work__meta">
+                  <div><dt>Property</dt><dd>{request.propertyTitle || 'Property unavailable'}</dd></div>
+                  <div><dt>Category</dt><dd>{maintenanceEnumLabel(request.category, MAINTENANCE_CATEGORY)}</dd></div>
+                  {access && <div><dt>Preferred access</dt><dd>{access}</dd></div>}
+                </dl>
+                <Link className="shared-button shared-button--outline technician-work__details" to="/modules/assigned-work">View details</Link>
+              </article>
+            })}
+          </div>
+        )}
       </section>
-
-      <aside className="technician-dashboard__side" aria-label="Technician shared tools">
-        <DashboardNotificationCard id="technician-notifications-title" />
-        <section className="shared-card role-dashboard-account" aria-labelledby="technician-account-title">
-          <span className="role-dashboard__icon"><Icon name="user" size={22} /></span>
-          <div><p className="role-dashboard__eyebrow">Account</p><h2 id="technician-account-title">Your profile</h2><p>Review the identity and contact details associated with this technician session.</p></div>
-          <Link className="role-dashboard__text-link" to="/profile">View profile <Icon name="arrow" size={17} /></Link>
-        </section>
-      </aside>
     </div>
 
-    <section className="technician-readiness" aria-labelledby="technician-readiness-title">
-      <div className="role-dashboard__section-title"><div><p className="role-dashboard__eyebrow">Workspace readiness</p><h2 id="technician-readiness-title">What is available</h2></div><p>Only confirmed shared capabilities are shown as ready.</p></div>
-      <div className="technician-readiness__list">
-        <div><Icon name="bell" size={19} /><span><strong>Notifications</strong><small>Available for your authenticated account</small></span><StatusBadge tone="success">Available</StatusBadge></div>
-        <div><Icon name="user" size={19} /><span><strong>Profile</strong><small>Account details and sign out</small></span><StatusBadge tone="success">Available</StatusBadge></div>
-        <div><Icon name="tools" size={19} /><span><strong>Assigned Work</strong><small>Live maintenance queue for this technician</small></span><StatusBadge tone="success">Available</StatusBadge></div>
-      </div>
-    </section>
   </main>
 }

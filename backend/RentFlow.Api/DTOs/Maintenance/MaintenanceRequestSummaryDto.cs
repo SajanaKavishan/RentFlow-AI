@@ -15,6 +15,11 @@ public class MaintenanceRequestSummaryDto
 
     public Guid PropertyId { get; set; }
 
+    public string? PropertyTitle { get; set; }
+    public string? PropertyAddress { get; set; }
+    public string? PropertyCity { get; set; }
+    public string? RequesterName { get; set; }
+
     public Guid TenantId { get; set; }
 
     public Guid? TechnicianId { get; set; }
@@ -26,6 +31,8 @@ public class MaintenanceRequestSummaryDto
     public MaintenancePriority Priority { get; set; }
 
     public MaintenanceRequestStatus Status { get; set; }
+
+    public DateTimeOffset? CompletedAt { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 

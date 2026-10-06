@@ -201,7 +201,9 @@ public sealed class AuthService(
                 user.Role,
                 user.ProfileImage != null,
                 user.Role == UserRole.Landlord ? user.PublicContactPhone : null,
-                user.Role == UserRole.Landlord ? user.PublicContactEnabled : (bool?)null))
+                user.Role == UserRole.Landlord ? user.PublicContactEnabled : (bool?)null,
+                user.Role == UserRole.MaintenanceTechnician ? user.MaintenanceContactPhone : null,
+                user.Role == UserRole.MaintenanceTechnician ? user.MaintenanceContactEnabled : (bool?)null))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -237,6 +239,22 @@ public sealed class AuthService(
                 throw AuthServiceException.Validation("Enter a valid public contact number (7 to 15 digits, maximum 32 characters).");
             user.PublicContactPhone = phone;
             user.PublicContactEnabled = enabled;
+        }
+
+        if (request.MaintenanceContactEnabled.HasValue || request.MaintenanceContactPhone is not null)
+        {
+            if (user.Role != UserRole.MaintenanceTechnician)
+                throw AuthServiceException.Validation("Only maintenance technicians can edit work contact settings.");
+
+            var phone = request.MaintenanceContactPhone is null
+                ? user.MaintenanceContactPhone
+                : request.MaintenanceContactPhone.Trim();
+            phone = string.IsNullOrEmpty(phone) ? null : phone;
+            var enabled = request.MaintenanceContactEnabled ?? user.MaintenanceContactEnabled;
+            if ((phone is not null || enabled) && PhoneNumberValidation.UsablePhoneNumber(phone) is null)
+                throw AuthServiceException.Validation("Enter a valid work contact number (7 to 15 digits, maximum 32 characters).");
+            user.MaintenanceContactPhone = phone;
+            user.MaintenanceContactEnabled = enabled;
         }
 
         user.FullName = request.FullName.Trim();
@@ -344,7 +362,9 @@ public sealed class AuthService(
     private static UserProfileDto ToProfile(ApplicationUser user) =>
         new(user.Id, user.FullName, user.Email, user.PhoneNumber, user.Role, user.ProfileImage is not null,
             user.Role == UserRole.Landlord ? user.PublicContactPhone : null,
-            user.Role == UserRole.Landlord ? user.PublicContactEnabled : null);
+            user.Role == UserRole.Landlord ? user.PublicContactEnabled : null,
+            user.Role == UserRole.MaintenanceTechnician ? user.MaintenanceContactPhone : null,
+            user.Role == UserRole.MaintenanceTechnician ? user.MaintenanceContactEnabled : null);
 
     private static bool HasValidImageSignature(byte[] content, string contentType) => contentType switch
     {

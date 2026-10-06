@@ -11,3 +11,10 @@ String? usablePhoneNumber(String? value) {
       ? phone
       : null;
 }
+
+Uri? phoneDialerUri(String? number) {
+  final phone = usablePhoneNumber(number);
+  return phone == null
+      ? null
+      : Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'[^+0-9]'), ''));
+}

@@ -339,8 +339,9 @@ def _log_invocation_failure(
         status=provider_status(exc),
         model=model_name,
         message=(
-            getattr(exc, "diagnostic_message", None)
-            or sanitized_exception_message(exc)
+            "Media assessment failed; provider message omitted"
+            if invocation_name == "maintenance_visual_evidence" else
+            (getattr(exc, "diagnostic_message", None) or sanitized_exception_message(exc))
         ),
     )
 

@@ -8,8 +8,9 @@ import { tokenStorage } from '../../../core/auth/tokenStorage.js'
 
 const tenantId = '11111111-1111-1111-1111-111111111111'
 const propertyId = '22222222-2222-2222-2222-222222222222'
+const propertyTitle = 'Port city residence'
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
-const viewing = (status, extra = {}) => ({ id: `viewing-${status}`, tenantId, propertyId,
+const viewing = (status, extra = {}) => ({ id: `viewing-${status}`, tenantId, propertyId, propertyTitle,
   requestedDateTime: '2026-10-01T10:00:00Z', status, landlordResponse: null, ...extra })
 
 function renderPage(role = 'Tenant', entry = '/modules/my-viewings') {
@@ -35,7 +36,12 @@ describe('Tenant My Viewings', () => {
     for (const label of ['Pending', 'Approved', 'Rejected', 'Cancelled', 'Completed']) {
       expect(within(list).getByLabelText(`Viewing status: ${label}`)).toBeInTheDocument()
     }
-    expect(within(list).getAllByText(propertyId)).toHaveLength(5)
+    expect(screen.getByText('Viewing journey')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Your requests' })).toBeInTheDocument()
+    expect(within(list).getAllByText('Property')).toHaveLength(5)
+    expect(within(list).getAllByText(propertyTitle)).toHaveLength(5)
+    expect(within(list).queryByText(propertyId)).not.toBeInTheDocument()
+    expect(within(list).queryByText('Property reference')).not.toBeInTheDocument()
     expect(within(list).getAllByText('Requested date and time')).toHaveLength(5)
     expect(within(list).getAllByText('See you at 10.')).toHaveLength(1)
     expect(within(list).getAllByText('Landlord response')).toHaveLength(1)
@@ -46,8 +52,35 @@ describe('Tenant My Viewings', () => {
       expect(options.method).toBeUndefined()
       expect(url).not.toContain('tenantId')
       expect(url).not.toContain('propertyId')
+      expect(url).not.toContain('/api/properties')
     }
     expect(screen.queryByRole('button', { name: /Approve|Reject|Cancel|Book/ })).not.toBeInTheDocument()
+  })
+
+  it('displays each viewing property title from the response', async () => {
+    const secondPropertyId = '33333333-3333-3333-3333-333333333333'
+    fetch.mockImplementation((url) => Promise.resolve(json(url.endsWith('/api/viewings')
+      ? [viewing(0), viewing(1, { propertyId: secondPropertyId, propertyTitle: 'Lake View Apartment' })]
+      : { unreadCount: 0 })))
+    renderPage()
+    const list = await screen.findByRole('region', { name: 'Your viewing requests' })
+    const cards = within(list).getAllByRole('heading', { name: 'Viewing request' })
+      .map((heading) => heading.closest('.my-viewing-card'))
+    expect(within(cards[0]).getByText(propertyTitle)).toBeInTheDocument()
+    expect(within(cards[1]).getByText('Lake View Apartment')).toBeInTheDocument()
+    expect(list).not.toHaveTextContent(propertyId)
+    expect(list).not.toHaveTextContent(secondPropertyId)
+    expect(fetch.mock.calls.some(([url]) => url.includes('/api/properties'))).toBe(false)
+  })
+
+  it.each([undefined, null, '', '   '])('handles an unavailable title (%s) without exposing the UUID', async (title) => {
+    fetch.mockImplementation((url) => Promise.resolve(json(url.endsWith('/api/viewings')
+      ? [viewing(1, { propertyTitle: title })] : { unreadCount: 0 })))
+    renderPage()
+    const list = await screen.findByRole('region', { name: 'Your viewing requests' })
+    expect(within(list).getByText('Property unavailable')).toBeInTheDocument()
+    expect(list).not.toHaveTextContent(propertyId)
+    expect(fetch.mock.calls.some(([url]) => url.includes('/api/properties'))).toBe(false)
   })
 
   it('does not display a record returned for another tenant', async () => {
@@ -58,7 +91,7 @@ describe('Tenant My Viewings', () => {
     expect(screen.queryByText(propertyId)).not.toBeInTheDocument()
   })
 
-  it('shows loading, error, retry, refresh and empty states without stale data', async () => {
+  it('shows loading, error and retry states without a refresh button', async () => {
     let finishFirst
     let requests = 0
     fetch.mockImplementation((url) => {
@@ -70,14 +103,14 @@ describe('Tenant My Viewings', () => {
     })
     renderPage()
     expect(screen.getByRole('status')).toHaveTextContent('Loading your viewings')
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
     await act(async () => { finishFirst(json({ message: 'Unavailable' }, 503)) })
     expect(await screen.findByRole('alert')).toHaveTextContent('Viewings could not be loaded')
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByText('Confirmed.')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-    expect(await screen.findByRole('heading', { name: 'No viewing requests yet' })).toBeInTheDocument()
-    expect(screen.queryByText('Confirmed.')).not.toBeInTheDocument()
-    expect(requests).toBe(3)
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(requests).toBe(2)
   })
 
   it('handles a network failure and retries successfully', async () => {

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useLandlordActions } from '../../../shared/layout/LandlordActionsContext.js'
 import { ApiError } from '../../../core/api/apiClient.js'
 import { AppCard, PageHeader, StatusBadge } from '../../../shared/ui/States.jsx'
 import { changePaymentStatus, getLandlordPayments, getPayment } from '../services/paymentApiService.js'
@@ -45,7 +47,7 @@ function PaymentDetails({ payment, acting, actionError, onAction }) {
       <div><dt>Created</dt><dd>{dateTime(payment.createdAt)}</dd></div>
       <div><dt>Updated</dt><dd>{dateTime(payment.updatedAt)}</dd></div>
     </dl>
-    {payment.status === 0 && <div className="payments-actions">
+    {payment.status === 0 && payment.provider !== 1 && <div className="payments-actions">
       <button className="shared-button" type="button" disabled={Boolean(acting)} onClick={() => onAction('complete')}>{acting === 'complete' ? 'Completing…' : 'Complete payment'}</button>
       <button className="shared-button shared-button--outline shared-button--danger" type="button" disabled={Boolean(acting)} onClick={() => onAction('fail')}>{acting === 'fail' ? 'Failing…' : 'Mark as failed'}</button>
     </div>}
@@ -54,6 +56,9 @@ function PaymentDetails({ payment, acting, actionError, onAction }) {
 }
 
 export default function PaymentsPage() {
+  const actionSummary = useLandlordActions()
+  const [searchParams] = useSearchParams()
+  const requestedPaymentId = searchParams.get('paymentId')
   const [listState, setListState] = useState({ status: 'loading', items: [], error: '' })
   const [listReload, setListReload] = useState(0)
   const [detailState, setDetailState] = useState({ status: 'idle', payment: null, error: '' })
@@ -62,6 +67,18 @@ export default function PaymentsPage() {
   const [notice, setNotice] = useState('')
   const detailRequest = useRef(0)
   const actionInFlight = useRef(false)
+
+  useEffect(() => {
+    if (!requestedPaymentId) return undefined
+    let active = true
+    const request = ++detailRequest.current
+    getPayment(requestedPaymentId).then((payment) => {
+      if (active && request === detailRequest.current) setDetailState({ status: 'ready', payment, error: '' })
+    }).catch((error) => {
+      if (active && request === detailRequest.current) setDetailState({ status: 'error', payment: null, error: safeError(error, 'Unable to load payment details.') })
+    })
+    return () => { active = false }
+  }, [requestedPaymentId])
 
   useEffect(() => {
     let active = true
@@ -74,6 +91,7 @@ export default function PaymentsPage() {
   }, [listReload])
 
   function refreshList() {
+    actionSummary?.refresh()
     setListState((current) => ({ ...current, status: 'loading' }))
     setListReload((value) => value + 1)
   }
@@ -94,7 +112,7 @@ export default function PaymentsPage() {
 
   async function changeStatus(action) {
     const payment = detailState.payment
-    if (actionInFlight.current || detailState.status !== 'ready' || payment.status !== 0 || !['complete', 'fail'].includes(action)) return
+    if (actionInFlight.current || detailState.status !== 'ready' || payment.status !== 0 || payment.provider === 1 || !['complete', 'fail'].includes(action)) return
     actionInFlight.current = true
     setActing(action)
     setActionError('')
@@ -128,7 +146,7 @@ export default function PaymentsPage() {
     <PageHeader eyebrow="Rental management" title="Payments"><p>Review payments recorded for your rentals and resolve pending payments.</p></PageHeader>
     {notice && <p className="shared-notice" role="status">{notice}</p>}
     <AppCard>
-      <div className="payments-heading"><h2>Payment history</h2><button className="shared-button shared-button--outline" type="button" onClick={refreshList} disabled={listState.status === 'loading' || Boolean(acting)}>Refresh</button></div>
+      <div className="payments-heading"><h2>Payment history</h2></div>
       {listState.status === 'loading' && <p role="status">Loading payments…</p>}
       {listState.status === 'error' && <div role="alert"><p>{listState.error}</p><button className="shared-button shared-button--outline" type="button" onClick={refreshList}>Try again</button></div>}
       {listState.status === 'ready' && (listState.items.length === 0 ? <p>No payments have been recorded for your rentals.</p> : <div className="payments-table-wrap"><table className="payments-table"><thead><tr><th scope="col">Created</th><th scope="col">Tenant ID</th><th scope="col">Amount</th><th scope="col">Method</th><th scope="col">Status</th><th scope="col">Details</th></tr></thead><tbody>{listState.items.map((payment) => <tr key={payment.id}><td>{dateTime(payment.createdAt)}</td><td>{payment.tenantId}</td><td>{amount(payment.amount)}</td><td>{payment.paymentMethod || missing}</td><td><StatusBadge tone={payment.status === 1 ? 'success' : payment.status === 2 ? 'warning' : 'progress'}>{statusLabel(payment.status)}</StatusBadge></td><td><button className="shared-button shared-button--outline" type="button" disabled={Boolean(acting)} onClick={() => openPayment(payment.id)}>View details</button></td></tr>)}</tbody></table></div>)}

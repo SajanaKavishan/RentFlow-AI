@@ -38,6 +38,7 @@ public class MaintenanceCoordinationServiceTests
             MaintenanceRequestId = request.Id,
             FileName = "leak.jpg",
             ContentType = "image/jpeg",
+            FileSize = 1234,
             StorageKey = "private/not-forwarded",
             UploadedByUserId = Guid.NewGuid()
         });
@@ -48,22 +49,22 @@ public class MaintenanceCoordinationServiceTests
 
         var result = await new MaintenanceCoordinationService(context, agent).AnalyzeAsync(request.Id);
 
-        Assert.Equal("plumbing", result.RecommendedCategory);
+        Assert.Equal("Plumbing", result.SuggestedCategory);
         Assert.Equal(originalStatus, request.Status);
         Assert.Equal(originalTechnician, request.TechnicianId);
         Assert.Equal(request.Id, agent.Request!.MaintenanceRequestId);
-        Assert.Equal(250m, agent.Request.RepairEstimate!.Amount);
+        Assert.Equal(250m, agent.Request.RepairEstimate!.TotalCost);
         var attachment = Assert.Single(agent.Request.Attachments);
-        Assert.Equal("leak.jpg", attachment.FileName);
+        Assert.True(attachment.FileSize > 0);
         Assert.Equal("image/jpeg", attachment.ContentType);
         Assert.DoesNotContain("storageKey", JsonSerializer.Serialize(agent.Request), StringComparison.OrdinalIgnoreCase);
 
         var payload = JsonSerializer.SerializeToElement(agent.Request, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.Equal(
-            ["maintenanceRequestId", "title", "description", "category", "priority", "currentStatus", "assignedTechnicianId", "repairEstimate", "attachments"],
+            ["maintenanceRequestId", "title", "description", "category", "priority", "currentStatus", "preferredAccessWindow", "hasAssignedTechnician", "repairEstimate", "attachments", "evidencePhotos", "photoLimitations"],
             payload.EnumerateObject().Select(property => property.Name).ToArray());
         Assert.Equal(
-            ["attachmentId", "fileName", "contentType"],
+            ["attachmentId", "contentType", "fileSize"],
             payload.GetProperty("attachments")[0].EnumerateObject().Select(property => property.Name).ToArray());
         Assert.DoesNotContain(context.ChangeTracker.Entries(), entry =>
             entry.State is EntityState.Modified or EntityState.Added or EntityState.Deleted);
@@ -111,14 +112,8 @@ public class MaintenanceCoordinationServiceTests
             return Task.FromResult(new MaintenanceCoordinationAgentResponse
             {
                 MaintenanceRequestId = request.MaintenanceRequestId,
-                Result = new MaintenanceCoordinationResult
-                {
-                    RecommendedCategory = "plumbing",
-                    RecommendedPriority = "high",
-                    NextAction = "Schedule technician review",
-                    Reasoning = "Review the reported leak.",
-                    AgentVersion = "test"
-                }
+                Result = MaintenanceCoordinationTestData.Result(request),
+                ExecutionMetadata = MaintenanceCoordinationTestData.Metadata()
             });
         }
     }

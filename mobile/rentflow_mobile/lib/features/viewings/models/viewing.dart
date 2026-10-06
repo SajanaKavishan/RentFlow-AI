@@ -75,6 +75,8 @@ class Viewing {
     required this.landlordResponse,
     required this.createdAt,
     required this.updatedAt,
+    this.propertyTitle,
+    this.durationMinutes,
     this.timeZoneId,
     this.requestedLocalDate,
     this.requestedDisplayTime,
@@ -89,6 +91,8 @@ class Viewing {
   final String tenantId;
   final ViewingTenantSummary tenant;
   final String propertyId;
+  final String? propertyTitle;
+  final int? durationMinutes;
   final DateTime requestedDateTime;
   final ViewingStatus status;
   final String? tenantMessage;
@@ -113,6 +117,8 @@ class Viewing {
       tenantId: _requiredString(json, 'tenantId'),
       tenant: ViewingTenantSummary.fromJson(json['tenant']),
       propertyId: _requiredString(json, 'propertyId'),
+      propertyTitle: _nullableString(json, 'propertyTitle'),
+      durationMinutes: _nullableInt(json, 'durationMinutes'),
       requestedDateTime: _requiredDateTime(json, 'requestedDateTime'),
       status: ViewingStatus.fromJson(json['status']),
       canCancel: _canCancel(json),
@@ -131,6 +137,12 @@ class Viewing {
 
   static bool _canCancel(Map<String, dynamic> json) {
     return _optionalBool(json, 'canCancel');
+  }
+
+  static int? _nullableInt(Map<String, dynamic> json, String key) {
+    final value = json[key];
+    if (value == null || value is int) return value as int?;
+    throw FormatException('Invalid "$key".');
   }
 
   static bool _optionalBool(Map<String, dynamic> json, String key) {

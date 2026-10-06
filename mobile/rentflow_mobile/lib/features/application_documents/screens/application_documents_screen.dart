@@ -1,4 +1,5 @@
-import 'package:file_picker/file_picker.dart';
+import '../services/application_document_picker.dart';
+export '../services/application_document_picker.dart' show SelectedDocumentFile;
 import '../../../shared/follow_up/follow_up_activity.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -39,7 +40,8 @@ class ApplicationDocumentsScreen extends StatefulWidget {
 
 class _ApplicationDocumentsScreenState
     extends State<ApplicationDocumentsScreen> {
-  static const _maximumFileSizeBytes = 5 * 1024 * 1024;
+  static const _maximumFileSizeBytes =
+      ApplicationDocumentPicker.maximumFileSizeBytes;
 
   ApiClient? _ownedApiClient;
   late final ApplicationDocumentApiService _documentApiService;
@@ -136,6 +138,8 @@ class _ApplicationDocumentsScreenState
         _selectedFile = selectedFile;
         _uploadError = null;
       });
+    } on DocumentSelectionException catch (error) {
+      if (mounted) _showUploadError(error.message);
     } on Exception {
       if (mounted) {
         _showUploadError('Unable to select a file right now.');
@@ -149,21 +153,8 @@ class _ApplicationDocumentsScreenState
     }
   }
 
-  Future<SelectedDocumentFile?> _pickDocumentFile() async {
-    final file = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
-    );
-    if (file == null) return null;
-    final size = await file.length();
-    final bytes = await file.readAsBytes();
-    return SelectedDocumentFile(
-      name: file.name,
-      extension: _extensionFor(file.name),
-      size: size,
-      bytes: bytes,
-    );
-  }
+  Future<SelectedDocumentFile?> _pickDocumentFile() =>
+      ApplicationDocumentPicker.pick();
 
   Future<void> _upload() async {
     final file = _selectedFile;
@@ -343,20 +334,8 @@ class _ApplicationDocumentsScreenState
     }
   }
 
-  String? _contentTypeFor(String? extension) {
-    return switch (extension?.toLowerCase()) {
-      'pdf' => 'application/pdf',
-      'jpg' || 'jpeg' => 'image/jpeg',
-      'png' => 'image/png',
-      _ => null,
-    };
-  }
-
-  String? _extensionFor(String fileName) {
-    final separator = fileName.lastIndexOf('.');
-    if (separator < 0 || separator == fileName.length - 1) return null;
-    return fileName.substring(separator + 1).toLowerCase();
-  }
+  String? _contentTypeFor(String? extension) =>
+      ApplicationDocumentPicker.contentTypeFor(extension);
 
   void _showMessage(String message, {bool isError = false}) {
     AppSnackbars.show(
@@ -965,20 +944,6 @@ class _DocumentsData {
 
   final List<ApplicationDocument> documents;
   final bool canChangeDocuments;
-}
-
-class SelectedDocumentFile {
-  const SelectedDocumentFile({
-    required this.name,
-    required this.extension,
-    required this.size,
-    required this.bytes,
-  });
-
-  final String name;
-  final String? extension;
-  final int size;
-  final Uint8List bytes;
 }
 
 class _EmptyDocumentsState extends StatelessWidget {

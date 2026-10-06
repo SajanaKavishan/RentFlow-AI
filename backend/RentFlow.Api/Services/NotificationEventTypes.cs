@@ -2,6 +2,14 @@ namespace RentFlow.Api.Services;
 
 internal static class NotificationEventTypes
 {
+    public const string MaintenanceSubmitted = "maintenance_request.submitted";
+    public const string MaintenanceTriaged = "maintenance_request.triaged";
+    public const string MaintenanceEstimatePreparation = "maintenance_request.estimate_preparation";
+    public const string MaintenanceEstimateReview = "maintenance_request.estimate_review";
+    public const string MaintenanceCoordinationReview = "maintenance_request.coordination_review";
+    public const string LeaseCreationRequired = "rental_offer.accepted";
+    public const string LeaseActivationRequired = "lease.activation_required";
+    public const string ManualPaymentReview = "payment.manual_review";
     public const string ViewingCreated = "viewing.created";
     public const string ViewingApproved = "viewing.approved";
     public const string ViewingRejected = "viewing.rejected";
@@ -15,4 +23,5 @@ internal static class NotificationEventTypes
         "maintenance_technician.activated";
     public const string AccountPasswordChanged = "account.password_changed";
     public const string AccountPasswordReset = "account.password_reset";
+    public const string MaintenanceRequestAssigned = "maintenance_request.assigned";
 }

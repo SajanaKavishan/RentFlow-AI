@@ -5,13 +5,14 @@ using RentFlow.Api.Authorization;
 using RentFlow.Api.Data;
 using RentFlow.Api.DTOs.Auth;
 using RentFlow.Api.Models;
+using RentFlow.Api.Services.Interfaces;
 
 namespace RentFlow.Api.Controllers;
 
 [ApiController]
 [Route("api/admin/users")]
 [Authorize(Policy = AuthorizationPolicies.ActiveAdmin)]
-public sealed class AdminUsersController(ApplicationDbContext dbContext) : ControllerBase
+public sealed class AdminUsersController(ApplicationDbContext dbContext, ICurrentUserService currentUser, TimeProvider clock) : ControllerBase
 {
     private const int DefaultPageSize = 20;
     private const int MaximumPageSize = 100;
@@ -112,6 +113,41 @@ public sealed class AdminUsersController(ApplicationDbContext dbContext) : Contr
             }
         });
     }
+
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<AdminUserDetailsDto>> GetUser(Guid id, CancellationToken ct)
+    {
+        var user = await dbContext.Users.AsNoTracking().SingleOrDefaultAsync(user => user.Id == id, ct);
+        return user is null ? NotFound() : Ok(Details(user));
+    }
+
+    [HttpPatch("{id:guid}/deactivate")]
+    public async Task<ActionResult<AdminUserDetailsDto>> Deactivate(Guid id, CancellationToken ct)
+    {
+        if (currentUser.UserId is not Guid actor) return Unauthorized();
+        if (actor == id) return Conflict(new ProblemDetails { Status = 409, Detail = "You cannot deactivate your own Admin account." });
+        await using var transaction = dbContext.Database.IsRelational() ? await dbContext.Database.BeginTransactionAsync(ct) : null;
+        if (transaction is not null)
+            await dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Users\" WHERE \"Id\" = {actor} OR \"Id\" = {id} ORDER BY \"Id\" FOR UPDATE", ct);
+        if (!await dbContext.Users.AsNoTracking().AnyAsync(user => user.Id == actor && user.IsActive && user.Role == UserRole.Admin, ct)) return Unauthorized();
+        var target = await dbContext.Users.SingleOrDefaultAsync(user => user.Id == id, ct);
+        if (target is null) return NotFound();
+        if (target.IsActive)
+        {
+            var now = clock.GetUtcNow();
+            target.IsActive = false;
+            target.TokenVersion = checked(target.TokenVersion + 1);
+            target.UpdatedAt = now;
+            foreach (var token in await dbContext.TechnicianPasswordSetupTokens.Where(token => token.UserId == id && token.ConsumedAt == null).ToListAsync(ct)) token.ConsumedAt = now;
+            foreach (var token in await dbContext.PasswordResetTokens.Where(token => token.UserId == id && token.ConsumedAt == null).ToListAsync(ct)) token.ConsumedAt = now;
+            await dbContext.SaveChangesAsync(ct);
+        }
+        if (transaction is not null) await transaction.CommitAsync(ct);
+        return Ok(Details(target));
+    }
+
+    private static AdminUserDetailsDto Details(ApplicationUser user) => new(user.Id, user.FullName, user.Email,
+        user.PhoneNumber, user.Role, user.IsActive, user.CreatedAt);
 
     private BadRequestObjectResult InvalidQuery(string detail) => BadRequest(new ProblemDetails
     {

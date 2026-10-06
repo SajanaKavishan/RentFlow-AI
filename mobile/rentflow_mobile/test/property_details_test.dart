@@ -375,6 +375,70 @@ void main() {
     },
   );
 
+  testWidgets(
+    'mutes viewing booking when the tenant already booked this property',
+    (tester) async {
+      late ApiClient client;
+      final listing = propertyJson();
+      final service = serviceWith(
+        register: (value) => client = value,
+        respond: (request) {
+          if (request.url.path == '/api/viewings') {
+            return http.Response(
+              jsonEncode([
+                {
+                  'id': 'viewing-1',
+                  'tenantId': 'tenant-1',
+                  'propertyId': id,
+                  'requestedDateTime': '2026-10-20T10:00:00Z',
+                  'status': 0,
+                  'tenantMessage': 'I would like to view this property.',
+                  'landlordResponse': null,
+                  'createdAt': '2026-10-01T10:00:00Z',
+                  'updatedAt': null,
+                },
+              ]),
+              200,
+            );
+          }
+          if (request.url.path.endsWith('/images')) {
+            return http.Response('[]', 200);
+          }
+          if (request.url.path.endsWith('/landlord-summary')) {
+            return http.Response(
+              jsonEncode({
+                'displayName': 'Maya Perera',
+                'memberSinceYear': 2022,
+                'hasProfileImage': false,
+              }),
+              200,
+            );
+          }
+          return http.Response(jsonEncode(listing), 200);
+        },
+      );
+      addTearDown(client.close);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(),
+          home: PropertyDetailsScreen(
+            property: Property.fromJson(listing),
+            propertyApiService: service,
+            viewingApiService: ViewingApiService(client),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final button = tester.widget<OutlinedButton>(
+        find.byKey(const Key('details-book-viewing')),
+      );
+      expect(button.onPressed, isNull);
+      expect(find.text('Viewing booked'), findsOneWidget);
+    },
+  );
+
   testWidgets('unavailable details omit actions and absent preferences', (
     tester,
   ) async {

@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useLandlordActions } from '../../../shared/layout/LandlordActionsContext.js'
+import { useNotificationCount } from '../../notifications/NotificationCountContext.js'
 import { useAuth } from '../../auth/useAuth.js'
 import { USER_ROLES } from '../../auth/authModel.js'
 import usePropertyContext from '../../../shared/property/usePropertyContext.js'
@@ -7,7 +10,7 @@ import {
   assignMaintenanceTechnician,
   getMaintenanceTechnicians,
   getLandlordMaintenanceProperties,
-  getCoordinationWorkflow,
+  getLatestCoordinationWorkflow,
   getLatestEstimate,
   getMaintenanceHistory,
   getMaintenanceRequestById,
@@ -25,6 +28,7 @@ import {
   MAINTENANCE_STATUS,
   maintenanceEnumLabel,
 } from '../services/maintenanceEnums.js'
+import AiCoordinationCard from '../components/AiCoordinationCard.jsx'
 import '../maintenance.css'
 
 function safeErrorMessage(error, fallback) {
@@ -41,14 +45,6 @@ function formatDate(value) {
   })
 }
 
-const STATUS_LABELS = {
-  AwaitingHumanReview: 'Awaiting Human Review',
-  Pending: 'Pending',
-  Running: 'Running',
-  Failed: 'Failed',
-  Completed: 'Completed',
-}
-
 const ESTIMATE_STATUS_LABELS = {
   0: 'Draft',
   1: 'Submitted',
@@ -57,8 +53,6 @@ const ESTIMATE_STATUS_LABELS = {
   4: 'Rejected',
   5: 'Superseded',
 }
-
-const WORKFLOW_STORAGE_PREFIX = 'rentflow.maintenance.workflow.'
 
 function formatLabel(value, labels = {}) {
   if (value == null || value === '') return 'Unknown'
@@ -69,6 +63,16 @@ function formatLabel(value, labels = {}) {
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/_/g, ' ')
     .trim()
+}
+
+function historyActorLabel(entry) {
+  if (entry.changedByName) {
+    const role = entry.changedByRole === 'MaintenanceTechnician'
+      ? 'Technician'
+      : formatLabel(entry.changedByRole)
+    return entry.changedByRole ? `${role} · ${entry.changedByName}` : entry.changedByName
+  }
+  return entry.changedByRole ? formatLabel(entry.changedByRole) : 'System'
 }
 
 function toBadgeClass(value) {
@@ -87,24 +91,12 @@ function money(value) {
   }).format(Number(value))
 }
 
-function extractWorkflowId(request) {
-  if (!request || typeof request !== 'object') return null
-
-  const candidates = [
-    request.coordinationWorkflowId,
-    request.workflowId,
-    request.latestWorkflowId,
-    request.currentWorkflowId,
-    request.coordinationWorkflow?.id,
-    request.coordinationWorkflow?.workflowId,
-    request.latestCoordinationWorkflow?.id,
-    request.latestCoordinationWorkflow?.workflowId,
-  ]
-
-  return candidates.find((value) => value != null && value !== '') ?? null
-}
-
 export default function LandlordMaintenancePage() {
+  const actionSummary = useLandlordActions()
+  const notificationCount = useNotificationCount()
+  function refreshActionCounts() { actionSummary?.refresh(); notificationCount?.refreshCount?.() }
+  const [searchParams] = useSearchParams()
+  const requestedRequestId = searchParams.get('requestId')
   const { propertyId } = usePropertyContext()
   const { user } = useAuth()
 
@@ -116,6 +108,10 @@ export default function LandlordMaintenancePage() {
   const [requests, setRequests] = useState([])
   const [selectedRequestId, setSelectedRequestId] = useState(null)
   const selectedRequestIdRef = useRef(null)
+  const detailLoadVersionRef = useRef(0)
+  const coordinationOperationRef = useRef(0)
+  const coordinationPendingRef = useRef(false)
+  const coordinationRequestsRef = useRef(new Map())
   const [selectedRequest, setSelectedRequest] = useState(null)
   const [history, setHistory] = useState([])
   const [latestEstimate, setLatestEstimate] = useState(null)
@@ -149,6 +145,11 @@ export default function LandlordMaintenancePage() {
 
   const isLandlord = user && [USER_ROLES.LANDLORD, USER_ROLES.ADMIN].includes(user.role)
   const activePropertyId = propertyId || selectedPropertyId
+
+  useEffect(() => () => {
+    ++detailLoadVersionRef.current
+    ++coordinationOperationRef.current
+  }, [])
 
   useEffect(() => {
     if (!isLandlord || propertyId) return undefined
@@ -187,6 +188,12 @@ export default function LandlordMaintenancePage() {
   }, [])
 
   const loadRequestDetails = useCallback(async (requestId) => {
+    const loadVersion = ++detailLoadVersionRef.current
+    const isCurrent = () => detailLoadVersionRef.current === loadVersion
+    ++coordinationOperationRef.current
+    coordinationPendingRef.current = false
+    setDecisionPending(false)
+    setWorkflow(null)
     if (!requestId) {
       setSelectedRequest(null)
       setHistory([])
@@ -225,6 +232,7 @@ export default function LandlordMaintenancePage() {
 
     try {
       const request = await getMaintenanceRequestById(requestId)
+      if (!isCurrent()) return
       setSelectedRequest(request)
       setDetailState('success')
       setTriageCategory(request.category)
@@ -237,9 +245,11 @@ export default function LandlordMaintenancePage() {
         setTechnicianState('loading')
         try {
           const nextTechnicians = await getMaintenanceTechnicians()
+          if (!isCurrent()) return
           setTechnicians(Array.isArray(nextTechnicians) ? nextTechnicians : [])
           setTechnicianState(nextTechnicians?.length ? 'success' : 'empty')
         } catch (technicianLoadError) {
+          if (!isCurrent()) return
           setTechnicians([])
           setTechnicianState('error')
           setTechnicianError(technicianLoadError.message || 'Unable to load maintenance technicians.')
@@ -251,9 +261,11 @@ export default function LandlordMaintenancePage() {
 
       try {
         const nextHistory = await getMaintenanceHistory(requestId)
+        if (!isCurrent()) return
         setHistory(Array.isArray(nextHistory) ? nextHistory : [])
         setHistoryState('success')
       } catch (historyError) {
+        if (!isCurrent()) return
         setHistory([])
         setHistoryState('error')
         setHistoryError(
@@ -266,9 +278,11 @@ export default function LandlordMaintenancePage() {
 
       try {
         const latest = await getLatestEstimate(requestId)
+        if (!isCurrent()) return
         setLatestEstimate(latest ?? null)
         setEstimateState(latest ? 'success' : 'empty')
       } catch (estimateError) {
+        if (!isCurrent()) return
         setLatestEstimate(null)
         if (estimateError instanceof MaintenanceApiError && estimateError.statusCode === 404) {
           setEstimateState('empty')
@@ -284,36 +298,29 @@ export default function LandlordMaintenancePage() {
         }
       }
 
-      let workflowId = extractWorkflowId(request)
-      if (!workflowId) {
-        try {
-          workflowId = window.localStorage.getItem(`${WORKFLOW_STORAGE_PREFIX}${requestId}`)
-        } catch {
-          workflowId = null
-        }
-      }
-      if (!workflowId) {
-        setWorkflow(null)
-        setWorkflowState('none')
-        setWorkflowError('')
-        return
-      }
-
       try {
-        const nextWorkflow = await getCoordinationWorkflow(requestId, workflowId)
-        setWorkflow(nextWorkflow)
-        setWorkflowState('success')
-      } catch (workflowError) {
+        // A refresh/reselection joins the same request's ongoing operation instead
+        // of briefly showing an empty analysis or allowing another POST.
+        const ongoing = coordinationRequestsRef.current.get(requestId)
+        if (ongoing) {
+          setWorkflowState(ongoing.analyzing ? 'analyzing' : 'loading')
+          setDecisionPending(true)
+        }
+        const nextWorkflow = ongoing ? await ongoing.promise : await getLatestCoordinationWorkflow(requestId)
+        if (!isCurrent()) return
+        setWorkflow(nextWorkflow ?? null)
+        setWorkflowState(nextWorkflow ? 'success' : 'none')
+        setWorkflowError('')
+      } catch {
+        if (!isCurrent()) return
         setWorkflow(null)
         setWorkflowState('error')
-        setWorkflowError(
-          safeErrorMessage(
-            workflowError,
-            'Unable to load the coordination workflow. Please try again.',
-          ),
-        )
+        setWorkflowError('AI analysis unavailable')
+      } finally {
+        if (isCurrent()) setDecisionPending(false)
       }
     } catch (requestError) {
+      if (!isCurrent()) return
       setSelectedRequest(null)
       setHistory([])
       setLatestEstimate(null)
@@ -367,7 +374,7 @@ export default function LandlordMaintenancePage() {
       const currentRequestId = selectedRequestIdRef.current
       const nextSelectedId = currentRequestId && safeRequests.some((request) => request.id === currentRequestId)
         ? currentRequestId
-        : safeRequests[0].id
+        : safeRequests.find((request) => request.id === requestedRequestId)?.id || safeRequests[0].id
 
       setPageState('success')
       updateSelectedRequestId(nextSelectedId)
@@ -389,7 +396,7 @@ export default function LandlordMaintenancePage() {
       setDetailState('idle')
       setDetailError('')
     }
-  }, [activePropertyId, loadRequestDetails, updateSelectedRequestId])
+  }, [activePropertyId, loadRequestDetails, updateSelectedRequestId, requestedRequestId])
 
   useEffect(() => {
     if (!isLandlord) return undefined
@@ -402,71 +409,87 @@ export default function LandlordMaintenancePage() {
   }, [isLandlord, loadRequests])
 
   async function handleWorkflowDecision(action) {
-    if (!selectedRequest || !workflow || decisionPending) return
-
-    const workflowId = workflow.id
-    if (!workflowId) {
-      setWorkflowError('This coordination workflow does not contain a valid workflow ID.')
-      return
-    }
-
+    if (!selectedRequest || !workflow?.id || coordinationPendingRef.current ||
+        coordinationRequestsRef.current.has(selectedRequest.id) ||
+        workflow.status !== 'AwaitingHumanReview' || workflow.approvalStatus !== 'Pending') return
+    const requestId = selectedRequest.id
+    const operation = ++coordinationOperationRef.current
+    const isCurrent = () => coordinationOperationRef.current === operation &&
+      selectedRequestIdRef.current === requestId
+    coordinationPendingRef.current = true
     setDecisionPending(true)
     setDecisionNotice('')
     setWorkflowError('')
-
+    const operationPromise = action === 'approve'
+      ? approveCoordinationWorkflow(requestId, workflow.id, decisionNotes)
+      : rejectCoordinationWorkflow(requestId, workflow.id, decisionNotes)
+    coordinationRequestsRef.current.set(requestId, { promise: operationPromise, analyzing: false })
     try {
-      const nextWorkflow = action === 'approve'
-        ? await approveCoordinationWorkflow(selectedRequest.id, workflowId, decisionNotes)
-        : await rejectCoordinationWorkflow(selectedRequest.id, workflowId, decisionNotes)
-
+      const nextWorkflow = await operationPromise
+      refreshActionCounts()
+      if (!isCurrent()) return
       setWorkflow(nextWorkflow)
       setWorkflowState('success')
-      setDecisionNotice(
-        action === 'approve'
-          ? 'AI/workflow review approved. This does not change the maintenance request status.'
-          : 'AI/workflow review rejected. This does not change the maintenance request status.',
-      )
-    } catch (error) {
-      setWorkflowError(
-        safeErrorMessage(
-          error,
-          'Unable to record the workflow decision. Please try again.',
-        ),
-      )
+    } catch {
+      if (isCurrent()) setWorkflowError('Unable to record the recommendation review.')
     } finally {
-      setDecisionPending(false)
+      if (coordinationRequestsRef.current.get(requestId)?.promise === operationPromise) {
+        coordinationRequestsRef.current.delete(requestId)
+      }
+      if (isCurrent()) {
+        coordinationPendingRef.current = false
+        setDecisionPending(false)
+      }
     }
   }
 
-  async function beginCoordinationWorkflow() {
-    if (!selectedRequest || decisionPending) return
+  async function loadCoordinationWorkflow(analyze) {
+    if (!selectedRequest || coordinationPendingRef.current || coordinationRequestsRef.current.has(selectedRequest.id)) return
+    const requestId = selectedRequest.id
+    const operation = ++coordinationOperationRef.current
+    const isCurrent = () => coordinationOperationRef.current === operation &&
+      selectedRequestIdRef.current === requestId
+    coordinationPendingRef.current = true
     setDecisionPending(true)
     setWorkflowError('')
     setDecisionNotice('')
-    setWorkflowState('loading')
+    setWorkflowState(analyze ? 'analyzing' : 'loading')
+    const operationPromise = analyze
+      ? startCoordinationWorkflow(requestId)
+      : getLatestCoordinationWorkflow(requestId)
+    coordinationRequestsRef.current.set(requestId, { promise: operationPromise, analyzing: analyze })
     try {
-      const started = await startCoordinationWorkflow(selectedRequest.id)
-      if (!started?.id) throw new Error('The workflow service did not return a workflow ID.')
-      try {
-        window.localStorage.setItem(
-          `${WORKFLOW_STORAGE_PREFIX}${selectedRequest.id}`,
-          started.id,
-        )
-      } catch {
-        // The server remains the source of truth; this only saves the lookup ID locally.
+      const nextWorkflow = await operationPromise
+      if (!isCurrent()) return
+      setWorkflow(nextWorkflow ?? null)
+      if (analyze) refreshActionCounts()
+      setWorkflowState(nextWorkflow ? 'success' : 'none')
+    } catch {
+      if (isCurrent()) {
+        setWorkflowState('error')
+        setWorkflowError('AI analysis unavailable')
       }
-      const persistedWorkflow = await getCoordinationWorkflow(selectedRequest.id, started.id)
-      setWorkflow(persistedWorkflow)
-      setWorkflowState('success')
-      setDecisionNotice('AI coordination started and saved.')
-    } catch (error) {
-      setWorkflowState('error')
-      setWorkflowError(
-        safeErrorMessage(error, 'Unable to start or read the coordination workflow. Please try again.'),
-      )
     } finally {
-      setDecisionPending(false)
+      if (coordinationRequestsRef.current.get(requestId)?.promise === operationPromise) {
+        coordinationRequestsRef.current.delete(requestId)
+      }
+      if (isCurrent()) {
+        coordinationPendingRef.current = false
+        setDecisionPending(false)
+      }
     }
+  }
+
+  function useSuggestionInTriage(result) {
+    if (selectedRequest?.status !== 'Submitted') return
+    if (result.suggestedCategory !== null) setTriageCategory(result.suggestedCategory)
+    // Keep a human Emergency selection when AI proposes a lower priority.
+    const keepEmergency = triagePriority === 'Emergency' || selectedRequest.priority === 'Emergency'
+    if (result.suggestedPriority !== null && !keepEmergency) setTriagePriority(result.suggestedPriority)
+    const keptPriorityNote = keepEmergency
+      ? (triagePriority === 'Emergency' ? ' Emergency priority was kept.' : ' Your selected priority was kept.')
+      : ''
+    setDecisionNotice('Triage suggestions filled in for review.' + keptPriorityNote + ' Submit triage separately to save.')
   }
 
   async function handleRequestTransition(action) {
@@ -490,6 +513,7 @@ export default function LandlordMaintenancePage() {
         await markMaintenanceEstimatePending(selectedRequest.id)
       }
       await loadRequests()
+      refreshActionCounts()
       setRequestActionNotice(
         action === 'triage' ? 'Request triaged.' :
           action === 'assign' ? 'Technician assigned.' : 'Estimate requested from the technician.',
@@ -510,6 +534,7 @@ export default function LandlordMaintenancePage() {
     setRequestActionNotice('')
     try {
       await reviewRepairEstimate(selectedRequest.id, latestEstimate.id, action, estimateReviewNotes)
+      refreshActionCounts()
       await loadRequests()
       setRequestActionNotice(
         action === 'approve' ? 'Repair estimate approved.' :
@@ -524,29 +549,17 @@ export default function LandlordMaintenancePage() {
     }
   }
 
-  const workflowRequiresDecision =
-    workflow && workflow.status === 'AwaitingHumanReview' && workflow.requiresHumanApproval !== false
   const isPageLoading = Boolean(isLandlord && pageState === 'loading')
 
   return (
     <main className="maintenance-page maintenance-page--landlord" aria-busy={isPageLoading}>
       <header className="maintenance-page__header">
         <div>
-          <p className="maintenance-page__eyebrow">Landlord workspace</p>
           <h1>Maintenance &amp; support management</h1>
           <p>
-            Review property maintenance issues, inspect request details, and handle AI coordination workflow decisions.
+            Review property maintenance issues and keep every maintenance decision under human control.
           </p>
         </div>
-        <button
-          type="button"
-          className="button button--quiet maintenance-page__refresh"
-          onClick={loadRequests}
-          disabled={isPageLoading || !propertyId || !isLandlord}
-        >
-          <span aria-hidden="true">↻</span>
-          {isPageLoading ? 'Refreshing...' : 'Refresh'}
-        </button>
       </header>
 
       {!isLandlord && (
@@ -594,11 +607,19 @@ export default function LandlordMaintenancePage() {
               <option value="">Choose a property</option>
               {properties.map((property) => (
                 <option key={property.id} value={property.id}>
-                  {[property.title, property.address, property.city].filter(Boolean).join(' — ')}
+                  {[property.title, property.address, property.city].filter(Boolean).join(' — ')}{actionSummary?.status === 'ready' && actionSummary.data.maintenanceByProperty.find((item) => item.propertyId.toLowerCase() === property.id.toLowerCase())?.count > 0 ? ` [${actionSummary.data.maintenanceByProperty.find((item) => item.propertyId.toLowerCase() === property.id.toLowerCase()).count}]` : ''}
                 </option>
               ))}
             </select>
           </label>
+          {actionSummary?.status === 'ready' && <ul className="maintenance-property-actions" aria-label="Property maintenance actions">
+            {properties.map((property) => {
+              const count = actionSummary.data.maintenanceByProperty.find((item) => item.propertyId.toLowerCase() === property.id.toLowerCase())?.count || 0
+              return <li key={property.id}><button type="button" className="maintenance-property-action" aria-pressed={selectedPropertyId === property.id} onClick={() => setSelectedPropertyId(property.id)}>
+                <span>{property.title}</span>{count > 0 && <span className="shared-nav-link__pending" aria-label={`${count} actions required`}>{count}</span>}
+              </button></li>
+            })}
+          </ul>}
         </section>
       )}
 
@@ -690,7 +711,7 @@ export default function LandlordMaintenancePage() {
                 <div className="maintenance-detail__topline">
                   <div>
                     <p className="maintenance-page__eyebrow">Selected request</p>
-                    <h3>{selectedRequest.title}</h3>
+                    <h2>{selectedRequest.title}</h2>
                   </div>
                   <span className={`status-badge status-badge--${toBadgeClass(selectedRequest.status)}`}>
                     {maintenanceEnumLabel(selectedRequest.status, MAINTENANCE_STATUS)}
@@ -707,12 +728,12 @@ export default function LandlordMaintenancePage() {
                     <dd>{maintenanceEnumLabel(selectedRequest.priority, MAINTENANCE_PRIORITY)}</dd>
                   </div>
                   <div>
-                    <dt>Tenant ID</dt>
-                    <dd>{selectedRequest.tenantId}</dd>
+                    <dt>Tenant</dt>
+                    <dd>{selectedRequest.tenantName || 'Tenant'}</dd>
                   </div>
                   <div>
-                    <dt>Technician ID</dt>
-                    <dd>{selectedRequest.technicianId ?? 'Unassigned'}</dd>
+                    <dt>Technician</dt>
+                    <dd>{selectedRequest.assignedTechnicianName || 'Unassigned'}</dd>
                   </div>
                   <div>
                     <dt>Created</dt>
@@ -752,6 +773,26 @@ export default function LandlordMaintenancePage() {
               </div>
             )}
 
+            {detailState === 'success' && selectedRequest && <AiCoordinationCard
+              request={selectedRequest}
+              workflow={workflow}
+              state={workflowState}
+              pending={decisionPending}
+              error={workflowError}
+              notice={decisionNotice}
+              decisionNotes={decisionNotes}
+              onDecisionNotesChange={setDecisionNotes}
+              onAnalyze={() => loadCoordinationWorkflow(true)}
+              onRefresh={() => loadCoordinationWorkflow(false)}
+              onDecision={handleWorkflowDecision}
+              onUseSuggestions={selectedRequest.status === 'Submitted' ? useSuggestionInTriage : undefined}
+            />}
+
+            {detailState === 'success' && selectedRequest && <div className="maintenance-request-actions-heading">
+              <h3>Request actions</h3>
+              <p>Review and submit maintenance changes separately.</p>
+            </div>}
+
             {detailState === 'success' && selectedRequest?.status === 'Submitted' && (
               <section className="maintenance-detail__section" aria-label="Triage request">
                 <h4>Triage request</h4>
@@ -761,7 +802,7 @@ export default function LandlordMaintenancePage() {
                       Category
                       <select value={triageCategory} onChange={(event) => setTriageCategory(event.target.value)}>
                         {Object.keys(MAINTENANCE_CATEGORY.byName).map((category) => (
-                          <option key={category} value={category}>{category}</option>
+                          <option key={category} value={category}>{maintenanceEnumLabel(category, MAINTENANCE_CATEGORY)}</option>
                         ))}
                       </select>
                     </label>
@@ -808,7 +849,7 @@ export default function LandlordMaintenancePage() {
                         <option value="">Choose a technician</option>
                         {technicians.map((technician) => (
                           <option key={technician.id} value={technician.id}>
-                            {technician.name || technician.fullName || technician.id}
+                            {technician.name || technician.fullName || 'Technician'}
                           </option>
                         ))}
                       </select>
@@ -888,7 +929,7 @@ export default function LandlordMaintenancePage() {
                       </span>
                     </div>
                     <div className="maintenance-request-card__meta">
-                      <span>Changed by {entry.changedByUserId ?? 'System'}</span>
+                      <span>Changed by {historyActorLabel(entry)}</span>
                       <span>{formatDate(entry.changedAt)}</span>
                     </div>
                     {entry.notes && <small>{entry.notes}</small>}
@@ -932,7 +973,7 @@ export default function LandlordMaintenancePage() {
                 <p><strong>Parts:</strong> {money(latestEstimate.partsCost)}</p>
                 <p><strong>Additional:</strong> {money(latestEstimate.additionalCost)}</p>
                 {latestEstimate.notes && <p><strong>Notes:</strong> {latestEstimate.notes}</p>}
-                <p><strong>Technician ID:</strong> {latestEstimate.technicianId}</p>
+                <p><strong>Technician:</strong> {selectedRequest.assignedTechnicianName || 'Unassigned'}</p>
                 <p><strong>Submitted:</strong> {formatDate(latestEstimate.submittedAt || latestEstimate.createdAt)}</p>
                 {selectedRequest?.status === 'AwaitingLandlordApproval' &&
                   (latestEstimate.status === 1 || latestEstimate.status === 'Submitted') && (
@@ -976,114 +1017,6 @@ export default function LandlordMaintenancePage() {
               </div>
             )}
 
-            <div className="maintenance-panel__header" style={{ marginTop: '28px' }}>
-              <p className="maintenance-page__eyebrow">AI workflow</p>
-              <h2>Coordination review</h2>
-            </div>
-
-            {workflowState === 'none' && (
-              <div className="page-state page-state--inline">
-                <h3>No coordination workflow available</h3>
-                <p>Start AI coordination to create and save a workflow for this maintenance request.</p>
-                <button
-                  type="button"
-                  className="button button--primary"
-                  onClick={beginCoordinationWorkflow}
-                  disabled={decisionPending}
-                >
-                  {decisionPending ? 'Starting…' : 'Start AI coordination'}
-                </button>
-              </div>
-            )}
-
-            {workflowState === 'loading' && (
-              <div className="page-state page-state--inline" aria-live="polite">
-                <span className="loading-spinner" aria-hidden="true" />
-                <h3>Loading workflow</h3>
-              </div>
-            )}
-
-            {workflowState === 'error' && (
-              <div className="page-state page-state--inline page-state--error" role="alert">
-                <div className="page-state__icon" aria-hidden="true">!</div>
-                <h3>Workflow unavailable</h3>
-                <p>{workflowError}</p>
-                <button
-                  type="button"
-                  className="button button--quiet"
-                  onClick={beginCoordinationWorkflow}
-                  disabled={decisionPending}
-                >
-                  Start a new workflow
-                </button>
-              </div>
-            )}
-
-            {workflowState === 'success' && workflow && (
-              <div className="maintenance-detail__section">
-                <p><strong>Workflow ID:</strong> {workflow.id}</p>
-                <p><strong>Status:</strong> {formatLabel(workflow.status, STATUS_LABELS)}</p>
-                <p><strong>Approval status:</strong> {formatLabel(workflow.approvalStatus, STATUS_LABELS)}</p>
-                <p><strong>Requires human approval:</strong> {workflow.requiresHumanApproval ? 'Yes' : 'No'}</p>
-                {workflow.planSummary && <p><strong>Plan summary:</strong> {workflow.planSummary}</p>}
-                {workflow.executionSummary && <p><strong>Execution summary:</strong> {workflow.executionSummary}</p>}
-                {workflow.finalResultJson && <p><strong>Result:</strong> {workflow.finalResultJson}</p>}
-
-                {workflowRequiresDecision && (
-                  <div style={{ marginTop: '16px' }}>
-                    <p className="maintenance-page__eyebrow" style={{ marginBottom: '10px' }}>
-                      AI / workflow review decision
-                    </p>
-                    <label>
-                      <span>Decision notes</span>
-                      <textarea
-                        value={decisionNotes}
-                        onChange={(event) => setDecisionNotes(event.target.value)}
-                        rows={4}
-                        placeholder="Optional decision notes for the AI coordination review"
-                      />
-                    </label>
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                      <button
-                        type="button"
-                        className="button button--primary"
-                        onClick={() => handleWorkflowDecision('approve')}
-                        disabled={decisionPending}
-                      >
-                        {decisionPending ? 'Approving...' : 'Approve'}
-                      </button>
-                      <button
-                        type="button"
-                        className="button button--quiet"
-                        onClick={() => handleWorkflowDecision('reject')}
-                        disabled={decisionPending}
-                      >
-                        {decisionPending ? 'Rejecting...' : 'Reject'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {!workflowRequiresDecision && workflow.approvalStatus !== 'Pending' && (
-                  <p style={{ marginTop: '12px' }}>
-                    <strong>Review outcome:</strong> {formatLabel(workflow.approvalStatus, STATUS_LABELS)}
-                  </p>
-                )}
-
-                {decisionNotice && (
-                  <div className="page-notice" role="status" style={{ marginTop: '12px' }}>
-                    <span className="page-notice__icon" aria-hidden="true">✓</span>
-                    <span>{decisionNotice}</span>
-                  </div>
-                )}
-
-                {workflowError && (
-                  <div className="form-message form-message--error" style={{ marginTop: '12px' }}>
-                    {workflowError}
-                  </div>
-                )}
-              </div>
-            )}
           </aside>
         </div>
       )}

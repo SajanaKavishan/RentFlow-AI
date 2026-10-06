@@ -183,16 +183,26 @@ describe('tenant dashboard', () => {
     renderApp()
 
     const activity = screen.getByRole('region', { name: 'Recent Activity' })
-    const items = await within(activity).findAllByRole('listitem')
-    expect(items).toHaveLength(6)
+    let items = await within(activity).findAllByRole('listitem')
+    expect(items).toHaveLength(3)
     expect(items.map((item) => within(item).getByText(/Notification|Maintenance|Payment|Viewing|Application|Lease/, { selector: '.tenant-activity__source' }).textContent))
-      .toEqual(['Notification', 'Maintenance', 'Payment', 'Viewing', 'Application', 'Lease'])
+      .toEqual(['Notification', 'Maintenance', 'Payment'])
     expect(within(activity).getByText('Kitchen tap leak')).toBeInTheDocument()
     expect(within(activity).getByText('Rs. 85,000 via Bank transfer')).toBeInTheDocument()
     expect(within(activity).getByRole('link', { name: 'Open Payment completed' })).toHaveAttribute('href', '/modules/lease-payments')
+    const viewAll = within(activity).getByRole('button', { name: 'View all' })
+    expect(viewAll).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(viewAll)
+    items = within(activity).getAllByRole('listitem')
+    expect(items).toHaveLength(6)
+    expect(items.map((item) => within(item).getByText(/Notification|Maintenance|Payment|Viewing|Application|Lease/, { selector: '.tenant-activity__source' }).textContent))
+      .toEqual(['Notification', 'Maintenance', 'Payment', 'Viewing', 'Application', 'Lease'])
     expect(within(activity).getByRole('link', { name: 'Open Viewing completed' })).toHaveAttribute('href', '/modules/my-viewings')
     expect(within(activity).queryByRole('link', { name: 'Open Repair in progress' })).not.toBeInTheDocument()
-    expect(within(activity).queryByRole('link', { name: 'View all' })).not.toBeInTheDocument()
+    const showLess = within(activity).getByRole('button', { name: 'Show less' })
+    expect(showLess).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.click(showLess)
+    expect(within(activity).getAllByRole('listitem')).toHaveLength(3)
   })
 
   it('keeps available activity visible when one source fails and retries that source', async () => {
@@ -286,7 +296,7 @@ describe('tenant dashboard', () => {
     const viewingLink = await screen.findByRole('link', { name: 'View request' })
     expect(viewingLink).toHaveAttribute('href', '/modules/my-viewings')
     await userEvent.click(viewingLink)
-    expect(await screen.findByRole('heading', { name: 'My Viewings' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Your requests' })).toBeInTheDocument()
   })
 
   it('keeps recommendation, property discovery, and maintenance destinations honest', async () => {
@@ -296,9 +306,10 @@ describe('tenant dashboard', () => {
     expect(screen.getByRole('link', { name: 'Browse properties' })).toHaveAttribute('href', '/modules/properties')
     expect(screen.getByRole('region', { name: 'Open Request' })).toHaveTextContent('No open maintenance requests')
 
-    const maintenanceLink = within(screen.getByRole('main')).getByRole('link', { name: 'Maintenance' })
+    expect(within(screen.getByRole('main')).queryByRole('link', { name: 'Maintenance' })).not.toBeInTheDocument()
+    expect(within(screen.getByRole('main')).queryByRole('region', { name: 'Lease & Payments' })).not.toBeInTheDocument()
+    const maintenanceLink = within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Maintenance' })
     expect(maintenanceLink).toHaveAttribute('href', '/modules/maintenance')
-    expect(maintenanceLink).toHaveTextContent('Request repairs and track their progress.')
     expect(maintenanceLink).not.toHaveTextContent('Integration pending')
     await userEvent.click(maintenanceLink)
     expect(await screen.findByRole('heading', { name: 'Maintenance requests' })).toBeInTheDocument()
@@ -307,7 +318,7 @@ describe('tenant dashboard', () => {
   it('opens the tenant lease and payments workspace from the sidebar', async () => {
     renderApp()
     await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Lease & Payments' }))
-    expect(screen.getByRole('heading', { name: 'Lease & Payments' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My Lease & Payments' })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Lease and payment sections' })).toBeInTheDocument()
   })
 

@@ -7,6 +7,7 @@ import { PendingApplicationsContext } from '../../../shared/layout/PendingApplic
 import Icon from '../../../shared/ui/Icons.jsx'
 import { APPLICATION_STATUS_DETAILS } from '../components/applicationStatus.js'
 import RentalApplicationListCard from '../components/RentalApplicationListCard.jsx'
+import ApplicationPropertySelector from '../components/ApplicationPropertySelector.jsx'
 import {
   approveApplication,
   getApplicationsByProperty,
@@ -113,6 +114,8 @@ function RentalApplicationsPage() {
     : pageState.propertyId === propertyId
       ? pageState.status
       : 'loading'
+  const canRefreshPortfolio = !isAiReviewRoute && pageStatus === 'property-context'
+    && selection.collection?.status === 'ready' && selection.collection.properties.length > 0
 
   useEffect(() => {
     if (!propertyId || selection.status !== 'selected') return undefined
@@ -149,6 +152,10 @@ function RentalApplicationsPage() {
   }, [propertyId, reloadKey, selection.status])
 
   function loadApplications() {
+    if (canRefreshPortfolio) {
+      setReloadKey((value) => value + 1)
+      return
+    }
     if (!propertyId || selection.status !== 'selected' || pageStatus === 'loading') return
 
     setPageState((current) => ({
@@ -252,6 +259,7 @@ function RentalApplicationsPage() {
       {selection.property && <Link className="applications-page__back" to={`/properties/${encodeURIComponent(propertyId)}`}>
         <span aria-hidden="true">&larr;</span> Back to Property
       </Link>}
+      {selection.property && !isAiReviewRoute && <Link className="applications-page__back" to="/rental-applications">Change property</Link>}
       <header className="applications-page__header">
         <div className="applications-page__intro">
           <h1>{isAiReviewRoute ? 'AI Review' : 'Rental Applications'}</h1>
@@ -274,20 +282,15 @@ function RentalApplicationsPage() {
             <div><dt>Total</dt><dd>{applications.length}</dd></div>
             <div><dt>Awaiting review</dt><dd>{awaitingReview}</dd></div>
           </dl>}
-          <button
-            type="button"
-            className="application-button application-button--quiet"
-            onClick={loadApplications}
-            disabled={selection.status !== 'selected' || pageStatus === 'loading'}
-          >
-            <Icon name="refresh" size={17} />Refresh
-          </button>
         </div>
       </header>
 
       {pageStatus === 'property-context' && (
-        <PropertySelectionState className="applications-state" destination={isAiReviewRoute ? 'ai-review' : 'rental-applications'}
-          selectedPropertyId={selection.status === 'unauthorized' ? propertyId : null} />
+        isAiReviewRoute
+          ? <PropertySelectionState className="applications-state" destination="ai-review"
+              selectedPropertyId={selection.status === 'unauthorized' ? propertyId : null} />
+          : <ApplicationPropertySelector refreshKey={reloadKey}
+              selectedPropertyId={selection.status === 'unauthorized' ? propertyId : null} />
       )}
 
       {pageStatus === 'success' && notice.propertyId === propertyId && notice.message && (

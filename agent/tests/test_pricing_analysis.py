@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.conftest import authenticated_client
 
 import asyncio
 from typing import Any
@@ -115,7 +116,7 @@ class PricingProvider(ModelProvider):
 
 def test_valid_pricing_request_and_route_return_exact_structured_response(settings) -> None:
     provider = PricingProvider()
-    response = TestClient(create_app(settings=settings, model_provider=provider)).post(
+    response = authenticated_client(create_app(settings=settings, model_provider=provider)).post(
         "/internal/pricing-analysis/analyze",
         json=valid_request(),
     )
@@ -182,7 +183,7 @@ def test_plan_is_fixed_and_not_model_controlled(settings) -> None:
 def test_insufficient_evidence_skips_provider_and_returns_null_recommendation(settings) -> None:
     provider = PricingProvider()
     payload = valid_request("INSUFFICIENT", count=0)
-    response = TestClient(create_app(settings=settings, model_provider=provider)).post(
+    response = authenticated_client(create_app(settings=settings, model_provider=provider)).post(
         "/internal/pricing-analysis/analyze",
         json=payload,
     )
@@ -214,7 +215,7 @@ def test_insufficient_evidence_skips_provider_and_returns_null_recommendation(se
 )
 def test_sufficient_evidence_calls_provider_once(sufficiency: str, count: int, settings) -> None:
     provider = PricingProvider()
-    response = TestClient(create_app(settings=settings, model_provider=provider)).post(
+    response = authenticated_client(create_app(settings=settings, model_provider=provider)).post(
         "/internal/pricing-analysis/analyze",
         json=valid_request(sufficiency, count=count),
     )
@@ -225,7 +226,7 @@ def test_sufficient_evidence_calls_provider_once(sufficiency: str, count: int, s
 
 def test_model_prompt_enforces_evidence_boundary_and_request_provenance(settings) -> None:
     provider = PricingProvider()
-    response = TestClient(create_app(settings=settings, model_provider=provider)).post(
+    response = authenticated_client(create_app(settings=settings, model_provider=provider)).post(
         "/internal/pricing-analysis/analyze",
         json=valid_request(),
     )
@@ -257,7 +258,7 @@ def test_model_prompt_enforces_evidence_boundary_and_request_provenance(settings
 )
 def test_invalid_model_output_fails_safely(overrides: dict[str, Any], settings) -> None:
     provider = PricingProvider(response=valid_draft(**overrides))
-    response = TestClient(create_app(settings=settings, model_provider=provider)).post(
+    response = authenticated_client(create_app(settings=settings, model_provider=provider)).post(
         "/internal/pricing-analysis/analyze",
         json=valid_request(),
     )
@@ -282,7 +283,7 @@ def test_model_rationale_cannot_claim_currency_or_mutation(rationale: str) -> No
 
 def test_model_cannot_inject_authoritative_sufficiency_or_confidence(settings) -> None:
     provider = PricingProvider(response=valid_draft(evidenceSufficiency="STRONG", confidence="HIGH"))
-    response = TestClient(create_app(settings=settings, model_provider=provider)).post(
+    response = authenticated_client(create_app(settings=settings, model_provider=provider)).post(
         "/internal/pricing-analysis/analyze",
         json=valid_request(),
     )
@@ -301,7 +302,7 @@ def test_model_cannot_inject_authoritative_sufficiency_or_confidence(settings) -
 )
 def test_provider_failures_are_sanitized(failure: Exception, status: int, code: str, settings) -> None:
     provider = PricingProvider(failure=failure)
-    response = TestClient(create_app(settings=settings, model_provider=provider)).post(
+    response = authenticated_client(create_app(settings=settings, model_provider=provider)).post(
         "/internal/pricing-analysis/analyze",
         json=valid_request(),
     )
@@ -314,7 +315,7 @@ def test_provider_failures_are_sanitized(failure: Exception, status: int, code: 
 
 def test_malformed_provider_output_is_sanitized(settings) -> None:
     provider = PricingProvider(response={"recommendedMinRent": -1, "providerSecret": "hidden"})
-    response = TestClient(create_app(settings=settings, model_provider=provider)).post(
+    response = authenticated_client(create_app(settings=settings, model_provider=provider)).post(
         "/internal/pricing-analysis/analyze",
         json=valid_request(),
     )
@@ -326,7 +327,7 @@ def test_malformed_provider_output_is_sanitized(settings) -> None:
 
 def test_response_has_no_currency_or_database_evidence_identifiers(settings) -> None:
     provider = PricingProvider()
-    response = TestClient(create_app(settings=settings, model_provider=provider)).post(
+    response = authenticated_client(create_app(settings=settings, model_provider=provider)).post(
         "/internal/pricing-analysis/analyze",
         json=valid_request(),
     )

@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RentFlow.Api\RentFlow.Api.csproj" />
+    <ProjectReference Include="..\RentFlow.DevTools\RentFlow.DevTools.csproj" />
   </ItemGroup>
 
 </Project>

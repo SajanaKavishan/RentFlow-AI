@@ -72,11 +72,11 @@ public class ApplicationValidationAgentClient(
         HttpResponseMessage response;
         try
         {
-            response = await httpClient.PostAsJsonAsync(
+            response = await AgentServiceRequest.PostAsync(httpClient,
                 endpoint,
                 request,
                 ApplicationValidationResponseMapper.JsonOptions,
-                timeoutSource.Token);
+                serviceOptions.ServiceApiKey, timeoutSource.Token);
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {

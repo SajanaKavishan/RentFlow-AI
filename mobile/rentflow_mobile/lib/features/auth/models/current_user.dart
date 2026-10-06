@@ -23,6 +23,8 @@ class CurrentUser {
     this.hasProfileImage = false,
     this.publicContactPhone,
     this.publicContactEnabled = false,
+    this.maintenanceContactPhone,
+    this.maintenanceContactEnabled = false,
   });
 
   final String id;
@@ -33,6 +35,8 @@ class CurrentUser {
   final bool hasProfileImage;
   final String? publicContactPhone;
   final bool publicContactEnabled;
+  final String? maintenanceContactPhone;
+  final bool maintenanceContactEnabled;
 
   factory CurrentUser.fromJson(Map<String, dynamic> json) {
     final id = json['id'];
@@ -60,6 +64,14 @@ class CurrentUser {
       publicContactEnabled:
           json['role'] == UserRole.landlord.value &&
           json['publicContactEnabled'] == true,
+      maintenanceContactPhone:
+          json['role'] == UserRole.maintenanceTechnician.value &&
+              json['maintenanceContactPhone'] is String
+          ? json['maintenanceContactPhone'] as String
+          : null,
+      maintenanceContactEnabled:
+          json['role'] == UserRole.maintenanceTechnician.value &&
+          json['maintenanceContactEnabled'] == true,
     );
   }
 }

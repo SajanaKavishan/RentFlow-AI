@@ -43,6 +43,8 @@ Map<String, dynamic> _viewingJson(
   'tenantId': tenantId,
   'tenant': {'displayName': displayName, 'phoneNumber': phoneNumber},
   'propertyId': propertyId,
+  'propertyTitle': 'Garden House',
+  'durationMinutes': 60,
   'requestedDateTime': '2030-02-03T14:30:00Z',
   'status': status,
   'tenantMessage': 'Please confirm whether parking is available.',
@@ -318,7 +320,7 @@ void main() {
         expect(find.text('Pending'), findsOneWidget);
         expect(find.text('Approved'), findsOneWidget);
         expect(find.text('Rejected'), findsOneWidget);
-        expect(find.text('Property reference'), findsNWidgets(3));
+        expect(find.text('Property'), findsNWidgets(3));
         expect(find.text('Tenant'), findsNWidgets(3));
         expect(find.text('Chamodya Sayanjali'), findsNWidgets(3));
         expect(find.text(_tenantId), findsNothing);
@@ -385,7 +387,7 @@ void main() {
       }),
     );
 
-    expect(find.text(_propertyId), findsOneWidget);
+    expect(find.text('Garden House'), findsOneWidget);
     expect(find.text(_tenantId), findsNothing);
     expect(find.text('Chamodya Sayanjali'), findsOneWidget);
     expect(find.text(_phone), findsNothing);

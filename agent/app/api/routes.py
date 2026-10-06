@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from fastapi import APIRouter, Request
+from app.services.exceptions import ModelTimeoutError
+from app.services.maintenance_photo_evidence import prepare_visual_evidence
 
 from app.graph.workflow import build_application_validation_graph
 from app.graph.maintenance_workflow import build_maintenance_coordination_graph
@@ -99,22 +102,44 @@ async def analyze_maintenance_coordination(
         timeout_seconds=settings.ai_timeout_seconds,
         agent_version=settings.agent_version,
     )
-    result = await graph.ainvoke(
-        {
-            "maintenance_request": payload.model_dump(mode="json", by_alias=True),
-            "plan": None,
-            "issue_assessment": None,
-            "urgency_assessment": None,
-            "information_review": None,
-            "coordination_recommendation": None,
-            "final_summary": None,
-            "execution_steps": [],
-        }
-    )
+    budget = min(settings.ai_timeout_seconds, 30.0)
+    requested_budget = request.headers.get("X-RentFlow-Analysis-Budget-Seconds")
+    if requested_budget is not None:
+        try:
+            supplied_budget = float(requested_budget)
+            if not 0 < supplied_budget <= 300:
+                raise ValueError
+            budget = min(budget, supplied_budget)
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="Invalid analysis budget") from None
+    async def run_analysis():
+        evidence = await prepare_visual_evidence(payload, request.app.state.vision_model_provider, budget_seconds=budget)
+        # Media is held only for one optional assessment, never in graph/checkpoint state.
+        text_input = payload.model_dump(mode="json", by_alias=True,
+            exclude={"evidence_photos", "photo_limitations", "attachments", "maintenance_request_id"})
+        return await graph.ainvoke({
+                "maintenance_request": text_input,
+                "visual_evidence": evidence,
+                "plan": None,
+                "issue_assessment": None,
+                "urgency_assessment": None,
+                "information_review": None,
+                "coordination_recommendation": None,
+                "final_summary": None,
+                "execution_steps": [],
+            })
+    try:
+        result = await asyncio.wait_for(run_analysis(), timeout=budget)
+    except TimeoutError as exc:
+        raise ModelTimeoutError from exc
     return MaintenanceCoordinationResponse(
         maintenance_request_id=payload.maintenance_request_id,
         result=MaintenanceCoordinationSummary.model_validate(result["final_summary"]),
-        execution_metadata={"executedSteps": result["execution_steps"]},
+        execution_metadata={"executedSteps": result["execution_steps"], "photoEvidence": {
+            "suppliedPhotoCount": result["visual_evidence"]["suppliedPhotoCount"],
+            "analyzedPhotoCount": result["visual_evidence"]["analyzedPhotoCount"],
+        }},
     )
 @router.post(
     "/internal/pricing-analysis/analyze",

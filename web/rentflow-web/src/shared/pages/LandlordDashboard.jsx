@@ -8,12 +8,21 @@ import { useOwnedPropertySelection, useOwnedProperties } from '../property/useOw
 import { PageHeader } from '../ui/States.jsx'
 import Icon from '../ui/Icons.jsx'
 import usePropertySummary from './usePropertySummary.js'
+import useDashboardLeases, { renewalDays } from './useDashboardLeases.js'
+import useLandlordRevenue, { monthlyRevenue } from './useLandlordRevenue.js'
+import { getPropertyMaintenanceRequests } from '../../features/maintenance/services/maintenanceApiService.js'
+import { MAINTENANCE_STATUS } from '../../features/maintenance/services/maintenanceEnums.js'
 import useDashboardValidation, { isReviewable, WORKFLOW_STATUS } from './useDashboardValidation.js'
 import { PendingViewingsContext } from '../layout/PendingViewingsContext.js'
 import { PendingApplicationsContext } from '../layout/PendingApplicationsContext.js'
 import './landlord-dashboard.css'
 
 const LOADING_COPY = 'Loading landlord activity...'
+
+async function loadMaintenanceSummary(propertyId) {
+  const requests = await getPropertyMaintenanceRequests(propertyId)
+  return requests.map((request) => ({ ...request, status: MAINTENANCE_STATUS.byName[request.status] }))
+}
 
 function firstName(fullName) {
   return fullName?.trim().split(/\s+/).filter(Boolean)[0] || 'there'
@@ -68,17 +77,6 @@ function SummaryCard({ title, icon, status, value, secondary, to, actionLabel, r
         </div>
       )}
       {to && status !== 'loading' && <Link className="landlord-summary__link" to={to} aria-label={actionLabel} />}
-    </section>
-  )
-}
-
-function RevenueSummaryCard() {
-  return (
-    <section className="shared-card landlord-summary landlord-summary--trend landlord-summary--integration" aria-label="Revenue This Month">
-      <span className="landlord-dashboard__icon" aria-hidden="true"><Icon name="trend" size={20} /></span>
-      <span className="landlord-dashboard__badge">Integration pending</span>
-      <h2>Revenue This Month</h2>
-      <p>Revenue data will appear when the Payments and Lease module is connected.</p>
     </section>
   )
 }
@@ -164,32 +162,41 @@ function SectionState({ title, description, icon = 'info', loading = false }) {
   )
 }
 
-function NeedsAttention({ applications, viewings, validation, selectedProperty, selectedPropertyId, properties }) {
+function NeedsAttention({ applications, viewings, validation, maintenance, leases, selectedProperty, selectedPropertyId, properties }) {
   const reviewableApplications = applications.data.filter(isReviewable).length
   const pendingViewings = viewings.data.filter((item) => item.status === VIEWING_STATUS.PENDING).length
-  const awaitingAiReview = validation.attention.filter((item) => item.status === WORKFLOW_STATUS.AWAITING_HUMAN_REVIEW).length
-  const hasActions = reviewableApplications + pendingViewings + awaitingAiReview > 0
+  const aiReviews = validation.attention.filter((item) => item.status === WORKFLOW_STATUS.AWAITING_HUMAN_REVIEW)
+  const urgentRequests = maintenance.data.filter((request) => ![9, 10].includes(request.status) && ['High', 'Emergency'].includes(request.priority))
+  const approvalRequests = maintenance.data.filter((request) => request.status === 5 && !urgentRequests.includes(request))
+  const renewals = leases.data.map((lease) => ({ ...lease, days: renewalDays(lease) }))
+    .filter((lease) => lease.status === 1 && lease.days >= 0 && lease.days <= 60)
+    .sort((a, b) => a.days - b.days)
+  const resources = [applications, viewings, maintenance, leases]
+  const hasActions = reviewableApplications + pendingViewings + aiReviews.length + urgentRequests.length + approvalRequests.length + renewals.length > 0
+  const propertyTitle = (id) => properties?.properties.find((property) => property.id.toLowerCase() === id.toLowerCase())?.title || 'Property'
   const retryFailed = () => {
     if (applications.status === 'error') applications.retry()
     if (viewings.status === 'error') viewings.retry()
+    if (maintenance.status === 'error') maintenance.retry()
+    if (leases.status === 'error') leases.retry()
   }
   const scopeDescription = selectedProperty ? selectedProperty.title : 'all properties'
 
   let content
-  if ([applications.status, viewings.status].includes('error')) {
+  if (!hasActions && resources.some((resource) => resource.status === 'error')) {
     content = <InlineError retry={retryFailed} />
-  } else if ([applications.status, viewings.status, validation.status].includes('loading')) {
+  } else if (!hasActions && [...resources, validation].some((resource) => resource.status === 'loading')) {
     content = <SectionState title={LOADING_COPY} description={`Checking current activity for ${scopeDescription}.`} loading />
-  } else if (!hasActions) {
+  } else if (!hasActions && validation.status !== 'partial') {
     content = <SectionState title="You're all caught up" description={`No urgent landlord actions for ${scopeDescription} right now.`} icon="shield" />
   } else {
     content = (
       <ul className="landlord-attention__list">
         {reviewableApplications > 0 && (
           <AttentionRow
-            icon="document"
+            icon="info"
             title={`${reviewableApplications} ${pluralized(reviewableApplications, 'application')} awaiting review`}
-            description={`Review submitted applications for ${scopeDescription}.`}
+            description={[...new Set(applications.data.filter(isReviewable).map((application) => propertyTitle(application.propertyId)))].join(', ')}
             to={scopedPath('/rental-applications', selectedPropertyId)}
             action="Review"
           />
@@ -200,18 +207,38 @@ function NeedsAttention({ applications, viewings, validation, selectedProperty, 
             title={`${pendingViewings} viewing ${pluralized(pendingViewings, 'request')} pending approval`}
             description="Respond to requested viewing appointments."
             to={scopedPath('/viewing-requests', selectedPropertyId)}
+            action="Approve"
+          />
+        )}
+        {aiReviews.map((review) => {
+          const application = applications.data.find((item) => item.id === review.applicationId)
+          return (
+          <AttentionRow
+            key={review.applicationId}
+            icon="sparkles"
+            title="AI validation completed for 1 application"
+            description={`Human review required · ${applicantLabel(application)}`}
+            to={`/properties/${encodeURIComponent(application.propertyId)}/rental-applications/${encodeURIComponent(application.id)}/validation`}
             action="Review"
           />
-        )}
-        {awaitingAiReview > 0 && (
-          <AttentionRow
-            icon="search"
-            title="AI validation requires human review"
-            description="Review validation findings before making the final landlord decision."
-            to={scopedPath('/ai-review', selectedPropertyId)}
-            action="Open AI Review"
-          />
-        )}
+          )
+        })}
+        {urgentRequests.map((request) => <AttentionRow key={request.id} icon="tools"
+          title="1 urgent maintenance request"
+          description={`${request.title || 'Maintenance request'} · ${propertyTitle(request.propertyId)}`}
+          to={`/properties/${encodeURIComponent(request.propertyId)}/maintenance?${new URLSearchParams({ requestId: request.id })}`}
+          action={request.status === 5 ? 'Review' : [0, 1].includes(request.status) ? 'Assign' : 'View'} />)}
+        {approvalRequests.map((request) => <AttentionRow key={request.id} icon="tools"
+          title="1 repair estimate awaiting approval"
+          description={`${request.title || 'Maintenance request'} · ${propertyTitle(request.propertyId)}`}
+          to={`/properties/${encodeURIComponent(request.propertyId)}/maintenance?${new URLSearchParams({ requestId: request.id })}`}
+          action="Review" />)}
+        {renewals.map((lease) => <AttentionRow key={lease.id} icon="wallet"
+          title={lease.days === 0 ? 'Lease renewal due today' : `Lease renewal due in ${lease.days} ${pluralized(lease.days, 'day')}`}
+          description={[propertyTitle(lease.propertyId), applications.data.find((application) => application.tenantId === lease.tenantId)?.applicantName?.trim()].filter(Boolean).join(' · ')}
+          to={`/modules/pricing-lease/leases?${new URLSearchParams({ leaseId: lease.id })}`} action="View" />)}
+        {resources.some((resource) => resource.status === 'loading') && <li className="landlord-attention__notice" role="status">Checking remaining landlord activity...</li>}
+        {resources.some((resource) => resource.status === 'error') && <li className="landlord-attention__notice" role="alert">Some landlord activity could not be checked. <button type="button" className="landlord-dashboard__text-button" onClick={retryFailed}>Try again</button></li>}
         {validation.status === 'partial' && (
           <li className="landlord-attention__notice" role="status">Some AI validation activity could not be checked. Open AI Review for the latest available details.</li>
         )}
@@ -236,9 +263,9 @@ function applicationDate(application) {
 }
 
 function applicantLabel(application) {
-  return typeof application.tenantId === 'string' && application.tenantId.trim()
-    ? application.tenantId.trim()
-    : application.id
+  return typeof application?.applicantName === 'string' && application.applicantName.trim()
+    ? application.applicantName.trim()
+    : 'Name unavailable'
 }
 
 function formatCurrency(value) {
@@ -269,21 +296,22 @@ function RecentApplications({ applications, validation, selectedProperty, select
     content = (
       <div className="landlord-recent__table-wrap">
         <table>
-          <thead><tr><th scope="col">Applicant / Reference</th><th scope="col">Property</th><th scope="col">Monthly Income</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+          <thead><tr><th scope="col">Applicant</th><th scope="col">Property</th><th scope="col">Income</th><th scope="col">Status</th><th scope="col"><span className="landlord-recent__action-heading">Action</span></th></tr></thead>
           <tbody>{recent.map((application) => {
             const label = applicantLabel(application)
             const aiReady = aiReadyIds.has(application.id)
             const applicationPropertyId = application.propertyId
-            const propertyTitle = propertyTitles.get(applicationPropertyId.toLowerCase()) || selectedProperty?.title || 'Property'
-            const to = `/properties/${encodeURIComponent(applicationPropertyId)}/rental-applications/${encodeURIComponent(application.id)}/validation`
+            const propertyTitle = propertyTitles.get(applicationPropertyId.toLowerCase()) || application.propertyTitle || selectedProperty?.title || 'Property'
+            const to = aiReady ? `/properties/${encodeURIComponent(applicationPropertyId)}/rental-applications/${encodeURIComponent(application.id)}/validation`
+              : `/notifications/rental-application/${encodeURIComponent(application.id)}`
             return (
               <tr key={application.id}>
                 <th scope="row">
-                  <span className="landlord-recent__applicant-mark" aria-hidden="true">{label.charAt(0).toLocaleUpperCase() || 'T'}</span>
-                  <span className="landlord-recent__applicant" title={label}><span>Tenant reference</span><code>{label}</code></span>
+                  <span className="landlord-recent__applicant-mark" aria-hidden="true">{label === 'Name unavailable' ? '?' : label.charAt(0).toLocaleUpperCase()}</span>
+                  <span className="landlord-recent__applicant" title={label}>{label}</span>
                 </th>
                 <td>{propertyTitle}</td>
-                <td>{formatCurrency(application.monthlyIncome)}</td>
+                <td>{formatCurrency(application.monthlyIncome)}<span className="landlord-recent__income-period">/mo</span></td>
                 <td><RentalApplicationStatusBadge status={application.status} /></td>
                 <td><Link aria-label={`${aiReady ? 'AI Review' : 'Review'} application ${application.id}`} to={to}>{aiReady ? 'AI Review' : 'Review'}<Icon name="arrow" size={14} /></Link></td>
               </tr>
@@ -343,15 +371,21 @@ function PortfolioOverview({ collection }) {
   )
 }
 
-function MaintenanceCard() {
+function MaintenanceCard({ maintenance, selectedPropertyId }) {
+  const open = maintenance.data.filter((request) => ![9, 10].includes(request.status)).length
+  const awaitingApproval = maintenance.data.filter((request) => request.status === 5).length
   return (
     <section className="shared-card landlord-maintenance" aria-labelledby="landlord-maintenance-title">
       <div className="landlord-maintenance__heading">
         <h2 id="landlord-maintenance-title">Maintenance</h2>
-        <span className="landlord-dashboard__badge">Integration pending</span>
+        <Link to={selectedPropertyId ? `/properties/${encodeURIComponent(selectedPropertyId)}/maintenance` : '/modules/maintenance/landlord'}>View all <Icon name="arrow" size={14} /></Link>
       </div>
-      <span className="landlord-dashboard__icon" aria-hidden="true"><Icon name="tools" size={20} /></span>
-      <p>Maintenance activity will appear here when the Maintenance module is connected.</p>
+      <div className="landlord-maintenance__body">
+        {maintenance.status === 'loading' ? <SectionState title="Loading maintenance..." description="Checking requests for your properties." loading />
+          : maintenance.status === 'error' ? <InlineError retry={maintenance.retry} />
+            : <SectionState icon="tools" title={open ? `${open} open ${pluralized(open, 'request')}` : 'No open maintenance requests'}
+              description={awaitingApproval ? `${awaitingApproval} awaiting your approval` : 'No estimates awaiting your approval.'} />}
+      </div>
     </section>
   )
 }
@@ -375,6 +409,9 @@ function LandlordOverview({ user, propertyId }) {
     : null
   const viewings = usePropertySummary(getViewingsByProperty, summaryPropertyIds)
   const applications = usePropertySummary(getApplicationsByProperty, summaryPropertyIds)
+  const maintenance = usePropertySummary(loadMaintenanceSummary, summaryPropertyIds)
+  const revenue = useLandlordRevenue(summaryPropertyIds)
+  const leases = useDashboardLeases(summaryPropertyIds)
   const validation = useDashboardValidation(applications)
   const pendingViewings = viewings.data.filter((item) => item.status === VIEWING_STATUS.PENDING).length
   const reviewableApplications = applications.data.filter(isReviewable).length
@@ -433,7 +470,10 @@ function LandlordOverview({ user, propertyId }) {
           actionLabel="View Rental Applications"
           retry={applications.retry}
         />
-        <RevenueSummaryCard />
+        <SummaryCard title="Revenue This Month" icon="trend" status={revenue.status}
+          value={formatCurrency(monthlyRevenue(revenue.data))}
+          secondary={`Completed rent payments · ${selectedProperty ? selectedProperty.title : 'All properties'}`}
+          to="/modules/payments" actionLabel="View Payments" retry={revenue.retry} />
       </div>
 
       <div className="landlord-dashboard__content">
@@ -442,6 +482,8 @@ function LandlordOverview({ user, propertyId }) {
             applications={applications}
             viewings={viewings}
             validation={validation}
+            maintenance={maintenance}
+            leases={leases}
             selectedProperty={selectedProperty}
             selectedPropertyId={selectedPropertyId}
             properties={ownedProperties}
@@ -456,7 +498,7 @@ function LandlordOverview({ user, propertyId }) {
         </div>
         <aside className="landlord-dashboard__aside" aria-label="Portfolio details">
           <PortfolioOverview collection={ownedProperties} />
-          <MaintenanceCard />
+          <MaintenanceCard maintenance={maintenance} selectedPropertyId={selectedPropertyId} />
         </aside>
       </div>
     </main>

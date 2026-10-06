@@ -1,0 +1,21 @@
+.landlord-reviews-page > .viewing-reviews { margin-top: 0; }
+.landlord-reviews__properties > h2 { margin: 0; color: var(--ink); font-size: 1.2rem; }
+.landlord-reviews__intro { margin: 8px 0 16px; color: var(--muted); font-size: .85rem; }
+.landlord-reviews__selector { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.landlord-reviews__property { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; color: var(--ink); background: var(--cream-50); font: inherit; text-align: left; cursor: pointer; }
+.landlord-reviews__property:hover { border-color: var(--olive-700); }
+.landlord-reviews__property[aria-pressed="true"] { border-color: var(--olive-700); background: var(--olive-50); box-shadow: inset 0 0 0 1px var(--olive-700); }
+.landlord-reviews__property:focus-visible { outline: 2px solid var(--olive-700); outline-offset: 3px; }
+.landlord-reviews__property-name { font-weight: 700; overflow-wrap: anywhere; }
+.landlord-reviews__property-empty { color: var(--muted); font-size: .8rem; }
+.landlord-reviews__selected { margin-top: auto; color: var(--olive-700); font-size: .75rem; font-weight: 700; }
+.landlord-reviews__feedback { margin-top: 18px; padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--cream-50); }
+.landlord-reviews__feedback .viewing-reviews { margin: 0; padding: 0; border: 0; background: transparent; }
+.landlord-reviews__feedback .viewing-reviews > p:last-child { margin-bottom: 0; }
+.landlord-reviews__expand { margin-top: 16px; }
+.landlord-reviews__empty { margin: 12px 0; color: var(--muted); font-size: .85rem; }
+.landlord-reviews__error { color: var(--ink); font-size: .85rem; }
+@media (max-width: 600px) {
+  .landlord-reviews__feedback { padding: 16px; }
+  .landlord-reviews__selector { grid-template-columns: minmax(0, 1fr); }
+}

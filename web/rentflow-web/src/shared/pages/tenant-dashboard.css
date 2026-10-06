@@ -99,7 +99,8 @@
   margin-bottom: 14px;
 }
 .tenant-section-heading h2 { margin: 0; font-size: 1.18rem; letter-spacing: -.035em; }
-.tenant-section-heading > a {
+.tenant-section-heading > a,
+.tenant-section-heading > button {
   min-height: 36px;
   display: inline-flex;
   align-items: center;
@@ -110,7 +111,11 @@
   font-weight: 800;
   text-decoration: none;
 }
-.tenant-section-heading > a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.tenant-section-heading > button { padding: 0; border: 0; background: transparent; font-family: inherit; cursor: pointer; }
+.tenant-section-heading > a:hover,
+.tenant-section-heading > button:hover { text-decoration: underline; text-underline-offset: 4px; }
+.tenant-section-heading > button:focus-visible { outline: 3px solid rgb(91 111 61 / 28%); outline-offset: 2px; border-radius: 5px; }
+.tenant-section-heading > button[aria-expanded="true"] svg { transform: rotate(180deg); }
 
 .tenant-recommendations-empty,
 .tenant-activity-card,

@@ -30,6 +30,7 @@ function validateApplications(applications, tenantId) {
     || !Object.values(RENTAL_APPLICATION_STATUS).includes(item.status)
     || !validDate(item.createdAt)
     || (item.submittedAt != null && !validDate(item.submittedAt))
+    || (item.propertyTitle != null && typeof item.propertyTitle !== 'string')
     || (item.landlordResponse != null && typeof item.landlordResponse !== 'string')
   )) throw new TypeError('Invalid tenant application response')
   return [...applications].sort((a, b) =>
@@ -71,7 +72,6 @@ export default function MyApplicationsPage() {
       <PageHeader eyebrow="Your rental journey" title="My Applications">
         <p>Track your applications and landlord feedback. Use the mobile app to create or update an application.</p>
       </PageHeader>
-      <button className="shared-button shared-button--outline" type="button" onClick={reload} disabled={state.status === 'loading'}><Icon name="refresh" size={18} />Refresh</button>
     </div>
 
     {propertyId && (
@@ -100,7 +100,7 @@ export default function MyApplicationsPage() {
             ? <AppCard className="my-applications-state"><Icon name="search" size={28} /><h2>No applications with this status</h2><p>Choose another status to see your applications.</p></AppCard>
             : <section className="my-applications-list" aria-label="Your rental applications">
               {visibleApplications.map((application) => <AppCard key={application.id} className="my-application-card">
-                <div className="my-application-card__top"><div><p className="my-application-card__eyebrow">Property reference</p><h2><code>{application.propertyId}</code></h2></div><RentalApplicationStatusBadge status={application.status} /></div>
+                <div className="my-application-card__top"><div><p className="my-application-card__eyebrow">Property</p><h2>{application.propertyTitle?.trim() || 'Property unavailable'}</h2></div><RentalApplicationStatusBadge status={application.status} /></div>
                 <dl className="my-application-card__details">
                   <div><dt>Submitted</dt><dd>{application.submittedAt
                     ? <time dateTime={application.submittedAt}>{dateFormatter.format(new Date(application.submittedAt))}</time>

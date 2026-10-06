@@ -5,6 +5,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import OwnedPropertiesContext from '../../../shared/property/OwnedPropertiesContext.js'
 import ViewingRequestsPage from './ViewingRequestsPage.jsx'
 
+vi.mock('../../properties/services/propertyApiService.js', () => ({
+  getPropertyImages: vi.fn().mockResolvedValue([]),
+  getPropertyImageUrl: vi.fn(),
+}))
+vi.mock('../services/viewingApiService.js', async (importOriginal) => ({
+  ...await importOriginal(),
+  getOwnedPropertyPendingViewingCounts: vi.fn().mockResolvedValue([]),
+}))
+
 const tenantId = '11111111-1111-1111-1111-111111111112'
 const propertyId = '22222222-2222-2222-2222-222222222222'
 const property = {
@@ -76,8 +85,7 @@ afterEach(() => {
 })
 
 describe('Landlord viewing requests', () => {
-  it('loads Approved contact through viewing details and removes it after a cancellation refresh', async () => {
-    let cancelled = false
+  it('loads Approved contact without a manual refresh control', async () => {
     const phone = '+94 77 123 4567'
     const fetchMock = vi.fn().mockImplementation((url) => {
       if (url.includes(`/api/viewings/property/${propertyId}`)) {
@@ -86,8 +94,8 @@ describe('Landlord viewing requests', () => {
       expect(url).toContain(`/api/viewings/${approvedViewing.id}`)
       return Promise.resolve(jsonResponse({
         ...approvedViewing,
-        status: cancelled ? 3 : 1,
-        tenant: { displayName: 'Alex Tenant', phoneNumber: cancelled ? null : phone },
+        status: 1,
+        tenant: { displayName: 'Alex Tenant', phoneNumber: phone },
       }))
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -96,11 +104,7 @@ describe('Landlord viewing requests', () => {
     expect(container.querySelector('a[href^="tel:"]')).toBeNull()
     expect(screen.queryByRole('button', { name: /call tenant/i })).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    cancelled = true
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-    await screen.findByRole('article')
-    expect(within(screen.getByRole('article')).getByText('Cancelled')).toBeInTheDocument()
-    expect(screen.queryByText(phone)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
   })
 
   it('hides contact if Approved detail access fails, even when the list has stale contact', async () => {
@@ -373,7 +377,7 @@ describe('Landlord viewing requests', () => {
     expect(screen.getByText('No matching viewing requests')).toBeInTheDocument()
   })
 
-  it('refreshes the same property scope and preserves the Back to Property route', async () => {
+  it('preserves the Back to Property route without a manual refresh control', async () => {
     const fetchMock = vi.fn().mockImplementation(() => (
       Promise.resolve(jsonResponse([pendingViewing]))
     ))
@@ -381,15 +385,14 @@ describe('Landlord viewing requests', () => {
 
     renderPage()
     await screen.findByRole('article')
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-    await screen.findByRole('article')
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls.every(([url]) => (
       url.includes(`/api/viewings/property/${propertyId}`)
     ))).toBe(true)
     expect(screen.getByRole('link', { name: 'Back to Property' }))
       .toHaveAttribute('href', `/properties/${propertyId}`)
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
   })
 
   it('requires a property selection without calling the API with a fallback ID', () => {
@@ -402,8 +405,7 @@ describe('Landlord viewing requests', () => {
       screen.getByRole('heading', { name: 'Select a property' }),
     ).toBeInTheDocument()
     expect(screen.getByText(/Choose one of your owned properties/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Harbour View Residence/ }))
-      .toHaveAttribute('href', `/properties/${propertyId}/viewing-requests`)
+    expect(screen.getByRole('button', { name: /Harbour View Residence/ })).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

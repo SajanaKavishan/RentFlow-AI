@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../properties/services/property_api_service.dart';
+import '../../../shared/home/landlord_workspace_service.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../shared/theme/app_theme.dart';
@@ -12,10 +14,12 @@ class LandlordRentalApplicationsScreen extends StatefulWidget {
   const LandlordRentalApplicationsScreen({
     super.key,
     this.propertyId,
+    this.propertyApiService,
     this.rentalApplicationApiService,
   });
 
   final String? propertyId;
+  final PropertyApiService? propertyApiService;
   final RentalApplicationApiService? rentalApplicationApiService;
 
   @override
@@ -30,7 +34,8 @@ class _LandlordRentalApplicationsScreenState
   Future<List<RentalApplication>>? _applications;
 
   bool get _hasPropertyId =>
-      widget.propertyId != null && widget.propertyId!.trim().isNotEmpty;
+      widget.propertyApiService != null ||
+      (widget.propertyId != null && widget.propertyId!.trim().isNotEmpty);
 
   @override
   void initState() {
@@ -44,17 +49,19 @@ class _LandlordRentalApplicationsScreenState
     _load();
   }
 
+  Future<List<RentalApplication>> _fetch() => widget.propertyApiService != null
+      ? LandlordWorkspaceService(
+          widget.propertyApiService!,
+        ).applications(_apiService)
+      : _apiService.getApplicationsByProperty(widget.propertyId!.trim());
+
   void _load() {
-    _applications = _hasPropertyId
-        ? _apiService.getApplicationsByProperty(widget.propertyId!.trim())
-        : null;
+    _applications = _hasPropertyId ? _fetch() : null;
   }
 
   Future<void> _refresh() async {
     if (!_hasPropertyId) return;
-    final request = _apiService.getApplicationsByProperty(
-      widget.propertyId!.trim(),
-    );
+    final request = _fetch();
     setState(() {
       _applications = request;
     });
@@ -268,11 +275,14 @@ class _ApplicationReviewCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           _Reference(
-            label: 'Property reference',
-            value: application.propertyId,
+            label: 'Property',
+            value: application.propertyTitle ?? 'Property details unavailable',
           ),
           const SizedBox(height: AppSpacing.sm),
-          _Reference(label: 'Tenant reference', value: application.tenantId),
+          _Reference(
+            label: 'Applicant',
+            value: application.applicantName ?? 'Applicant name unavailable',
+          ),
           const Divider(height: AppSpacing.lg),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,

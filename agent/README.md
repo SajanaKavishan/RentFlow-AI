@@ -174,3 +174,69 @@ Tests use an in-memory fake provider, actively block external network connection
 and cover digital/scanned PDF routing, image OCR routing, limits, English/Sinhala and
 handwriting confidence, fact allow-lists, provider failures, deterministic comparisons,
 output safety, plan restrictions, and ordered graph execution.
+
+
+## Maintenance coordination: service boundary and optional photos
+
+The maintenance agent uses exact RentFlow category, priority, and request-status names,
+closed structured recommendations, explicit human review, and state-valid advisory actions.
+Both backend analysis paths use one minimum-data request mapper. Phase 3 adds optional
+private maintenance photo evidence to the existing on-demand workflow; tenant submission
+does not invoke AI. The Phase 1 final recommendation schema remains unchanged.
+
+Every `/internal/*` endpoint now requires `X-RentFlow-Service-Key`. Configure the same secret
+as Python `AGENT_SERVICE_API_KEY` and ASP.NET `AgentService__ServiceApiKey`. Keep it in private
+environment/secret configuration; the examples intentionally leave it blank. Unconfigured
+internal authentication fails closed. `GET /health` remains accessible.
+
+Deploy/restart both services together for the changed maintenance contract. The maintenance
+graph has one total deadline capped by the backend budget and local configuration. Human
+acceptance/rejection records an advisory review only; normal maintenance actions remain
+independent and available when analysis fails.
+
+See [the Phase 1 implementation report](../docs/maintenance-coordination-phase1-report.md)
+for contracts, exact files, verification, and remaining limitations.
+
+ASP.NET authorizes property ownership/manager role before downloading private R2 objects.
+It selects at most five JPEG/PNG/WEBP attachments from this request in creation/ID order,
+validates real image content, rejects sources beyond 8192 pixels per side or 20 million
+pixels, applies orientation, resizes to at most 1280 pixels per side, and copies only pixels
+into metadata-free JPEG quality 80. If needed it retries once at 960 pixels/quality 65.
+The analysis representation is limited to 512 KiB/image and 2 MiB aggregate (about 2.67 MiB
+Base64 plus bounded request JSON). Source retrieval remains capped at 10 MiB per photo.
+
+The internal request optionally adds `evidencePhotos: [{attachmentId, contentType,
+mediaBase64}]` and closed `photoLimitations` codes. Only the service-authenticated backend
+sends this contract. Python validates Base64, actual MIME/decode/dimensions/byte limits
+again, normalizes without metadata, and uses the existing `ModelMedia` abstraction.
+Raw media and correlation/storage identifiers never enter the text graph. One strict
+`MaintenanceVisualEvidence` assessment runs before the existing six graph nodes; its bounded
+observations are untrusted evidence. No extra result flags or provider stack were added.
+
+The existing `VISION_PROVIDER`, `VISION_MODEL`, `VISION_API_KEY` settings select the optional
+adapter using the established configuration/fallback rules. Zero photos is normal text-only
+analysis. Unavailable vision/storage or unreadable photos preserve usable evidence and add
+`PhotoUnavailable`/`PhotoUnreadable`; text/photo conflicts and safety concerns require human
+review. A readable irrelevant photo counts as analyzed but supplies no visual category.
+Unreadable photos do not count as analyzed. Counts describe this run's selected photos,
+not necessarily the current attachment list after later uploads.
+
+Backend retrieval/preparation uses at most min(8s, one quarter of its total deadline).
+The backend forwards its remaining budget, while Python caps the entire optional phase plus
+graph at min(AI_TIMEOUT_SECONDS, 30s, that budget). Vision uses at most min(6s, one quarter
+of Python's budget); preparation plus vision uses at most min(8s, one third). Cancellation
+propagates and mandatory text failure fails the advisory workflow safely.
+
+Only normal final recommendations and safe counts/failure summaries are persisted. Counts
+reuse the existing agent step's `ValidationSummary` and appear as optional `photoEvidence`
+on the public workflow DTO. Image bytes, Base64, filenames, storage keys and URLs are never
+stored in coordination workflows or exposed to React. No database migration is required.
+See [the Phase 3 report](../docs/maintenance-coordination-phase3-report.md) and
+[backend setup](../backend/RentFlow.Api/README-MaintenanceCoordination.md).
+
+
+Maintenance Groq compatibility: nullable primitive/enum fields are projected to Groq's
+union-type schema (including null in enums), while full local Pydantic validation is retained.
+The fixed `plan` node now builds its allow-listed plan locally; the graph still executes six
+steps but makes five text-model calls, plus at most one optional vision call. This avoids
+model-generated plan names and reduces latency/cost without changing the final result contract.

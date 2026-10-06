@@ -5,6 +5,7 @@ namespace RentFlow.Api.Configuration;
 public sealed class JwtOptions
 {
     public const string SectionName = "Jwt";
+    public const string SigningKeyKey = SectionName + ":SigningKey";
 
     [Required]
     public string Issuer { get; init; } = string.Empty;

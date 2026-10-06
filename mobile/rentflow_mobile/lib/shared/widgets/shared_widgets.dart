@@ -8,16 +8,19 @@ class AuthenticatedPage extends StatelessWidget {
     required this.child,
     this.padding = AppSpacing.page,
     this.maxWidth = 680,
+    this.physics,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double maxWidth;
+  final ScrollPhysics? physics;
 
   @override
   Widget build(BuildContext context) => SafeArea(
     top: false,
     child: SingleChildScrollView(
+      physics: physics,
       padding: padding,
       child: Center(
         child: ConstrainedBox(

@@ -15,6 +15,7 @@ import MyApplicationsPage from './features/rentalApplications/pages/MyApplicatio
 import ViewingRequestsPage from './features/viewings/pages/ViewingRequestsPage.jsx'
 import MyViewingsPage from './features/viewings/pages/MyViewingsPage.jsx'
 import LandlordMaintenancePage from './features/maintenance/pages/LandlordMaintenancePage.jsx'
+import TenantMaintenancePage from './features/maintenance/pages/TenantMaintenancePage.jsx'
 import NotificationsPage from './features/notifications/NotificationsPage.jsx'
 import NotificationResourcePage from './features/notifications/NotificationResourcePage.jsx'
 import PropertiesPage from './features/properties/pages/PropertiesPage.jsx'
@@ -37,15 +38,22 @@ import GetStartedPage from './features/landing/pages/GetStartedPage.jsx'
 import PlatformOverviewPage from './features/landing/pages/PlatformOverviewPage.jsx'
 import HowItWorksPage from './features/landing/pages/HowItWorksPage.jsx'
 import SmartAssistancePage from './features/landing/pages/SmartAssistancePage.jsx'
+import { useAuth } from './features/auth/useAuth.js'
 
 import AppShell from './shared/layout/AppShell.jsx'
 import DashboardPage from './shared/pages/DashboardPage.jsx'
 import TechnicianAssignedWorkPage from './shared/pages/TechnicianAssignedWorkPage.jsx'
+import TechnicianWorkHistoryPage from './shared/pages/TechnicianWorkHistoryPage.jsx'
 import AdminUsersPage from './shared/pages/AdminUsersPage.jsx'
 import AdminSystemOverviewPage from './shared/pages/AdminSystemOverviewPage.jsx'
 import AdminSupportRequestsPage from './shared/pages/AdminSupportRequestsPage.jsx'
 import ProfilePage from './shared/pages/ProfilePage.jsx'
 import { NotFoundState, UnauthorizedState, UnavailableState } from './shared/ui/States.jsx'
+
+function MaintenanceModulePage() {
+  const { user } = useAuth()
+  return user.role === USER_ROLES.TENANT ? <TenantMaintenancePage /> : <LandlordMaintenancePage />
+}
 
 export default function App() {
   return <Routes>
@@ -64,6 +72,9 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.TENANT, USER_ROLES.LANDLORD]} />}>
+          <Route path="/modules/maintenance" element={<MaintenanceModulePage />} />
+        </Route>
         <Route path="/unauthorized" element={<UnauthorizedState />} />
         <Route path="/properties/:propertyId" element={<PropertyDetailsPage />} />
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.LANDLORD, USER_ROLES.ADMIN]} />}>
@@ -94,6 +105,7 @@ export default function App() {
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.MAINTENANCE_TECHNICIAN]} />}>
           <Route path="/modules/assigned-work" element={<TechnicianAssignedWorkPage />} />
+          <Route path="/modules/work-history" element={<TechnicianWorkHistoryPage />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} />}>

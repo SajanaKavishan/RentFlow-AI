@@ -33,6 +33,8 @@ enum RentalApplicationStatus {
 
 class RentalApplication {
   const RentalApplication({
+    this.propertyTitle,
+    this.applicantName,
     required this.id,
     required this.tenantId,
     required this.propertyId,
@@ -51,6 +53,8 @@ class RentalApplication {
   final String id;
   final String tenantId;
   final String propertyId;
+  final String? propertyTitle;
+  final String? applicantName;
   final DateTime moveInDate;
   final double monthlyIncome;
   final String occupation;
@@ -71,6 +75,8 @@ class RentalApplication {
       id: id,
       tenantId: tenantId,
       propertyId: propertyId,
+      propertyTitle: propertyTitle,
+      applicantName: applicantName,
       moveInDate: moveInDate,
       monthlyIncome: monthlyIncome,
       occupation: occupation,
@@ -89,6 +95,8 @@ class RentalApplication {
       id: _requiredString(json, 'id'),
       tenantId: _requiredString(json, 'tenantId'),
       propertyId: _requiredString(json, 'propertyId'),
+      propertyTitle: _nullableString(json, 'propertyTitle'),
+      applicantName: _nullableString(json, 'applicantName'),
       moveInDate: _requiredDateOnly(json, 'moveInDate'),
       monthlyIncome: _requiredDouble(json, 'monthlyIncome'),
       occupation: _requiredString(json, 'occupation'),

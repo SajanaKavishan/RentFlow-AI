@@ -12,8 +12,10 @@ public sealed class MaintenanceAttachmentService(
     IFileStorageService fileStorageService,
     ILogger<MaintenanceAttachmentService> logger) : IMaintenanceAttachmentService
 {
+    public const string TechnicianCompletionAttachmentType = "technician-completion";
     public const long MaximumFileSizeBytes = 10 * 1024 * 1024;
     public const int MaximumAttachments = 5;
+    public const int MaximumCompletionAttachments = 3;
     private static readonly TimeSpan SignedUrlLifetime = TimeSpan.FromMinutes(10);
     private static readonly IReadOnlyDictionary<string, string> AllowedContentTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -26,6 +28,8 @@ public sealed class MaintenanceAttachmentService(
     {
         ValidateRequestAndTenantIds(requestId, tenantId);
         ValidateUpload(content, contentType, fileSize, attachmentType);
+        if (string.Equals(attachmentType?.Trim(), TechnicianCompletionAttachmentType, StringComparison.OrdinalIgnoreCase))
+            throw MaintenanceRequestServiceException.Validation("The completion-photo attachment type is reserved for assigned technicians.");
         // Serialize the count check and insert for this request on PostgreSQL.
         // In-memory unit tests retain the same validation without relational SQL.
         await using var transaction = dbContext.Database.IsRelational()
@@ -38,10 +42,64 @@ public sealed class MaintenanceAttachmentService(
         }
         await GetOwnedRequestAsync(requestId, tenantId, cancellationToken);
         if (await dbContext.MaintenanceAttachments.CountAsync(
-            item => item.MaintenanceRequestId == requestId, cancellationToken) >= MaximumAttachments)
+            item => item.MaintenanceRequestId == requestId
+                && item.AttachmentType != TechnicianCompletionAttachmentType, cancellationToken) >= MaximumAttachments)
         {
             throw MaintenanceRequestServiceException.Validation("A request can have up to 5 photos. Remove a photo before adding another.");
         }
+
+        return await StoreAsync(requestId, tenantId, content, fileName, contentType, fileSize, attachmentType, transaction, cancellationToken);
+    }
+
+    public async Task<MaintenanceAttachmentResponseDto> UploadCompletionAsync(
+        Guid requestId,
+        Guid technicianId,
+        Stream content,
+        string fileName,
+        string contentType,
+        long fileSize,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequestAndTenantIds(requestId, technicianId);
+        ValidateUpload(content, contentType, fileSize, TechnicianCompletionAttachmentType);
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
+        if (transaction is not null)
+        {
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM \"MaintenanceRequests\" WHERE \"Id\" = {requestId} FOR UPDATE",
+                cancellationToken);
+        }
+
+        var request = await dbContext.MaintenanceRequests.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == requestId, cancellationToken)
+            ?? throw MaintenanceRequestServiceException.NotFound("The maintenance request was not found.");
+        if (request.TechnicianId != technicianId)
+            throw MaintenanceRequestServiceException.Forbidden("Only the assigned technician can upload completion photos.");
+        if (request.Status != MaintenanceRequestStatus.InProgress)
+            throw MaintenanceRequestServiceException.Conflict("Completion photos can only be uploaded while work is in progress.");
+        if (await dbContext.MaintenanceAttachments.CountAsync(
+            item => item.MaintenanceRequestId == requestId
+                && item.UploadedByUserId == technicianId
+                && item.AttachmentType == TechnicianCompletionAttachmentType,
+            cancellationToken) >= MaximumCompletionAttachments)
+            throw MaintenanceRequestServiceException.Validation("A job can have up to 3 completion photos.");
+
+        return await StoreAsync(requestId, technicianId, content, fileName, contentType, fileSize,
+            TechnicianCompletionAttachmentType, transaction, cancellationToken);
+    }
+
+    private async Task<MaintenanceAttachmentResponseDto> StoreAsync(
+        Guid requestId,
+        Guid uploadedByUserId,
+        Stream content,
+        string fileName,
+        string contentType,
+        long fileSize,
+        string? attachmentType,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
 
         var normalizedContentType = contentType.Trim().ToLowerInvariant();
         var attachmentId = Guid.NewGuid();
@@ -57,7 +115,7 @@ public sealed class MaintenanceAttachmentService(
             ContentType = normalizedContentType,
             FileSize = fileSize,
             AttachmentType = NormalizeOptionalText(attachmentType),
-            UploadedByUserId = tenantId,
+            UploadedByUserId = uploadedByUserId,
             CreatedAt = DateTimeOffset.UtcNow
         };
         dbContext.MaintenanceAttachments.Add(attachment);

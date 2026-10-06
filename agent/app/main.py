@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import hmac
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -36,6 +37,17 @@ def create_app(
     app.state.vision_model_provider = vision_model_provider or build_vision_model_provider(
         resolved_settings, app.state.model_provider
     )
+    @app.middleware("http")
+    async def authenticate_internal_service(request: Request, call_next):
+        if request.url.path.startswith("/internal/"):
+            expected = resolved_settings.service_api_key
+            if not expected:
+                return JSONResponse(status_code=503, content={"error": {"code": "service_auth_not_configured", "message": "Internal analysis is unavailable.", "retryable": False}})
+            supplied = request.headers.get("X-RentFlow-Service-Key", "")
+            if not hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8")):
+                return JSONResponse(status_code=401, content={"error": {"code": "service_unauthorized", "message": "Service authentication required.", "retryable": False}})
+        return await call_next(request)
+
     app.include_router(router)
 
     @app.exception_handler(AgentServiceError)

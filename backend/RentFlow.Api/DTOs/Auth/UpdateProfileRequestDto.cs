@@ -16,4 +16,6 @@ public sealed class UpdateProfileRequestDto
     // Omitted settings preserve compatibility with existing profile clients.
     public string? PublicContactPhone { get; init; }
     public bool? PublicContactEnabled { get; init; }
+    public string? MaintenanceContactPhone { get; init; }
+    public bool? MaintenanceContactEnabled { get; init; }
 }

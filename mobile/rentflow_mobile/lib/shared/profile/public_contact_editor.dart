@@ -11,9 +11,11 @@ class PublicContactEditor extends StatefulWidget {
     super.key,
     required this.loadUser,
     required this.save,
+    this.maintenance = false,
   });
   final Future<CurrentUser> Function() loadUser;
   final Future<CurrentUser> Function(CurrentUser, String, bool) save;
+  final bool maintenance;
 
   @override
   State<PublicContactEditor> createState() => _PublicContactEditorState();
@@ -26,6 +28,13 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
   _ContactPhoneSource _source = _ContactPhoneSource.profile;
   bool _saving = false;
   String? _error;
+  String get _title => widget.maintenance ? 'Work contact' : 'Public contact';
+  String? _storedPhone(CurrentUser user) => widget.maintenance
+      ? user.maintenanceContactPhone
+      : user.publicContactPhone;
+  bool _storedEnabled(CurrentUser user) => widget.maintenance
+      ? user.maintenanceContactEnabled
+      : user.publicContactEnabled;
 
   @override
   void initState() {
@@ -37,19 +46,26 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
     try {
       final user = await widget.loadUser();
       if (!mounted) return;
-      if (user.role != UserRole.landlord) throw const FormatException();
+      if (user.role !=
+          (widget.maintenance
+              ? UserRole.maintenanceTechnician
+              : UserRole.landlord)) {
+        throw const FormatException();
+      }
       setState(() {
         _user = user;
-        _phone.text = user.publicContactPhone ?? '';
-        final storedPhone = (user.publicContactPhone ?? '').trim();
+        _phone.text = _storedPhone(user) ?? '';
+        final storedPhone = (_storedPhone(user) ?? '').trim();
         _source = storedPhone.isEmpty || storedPhone == user.phoneNumber.trim()
             ? _ContactPhoneSource.profile
             : _ContactPhoneSource.different;
-        _enabled = user.publicContactEnabled;
+        _enabled = _storedEnabled(user);
       });
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Unable to load public contact settings.');
+        setState(
+          () => _error = 'Unable to load ${_title.toLowerCase()} settings.',
+        );
       }
     }
   }
@@ -71,12 +87,12 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
         ? _phone.text.trim()
         : _enabled
         ? user.phoneNumber.trim()
-        : (user.publicContactPhone ?? '').trim();
+        : (_storedPhone(user) ?? '').trim();
     if ((_enabled || publicPhone.isNotEmpty) &&
         usablePhoneNumber(publicPhone) == null) {
       setState(
         () => _error =
-            'Enter a valid public contact number (7 to 15 digits, maximum 32 characters).',
+            'Enter a valid ${widget.maintenance ? 'work' : 'public'} contact number (7 to 15 digits, maximum 32 characters).',
       );
       return;
     }
@@ -91,7 +107,7 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
       if (mounted) {
         setState(
           () => _error =
-              'Your public contact could not be updated. Please try again.',
+              'Your ${_title.toLowerCase()} could not be updated. Please try again.',
         );
       }
     } finally {
@@ -126,7 +142,7 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
-                    'Public contact',
+                    _title,
                     style: AppTypography.pageTitle.copyWith(
                       color: AppPalette.primaryText,
                     ),
@@ -135,8 +151,10 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
               ],
             ),
             const SizedBox(height: AppSpacing.sm),
-            const Text(
-              'Let tenants contact you with questions about your property listings.',
+            Text(
+              widget.maintenance
+                  ? 'Let tenants contact you about maintenance requests assigned to you.'
+                  : 'Let tenants contact you with questions about your property listings.',
             ),
             const SizedBox(height: AppSpacing.base),
             if (_user == null && _error == null)
@@ -181,9 +199,11 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
                   enabled: _user != null && !_saving,
                   maxLength: 32,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Public contact number',
-                    hintText: 'Enter public contact number',
+                  decoration: InputDecoration(
+                    labelText:
+                        '${widget.maintenance ? 'Work' : 'Public'} contact number',
+                    hintText:
+                        'Enter ${widget.maintenance ? 'work' : 'public'} contact number',
                   ),
                 ),
               ),
@@ -195,11 +215,21 @@ class _PublicContactEditorState extends State<PublicContactEditor> {
               onChanged: _user == null || _saving
                   ? null
                   : (value) => setState(() => _enabled = value),
-              title: const Text('Show contact number on my property listings'),
+              title: Text(
+                widget.maintenance
+                    ? 'Share work contact with assigned tenants'
+                    : 'Show contact number on my property listings',
+              ),
             ),
             const Text(
               'Your profile phone stays private unless you explicitly choose to use it here.',
             ),
+            if (widget.maintenance) ...[
+              const SizedBox(height: AppSpacing.sm),
+              const Text(
+                'Saving copies your chosen number. Later profile phone changes do not change your work contact.',
+              ),
+            ],
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),

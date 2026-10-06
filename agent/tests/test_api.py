@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.conftest import authenticated_client
 
 import base64
 import logging
@@ -91,7 +92,7 @@ def test_sensitive_input_fields_are_rejected(client: TestClient) -> None:
 
 def test_provider_not_configured_returns_safe_failure(settings: Settings) -> None:
     provider = build_model_provider(settings)
-    client = TestClient(create_app(settings=settings, model_provider=provider))
+    client = authenticated_client(create_app(settings=settings, model_provider=provider))
 
     response = client.post("/internal/application-validation/analyze", json=valid_request())
 
@@ -113,8 +114,9 @@ def test_unsupported_provider_does_not_break_startup(settings: Settings) -> None
         ai_api_key="test-key",
         ai_timeout_seconds=settings.ai_timeout_seconds,
         agent_version=settings.agent_version,
+        service_api_key=settings.service_api_key,
     )
-    client = TestClient(create_app(settings=configured))
+    client = authenticated_client(create_app(settings=configured))
 
     assert client.get("/health").json() == {"status": "healthy"}
     response = client.post("/internal/application-validation/analyze", json=valid_request())
@@ -124,7 +126,7 @@ def test_unsupported_provider_does_not_break_startup(settings: Settings) -> None
 
 def test_malformed_model_output_returns_safe_failure(settings: Settings) -> None:
     provider = FakeModelProvider({"Plan": {"steps": ["invent_a_tool"]}})
-    client = TestClient(create_app(settings=settings, model_provider=provider))
+    client = authenticated_client(create_app(settings=settings, model_provider=provider))
 
     response = client.post("/internal/application-validation/analyze", json=valid_request())
 
@@ -135,7 +137,7 @@ def test_malformed_model_output_returns_safe_failure(settings: Settings) -> None
 
 
 def test_model_failure_returns_sanitized_error(settings: Settings) -> None:
-    client = TestClient(
+    client = authenticated_client(
         create_app(settings=settings, model_provider=FailingModelProvider()),
         raise_server_exceptions=False,
     )
@@ -205,7 +207,7 @@ def test_supporting_document_analysis_returns_only_safe_structured_output(
         "confidenceLabel": "Low",
     }
     provider = SupportingDocumentModelProvider(responses)
-    client = TestClient(
+    client = authenticated_client(
         create_app(
             settings=settings,
             model_provider=provider,
@@ -243,7 +245,7 @@ def test_missing_vision_provider_warns_without_failing_workflow(
     settings: Settings,
     fake_provider: FakeModelProvider,
 ) -> None:
-    client = TestClient(create_app(settings=settings, model_provider=fake_provider))
+    client = authenticated_client(create_app(settings=settings, model_provider=fake_provider))
     payload = valid_request()
     raw_content = b"synthetic-image"
     payload["supportingDocuments"] = [
@@ -286,7 +288,7 @@ def test_income_proof_api_response_is_structured_without_raw_transport_data(
         "confidenceLabel": "High",
     }
     provider = FakeModelProvider(responses)
-    client = TestClient(create_app(settings=settings, model_provider=provider))
+    client = authenticated_client(create_app(settings=settings, model_provider=provider))
     raw_content = selectable_pdf(
         "INCOME PROOF Employee Name Test Applicant Employer Example Solutions Gross "
         "Monthly Income LKR 185,000 Pay Period July 2026 Payment Date 01 August 2026"

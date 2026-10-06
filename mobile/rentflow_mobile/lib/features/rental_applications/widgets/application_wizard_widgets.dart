@@ -174,21 +174,33 @@ class ApplicationWizardDocumentRow extends StatelessWidget {
     required this.type,
     required this.documents,
     required this.onOpen,
+    this.picking = false,
+    this.uploading = false,
+    this.uploadError,
   });
   final ApplicationDocumentType type;
   final List<ApplicationDocument> documents;
   final VoidCallback? onOpen;
+  final bool picking, uploading;
+  final String? uploadError;
   @override
   Widget build(BuildContext context) {
     final uploaded = documents
         .where((doc) => doc.documentType == type)
         .toList();
-    final summary = uploaded.isEmpty
+    final summary = uploading
+        ? 'Uploading...'
+        : picking
+        ? 'Choosing file...'
+        : uploaded.isEmpty
         ? '${type.requirement == DocumentRequirement.required ? 'Missing' : 'Not uploaded'} · ${type.requirementLabel}'
         : 'Uploaded · ${uploaded.map((doc) => doc.originalFileName).join(', ')}';
     return Material(
-      color: AppPalette.softCream,
-      borderRadius: BorderRadius.circular(12),
+      color: AppPalette.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppPalette.outline),
+      ),
       child: InkWell(
         key: ValueKey('wizard-document-${type.value}'),
         borderRadius: BorderRadius.circular(12),
@@ -201,14 +213,60 @@ class ApplicationWizardDocumentRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(type.label, style: AppTypography.body),
+                    Text(
+                      type.label,
+                      style: AppTypography.body.copyWith(
+                        color: AppPalette.primaryText,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(summary, style: wizardHelper),
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        summary,
+                        style: wizardHelper.copyWith(
+                          color: AppPalette.primaryText,
+                        ),
+                      ),
+                    ),
+                    if (uploadError != null) ...[
+                      const SizedBox(height: 6),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          onOpen == null
+                              ? 'Upload failed'
+                              : 'Upload failed · Tap to retry',
+                          style: wizardHelper.copyWith(
+                            color: AppPalette.danger,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        uploadError!,
+                        style: wizardHelper.copyWith(
+                          color: AppPalette.primaryText,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.chevron_right, size: 20),
+              if (uploading)
+                const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Icon(
+                  uploaded.isEmpty
+                      ? Icons.upload_file_outlined
+                      : Icons.check_circle_outline,
+                  size: 24,
+                  color: AppPalette.olive,
+                ),
             ],
           ),
         ),

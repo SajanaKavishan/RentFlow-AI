@@ -28,27 +28,50 @@ function renderDashboard(role) {
 beforeEach(() => {
   tokenStorage.setToken('staff-token')
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
-  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json({ unreadCount: 3 }))))
+  vi.stubGlobal('fetch', vi.fn((url) => {
+    const path = new URL(url, 'http://localhost').pathname
+    if (path.includes('/api/maintenance-requests/technician/')) return Promise.resolve(json([]))
+    if (path === '/api/notifications/unread-count') return Promise.resolve(json({ unreadCount: 3 }))
+    if (path === '/api/admin/dashboard/summary') {
+      return Promise.resolve(json({ propertyCount: 15, activeApplicationCount: 6, monthlyVolume: 450000, month: '2026-10' }))
+    }
+    if (path === '/api/admin/dashboard/activity') return Promise.resolve(json([]))
+    if (path === '/api/admin/dashboard/workflows') {
+      return Promise.resolve(json([
+        { name: 'Application validation', total: 0, pending: 0, running: 0, awaitingReview: 0, completed: 0, failed: 0 },
+        { name: 'Identity verification', total: 0, pending: 0, running: 0, awaitingReview: 0, completed: 0, failed: 0 },
+        { name: 'Maintenance dispatch', total: 0, pending: 0, running: 0, awaitingReview: 0, completed: 0, failed: 0 },
+      ]))
+    }
+    if (path === '/api/admin/dashboard/health') {
+      return Promise.resolve(json({ checkedAt: '2026-10-06T10:00:00Z', services: [{ name: 'Database', status: 'available', detail: 'OK' }] }))
+    }
+    return Promise.resolve(json({ unreadCount: 3 }))
+  }))
 })
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals() })
 
 describe('Technician and Admin dashboards', () => {
-  it('renders a dedicated Technician workspace with real shared actions and an honest maintenance dependency', async () => {
+  it('renders the technician dashboard with a real assigned-work preview', async () => {
     renderDashboard('MaintenanceTechnician')
     const main = screen.getByRole('main')
     expect(within(main).getByRole('heading', { name: 'Welcome, Sam Perera' })).toBeInTheDocument()
-    expect(within(main).getByText('Technician workspace')).toBeInTheDocument()
+    expect(within(main).queryByText('Technician workspace')).not.toBeInTheDocument()
+    const summary = within(main).getByRole('region', { name: 'Work summary' })
+    expect(await within(summary).findAllByText('0')).toHaveLength(3)
+    expect(summary).toHaveTextContent("0Today's jobs0In progress0Completed this week")
 
     const assignedWork = within(main).getByRole('region', { name: 'Assigned Work' })
-    expect(assignedWork).toHaveTextContent('Connected')
-    expect(assignedWork).toHaveTextContent('Assigned work ready')
-    expect(within(assignedWork).getByRole('link', { name: /View assigned work/ })).toHaveAttribute('href', '/modules/assigned-work')
+    expect(assignedWork).toHaveTextContent('No active assigned work.')
+    expect(assignedWork).not.toHaveTextContent('Connected')
+    expect(assignedWork).not.toHaveTextContent('Assigned work ready')
+    expect(within(assignedWork).getByRole('link', { name: /View all/ })).toHaveAttribute('href', '/modules/assigned-work')
 
-    expect(await within(main).findByRole('heading', { name: '3 unread notifications' })).toBeInTheDocument()
-    expect(within(main).getAllByRole('link', { name: /Notifications|Open notifications/ }).every((link) => link.getAttribute('href') === '/notifications')).toBe(true)
-    expect(within(main).getAllByRole('link', { name: /Profile|View profile/ }).every((link) => link.getAttribute('href') === '/profile')).toBe(true)
-    expect(fetch).toHaveBeenCalledTimes(1)
-    expect(new URL(fetch.mock.calls[0][0], 'http://localhost').pathname).toBe('/api/notifications/unread-count')
+    expect(within(main).queryByRole('heading', { name: '3 unread notifications' })).not.toBeInTheDocument()
+    expect(within(main).queryByRole('link', { name: 'Open notification inbox' })).not.toBeInTheDocument()
+    expect(within(main).queryByRole('heading', { name: 'Your profile' })).not.toBeInTheDocument()
+    expect(fetch).toHaveBeenCalled()
+    expect(fetch.mock.calls.some(([url]) => String(url).includes('/api/maintenance-requests/technician/'))).toBe(true)
     expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer staff-token')
 
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
@@ -72,20 +95,23 @@ describe('Technician and Admin dashboards', () => {
     expect(totalUsers).not.toHaveTextContent('Integration pending')
     for (const title of ['Properties', 'Active Applications', 'Monthly Volume']) {
       const card = within(summary).getByRole('region', { name: title })
-      expect(card).toHaveTextContent('Integration pending')
-      expect(card).toHaveTextContent('Admin')
+      expect(card).not.toHaveTextContent('Integration pending')
     }
+    expect(await within(within(summary).getByRole('region', { name: 'Properties' })).findByText('15')).toBeInTheDocument()
+    expect(within(summary).getByRole('region', { name: 'Active Applications' })).toHaveTextContent('6')
+    expect(within(summary).getByRole('region', { name: 'Monthly Volume' })).toHaveTextContent('Rs. 450,000')
 
     const activity = within(main).getByRole('region', { name: 'Platform Activity' })
     const distribution = within(main).getByRole('region', { name: 'User Distribution' })
     const workflows = within(main).getByRole('region', { name: 'AI Workflows' })
     const health = within(main).getByRole('region', { name: 'System Health' })
-    expect(activity).toHaveTextContent('Admin activity-feed contract')
+    expect(activity).toHaveTextContent('Latest listings, applications, maintenance requests and completed payments.')
     expect(distribution).toHaveTextContent('Counts include active and inactive accounts')
     expect(distribution).toHaveTextContent('Technicians7')
-    expect(workflows).toHaveTextContent('Admin AI reporting aggregate')
-    expect(health).toHaveTextContent('Admin service-health contract')
-    expect([activity, workflows, health].every((panel) => panel.textContent.includes('Integration pending'))).toBe(true)
+    expect(workflows).toHaveTextContent('Recorded workflow runs across the platform, including retries.')
+    expect(health).toHaveTextContent('Live API, database and agent connectivity checks.')
+    expect(within(workflows).getByRole('link', { name: /Open workflow monitor/ })).toHaveAttribute('href', '/modules/ai-system-overview')
+    expect([activity, workflows, health].every((panel) => !panel.textContent.includes('Integration pending'))).toBe(true)
     expect(distribution).not.toHaveTextContent('Integration pending')
 
     const quickAccess = within(main).getByRole('navigation', { name: 'Admin quick access' })
@@ -98,8 +124,8 @@ describe('Technician and Admin dashboards', () => {
     expect(quickAccess).not.toHaveTextContent(/full directory is pending|sign out/i)
     expect(within(quickAccess).getByRole('link', { name: 'AI / System Overview' })).toHaveAttribute('href', '/modules/ai-system-overview')
     expect(await within(quickAccess).findByText('3 unread notifications')).toBeInTheDocument()
-    expect(fetch).toHaveBeenCalledTimes(1)
-    expect(new URL(fetch.mock.calls[0][0], 'http://localhost').pathname).toBe('/api/notifications/unread-count')
+    expect(fetch.mock.calls.some(([url]) => new URL(url, 'http://localhost').pathname === '/api/notifications/unread-count')).toBe(true)
+    expect(fetch.mock.calls.some(([url]) => new URL(url, 'http://localhost').pathname === '/api/admin/dashboard/summary')).toBe(true)
     expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer staff-token')
     expect(main).not.toHaveTextContent(/all systems operational|uptime|recent sign-up|AI requests|maintenance jobs/i)
 
@@ -118,19 +144,15 @@ describe('Technician and Admin dashboards', () => {
   })
 
   it.each([
-    ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work', /View assigned work/],
-    ['Admin', 'AI Workflows', 'AI / System Monitoring Platform', /View integration details/],
+    ['MaintenanceTechnician', 'Assigned Work', 'Assigned Work', /View (all|assigned work)/],
+    ['Admin', 'AI Workflows', 'AI / System Monitoring Platform', /Open workflow monitor/],
   ])('opens the explicit workspace for %s %s', async (role, label, pageTitle, linkName) => {
     renderDashboard(role)
     const main = screen.getByRole('main')
     const region = within(main).getByRole('region', { name: label })
     await userEvent.click(within(region).getByRole('link', { name: linkName }))
     expect(screen.getByRole('heading', { name: pageTitle })).toBeInTheDocument()
-    if (role === 'MaintenanceTechnician') {
-      expect(screen.queryByText('Integration pending')).not.toBeInTheDocument()
-    } else {
-      expect(screen.getAllByText('Integration pending').length).toBeGreaterThan(0)
-    }
+    expect(screen.queryByText('Integration pending')).not.toBeInTheDocument()
   })
 
   it('opens the working Technician provisioning page from Admin Quick Access', async () => {
@@ -153,12 +175,7 @@ describe('Technician and Admin dashboards', () => {
     expect(screen.getByText('Directory available')).toBeInTheDocument()
   })
 
-  it('keeps Notifications and Profile reachable from both dedicated dashboards', async () => {
-    const view = renderDashboard('MaintenanceTechnician')
-    await userEvent.click(within(screen.getByRole('main')).getByRole('link', { name: 'View profile' }))
-    expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument()
-
-    view.unmount()
+  it('keeps Notifications reachable from the Admin dashboard', async () => {
     fetch.mockImplementation((url) => Promise.resolve(json(url.includes('unread-count')
       ? { unreadCount: 0 }
       : { items: [], pagination: { page: 1, totalPages: 1, totalCount: 0, hasNextPage: false, hasPreviousPage: false } })))

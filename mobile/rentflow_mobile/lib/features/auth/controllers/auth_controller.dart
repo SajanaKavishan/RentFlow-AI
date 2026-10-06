@@ -187,6 +187,25 @@ class AuthController extends ChangeNotifier {
     return updated;
   }
 
+  Future<CurrentUser> updateMaintenanceContact(
+    CurrentUser user,
+    String phone,
+    bool enabled,
+  ) async {
+    final revision = _sessionRevision;
+    final updated = await authService.updateMaintenanceContact(
+      user,
+      phone,
+      enabled,
+    );
+    if (revision == _sessionRevision &&
+        (_currentUser == null || _currentUser?.id == user.id)) {
+      _currentUser = updated;
+      notifyListeners();
+    }
+    return updated;
+  }
+
   Future<void> logout() async {
     _sessionRevision++;
     authService.apiClient.suspendAuthentication();

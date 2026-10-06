@@ -29,6 +29,26 @@ beforeEach(() => {
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals() })
 
 describe('Technician Assigned Work page', () => {
+  it.each(['MR-C8070B6D94F6A810', null])('shows only the friendly reference or a neutral fallback (%s)', (referenceCode) => {
+    const ids = {
+      id: '11efbe01-9196-44b6-b1b2-73767fae5cf1',
+      tenantId: '21efbe01-9196-44b6-b1b2-73767fae5cf1',
+      propertyId: '31efbe01-9196-44b6-b1b2-73767fae5cf1',
+    }
+    render(<AssignedWorkState status="ready" requests={[{
+      ...ids, referenceCode, title: 'Bedroom outlet not working', selected: true,
+      category: 'Electrical', priority: 'Normal', status: 'Assigned',
+    }]} />)
+    expect(screen.getByRole('heading', { name: 'Bedroom outlet not working' })).toBeInTheDocument()
+    if (referenceCode) {
+      expect(screen.getAllByText(referenceCode)).toHaveLength(2)
+    } else {
+      expect(screen.getAllByText('Reference unavailable')).toHaveLength(2)
+    }
+    for (const id of Object.values(ids)) expect(screen.queryByText(id)).not.toBeInTheDocument()
+    expect(screen.queryByText('Request ID')).not.toBeInTheDocument()
+  })
+
   it('loads the signed-in technician work queue and renders live maintenance items', async () => {
     fetch.mockResolvedValueOnce({
       ok: true,
@@ -40,13 +60,27 @@ describe('Technician Assigned Work page', () => {
         priority: 2,
         category: 0,
         propertyId: 'property-1',
+        propertyTitle: 'Oakview Apartments',
+        preferredAccessWindow: 'Morning',
+      }, {
+        id: 'completed-request',
+        title: 'Completed leak repair',
+        status: 9,
+        priority: 1,
+        category: 0,
+      }, {
+        id: 'rejected-request',
+        title: 'Rejected repair',
+        status: 7,
+        priority: 1,
+        category: 0,
       }],
     })
 
     renderRoute()
     const main = screen.getByRole('main')
     expect(within(main).getByRole('heading', { name: 'Assigned Work', level: 1 })).toBeInTheDocument()
-    expect(within(main).getByText('Technician workspace')).toBeInTheDocument()
+    expect(within(main).queryByText('Technician workspace')).not.toBeInTheDocument()
 
     await waitFor(() => {
       expect(screen.getByText('Kitchen sink leak')).toBeInTheDocument()
@@ -54,6 +88,10 @@ describe('Technician Assigned Work page', () => {
     expect(screen.getByText('Assigned')).toBeInTheDocument()
     expect(screen.getByText('High')).toBeInTheDocument()
     expect(screen.getByText('Plumbing')).toBeInTheDocument()
+    expect(screen.getByText('Oakview Apartments')).toBeInTheDocument()
+    expect(screen.getByText('Morning (8-12)')).toBeInTheDocument()
+    expect(screen.queryByText('Completed leak repair')).not.toBeInTheDocument()
+    expect(screen.queryByText('Rejected repair')).not.toBeInTheDocument()
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/maintenance-requests/technician/11111111-1111-1111-1111-111111111111'),
@@ -77,9 +115,14 @@ describe('Technician Assigned Work page', () => {
     expect(assignedLink).not.toHaveTextContent('Soon')
 
     const main = screen.getByRole('main')
-    expect(within(main).getByRole('link', { name: 'Back to dashboard' })).toHaveAttribute('href', '/dashboard')
-    expect(within(main).getAllByRole('link', { name: /notification/i }).every((link) => link.getAttribute('href') === '/notifications')).toBe(true)
-    expect(within(main).getByRole('link', { name: /Profile/ })).toHaveAttribute('href', '/profile')
+    expect(within(main).queryByRole('link', { name: 'Back to dashboard' })).not.toBeInTheDocument()
+    expect(within(main).queryByRole('link', { name: /notification/i })).not.toBeInTheDocument()
+    expect(within(main).queryByRole('link', { name: /Profile/ })).not.toBeInTheDocument()
+    expect(within(main).queryByText('Shared tools')).not.toBeInTheDocument()
+    expect(within(main).queryByRole('heading', { name: 'Account access' })).not.toBeInTheDocument()
+    expect(within(main).queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument()
+    expect(within(main).queryByRole('heading', { name: 'Workflow status' })).not.toBeInTheDocument()
+    expect(within(main).queryByText('Availability')).not.toBeInTheDocument()
     expect(await within(main).findByRole('button', { name: 'View details' })).toBeInTheDocument()
     expect(within(main).queryByRole('button', { name: /start work|complete work/i })).not.toBeInTheDocument()
   })
@@ -88,7 +131,7 @@ describe('Technician Assigned Work page', () => {
     renderRoute(role)
     expect(screen.getByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Assigned Work' })).not.toBeInTheDocument()
-    expect(fetch).not.toHaveBeenCalled()
+    expect(fetch.mock.calls.filter(([url]) => !url.includes('/api/landlord/actions/summary'))).toHaveLength(0)
   })
 
   it('provides accessible loading and empty presentations for the future collection workflow', () => {
@@ -145,7 +188,7 @@ describe('Technician Assigned Work page', () => {
 
     renderRoute()
     await userEvent.click(await screen.findByRole('button', { name: 'View details' }))
-    expect(screen.getByText('tenant-1')).toBeInTheDocument()
+    expect(screen.queryByText('tenant-1')).not.toBeInTheDocument()
     expect(screen.getByText('Use the back door.')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Start work' }))
@@ -211,7 +254,7 @@ describe('Technician Assigned Work page', () => {
     await userEvent.type(screen.getByLabelText('Estimate notes'), 'Replace the thermostat.')
     await userEvent.click(screen.getByRole('button', { name: 'Create estimate' }))
 
-    expect(await screen.findByText(/\$170\.00/)).toBeInTheDocument()
+    expect(await screen.findByText(/Rs\.\s*170\.00/)).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: 'Submit estimate for review' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Submit estimate for review' }))
     expect(await screen.findByText('Estimate submitted for landlord review.')).toBeInTheDocument()

@@ -10,6 +10,7 @@ import '../../../shared/widgets/shared_widgets.dart';
 import '../../rental_applications/widgets/application_eligibility_action.dart';
 import '../../rental_applications/services/rental_application_api_service.dart';
 import '../../viewings/screens/book_viewing_screen.dart';
+import '../../viewings/models/viewing.dart';
 import '../../viewings/services/viewing_api_service.dart';
 import '../controllers/property_discovery_controller.dart';
 import '../models/property.dart';
@@ -54,6 +55,8 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
   late final PropertyDiscoveryController _favorites;
   bool _isVerifying = true;
   bool _verificationFailed = false;
+  bool _viewingStatusLoading = true;
+  bool _hasExistingViewing = false;
   int _contactRefreshVersion = 0;
   bool _descriptionExpanded = false;
 
@@ -78,6 +81,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
       ..addListener(_favoritesChanged);
     _favorites.loadFavorites();
     _refreshProperty();
+    _refreshViewingStatus();
   }
 
   @override
@@ -100,6 +104,7 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
         _verificationFailed = false;
       });
     }
+
     try {
       final property = await widget.propertyApiService.getPropertyById(
         _property.id,
@@ -117,6 +122,34 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
           _verificationFailed = true;
         });
       }
+    }
+  }
+
+  Future<void> _refreshViewingStatus() async {
+    final api = widget.viewingApiService;
+    if (api == null) {
+      if (mounted) {
+        setState(() => _viewingStatusLoading = false);
+      }
+      return;
+    }
+
+    setState(() => _viewingStatusLoading = true);
+    try {
+      final viewings = await api.getMyViewings();
+      if (!mounted) return;
+      final hasExistingViewing = viewings.any(
+        (viewing) =>
+            viewing.propertyId == _property.id &&
+            viewing.status != ViewingStatus.rejected &&
+            viewing.status != ViewingStatus.cancelled,
+      );
+      setState(() {
+        _hasExistingViewing = hasExistingViewing;
+        _viewingStatusLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _viewingStatusLoading = false);
     }
   }
 
@@ -164,7 +197,9 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
         ),
       ),
     );
-    if (mounted) await _refreshProperty();
+    if (mounted) {
+      await Future.wait([_refreshProperty(), _refreshViewingStatus()]);
+    }
   }
 
   Future<void> _openMaps() async {
@@ -1073,7 +1108,9 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                   Expanded(
                     child: OutlinedButton(
                       key: const Key('details-book-viewing'),
-                      onPressed: _openViewing,
+                      onPressed: _viewingStatusLoading || _hasExistingViewing
+                          ? null
+                          : _openViewing,
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size(44, 52),
                         padding: const EdgeInsets.symmetric(
@@ -1082,12 +1119,21 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
                         ),
                         side: const BorderSide(color: AppPalette.olive),
                         foregroundColor: AppPalette.olive,
+                        disabledForegroundColor: AppPalette.secondaryText
+                            .withValues(alpha: 0.55),
+                        backgroundColor: _hasExistingViewing
+                            ? AppPalette.softCream
+                            : null,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        'Book Viewing',
+                      child: Text(
+                        _hasExistingViewing
+                            ? 'Viewing booked'
+                            : _viewingStatusLoading
+                            ? 'Checking viewing status...'
+                            : 'Book Viewing',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: AppTypography.bodyLargeSize,

@@ -24,7 +24,7 @@ const application = { id: applicationId, propertyId, tenantId: '55555555-5555-55
   status: 1, moveInDate: '2026-10-01', monthlyIncome: 2500, occupation: 'Designer',
   numberOfOccupants: 2, tenantNote: 'Please review', landlordResponse: null,
   createdAt: '2026-09-20T10:00:00Z', submittedAt: '2026-09-20T10:00:00Z' }
-const viewing = { id: viewingId, propertyId, tenantId: application.tenantId,
+const viewing = { id: viewingId, propertyId, propertyTitle: 'Sunset Villa', tenantId: application.tenantId,
   status: 0, requestedDateTime: '2026-10-01T10:00:00Z', tenantMessage: 'Morning works',
   landlordResponse: null, createdAt: '2026-09-20T10:00:00Z' }
 
@@ -93,8 +93,8 @@ describe('notification resource navigation', () => {
     mockEndpoints(notification('ViewingRequest', viewingId), viewing)
     renderInbox('Tenant')
     await userEvent.click(await screen.findByRole('button', { name: /An update/ }))
-    expect(await screen.findByRole('heading', { name: 'My Viewings' })).toBeInTheDocument()
-    expect(await screen.findByText(propertyId)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Your requests' })).toBeInTheDocument()
+    expect(await screen.findByText('Sunset Villa')).toBeInTheDocument()
     expect(screen.queryByText(viewingId)).not.toBeInTheDocument()
     expect(fetch.mock.calls.filter(([url]) => new URL(url, 'http://localhost').pathname === `/api/viewings/${viewingId}`)).toHaveLength(1)
   })

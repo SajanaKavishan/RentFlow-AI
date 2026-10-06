@@ -12,6 +12,8 @@ namespace RentFlow.Api.Services;
 /// </summary>
 public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMaintenanceRequestService
 {
+    private sealed record UserDisplayIdentity(string FullName, UserRole Role);
+
     public async Task<MaintenanceRequestResponseDto> CreateAsync(
         Guid tenantId,
         CreateMaintenanceRequestDto request,
@@ -62,9 +64,11 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             toStatus: MaintenanceRequestStatus.Submitted,
             changedByUserId: tenantId,
             notes: "Maintenance request submitted.");
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(dbContext, maintenanceRequest.PropertyId, NotificationEventTypes.MaintenanceSubmitted,
+            "MaintenanceRequest", maintenanceRequest.Id, maintenanceRequest.Id, "Maintenance triage required", "A tenant submitted a maintenance request for your property.", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     private static string DeriveTitle(string? description, MaintenanceCategory category)
@@ -90,7 +94,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == requestId, cancellationToken);
 
-        return maintenanceRequest is null ? null : MapToResponse(maintenanceRequest);
+        return maintenanceRequest is null ? null : await MapToResponseAsync(maintenanceRequest, cancellationToken, includeContact: true);
     }
 
     public async Task<IReadOnlyList<MaintenanceRequestSummaryDto>> GetByTenantAsync(
@@ -105,7 +109,16 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .OrderByDescending(item => item.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        return requests.Select(MapToSummary).ToList();
+        var propertyIds = requests.Select(request => request.PropertyId).Distinct().ToArray();
+        var titles = await dbContext.Properties.AsNoTracking()
+            .Where(property => propertyIds.Contains(property.Id))
+            .ToDictionaryAsync(property => property.Id, property => property.Title, cancellationToken);
+        return requests.Select(request =>
+        {
+            var summary = MapToSummary(request);
+            summary.PropertyTitle = titles.GetValueOrDefault(request.PropertyId);
+            return summary;
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<MaintenanceRequestSummaryDto>> GetByPropertyAsync(
@@ -119,8 +132,26 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .Where(item => item.PropertyId == propertyId)
             .OrderByDescending(item => item.CreatedAt)
             .ToListAsync(cancellationToken);
-
-        return requests.Select(MapToSummary).ToList();
+        var propertyIds = requests.Select(request => request.PropertyId).Distinct().ToArray();
+        var properties = await dbContext.Properties.AsNoTracking()
+            .Where(property => propertyIds.Contains(property.Id))
+            .ToDictionaryAsync(property => property.Id, cancellationToken);
+        var tenantIds = requests.Select(request => request.TenantId).Distinct().ToArray();
+        var requesterNames = await dbContext.Users.AsNoTracking()
+            .Where(user => tenantIds.Contains(user.Id) && user.Role == UserRole.Tenant)
+            .ToDictionaryAsync(user => user.Id, user => user.FullName, cancellationToken);
+        return requests.Select(request =>
+        {
+            var summary = MapToSummary(request);
+            if (properties.GetValueOrDefault(request.PropertyId) is { } property)
+            {
+                summary.PropertyTitle = property.Title;
+                summary.PropertyAddress = property.Address;
+                summary.PropertyCity = property.City;
+            }
+            summary.RequesterName = NormalizeOptionalText(requesterNames.GetValueOrDefault(request.TenantId));
+            return summary;
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<MaintenanceRequestSummaryDto>> GetByTechnicianAsync(
@@ -134,8 +165,26 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .Where(item => item.TechnicianId == technicianId)
             .OrderByDescending(item => item.CreatedAt)
             .ToListAsync(cancellationToken);
-
-        return requests.Select(MapToSummary).ToList();
+        var propertyIds = requests.Select(request => request.PropertyId).Distinct().ToArray();
+        var properties = await dbContext.Properties.AsNoTracking()
+            .Where(property => propertyIds.Contains(property.Id))
+            .ToDictionaryAsync(property => property.Id, cancellationToken);
+        var tenantIds = requests.Select(request => request.TenantId).Distinct().ToArray();
+        var requesterNames = await dbContext.Users.AsNoTracking()
+            .Where(user => tenantIds.Contains(user.Id) && user.Role == UserRole.Tenant)
+            .ToDictionaryAsync(user => user.Id, user => user.FullName, cancellationToken);
+        return requests.Select(request =>
+        {
+            var summary = MapToSummary(request);
+            if (properties.GetValueOrDefault(request.PropertyId) is { } property)
+            {
+                summary.PropertyTitle = property.Title;
+                summary.PropertyAddress = property.Address;
+                summary.PropertyCity = property.City;
+            }
+            summary.RequesterName = NormalizeOptionalText(requesterNames.GetValueOrDefault(request.TenantId));
+            return summary;
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<MaintenanceTechnicianChoiceDto>> GetTechnicianChoicesAsync(
@@ -177,7 +226,19 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             .ThenBy(item => item.Id)
             .ToListAsync(cancellationToken);
 
-        return history.Select(MapToHistoryResponse).ToList();
+        var actorIds = history
+            .Where(item => item.ChangedByUserId.HasValue)
+            .Select(item => item.ChangedByUserId!.Value)
+            .Distinct()
+            .ToArray();
+        var actors = await dbContext.Users.AsNoTracking()
+            .Where(user => actorIds.Contains(user.Id))
+            .ToDictionaryAsync(
+                user => user.Id,
+                user => new UserDisplayIdentity(user.FullName, user.Role),
+                cancellationToken);
+
+        return history.Select(item => MapToHistoryResponse(item, actors.GetValueOrDefault(item.ChangedByUserId ?? Guid.Empty))).ToList();
     }
 
     public async Task<MaintenanceRequestResponseDto> UpdateTenantRequestAsync(
@@ -210,7 +271,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<MaintenanceRequestResponseDto> TriageAsync(
@@ -238,9 +299,12 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             changedByUserId: null,
             notes: maintenanceRequest.TriageNotes);
 
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(dbContext, maintenanceRequest.PropertyId, NotificationEventTypes.MaintenanceTriaged,
+            "MaintenanceRequest", maintenanceRequest.Id, maintenanceRequest.Id, "Technician assignment required", "A triaged maintenance request needs a technician assignment.", cancellationToken);
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<MaintenanceRequestResponseDto> AssignTechnicianAsync(
@@ -260,10 +324,29 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         var maintenanceRequest = await GetTrackedRequestAsync(requestId, cancellationToken);
         EnsureStatus(maintenanceRequest, "assigned", MaintenanceRequestStatus.Triaged);
 
+        if (!await dbContext.Users.AsNoTracking().AnyAsync(user =>
+            user.Id == request.TechnicianId && user.IsActive && user.Role == UserRole.MaintenanceTechnician,
+            cancellationToken))
+            throw MaintenanceRequestServiceException.Validation("Choose an active maintenance technician.");
+
         maintenanceRequest.TechnicianId = request.TechnicianId;
         maintenanceRequest.AssignmentNotes = NormalizeOptionalText(request.AssignmentNotes);
         maintenanceRequest.Status = MaintenanceRequestStatus.Assigned;
         maintenanceRequest.UpdatedAt = DateTimeOffset.UtcNow;
+        var assignedAt = maintenanceRequest.UpdatedAt;
+        var assignmentNotificationExists = await dbContext.Notifications.AnyAsync(notification =>
+            notification.RecipientId == request.TechnicianId
+            && notification.EventType == NotificationEventTypes.MaintenanceRequestAssigned
+            && notification.RelatedResourceType == "MaintenanceRequest"
+            && notification.RelatedResourceId == maintenanceRequest.Id,
+            cancellationToken);
+        if (!assignmentNotificationExists)
+        {
+            dbContext.Notifications.Add(NotificationEventFactory.ForMaintenanceRequestAssigned(
+                maintenanceRequest,
+                request.TechnicianId,
+                assignedAt ?? DateTimeOffset.UtcNow));
+        }
         AddHistory(
             maintenanceRequest,
             fromStatus: MaintenanceRequestStatus.Triaged,
@@ -271,9 +354,12 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             changedByUserId: null,
             notes: maintenanceRequest.AssignmentNotes);
 
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(dbContext, maintenanceRequest.PropertyId, NotificationEventTypes.MaintenanceEstimatePreparation,
+            "MaintenanceRequest", maintenanceRequest.Id, maintenanceRequest.Id, "Estimate preparation required", "A technician is assigned. Prepare this maintenance request for an estimate.", cancellationToken);
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<MaintenanceRequestResponseDto> MarkEstimatePendingAsync(
@@ -295,7 +381,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             "Technician estimate requested.");
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<RepairEstimateResponseDto> SubmitEstimateAsync(
@@ -375,8 +461,11 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             estimate.TechnicianId,
             "Repair estimate submitted for landlord approval.");
 
+        await NotificationDeliveryPolicy.QueueLandlordActionAsync(dbContext, maintenanceRequest.PropertyId, NotificationEventTypes.MaintenanceEstimateReview,
+            "MaintenanceRequest", maintenanceRequest.Id, estimate.Id, "Repair estimate review required", "A technician submitted a repair estimate for your approval.", cancellationToken);
+
         await dbContext.SaveChangesAsync(cancellationToken);
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public Task<RepairEstimateResponseDto> ApproveEstimateAsync(
@@ -455,7 +544,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             "Work started.");
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<MaintenanceRequestResponseDto> CompleteWorkAsync(
@@ -475,6 +564,17 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
                 "Only the assigned technician can complete work on this maintenance request.");
         }
 
+        var hasCompletionEvidence = await dbContext.MaintenanceAttachments
+            .AsNoTracking()
+            .AnyAsync(attachment =>
+                attachment.MaintenanceRequestId == requestId
+                && attachment.UploadedByUserId == technicianId
+                && attachment.AttachmentType == MaintenanceAttachmentService.TechnicianCompletionAttachmentType,
+                cancellationToken);
+        if (!hasCompletionEvidence)
+            throw MaintenanceRequestServiceException.Conflict(
+                "At least one technician completion photo is required before completing work.");
+
         var now = DateTimeOffset.UtcNow;
         maintenanceRequest.Status = MaintenanceRequestStatus.Completed;
         maintenanceRequest.CompletedAt = now;
@@ -487,7 +587,7 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             "Work completed.");
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return MapToResponse(maintenanceRequest);
+        return await MapToResponseAsync(maintenanceRequest, cancellationToken);
     }
 
     public async Task<IReadOnlyList<RepairEstimateResponseDto>> GetEstimatesAsync(
@@ -804,6 +904,39 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
         });
     }
 
+    private async Task<MaintenanceRequestResponseDto> MapToResponseAsync(
+        MaintenanceRequest request,
+        CancellationToken cancellationToken,
+        bool includeContact = false)
+    {
+        var response = MapToResponse(request);
+        var propertyDisplay = await dbContext.Properties.AsNoTracking()
+            .Where(property => property.Id == request.PropertyId)
+            .Select(property => new { property.Title, property.Address, property.City })
+            .SingleOrDefaultAsync(cancellationToken);
+        response.PropertyTitle = propertyDisplay?.Title;
+        response.PropertyAddress = propertyDisplay?.Address;
+        response.PropertyCity = propertyDisplay?.City;
+        response.TenantName = await dbContext.Users.AsNoTracking()
+            .Where(user => user.Id == request.TenantId && user.Role == UserRole.Tenant)
+            .Select(user => user.FullName)
+            .SingleOrDefaultAsync(cancellationToken);
+        response.RequesterName = NormalizeOptionalText(response.TenantName);
+        if (request.TechnicianId is { } technicianId)
+        {
+            // Project display identity only; account contact and profile data stay private.
+            var identity = await dbContext.Users.AsNoTracking()
+                .Where(user => user.Id == technicianId && user.Role == UserRole.MaintenanceTechnician)
+                .Select(user => new { user.FullName, user.MaintenanceContactPhone, user.MaintenanceContactEnabled, user.IsActive })
+                .SingleOrDefaultAsync(cancellationToken);
+            response.AssignedTechnicianName = NormalizeOptionalText(identity?.FullName);
+            if (includeContact && identity is { MaintenanceContactEnabled: true, IsActive: true })
+                response.AssignedTechnicianContactPhone = PhoneNumberValidation.UsablePhoneNumber(identity.MaintenanceContactPhone);
+        }
+
+        return response;
+    }
+
     private static MaintenanceRequestResponseDto MapToResponse(MaintenanceRequest request)
     {
         return new MaintenanceRequestResponseDto
@@ -866,13 +999,15 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             Category = request.Category,
             Priority = request.Priority,
             Status = request.Status,
+            CompletedAt = request.CompletedAt,
             CreatedAt = request.CreatedAt,
             UpdatedAt = request.UpdatedAt
         };
     }
 
     private static MaintenanceStatusHistoryResponseDto MapToHistoryResponse(
-        MaintenanceStatusHistory history)
+        MaintenanceStatusHistory history,
+        UserDisplayIdentity? actor)
     {
         return new MaintenanceStatusHistoryResponseDto
         {
@@ -880,6 +1015,8 @@ public class MaintenanceRequestService(ApplicationDbContext dbContext) : IMainte
             FromStatus = history.FromStatus,
             ToStatus = history.ToStatus,
             ChangedByUserId = history.ChangedByUserId,
+            ChangedByName = actor?.FullName,
+            ChangedByRole = actor?.Role,
             ChangedAt = history.ChangedAt,
             Notes = history.Notes
         };

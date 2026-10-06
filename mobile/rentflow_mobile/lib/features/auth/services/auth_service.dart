@@ -315,6 +315,17 @@ class AuthService {
     }
   }
 
+  Future<CurrentUser> updateMaintenanceContact(
+    CurrentUser user,
+    String phone,
+    bool enabled,
+  ) => _saveProfile({
+    'fullName': user.fullName,
+    'phoneNumber': user.phoneNumber,
+    'maintenanceContactPhone': phone.trim(),
+    'maintenanceContactEnabled': enabled,
+  }, 'Your work contact could not be updated.');
+
   Map<String, dynamic> _object(String body) {
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) throw const FormatException();

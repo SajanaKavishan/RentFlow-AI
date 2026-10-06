@@ -22,29 +22,28 @@ function renderRoute(role = 'Admin') {
 beforeEach(() => {
   tokenStorage.setToken('admin-token')
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
-  vi.stubGlobal('fetch', vi.fn())
+  vi.stubGlobal('fetch', vi.fn(async (url) => new Response(JSON.stringify(url.endsWith('/workflows')
+    ? ['Application validation', 'Pricing analysis', 'Maintenance coordination'].map((name) => ({ name, total: 2, pending: 0, running: 0, awaitingReview: 0, completed: 1, failed: 1 }))
+    : { checkedAt: '2026-10-06T10:00:00Z', services: [{ name: 'RentFlow API', status: 'available', detail: 'Responding' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
 })
 afterEach(() => { cleanup(); tokenStorage.clearToken(); vi.unstubAllGlobals() })
 
 describe('Admin AI and System Overview page', () => {
-  it('renders the two requested pending integration sections without inventing system data', () => {
+  it('loads authenticated workflow reporting and live system checks', async () => {
     renderRoute()
     const main = screen.getByRole('main')
     expect(within(main).getByRole('heading', { name: 'AI / System Monitoring Platform', level: 1 })).toBeInTheDocument()
-    expect(within(main).getByText(/Monitor AI workflows and system reporting/)).toBeInTheDocument()
+    expect(within(main).getByText(/Recorded workflow runs and current service connectivity/)).toBeInTheDocument()
 
     const workflows = within(main).getByRole('region', { name: 'AI Workflows' })
-    expect(workflows).toHaveTextContent('Integration pending')
-    expect(workflows).toHaveTextContent('Admin-authorized aggregate API')
-    expect(workflows).toHaveTextContent('Aggregate workflow reporting')
-    expect(workflows).toHaveTextContent('No validation outcomes, workflow totals or activity records')
+    expect(await within(workflows).findByRole('rowheader', { name: 'Application validation' })).toBeInTheDocument()
+    expect(within(workflows).getByRole('columnheader', { name: 'Failed' })).toBeInTheDocument()
 
     const health = within(main).getByRole('region', { name: 'System Health' })
-    expect(health).toHaveTextContent('Integration pending')
-    expect(health).toHaveTextContent('supported monitoring API')
-    expect(health).toHaveTextContent('No service statuses, uptime or latency measurements are inferred')
-    expect(within(main).getAllByRole('status')).toHaveLength(2)
-    expect(fetch).not.toHaveBeenCalled()
+    expect(await within(health).findByText('Available')).toBeInTheDocument()
+    expect(within(main).queryByText('Integration pending')).not.toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledTimes(2)
+    for (const [, options] of fetch.mock.calls) expect(options.headers.Authorization).toBe('Bearer admin-token')
   })
 
   it('omits the removed Figma cards and keeps the overview limited to its two sections', () => {
@@ -75,6 +74,6 @@ describe('Admin AI and System Overview page', () => {
     renderRoute(role)
     expect(screen.getByRole('heading', { name: 'Not accessible' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'AI / System Monitoring Platform' })).not.toBeInTheDocument()
-    expect(fetch).not.toHaveBeenCalled()
+    expect(fetch.mock.calls.some(([url]) => url.includes('/api/admin/dashboard/'))).toBe(false)
   })
 })

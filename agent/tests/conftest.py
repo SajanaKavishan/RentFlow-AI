@@ -94,23 +94,26 @@ def valid_maintenance_request() -> dict[str, Any]:
         "maintenanceRequestId": "maintenance-123",
         "title": "Leaking kitchen pipe",
         "description": "Water is leaking under the kitchen sink.",
-        "category": "plumbing",
-        "priority": "high",
-        "currentStatus": "open",
-        "assignedTechnicianId": "technician-456",
+        "category": "Plumbing",
+        "priority": "High",
+        "currentStatus": "Submitted",
+        "preferredAccessWindow": "Morning",
+        "hasAssignedTechnician": False,
         "repairEstimate": {
-            "amount": 250.0,
-            "currency": "USD",
-            "notes": "Initial estimate",
+            "versionNumber": 1, "laborCost": 150.0, "partsCost": 100.0,
+            "additionalCost": 0.0, "totalCost": 250.0,
+            "status": "Submitted", "notes": "Initial estimate",
         },
-        "attachments": [
-            {
-                "attachmentId": "attachment-789",
-                "fileName": "leak.jpg",
-                "contentType": "image/jpeg",
-            }
-        ],
+        "attachments": [{
+            "attachmentId": "attachment-789", "contentType": "image/jpeg", "fileSize": 100,
+        }],
     }
+
+
+def authenticated_client(app, **kwargs) -> TestClient:
+    headers = dict(kwargs.pop("headers", {}))
+    headers.setdefault("X-RentFlow-Service-Key", "test-service-key")
+    return TestClient(app, headers=headers, **kwargs)
 
 
 @pytest.fixture(autouse=True)
@@ -134,6 +137,7 @@ def settings() -> Settings:
         ai_api_key=None,
         ai_timeout_seconds=1.0,
         agent_version="test-1.0",
+        service_api_key="test-service-key",
     )
 
 
@@ -144,4 +148,4 @@ def fake_provider() -> FakeModelProvider:
 
 @pytest.fixture
 def client(settings: Settings, fake_provider: FakeModelProvider) -> TestClient:
-    return TestClient(create_app(settings=settings, model_provider=fake_provider))
+    return authenticated_client(create_app(settings=settings, model_provider=fake_provider))

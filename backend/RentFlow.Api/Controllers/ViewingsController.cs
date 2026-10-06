@@ -73,6 +73,17 @@ public class ViewingsController(
             result => Ok(result));
     }
 
+    [HttpGet("mine/pending-counts")]
+    [Authorize(Roles = nameof(UserRole.Landlord))]
+    [ProducesResponseType<IReadOnlyList<PropertyPendingViewingCountDto>>(StatusCodes.Status200OK)]
+    public Task<ActionResult<IReadOnlyList<PropertyPendingViewingCountDto>>> GetPendingCounts(
+        CancellationToken cancellationToken)
+    {
+        return ExecuteAsync(
+            () => viewingService.GetPendingCountsForLandlordAsync(GetRequiredUserId(), cancellationToken),
+            result => Ok(result));
+    }
+
     [HttpPatch("{id:guid}/approve")]
     [Authorize(Roles = $"{nameof(UserRole.Landlord)},{nameof(UserRole.Admin)}")]
     [ProducesResponseType<ViewingResponseDto>(StatusCodes.Status200OK)]

@@ -5,6 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App.jsx'
 import { tokenStorage } from '../../core/auth/tokenStorage.js'
 
+// This suite isolates dashboard record loading. The shared action-summary request
+// and its sidebar badges are covered by LandlordActions.test.jsx.
+vi.mock('../layout/useLandlordActionSummary.js', () => {
+  const result = { status: 'ready', data: { maintenanceCount: 0, maintenanceByProperty: [], leaseCount: 0, paymentCount: 0 }, refresh: vi.fn() }
+  return { default: () => result }
+})
+
 vi.mock('../../features/notifications/notificationsApi.js', async (importOriginal) => ({
   ...(await importOriginal()), getUnreadCount: vi.fn().mockResolvedValue(0),
 }))
@@ -12,6 +19,20 @@ import { AuthProvider } from '../../features/auth/AuthContext.jsx'
 import { AuthContext } from '../../features/auth/useAuth.js'
 import { getApplicationValidationRuns } from '../../features/rentalApplications/services/applicationValidationApiService.js'
 import { getMyProperties } from '../../features/properties/services/propertyApiService.js'
+import { getLandlordPayments } from '../../features/payments/services/paymentApiService.js'
+import { getPropertyMaintenanceRequests } from '../../features/maintenance/services/maintenanceApiService.js'
+import { monthlyRevenue } from './useLandlordRevenue.js'
+import { getLandlordLeases } from '../../features/leaseAgreements/services/leaseAgreementApiService.js'
+import { renewalDays } from './useDashboardLeases.js'
+
+vi.mock('../../features/leaseAgreements/services/leaseAgreementApiService.js', async (importOriginal) => ({
+  ...(await importOriginal()), getLandlordLeases: vi.fn(),
+}))
+
+vi.mock('../../features/payments/services/paymentApiService.js', () => ({ getLandlordPayments: vi.fn() }))
+vi.mock('../../features/maintenance/services/maintenanceApiService.js', async (importOriginal) => ({
+  ...(await importOriginal()), getPropertyMaintenanceRequests: vi.fn(),
+}))
 
 vi.mock('../../features/rentalApplications/services/applicationValidationApiService.js', async (importOriginal) => ({
   ...(await importOriginal()), getApplicationValidationRuns: vi.fn(),
@@ -81,6 +102,9 @@ function renderApp(entry = scopedDashboard(), user = landlord) {
 }
 
 beforeEach(() => {
+  getLandlordLeases.mockReset().mockResolvedValue([])
+  getLandlordPayments.mockReset().mockResolvedValue([])
+  getPropertyMaintenanceRequests.mockReset().mockResolvedValue([])
   tokenStorage.setToken('landlord-token')
   getMyProperties.mockReset().mockResolvedValue([ownedProperty, otherOwnedProperty])
   getApplicationValidationRuns.mockReset().mockResolvedValue([])
@@ -93,6 +117,46 @@ afterEach(() => {
 })
 
 describe('landlord dashboard redesign', () => {
+  it('routes maintenance and lease attention to their own records and scopes them by property', async () => {
+    fetch.mockImplementation(() => Promise.resolve(json([])))
+    getPropertyMaintenanceRequests.mockImplementation(async (id) => id === propertyId ? [
+      { id: 'repair-1', propertyId: id, title: 'Emergency plumbing', priority: 'Emergency', status: 'Submitted' },
+      { id: 'repair-closed', propertyId: id, priority: 'Emergency', status: 'Completed' },
+    ] : [])
+    const day = new Date()
+    day.setUTCDate(day.getUTCDate() + 45)
+    const endDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Colombo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(day)
+    getLandlordLeases.mockResolvedValue([
+      { id: 'lease-1', propertyId, endDate, status: 1 },
+      { id: 'lease-ended', propertyId, endDate, status: 3 },
+    ])
+    renderApp('/dashboard')
+    let attention = screen.getByRole('region', { name: 'Needs Attention' })
+    expect(await within(attention).findByText('1 urgent maintenance request')).toBeInTheDocument()
+    expect(within(attention).getByRole('link', { name: 'Assign' })).toHaveAttribute('href', `/properties/${propertyId}/maintenance?requestId=repair-1`)
+    expect(await within(attention).findByText('Lease renewal due in 45 days')).toBeInTheDocument()
+    expect(within(attention).getByRole('link', { name: 'View' })).toHaveAttribute('href', '/modules/pricing-lease/leases?leaseId=lease-1')
+    expect(within(attention).queryByText("You're all caught up")).not.toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filter dashboard by property' }), otherPropertyId)
+    attention = screen.getByRole('region', { name: 'Needs Attention' })
+    expect(await within(attention).findByText("You're all caught up")).toBeInTheDocument()
+    expect(within(attention).queryByText('1 urgent maintenance request')).not.toBeInTheDocument()
+  })
+
+  it('keeps available actions visible when another activity source fails', async () => {
+    getLandlordLeases.mockRejectedValue(new Error('Unavailable'))
+    renderApp()
+    const attention = screen.getByRole('region', { name: 'Needs Attention' })
+    expect(await within(attention).findByText('3 applications awaiting review')).toBeInTheDocument()
+    expect(await within(attention).findByText(/Some landlord activity could not be checked/)).toBeInTheDocument()
+    expect(within(attention).queryByText("You're all caught up")).not.toBeInTheDocument()
+  })
+
+  it('calculates renewal days using Sri Lankan calendar dates', () => {
+    expect(renewalDays({ endDate: '2026-10-07' }, new Date('2026-10-06T18:30:00Z'))).toBe(0)
+    expect(renewalDays({ endDate: '2026-10-06' }, new Date('2026-10-06T18:30:00Z'))).toBe(-1)
+  })
+
   it('uses a time-aware greeting and places the property filter with Needs Attention', async () => {
     renderApp()
 
@@ -104,7 +168,7 @@ describe('landlord dashboard redesign', () => {
     expect(screen.queryByRole('navigation', { name: 'Quick actions' })).not.toBeInTheDocument()
   })
 
-  it('shows truthful summary cards and integration-pending revenue copy', async () => {
+  it('shows truthful summary cards and completed monthly revenue', async () => {
     renderApp()
     const active = screen.getByRole('region', { name: 'Active Properties' })
     const viewing = screen.getByRole('region', { name: 'Pending Viewings' })
@@ -118,9 +182,9 @@ describe('landlord dashboard redesign', () => {
     expect(within(active).getByText('2 total properties')).toBeInTheDocument()
 
     const revenue = screen.getByRole('region', { name: 'Revenue This Month' })
-    expect(within(revenue).getByText('Integration pending')).toBeInTheDocument()
-    expect(within(revenue).getByText('Revenue data will appear when the Payments and Lease module is connected.')).toBeInTheDocument()
-    expect(within(revenue).queryByText(/Rs\.|last month|%/i)).not.toBeInTheDocument()
+    expect(await within(revenue).findByText('Rs. 0')).toBeInTheDocument()
+    expect(within(revenue).getByRole('link', { name: 'View Payments' })).toHaveAttribute('href', '/modules/payments')
+    expect(screen.queryByText('Integration pending')).not.toBeInTheDocument()
   })
 
   it('derives only real availability and rent metrics for the portfolio', async () => {
@@ -141,13 +205,57 @@ describe('landlord dashboard redesign', () => {
     expect(within(portfolio).queryByText('Average monthly rent')).not.toBeInTheDocument()
   })
 
-  it('keeps maintenance honest without invented requests or an unavailable route action', () => {
+  it('shows empty maintenance with a working property-scoped action', async () => {
     renderApp()
     const maintenance = screen.getByRole('region', { name: 'Maintenance' })
-    expect(within(maintenance).getByText('Integration pending')).toBeInTheDocument()
-    expect(within(maintenance).getByText('Maintenance activity will appear here when the Maintenance module is connected.')).toBeInTheDocument()
-    expect(within(maintenance).queryByRole('link')).not.toBeInTheDocument()
-    expect(within(maintenance).queryByText(/urgent|scheduled|plumbing/i)).not.toBeInTheDocument()
+    expect(await within(maintenance).findByText('No open maintenance requests')).toBeInTheDocument()
+    expect(within(maintenance).getByRole('link', { name: 'View all' })).toHaveAttribute('href', `/properties/${propertyId}/maintenance`)
+  })
+
+  it('filters revenue and maintenance when switching between the portfolio and a property', async () => {
+    const paidAt = new Date().toISOString()
+    getLandlordPayments.mockResolvedValue([
+      { id: 'paid-1', propertyId, amount: 120000, status: 1, paidAt },
+      { id: 'paid-2', propertyId: otherPropertyId, amount: 180000, status: 1, paidAt },
+      { id: 'pending', propertyId, amount: 90000, status: 0 },
+      { id: 'failed', propertyId, amount: 90000, status: 2 },
+      { id: 'old', propertyId, amount: 90000, status: 1, paidAt: '2020-01-01T00:00:00Z' },
+    ])
+    getPropertyMaintenanceRequests.mockImplementation(async (id) => [
+      { id: `${id}-open`, propertyId: id, status: id === propertyId ? 'AwaitingLandlordApproval' : 'InProgress' },
+      { id: `${id}-done`, propertyId: id, status: 'Completed' },
+      { id: `${id}-cancelled`, propertyId: id, status: 'Cancelled' },
+    ])
+    renderApp('/dashboard')
+    const revenue = () => screen.getByRole('region', { name: 'Revenue This Month' })
+    const maintenance = () => screen.getByRole('region', { name: 'Maintenance' })
+    expect(await within(revenue()).findByText('Rs. 300,000')).toBeInTheDocument()
+    expect(await within(maintenance()).findByText('2 open requests')).toBeInTheDocument()
+    expect(within(maintenance()).getByText('1 awaiting your approval')).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filter dashboard by property' }), otherPropertyId)
+    expect(await within(revenue()).findByText('Rs. 180,000')).toBeInTheDocument()
+    expect(await within(maintenance()).findByText('1 open request')).toBeInTheDocument()
+    expect(within(maintenance()).getByText('No estimates awaiting your approval.')).toBeInTheDocument()
+  })
+
+  it.each(['Revenue This Month', 'Maintenance'])('retries %s independently after a service failure', async (title) => {
+    const service = title === 'Maintenance' ? getPropertyMaintenanceRequests : getLandlordPayments
+    service.mockRejectedValueOnce(new Error('Unavailable'))
+    renderApp()
+    const card = screen.getByRole('region', { name: title })
+    await within(card).findByRole('alert')
+    expect(within(card).queryByText('Rs. 0')).not.toBeInTheDocument()
+    await userEvent.click(within(card).getByRole('button', { name: 'Try again' }))
+    expect(await within(card).findByText(title === 'Maintenance' ? 'No open maintenance requests' : 'Rs. 0')).toBeInTheDocument()
+  })
+
+  it('uses the Sri Lankan month boundary and excludes pending payments from revenue', () => {
+    expect(monthlyRevenue([
+      { amount: 100, status: 1, paidAt: '2026-09-30T18:29:59Z' },
+      { amount: 200, status: 1, paidAt: '2026-09-30T18:30:00Z' },
+      { amount: 300, status: 1, paidAt: '2026-10-31T18:30:00Z' },
+      { amount: 400, status: 0, paidAt: '2026-10-01T00:00:00Z' },
+    ], new Date('2026-10-06T00:00:00Z'))).toBe(200)
   })
 
   it('shows only real, selected-property actions in Needs Attention', async () => {
@@ -155,15 +263,11 @@ describe('landlord dashboard redesign', () => {
     const attention = screen.getByRole('region', { name: 'Needs Attention' })
 
     expect(await within(attention).findByText('3 applications awaiting review')).toBeInTheDocument()
-    expect(within(attention).getByText('Review submitted applications for Lake View Apartment.')).toBeInTheDocument()
+    expect(within(attention).getByText('Lake View Apartment', { selector: 'p' })).toBeInTheDocument()
     expect(within(attention).getByText('2 viewing requests pending approval')).toBeInTheDocument()
     expect(within(attention).getByText('Respond to requested viewing appointments.')).toBeInTheDocument()
-    const reviewLinks = within(attention).getAllByRole('link', { name: 'Review' })
-    expect(reviewLinks.map((link) => link.getAttribute('href'))).toEqual([
-      `/rental-applications?propertyId=${propertyId}`,
-      `/viewing-requests?propertyId=${propertyId}`,
-    ])
-    expect(within(attention).queryByRole('link', { name: /approve|reject/i })).not.toBeInTheDocument()
+    expect(within(attention).getByRole('link', { name: 'Review' })).toHaveAttribute('href', `/rental-applications?propertyId=${propertyId}`)
+    expect(within(attention).getByRole('link', { name: 'Approve' })).toHaveAttribute('href', `/viewing-requests?propertyId=${propertyId}`)
   })
 
   it('shows the caught-up state when the selected property has no urgent actions', async () => {
@@ -178,7 +282,7 @@ describe('landlord dashboard redesign', () => {
     expect(getApplicationValidationRuns).not.toHaveBeenCalled()
   })
 
-  it('renders recent applications with real property, income, status, and tenant references', async () => {
+  it('renders applicant names and application details links without exposing IDs as names', async () => {
     const records = applications.map((application, index) => index === 7
       ? { ...application, applicantName: 'Ayesha Fernando' }
       : application)
@@ -189,15 +293,15 @@ describe('landlord dashboard redesign', () => {
     expect(await within(recent).findByText('Showing applications for Lake View Apartment')).toBeInTheDocument()
     const rows = (await within(recent).findAllByRole('row')).slice(1)
     expect(rows).toHaveLength(5)
-    expect(within(rows[0]).getByText('tenant-7-reference')).toBeInTheDocument()
-    expect(within(rows[0]).queryByText('Ayesha Fernando')).not.toBeInTheDocument()
+    expect(within(rows[0]).getByText('Ayesha Fernando')).toBeInTheDocument()
+    expect(within(rows[0]).queryByText('tenant-7-reference')).not.toBeInTheDocument()
     expect(within(rows[0]).getByText('Rs. 110,000')).toBeInTheDocument()
     expect(within(rows[0]).getByLabelText('Application status: Withdrawn')).toBeInTheDocument()
-    expect(within(rows[1]).getByText('tenant-6-reference')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Name unavailable')).toBeInTheDocument()
     expect(rows.every((row) => within(row).getByText('Lake View Apartment'))).toBe(true)
     expect(within(rows[0]).getByRole('link', { name: 'Review application application-7' })).toHaveAttribute(
       'href',
-      `/properties/${propertyId}/rental-applications/application-7/validation`,
+      '/notifications/rental-application/application-7',
     )
   })
 
@@ -208,8 +312,8 @@ describe('landlord dashboard redesign', () => {
     renderApp()
     const attention = screen.getByRole('region', { name: 'Needs Attention' })
 
-    expect(await within(attention).findByText('AI validation requires human review')).toBeInTheDocument()
-    expect(within(attention).getByRole('link', { name: 'Open AI Review' })).toHaveAttribute('href', `/ai-review?propertyId=${propertyId}`)
+    expect(await within(attention).findByText('AI validation completed for 1 application')).toBeInTheDocument()
+    expect(within(attention).getAllByRole('link', { name: 'Review' }).map((link) => link.getAttribute('href'))).toContain(`/properties/${propertyId}/rental-applications/application-3/validation`)
     const recent = screen.getByRole('region', { name: 'Recent Applications' })
     expect(within(recent).getByRole('link', { name: 'AI Review application application-3' })).toHaveAttribute(
       'href',
@@ -233,7 +337,7 @@ describe('landlord dashboard redesign', () => {
     expect(await within(viewing).findByText('3')).toBeInTheDocument()
     expect(within(viewing).getByText('Across all properties')).toBeInTheDocument()
     expect(await within(application).findByText('10')).toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Needs Attention' })).getByText('Review submitted applications for all properties.')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Needs Attention' })).getByText('Lake View Apartment, Garden House')).toBeInTheDocument()
     expect(screen.getByText('Showing applications for all properties')).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'Recent Applications' })).getAllByText('Garden House')).toHaveLength(2)
     expect(fetch).toHaveBeenCalledTimes(4)
